@@ -56,6 +56,7 @@ El proyecto se gestiona en la carpeta EMG  **Lanzador** (`Sistema_de_Adquisicion
 
 *   **Ploteador Calibrado (`plotter_calibrado.py`)**:
     *   Herramienta de visualización para inspeccionar los datos crudos de `grabacion.csv` aplicando una calibración de ganancia fija y filtros para generar gráficos limpios en microvolts (µV).
+    * (Nueva Opcion) Ahora se puede elegir ponerle filtro basabanda, noch en 50 hz y envolvente Rms de 75 milisegundos (Se puede cambiar en el codigo). Tambien permite analizar muchas mediciones a la vez.
 ### En Desarrollo:
  **Análisis Avanzado de Correlación (`correlaciondeseñales.py`)**:
     *   Alinea temporalmente usando la correlación de  los pulsos de diferentes canales musculares mediante una estrategia "Master-Slave", designando un canal como líder para la sincronización.
@@ -161,7 +162,7 @@ Para comunicar con la tarjeta de adquisición, **debes** instalar el driver **NI
 
 ##  Guía de Uso 
 
-Ejecuta el lanzador en la carpeta EMG
+Ejecuta el lanzador en la carpeta EMG (Al abrir la carpeta en Vscode o Spider abrir Emg, si abres la carpeta del repo completo tendrias que cambiar la logica de guardado de los archivos, a futuro se espera mejorar esto.)
 
 ```bash
 Sistema_de_Adquisicion_Emg.py
@@ -191,8 +192,9 @@ El proyecto está en desarrollo activo. Consulta `CONTRIBUTING.md` si quieres ay
 - [ ] **Rendimiento:** Optimizar `visor_csv_interactivo.py` para archivos de larga duración.
 - [ ] **Procesamiento:** Corregir la generación de espectrogramas en el análisis por track.
 - [ ] **Calibración:** Implementar lógica para resistencias de 100 Ohms.
+- [ ] **Señal Ruido en Tiempo Real:**  en el visor de señales estaría bueno despues de cada pulso o periado tomar el maximo y dividirlo por el ruido calculado.
 - [ ] **Docs:** Documentar internamente las funciones críticas.
 
 ---
 
-Desarrollado para la ciencia, agradecimientos al laboratorio de sistemas dinamicos y a la facultad de ciencias exactas de la uba por darnos esta oportunidad.
+Desarrollado para la ciencia, agradecimientos al laboratorio de sistemas dinamicos y a la facultad de ciencias exactas de la uba por darnos esta oportunidad. Basado en codigos de Tomás Minini Y Roman Rolla.
