@@ -1,0 +1,96 @@
+### **Informe Técnico: Protocolo de Gestión de Datos para el Sistema de Adquisición de Electromiografía (EMG)**
+
+**Resumen:**
+Este documento detalla el procedimiento estandarizado para la adquisición, almacenamiento y posterior procesamiento de datos de electromiografía (EMG) utilizando el software del laboratorio. El protocolo asegura la integridad, consistencia y reproducibilidad de los datos a través de un flujo de trabajo definido y una estructura de archivos normalizada.
+
+---
+
+#### **Fase 1: Adquisición y Almacenamiento de Datos**
+
+**Software de Control:** `Sistema_de_Adquisicion_Emg.py`
+
+Esta fase comprende la captura de las señales EMG brutas y su almacenamiento en un formato estructurado y autocontenido, generando un conjunto de datos completo para cada sesión experimental.
+
+**Protocolo de Almacenamiento:**
+
+1.  **Finalización de la Adquisición:** El proceso de guardado se inicia automáticamente cuando el operador detiene una grabación en curso a través de la interfaz gráfica.
+
+2.  **Asignación de Identificador Único:** El sistema solicita al operador la asignación de un nombre descriptivo para la medición (e.g., `Sujeto01_Biceps_Carga5kg_05122025`). Este identificador es crucial, ya que se utiliza como el nombre del directorio principal que encapsulará todos los datos de esa sesión.
+
+3.  **Generación de la Arquitectura de Directorios:** Tras la asignación del identificador, el sistema crea una estructura de carpetas jerárquica y estandarizada dentro del directorio `base_de_datos_electrodos/`. Esta arquitectura organiza los datos por canal, asegurando una separación clara de las señales:
+    ```
+    base_de_datos_electrodos/
+    └── [Identificador_de_la_Medición]/
+        ├── canal_0/
+        ├── canal_1/
+        ├── ...
+        └── canal_n/
+    ```
+
+4.  **Generación de Artefactos de Datos:** Para cada medición, el sistema genera un conjunto de archivos con propósitos específicos, garantizando una trazabilidad completa:
+
+    *   **`metadata.json` (Metadatos de Sesión):**
+        *   **Función:** Este archivo es la piedra angular para la reproducibilidad del análisis. Almacena todos los parámetros configurados durante la adquisición, incluyendo: frecuencia de muestreo (Hz), tempo del metrónomo (BPM), duración de la fase de ruido (`noise_seconds`), y el número de contracciones o pulsos registrados (`pulse_count`).
+        *   **Ubicación:** Una copia idéntica de este archivo se almacena **dentro de cada subdirectorio de canal** (e.g., `canal_0/metadata.json`). Esta redundancia estratégica asegura que cada señal de canal sea una entidad autocontenida, poseyendo todo el contexto necesario para su análisis independiente.
+
+    *   **`grabacion.wav` (Señal de Audio Normalizada):**
+        *   **Función:** La señal de voltaje de cada canal se normaliza a un rango de amplitud de [-1.0, 1.0] y se codifica como un archivo de audio PCM de 16 bits. Este formato es ligero, universalmente compatible y optimizado para algoritmos de procesamiento de señales.
+        *   **Ubicación:** Se guarda un archivo `.wav` individual en la carpeta del canal correspondiente (e.g., `canal_0/grabacion.wav`).
+
+    *   **`grabacion.csv` (Datos Crudos para Calibración y Verificación):**
+        *   **Función:** Se genera un único archivo de valores separados por comas que contiene la señal de voltaje en sus unidades originales (Voltios) para todos los canales, junto con una marca de tiempo. Su propósito es doble: (1) permitir la inspección y análisis de los datos crudos con herramientas externas (como MATLAB o R) y (2) servir como **fuente de calibración** indispensable en la fase de análisis.
+        *   **Ubicación:** Se almacena en el directorio principal de la medición.
+
+    *   **`grabacion.png` (Verificación Visual Rápida):**
+        *   **Función:** Una representación gráfica de las señales de todos los canales a lo largo del tiempo. Permite una inspección visual inmediata de la calidad de la grabación.
+        *   **Ubicación:** Se almacena en el directorio principal de la medición.
+
+---
+
+#### **Fase 2: Procesamiento y Análisis Cuantitativo de Datos**
+
+**Software de Control:** `analisis_por_track_integrado.py`
+
+Esta fase utiliza los datos estructurados generados en la Fase 1 para ejecutar un análisis cuantitativo robusto y reproducible.
+
+**Protocolo de Análisis:**
+
+1.  **Selección del Conjunto de Datos:** El operador selecciona el directorio de la medición de interés y los canales específicos que desea procesar.
+
+2.  **Carga y Reconstrucción de la Señal:** El script localiza y carga automáticamente los artefactos de datos necesarios, aprovechando la estructura de directorios estandarizada:
+    *   Lee `metadata.json` del directorio del canal para recuperar los parámetros experimentales (`bpm`, `pulse_count`, etc.).
+    *   Lee `grabacion.wav` para obtener la señal normalizada.
+
+3.  **Proceso de Calibración de Amplitud (Paso Crítico):** Para asegurar que el análisis se realiza sobre datos con significado físico, se ejecuta un paso de calibración. El script:
+    a. Accede al archivo `grabacion.csv` ubicado en el directorio padre de la medición.
+    b. Lee la columna de voltaje crudo correspondiente al canal en análisis.
+    c. Determina el valor máximo absoluto de la señal de voltaje original.
+    d. Utiliza este valor como **factor de calibración** para reescalar la señal normalizada del archivo `.wav` a sus unidades físicas originales (Voltios).
+
+4.  **Ejecución del Análisis Cuantitativo:** Con la señal calibrada en Voltios y los parámetros contextuales del `metadata.json`, el script (`procesar_wavs_promedio`) procede a:
+    *   Segmentar la señal en la fase de ruido y las fases de contracción, utilizando los metadatos `noise_seconds` y `pulse_count`.
+    *   Detectar y alinear los picos de actividad muscular para cada contracción.
+    *   Calcular métricas clave como el pulso promedio, la Relación Señal-Ruido (SNR), la amplitud máxima y la latencia.
+
+5.  **Almacenamiento de Resultados:** Los resultados del análisis (gráficos como `avg.png`, `pulses.png`, y datos numéricos en `results.json`) se guardan directamente en el mismo subdirectorio del canal analizado. Esto completa el conjunto de datos para ese canal, consolidando la señal cruda, los metadatos, y los resultados del análisis en una única ubicación.
+
+---
+
+### **Diagrama Lógico del Flujo de Datos**
+
+**Productor (`Sistema_de_Adquisicion_Emg.py`)**
+1.  Captura de señal EMG en memoria.
+2.  Tras detener, creación de la estructura: `/[Identificador_Medición]/canal_n/`
+3.  Almacenamiento de artefactos:
+    *   `metadata.json` (en cada subdirectorio `canal_n`)
+    *   `grabacion.wav` (en cada subdirectorio `canal_n`)
+    *   `grabacion.csv` y `grabacion.png` (en el directorio `[Identificador_Medición]`)
+
+**Consumidor (`analisis_por_track_integrado.py`)**
+1.  Selección de `[Identificador_Medición]` y `canal_n`.
+2.  Carga de artefactos:
+    *   `metadata.json` -> Parámetros de análisis.
+    *   `grabacion.wav` -> Señal normalizada.
+    *   `grabacion.csv` -> Factor de calibración.
+3.  Análisis sobre la señal calibrada.
+4.  Almacenamiento de resultados (`results.json`, `avg.png`) en el subdirectorio `canal_n` correspondiente.

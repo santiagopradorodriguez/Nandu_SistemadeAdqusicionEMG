@@ -1,0 +1,8 @@
+{
+    "github.copilot.chat.agent.currentEditorContext.enabled": false,
+    "github.copilot.chat.agent.autoFix": false,
+    "chat.extensionUnification.enabled": false,
+    "notebook.defaultFormatter": "google.geminicodeassist",
+    "python.analysis.autoImportCompletions": true,
+    "chat.agent.enabled": false
+}
