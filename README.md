@@ -4,7 +4,7 @@
 ![Estado](https://img.shields.io/badge/Estado-En_Desarrollo-yellow?style=for-the-badge)
 ![Licencia](https://img.shields.io/badge/Licencia-Open_Source-green?style=for-the-badge)
 
-> **"HECHO PARA Y POR LA COMUNIDAD Y EL PUEBLO CIENTÍFICO"**
+> **"HECHO PARA LA COMUNIDAD Y EL PUEBLO CIENTÍFICO"**
 
 Este repositorio aloja una suite integral de software para la **adquisición, almacenamiento  y análisis** de señales de Electromiografía (EMG). El sistema gestionando el flujo desde la captura de hardware (National Instruments) hasta el reporte analítico. Este sistema está desarrollado para guardar los archivos de manera tal que sea compatible con guardar los datos por cada letra y palabra para luego hacer los experimentos de labo 7. Desarrollado por la comunidad para el **Laboratorio de Sistemas Dinamicos**
 
@@ -197,4 +197,4 @@ El proyecto está en desarrollo activo. Consulta `CONTRIBUTING.md` si quieres ay
 
 ---
 
-Desarrollado para la ciencia, agradecimientos al laboratorio de sistemas dinamicos y a la facultad de ciencias exactas de la uba por darnos esta oportunidad. Basado en codigos de Tomás Minini Y Roman Rolla.
+"Desarrollado para la ciencia. Agradecimientos al Laboratorio de Sistemas Dinámicos y a la Facultad de Ciencias Exactas de la UBA por darnos esta oportunidad. Basado en códigos de Tomás Minini y Roman Rolla."
