@@ -6,7 +6,7 @@
 
 > **"HECHO PARA Y POR LA COMUNDIDAD"**
 
-Este repositorio aloja una suite integral de software para la **adquisición, almacenamiento  y análisis** de señales de Electromiografía (EMG). El sistema gestionando el flujo desde la captura de hardware (National Instruments) hasta el reporte analítico. Este sistema está desarrollado para guardar los archivos de manera tal que sea compatible con guardar los datos por cada letra y palabra para luego hacer los experimentos de labo 7. Desarrollado por la comunidad para el **Laboratorio de Sistemas Dinamicos**
+Este repositorio aloja el  software para la **adquisición, almacenamiento  y análisis** de señales de Electromiografía (EMG). El sistema gestionando el flujo desde la captura de hardware (National Instruments) hasta el reporte analítico. Este sistema está desarrollado tal que sea compatible con el guardado de los datos por letra y palabra listo para realizar los experimentos de laboratorio 7. Desarrollado por la comunidad para el **Laboratorio de Sistemas Dinamicos**
 
 ## Tabla de Contenidos
 - [Características del Sistema](#-características-del-sistema)
