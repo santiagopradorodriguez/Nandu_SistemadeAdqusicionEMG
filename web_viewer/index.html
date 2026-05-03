@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ñandú - Visualizador EMG</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Librería para leer el CSV rápido -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <!-- Librería para los gráficos interactivos -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+</head>
+<body>
+    <header class="top-bar">
+        <div class="brand">
+            <h1>ÑANDÚ <span class="subtitle">VISUALIZADOR</span></h1>
+        </div>
+        <div class="controls">
+            <label for="csvFileInput" class="custom-file-upload">
+                CARGAR ARCHIVO .CSV
+            </label>
+            <input type="file" id="csvFileInput" accept=".csv">
+        </div>
+    </header>
+
+    <main class="chart-container">
+        <div id="emgChart">
+            <p class="placeholder-text">Cargá un archivo .csv para comenzar la visualización.</p>
+        </div>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>
