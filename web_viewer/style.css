@@ -2,7 +2,7 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
-    font-family: 'Courier New', Courier, monospace; /* Estilo terminal/técnico */
+    font-family: 'Courier New', Courier, monospace;
 }
 
 body {
@@ -11,31 +11,97 @@ body {
     height: 100vh;
     display: flex;
     flex-direction: column;
+    overflow: hidden; /* Evita que la página entera haga scroll */
 }
 
-/* Barra superior */
+/* Barra superior y Logo */
 .top-bar {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 15px 30px;
+    padding: 10px 30px;
     background-color: #111111;
     border-bottom: 2px solid #FF0000;
 }
 
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.logo {
+    height: 50px;
+    width: auto;
+    border-radius: 5px; /* Suaviza un poco los bordes del logo si es cuadrado */
+}
+
 .brand h1 {
     color: #FF0000;
-    font-size: 24px;
+    font-size: 26px;
     letter-spacing: 2px;
 }
 
 .brand .subtitle {
     color: #ffffff;
     font-weight: normal;
-    font-size: 16px;
 }
 
-/* Botón de carga de archivo */
+/* Pestañas */
+.tabs {
+    display: flex;
+    gap: 10px;
+}
+
+.tab-btn {
+    background-color: transparent;
+    color: #888888;
+    border: 1px solid #333;
+    padding: 10px 20px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 16px;
+    transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+    color: #ffffff;
+    border-color: #777;
+}
+
+.tab-btn.active {
+    background-color: #FF0000;
+    color: #000000;
+    border-color: #FF0000;
+}
+
+/* Contenido Principal */
+.main-content {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    height: calc(100vh - 110px); /* Resta header y footer */
+}
+
+.tab-content {
+    display: none;
+    flex-direction: column;
+    height: 100%;
+}
+
+.tab-content.active {
+    display: flex; /* Solo muestra la pestaña activa */
+}
+
+/* Paneles de control internos */
+.control-panel {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
 input[type="file"] {
     display: none;
 }
@@ -55,24 +121,58 @@ input[type="file"] {
     color: #000000;
 }
 
-/* Contenedor del gráfico */
-.chart-container {
+.info-text {
+    color: #888888;
+    font-size: 14px;
+}
+
+/* Contenedores de gráficos e imágenes */
+.canvas-wrapper {
     flex-grow: 1;
-    padding: 20px;
+    background-color: #0a0a0a;
+    border: 1px solid #333;
     display: flex;
     justify-content: center;
     align-items: center;
+    overflow: hidden; /* Mantiene el gráfico confinado */
+    border-radius: 4px;
 }
 
 #emgChart {
     width: 100%;
     height: 100%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
 }
 
 .placeholder-text {
     color: #555555;
     font-size: 1.2rem;
+    margin: auto;
+}
+
+/* Grilla para el comparador de PNGs */
+.gallery-grid {
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 15px;
+    padding: 15px;
+    align-content: start;
+}
+
+.gallery-grid img {
+    width: 100%;
+    height: auto;
+    border: 1px solid #444;
+}
+
+/* Pie de página */
+.bottom-bar {
+    background-color: #0a0a0a;
+    color: #666666;
+    text-align: center;
+    padding: 8px;
+    font-size: 12px;
+    border-top: 1px solid #222;
 }
