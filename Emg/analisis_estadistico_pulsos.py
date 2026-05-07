@@ -60,12 +60,11 @@ def main():
         
         # Dibujar un histograma por cada letra para compararlos
         for letra, grupo in df.groupby('Letra'):
-            # --- MODIFICADO: Convertir la amplitud a microvolts (V * 1e6) ---
-            amplitudes_microV = grupo['Amplitud_Real'] * 1e6
+            # --- CORRECCIÓN: La amplitud ya se encuentra en microvolts (µV) ---
+            amplitudes_microV = grupo['Amplitud_Real']
             plt.hist(amplitudes_microV, bins=20, alpha=0.7, label=f'Letra {letra}')
 
         plt.title('Distribución de Amplitudes Reales por Letra')
-        # --- MODIFICADO: Actualizar la etiqueta del eje X a microvolts (µV) ---
         plt.xlabel('Amplitud Real (µV)')
         plt.ylabel('Frecuencia (Número de Pulsos)')
         plt.legend()

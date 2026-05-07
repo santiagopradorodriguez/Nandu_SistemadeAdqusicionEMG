@@ -29,23 +29,20 @@ import shutil
 import pandas as pd # Usaremos pandas para escribir el CSV de resumen fácilmente
 
 def calculate_real_amplitude(df):
-    """Calcula Ganancia (G), Amplitud Real (V_real) y propaga el error."""
+    """Calcula Ganancia (G) para información. La amplitud ya viene calibrada."""
     R_fija = 49400.0 # 49.4 kΩ
-    # Asumimos que el error en R_fija y R_sg es despreciable
-    # V_real = V_med / G = V_med / (1 + R_fija / R_sg)
     
     df_copy = df.copy() # Evitar SettingWithCopyWarning
     
-    # Calcular G para cada R
+    # Calcular G para mostrar en el CSV a modo de información
     df_copy['Ganancia (G)'] = 1 + (R_fija / df_copy['Resistencia'])
     
-    # Calcular V_real = V_medida / G
-    df_copy['Amplitud_Real'] = df_copy['Amplitud_Medida'] / df_copy['Ganancia (G)']
+    # --- CORRECCIÓN ---
+    # La amplitud que extraemos de analisis_results.json YA FUE CALIBRADA
+    # a microvoltios en analisis_por_track_integrado.py. NO debemos dividirla de nuevo.
+    df_copy['Amplitud_Real'] = df_copy['Amplitud_Medida']
     
-    # Propagación de error para V_real = V_med / G
-    # σ(V_real) = |dV_real / dV_med| * σ(V_med) = (1/G) * σ(V_med)
-    # (Asumiendo que G es una constante sin error)
-    df_copy['Error_Amplitud_Real'] = df_copy['Error_Amplitud_Medida'] / df_copy['Ganancia (G)']
+    df_copy['Error_Amplitud_Real'] = df_copy['Error_Amplitud_Medida']
     
     return df_copy
 

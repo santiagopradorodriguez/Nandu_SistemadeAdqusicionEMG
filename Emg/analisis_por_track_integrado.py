@@ -19,10 +19,10 @@ import subprocess
 # --- NUEVO: Imports para el diálogo de selección de carpeta ---
 # Esta es la última versión funcional conocida.
 import tkinter as tk
-from tkinter import filedialog
+from tkinter import filedialog, simpledialog, messagebox
 
 # --- Versión del script de análisis ---
-__version__ = "3.0"
+__version__ = "4.1"
 
 plt.rcParams.update({
     "font.size": 16,
@@ -279,7 +279,9 @@ def _plot_pulse_full(
     individual_alpha=0.25,   # transparencia para trazas individuales (0 = invisibles)
     filter_pct_low=20,       # si plot_mode=='mean_filtered' descarta el X% más bajo RMS
     mostrar_individuales=True, # controla si se dibujan las trazas individuales
-    show_plot=False          # <-- NUEVO: para mostrar el gráfico interactivamente
+    show_plot=False,         # <-- NUEVO: para mostrar el gráfico interactivamente
+    noise_drift_pct=np.nan,  # <-- NUEVO: para mostrar en el gráfico
+    snr_drop_pct=np.nan      # <-- NUEVO: para mostrar en el gráfico
 ):
     """
     Plot del pulso completo manteniendo el estilo original,
@@ -342,6 +344,12 @@ def _plot_pulse_full(
         plt.annotate(f"% muestras |x|<umbral: {porc_ruido_samples:.1f}%%", xy=(0.98, 0.95),
                      xycoords='axes fraction', ha='right', va='top', fontsize=9,
                      bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="none", alpha=0.7))
+
+    # --- NUEVO: Mostrar métricas de fatiga en el gráfico ---
+    if not np.isnan(noise_drift_pct) and not np.isnan(snr_drop_pct):
+        text_fatiga = f"Deriva Ruido: {noise_drift_pct:+.1f}%\nCaída SNR: {snr_drop_pct:+.1f}%"
+        plt.annotate(text_fatiga, xy=(0.02, 0.95), xycoords='axes fraction', ha='left', va='top', fontsize=10,
+                     bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="black", alpha=0.8))
 
     plt.title(f"Pulso promedio - {filename}")
     plt.xlabel("Tiempo [s]")
@@ -443,6 +451,7 @@ def _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds,
     excluded_set_plot = set()
     if excluded_windows:
         excluded_set_plot = set(excluded_windows)
+    spans = []
 
     for i in range(n_pulsos):
         start_t = offset_start + i*muestras_pulso/samplerate
@@ -450,14 +459,20 @@ def _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds,
         window_number = i + 1
         color = "red" if window_number in excluded_set_plot else "orange"
         alpha = 0.3 if window_number in excluded_set_plot else 0.06
-        plt.axvspan(start_t, end_t, color=color, alpha=alpha)
+        span = plt.axvspan(start_t, end_t, color=color, alpha=alpha)
+        spans.append((window_number, start_t, end_t, span))
 
     if len(maxima_per_cut) > 0:
         t_maxima = [t_recortada[idx] for idx in maxima_per_cut]
         v_max_env = [env_recortada[idx] for idx in maxima_per_cut]
         plt.scatter(t_maxima, v_max_env, color='red', s=50, zorder=5, label='Máximos (envolvente)')
     
-    plt.title(f"Señal original y cortes periódicos - {filename}")
+    fig = plt.gcf()
+    ax = plt.gca()
+    if show_plot:
+        plt.title(f"Señal original y cortes (Click para excluir/incluir) - {filename}")
+    else:
+        plt.title(f"Señal original y cortes periódicos - {filename}")
     plt.xlabel("Tiempo [s]")
     plt.ylabel("Amplitud [µV]")
     # --- MODIFICACIÓN: Ajustar ylim al 90% por encima del máximo de la envolvente ---
@@ -472,10 +487,74 @@ def _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds,
     print_progress_bar(1, 1, prefix='Cargando gráfico de recortes (pulses.png):', suffix='Completado', length=40)
 
     if show_plot:
-        print("\nMostrando gráfico... Por favor, espere a que aparezca y ciérrelo para continuar.")
-        plt.show() # <-- Muestra el gráfico si se solicita
+        print("\nMostrando gráfico... Haz click en las ventanas para excluirlas/incluirlas interactivamente. Cierra la ventana al terminar.")
+        
+        def onclick(event):
+            if event.inaxes != ax: return
+            x = event.xdata
+            for window_number, start_t, end_t, span in spans:
+                if start_t <= x <= end_t:
+                    if window_number in excluded_set_plot:
+                        excluded_set_plot.remove(window_number)
+                        span.set_color("orange")
+                        span.set_alpha(0.06)
+                    else:
+                        excluded_set_plot.add(window_number)
+                        span.set_color("red")
+                        span.set_alpha(0.3)
+                    fig.canvas.draw_idle()
+                    break
+        
+        cid = fig.canvas.mpl_connect('button_press_event', onclick)
+        plt.show(block=True) # <-- Fuerza a pausar el script hasta que cierres el gráfico
     else:
         plt.close(plt.gcf()) # Cierra la figura para liberar memoria y evitar que se muestre
+
+    return sorted(list(excluded_set_plot))
+
+
+# ---------------------- Plot evolucion temporal --------------------------
+def _plot_evolucion_temporal(stats_time, stats_snr, stats_noise_mean, stats_noise_std, out_path, filename, t_start, t_end):
+    if not stats_time:
+        return
+    
+    t_arr = np.array(stats_time)
+    
+    # Filtrar por el rango de tiempo seleccionado
+    mask = (t_arr >= t_start) & (t_arr <= t_end)
+    if not np.any(mask):
+        mask = np.ones_like(t_arr, dtype=bool)
+        
+    t_plot = t_arr[mask]
+    snr_plot = np.array(stats_snr)[mask]
+    noise_mean_plot = np.array(stats_noise_mean)[mask]
+    noise_std_plot = np.array(stats_noise_std)[mask]
+
+    print_progress_bar(0, 1, prefix='Cargando gráfico de evolución (evolucion.png):', suffix='Guardando...', length=40)
+    fig, axs = plt.subplots(1, 2, figsize=(15, 4))
+    fig.suptitle(f"Evolución Temporal: SNR y Ruido Inter-pulso - {filename}", fontsize=16)
+
+    # Subplot Izquierdo: SNR
+    axs[0].plot(t_plot, snr_plot, marker='o', linestyle='-', color='b', linewidth=2)
+    axs[0].set_title(f"Evolución SNR Promedio")
+    axs[0].set_xlabel("Tiempo de Señal (s)")
+    axs[0].set_ylabel("SNR Promedio Acumulado")
+    axs[0].grid(True, alpha=0.5)
+
+    # Subplot Derecho: Ruido (x̄ y σ)
+    axs[1].plot(t_plot, noise_mean_plot, marker='o', linestyle='-', color='r', label='Promedio (x̄)', linewidth=2)
+    axs[1].plot(t_plot, noise_std_plot, marker='x', linestyle='--', color='orange', label='Desviación (σ)', linewidth=2)
+    axs[1].axhline(100.0, color='green', linestyle='--', alpha=0.7, label='Línea Base (100%)')
+    axs[1].set_title(f"Evolución Ruido Inter-pulso Normalizado")
+    axs[1].set_xlabel("Tiempo de Señal (s)")
+    axs[1].set_ylabel("Nivel de Ruido (%)")
+    axs[1].legend(fontsize=10, loc='best')
+    axs[1].grid(True, alpha=0.5)
+
+    plt.tight_layout(rect=[0, 0.03, 1, 0.96])
+    plt.savefig(out_path, dpi=300, bbox_inches='tight')
+    plt.close(fig)
+    print_progress_bar(1, 1, prefix='Cargando gráfico de evolución (evolucion.png):', suffix='Completado', length=40)
 
 
 # ---------------------- Export results (nueva función) ---------------------
@@ -640,6 +719,8 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
         r = resultados.get(name, {})
         snr_manual = r.get('snr_manual', np.nan)
         snr_manual_unc = r.get('snr_uncertainty', np.nan)
+        noise_drift = r.get('noise_drift_pct', np.nan)
+        snr_drop = r.get('snr_drop_pct', np.nan)
 
         measurement_date = r.get('measurement_date', '')
         comentario = r.get('comentario', '')
@@ -659,39 +740,27 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
         print(f"  - Archivo {len(short_names) + 1} ({os.path.splitext(name)[0]}): BPM = {bpm_str}")
 
         # Recalculo robusto de snr_energy si es posible:
+        # Recalculo robusto de snr_energy (Energía Normalizada):
         snr_energy = np.nan
         snr_energy_unc = np.nan
 
         # intentar reconstruir pulse_rms desde segmentos_rs (cada fila = un segmento)
         segmentos_rs = r.get('segmentos_rs', None)
-        snr_per_pulse = r.get('snr_per_pulse', None)
 
         if segmentos_rs is not None:
             try:
                 # pulse_rms por pulso
                 pulse_rms = np.array([_local_rms(seg) for seg in segmentos_rs])
-                # si snr_per_pulse está y es consistente, reconstruir noise_rms_per_pulse
-                if snr_per_pulse is not None:
-                    snr_pp = np.asarray(snr_per_pulse, dtype=float)
-                    # evitar dividir por cero
-                    snr_pp[snr_pp == 0] = np.nan
-                    noise_rms_per_pulse = pulse_rms / snr_pp
-                    # limpiar NaNs/infs resultantes
-                    valid_mask = np.isfinite(noise_rms_per_pulse) & (noise_rms_per_pulse > 0)
-                    if np.sum(valid_mask) >= 1:
-                        # calcular energía por pulso (relación potencia pulso/ruido por pulso)
-                        energy_ratio_per_pulse = (pulse_rms[valid_mask]**2) / (noise_rms_per_pulse[valid_mask]**2)
-                        if energy_ratio_per_pulse.size > 0:
-                            snr_energy = float(np.nanmean(energy_ratio_per_pulse))
-                            if energy_ratio_per_pulse.size > 1:
-                                snr_energy_unc = float(np.nanstd(energy_ratio_per_pulse, ddof=1) / np.sqrt(energy_ratio_per_pulse.size))
-                            else:
-                                snr_energy_unc = 0.0
-                # si no hay snr_per_pulse, pero hay ruido global registrado, usar fallback
-                if (not np.isfinite(snr_energy)) and ('noise_rms' in r and r.get('noise_rms') is not None):
-                    noise_global = float(r.get('noise_rms'))
-                    if noise_global > 0:
-                        energy_ratio_per_pulse = (pulse_rms**2) / (noise_global**2)
+                
+                # Obtener el ruido base para normalizar la energía
+                noise_base = r.get('noise_rms_from_noise_window')
+                if noise_base is None or noise_base <= 0:
+                    noise_base = r.get('noise_rms')
+                
+                if noise_base is not None and noise_base > 0:
+                    # Calcular Energía Normalizada (SNR Energía) -> (RMS_pulso / RMS_ruido)^2
+                    energy_ratio_per_pulse = (pulse_rms**2) / (noise_base**2)
+                    if energy_ratio_per_pulse.size > 0:
                         snr_energy = float(np.nanmean(energy_ratio_per_pulse))
                         if energy_ratio_per_pulse.size > 1:
                             snr_energy_unc = float(np.nanstd(energy_ratio_per_pulse, ddof=1) / np.sqrt(energy_ratio_per_pulse.size))
@@ -701,17 +770,6 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
                 snr_energy = np.nan
                 snr_energy_unc = np.nan
 
-        # último recurso: si snr_per_pulse está y no podemos reconstruir pulse_rms, usar media del cuadrado
-        if (not np.isfinite(snr_energy)) and snr_per_pulse is not None:
-            try:
-                per_pulse_power = np.asarray(snr_per_pulse, dtype=float)**2
-                Np = per_pulse_power.size
-                if Np > 0:
-                    snr_energy = float(np.nanmean(per_pulse_power))
-                    snr_energy_unc = float(np.nanstd(per_pulse_power, ddof=1) / np.sqrt(Np)) if Np > 1 else 0.0
-            except Exception:
-                snr_energy = np.nan
-                snr_energy_unc = np.nan
 
         snr_manual_vals.append(np.nan if snr_manual is None else float(snr_manual))
         snr_manual_uncs.append(np.nan if snr_manual_unc is None else float(snr_manual_unc))
@@ -726,7 +784,9 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
             'snr_energy': snr_energy if snr_energy is not None else np.nan,
             'snr_energy_unc': snr_energy_unc if snr_energy_unc is not None else np.nan,
             'hora': hora_str,
-            'comentario': comentario
+            'comentario': comentario,
+            'noise_drift': noise_drift,
+            'snr_drop': snr_drop
         })
 
     snr_manual_arr = np.array(snr_manual_vals, dtype=float)
@@ -963,7 +1023,7 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
 
         csv_path = f"{os.path.splitext(nombre_salida)[0]}_snr_table.csv"
         with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
-            fieldnames = ['filename', 'Hora', 'Comentario', 'SNR_manual ± unc', 'SNR_energy ± unc']
+            fieldnames = ['filename', 'Hora', 'Comentario', 'SNR_manual ± unc', 'SNR_energy ± unc', 'Deriva Ruido (%)', 'Caida SNR (%)']
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             for r in rows_sorted:
@@ -986,7 +1046,9 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
                     'Hora': r['hora'],
                     'Comentario': r['comentario'],
                     'SNR_manual ± unc': manual_str,
-                    'SNR_energy ± unc': energy_str
+                    'SNR_energy ± unc': energy_str,
+                    'Deriva Ruido (%)': f"{r['noise_drift']:.1f}%" if not np.isnan(r['noise_drift']) else "",
+                    'Caida SNR (%)': f"{r['snr_drop']:.1f}%" if not np.isnan(r['snr_drop']) else ""
                 })
         print(f"Tabla CSV guardada en: {csv_path}")
 
@@ -1009,15 +1071,19 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
                         energy_cell = f"{r['snr_energy']:.3f}"
                     else:
                         energy_cell = f"{r['snr_energy']:.3f} ± {r['snr_energy_unc']:.3f}"
+                        
+                drift_cell = f"{r['noise_drift']:.1f}%" if not np.isnan(r['noise_drift']) else ""
+                drop_cell = f"{r['snr_drop']:.1f}%" if not np.isnan(r['snr_drop']) else ""
+                
                 comentario_corto = r['comentario'][:25] + ('...' if len(r['comentario']) > 25 else '')
-                table_data.append([fname_noext, r['hora'], comentario_corto, manual_cell, energy_cell])
+                table_data.append([fname_noext, r['hora'], comentario_corto, manual_cell, energy_cell, drift_cell, drop_cell])
 
-            col_labels = ['Filename', 'Hora', 'Comentario', 'SNR_manual ± unc', 'SNR_energy ± unc']
+            col_labels = ['Filename', 'Hora', 'Comentario', 'SNR_m ± unc', 'SNR_e ± unc', 'Deriva Ruido', 'Fatiga(SNR)']
             nrows = len(table_data)
             fig_tab, ax_tab = plt.subplots(figsize=(16, max(2, 0.35 * nrows)))
             ax_tab.axis('off')
             table = ax_tab.table(cellText=table_data, colLabels=col_labels, cellLoc='left', loc='center',
-                                 colWidths=[0.23, 0.12, 0.25, 0.2, 0.2])
+                                 colWidths=[0.20, 0.08, 0.22, 0.15, 0.15, 0.10, 0.10])
             table.auto_set_font_size(False)
             table.set_fontsize(9)
             table.scale(1, 1.2)
@@ -1040,7 +1106,10 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
             en_unc = ("" if (r['snr_energy_unc'] is None or np.isnan(r['snr_energy_unc'])) else f"{r['snr_energy_unc']:.3f}")
             combined_man = f"{man} ± {man_unc}" if man_unc != "" else man
             combined_en = f"{en} ± {en_unc}" if en_unc != "" else en
-            print(f"{r['filename']}: {combined_man} | {combined_en}")
+            
+            drift_str = f"{r['noise_drift']:+.1f}%" if not np.isnan(r['noise_drift']) else "N/A"
+            drop_str = f"{r['snr_drop']:+.1f}%" if not np.isnan(r['snr_drop']) else "N/A"
+            print(f"{r['filename']}: SNR_m={combined_man} | SNR_e={combined_en} | Deriva Ruido={drift_str} | Caída SNR={drop_str}")
 
 # ---------------------- Main function (misma firma y lógica) ----------------
 def procesar_wavs_promedio(
@@ -1084,12 +1153,16 @@ def procesar_wavs_promedio(
     # NUEVOS ARGUMENTOS PARA PLOTTING (por defecto como tú lo tenías)
     plot_mode='mean',         # 'mean'|'median'|'mean_filtered' (por defecto 'mean' = comport. original)
     individual_alpha=0.25,    # opacidad por defecto igual a la que tenías
-    lowpass_cutoff_hz=None,   # <-- NUEVO: Frecuencia de corte para filtro pasa-bajos
+    lowpass_cutoff_hz=500.0,  # <-- NUEVO: Frecuencia de corte para filtro pasa-bajos
+    highpass_cutoff_hz=20.0,  # <-- NUEVO: Frecuencia de corte para filtro pasa-altos
     output_root="/home/santiago/Documentos/codigos/Labo 6",          # si se provee, todas las carpetas de resultados se crean dentro de esta raíz
     display_name_for_plot="", # <-- Argumento que faltaba
     show_interactive_plot=False, # <-- para mostrar el gráfico de recortes
     show_average_plot=False,     # <-- NUEVO: para mostrar el gráfico de pulso promedio
-    apply_notch_filter=False     # <-- NUEVO: para controlar el filtro notch
+    apply_notch_filter=False,    # <-- NUEVO: para controlar el filtro notch
+    mostrar_evolucion=False,
+    evol_t_start=25.0,
+    evol_t_end=100.0
 ):
     rng = np.random.RandomState(seed)
     archivos = [f for f in os.listdir(carpeta) if f.lower().endswith(".wav")]
@@ -1165,6 +1238,21 @@ def procesar_wavs_promedio(
         ganancia = 1.0 + (r_fija / resistencia_ohm)
         signal = (signal_v / ganancia) * 1e6
         print(f"[Calibración a µV] Resistencia: {resistencia_ohm} Ω | Ganancia: {ganancia:.2f} | Señal convertida a microvoltios (µV).")
+
+        # --- NUEVO: Filtro Pasa-Altos ---
+        if highpass_cutoff_hz is not None and highpass_cutoff_hz > 0:
+            try:
+                nyquist = 0.5 * samplerate
+                cutoff_hp = highpass_cutoff_hz
+                if cutoff_hp >= nyquist:
+                    cutoff_hp = nyquist * 0.99
+                    print(f"ADVERTENCIA: Frecuencia pasa-altos excede Nyquist. Ajustando a {cutoff_hp:.2f} Hz.")
+                
+                b, a = butter(4, cutoff_hp / nyquist, btype='high', analog=False)
+                signal = filtfilt(b, a, signal)
+                print(f"[Filtro] Aplicado filtro pasa-altos a {cutoff_hp:.2f} Hz.")
+            except Exception as e:
+                print(f"ADVERTENCIA: No se pudo aplicar el filtro pasa-altos. Error: {e}")
         
         # --- MODIFICADO: Filtro Notch para 50 Hz (condicional) ---
         if apply_notch_filter:
@@ -1309,50 +1397,108 @@ def procesar_wavs_promedio(
                 print(f"[noise est.] {filename}: fallback a sigma_est: noise_rms={noise_rms:.5e}")
 
         # ---------- Calculo SNR ----------
-        # ---------- Calculo SNR (ruido local por pulso, sin dB) ----------
-        # calculamos RMS de cada segmento (pulso)
-        pulse_rms = np.array([rms(s) for s in segmentos_rs])
+        # ---------- Calculo SNR y Ruido Interpulso Normalizado ----------
+        # Calcular ruido base (como en unificador)
+        if start_sample_noise > 0:
+            initial_noise_segment = signal_recortada[:start_sample_noise]
+            initial_noise_mean = np.mean(np.abs(initial_noise_segment))
+            initial_noise_std = np.std(initial_noise_segment)
+        else:
+            initial_noise_mean = 1e-12
+            initial_noise_std = 1e-12
+            
+        if initial_noise_mean <= 0: initial_noise_mean = 1e-12
+        if initial_noise_std <= 0: initial_noise_std = 1e-12
+
+        # inicializar vectores
+        snr_per_pulse = np.zeros(len(segmentos_rs))
+        noise_rms_per_pulse = np.zeros(len(segmentos_rs))
+
+        # Para la gráfica de evolución:
+        stats_time = []
+        stats_noise_mean = []
+        stats_noise_std = []
+        stats_snr = []
+
+        # longitud (en muestras) de la ventana local de ruido (unificador usa 1/8 del periodo)
+        noise_win_samples = max(3, int(round((periodo / 8.0) * samplerate)))
         
-        # longitud (en muestras) de la ventana local de ruido previa al pulso
-        # (por ejemplo la mitad de pre_samples, mínimo 3 muestras)
-        noise_win_samples = max(3, int(round(0.5 * pre_samples)))
-        
-        # inicializar vector de ruido por pulso (NaN por defecto)
-        noise_rms_per_pulse = np.full_like(pulse_rms, np.nan, dtype=float)
-        
-        # maxima_per_cut contiene los índices absolutos de los máximos en env_recortada
-        # asumimos que maxima_per_cut y segmentos_rs están en el mismo orden
-        for i, max_idx in enumerate(maxima_per_cut[:len(pulse_rms)]):
+        valid_idx = 0
+        n_pulsos_total = int(n_pulsos_manual) if n_pulsos_manual is not None and n_pulsos_manual > 0 else n_pulsos
+        excluded_set_local = set(excluded_windows) if excluded_windows else set()
+
+        for i in range(n_pulsos_total):
+            window_number = i + 1
+            if window_number in excluded_set_local:
+                # Ventana excluida: omitimos insertar datos y matplotlib unirá los puntos válidos con una línea
+                continue
+                
+            if valid_idx >= len(segmentos_rs):
+                continue
+                
+            max_idx = maxima_per_cut[valid_idx]
+            
             seg_start = int(max_idx) - pre_samples
-            # ventana de ruido inmediatamente anterior al segmento: [seg_start - noise_win, seg_start)
             noise_start = max(0, seg_start - noise_win_samples)
             noise_end = max(0, seg_start)
-            if noise_end - noise_start >= 3:
-                noise_segment = env_recortada[noise_start:noise_end]
-                noise_rms_i = rms(np.abs(noise_segment))
-                noise_rms_per_pulse[i] = noise_rms_i if noise_rms_i > 0 else np.nan
+            
+            t_pulso_abs = t_recortada[int(max_idx)]
+            stats_time.append(t_pulso_abs)
+            
+            # SNR como en unificador: pico del pulso / ruido base
+            # Calculamos el pico máximo sobre la señal cruda filtrada, idéntico a como lo hace el Unificador
+            seg_end = int(max_idx) + post_samples
+            raw_segment = signal_recortada[max(0, seg_start):min(len(signal_recortada), seg_end)]
+            peak_val = np.max(np.abs(raw_segment)) if len(raw_segment) > 0 else 0.0
+            
+            curr_snr = peak_val / initial_noise_mean
+            snr_per_pulse[valid_idx] = curr_snr
+            
+            if valid_idx > 0:
+                last_valid_snr = stats_snr[-1] if stats_snr else 0.0
+                snr_acumulado = (last_valid_snr * valid_idx + curr_snr) / (valid_idx + 1)
             else:
-                # si no hay suficientes muestras locales, dejamos NaN para usar fallback luego
-                noise_rms_per_pulse[i] = np.nan
-        
-        # fallback: si no calculamos ruido local para algún pulso, usamos noise_rms global (ya estimado arriba)
-        # si noise_rms global no es usable, lo sustituimos por un eps para evitar división por cero
-        if noise_rms is None or noise_rms <= 0:
-            noise_rms = 1e-12
-        
-        nan_mask = np.isnan(noise_rms_per_pulse)
-        if np.any(nan_mask):
-            noise_rms_per_pulse[nan_mask] = noise_rms
-        
-        # proteger contra ceros
-        noise_rms_per_pulse[noise_rms_per_pulse <= 0] = 1e-12
-        
-        # ahora el SNR por pulso usa ruido local por pulso (sin convertir a dB)
-        snr_per_pulse = pulse_rms / noise_rms_per_pulse
+                snr_acumulado = curr_snr
+            stats_snr.append(snr_acumulado)
+            
+            if noise_end - noise_start >= 3:
+                noise_segment_sig = signal_recortada[noise_start:noise_end]
+                curr_mean = np.mean(np.abs(noise_segment_sig))
+                curr_std = np.std(noise_segment_sig)
+                
+                # Normalizado (porcentaje respecto al inicial)
+                stats_noise_mean.append((curr_mean / initial_noise_mean) * 100.0)
+                stats_noise_std.append((curr_std / initial_noise_std) * 100.0)
+                
+                # Mantenemos esto por si se usa en otro lado
+                noise_rms_per_pulse[valid_idx] = rms(np.abs(env_recortada[noise_start:noise_end]))
+            else:
+                stats_noise_mean.append(100.0)
+                stats_noise_std.append(100.0)
+                noise_rms_per_pulse[valid_idx] = noise_rms if noise_rms is not None else 1e-12
+                
+            valid_idx += 1
+                
         snr_mean = np.mean(snr_per_pulse)
-        
-        # definimos snr_db para evitar NameError, pero no lo usamos (marcar como NaN)
         snr_db = np.nan
+
+        # --- NUEVO: Calcular Deriva de Ruido y Caída de SNR (Evaluación de fatiga y cable) ---
+        valid_snr = snr_per_pulse[:valid_idx]
+        valid_noise = noise_rms_per_pulse[:valid_idx]
+        
+        if len(valid_noise) >= 4:
+            q = max(1, len(valid_noise) // 4) # Tomar el 25% inicial y final
+            noise_start = np.mean(valid_noise[:q])
+            noise_end = np.mean(valid_noise[-q:])
+            noise_drift_pct = ((noise_end / noise_start) - 1.0) * 100.0 if noise_start > 0 else 0.0
+
+            snr_start = np.mean(valid_snr[:q])
+            snr_end = np.mean(valid_snr[-q:])
+            snr_drop_pct = ((snr_start - snr_end) / snr_start) * 100.0 if snr_start > 0 else 0.0
+        else:
+            noise_drift_pct = np.nan
+            snr_drop_pct = np.nan
+            
 # -------------------------------------------------------------------------------
 
 # -------------------------------------------------------------------------------
@@ -1393,6 +1539,7 @@ def procesar_wavs_promedio(
         out_prom = os.path.join(out_dir, "avg.png")       # pulso promedio
         out_spec = os.path.join(out_dir, "spec.png")      # espectro/espectrograma
         out_rec = os.path.join(out_dir, "pulses.png")       # recortes / señal original
+        out_evol = os.path.join(out_dir, "evolucion.png")   # evolucion temporal
 
         # --- GRAFICO: pulsos individuales y promedio (restaurado completo) ---
         _plot_pulse_full(
@@ -1413,7 +1560,9 @@ def procesar_wavs_promedio(
             plot_mode=plot_mode,
             individual_alpha=individual_alpha,
             mostrar_individuales=mostrar_individuales,
-            show_plot=show_average_plot # <-- Pasar el nuevo parámetro
+            show_plot=show_average_plot, # <-- Pasar el nuevo parámetro
+            noise_drift_pct=noise_drift_pct,
+            snr_drop_pct=snr_drop_pct
         )
 
         # --- BLOQUE: Espectrograma y espectro de frecuencias del pulso promedio ---
@@ -1422,14 +1571,22 @@ def procesar_wavs_promedio(
                                            espectrograma_db, frecuenciamaxima, frecuenciaminima, out_spec, final_plot_title)
 
         # --- GRAFICO: señal original recortada con cortes periódicos y puntos de máximo (deteccion en envolvente) ---
+        interactive_excluded = excluded_windows
         if mostrar_recortes:
-            _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds, start_sample_noise, samplerate, maxima_per_cut, periodo, muestras_pulso, out_rec, final_plot_title, excluded_windows=excluded_windows,
+            interactive_excluded = _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds, start_sample_noise, samplerate, maxima_per_cut, periodo, muestras_pulso, out_rec, final_plot_title, excluded_windows=excluded_windows,
                            show_plot=show_interactive_plot,
                            signal_original_unfiltered=signal_unfiltered[mask] # <-- Pasar la señal original recortada
                            )
+                           
+        # --- GRAFICO: Evolución Temporal ---
+        if mostrar_evolucion:
+            _plot_evolucion_temporal(
+                stats_time, stats_snr, stats_noise_mean, stats_noise_std, 
+                out_evol, final_plot_title, evol_t_start, evol_t_end
+            )
 
         # --- NUEVO: Mensaje de resumen mejorado ---
-        print(f"\nCargando, por favor espere... RESUMEN para {filename}: Ventanas totales={n_pulsos}, Ventanas promediadas={len(segmentos_rs)}, SNR_manual={snr_manual:.2f}")
+        print(f"\nCargando, por favor espere... RESUMEN para {filename}:\nVentanas totales={n_pulsos}, Ventanas promediadas={len(segmentos_rs)}\nSNR_manual={snr_manual:.2f}, Deriva Ruido={noise_drift_pct:+.1f}%, Caída SNR={snr_drop_pct:+.1f}%")
 
         promedios_globales.append(np.mean(segmentos_norm, axis=0))
         tiempos_globales.append(t_pulso)
@@ -1455,10 +1612,13 @@ def procesar_wavs_promedio(
             'noise_sigma': noise_sigma,
             'amp_uncertainty': amp_uncertainty,
             'snr_uncertainty': snr_uncertainty,
+            'noise_drift_pct': noise_drift_pct,
+            'snr_drop_pct': snr_drop_pct,
             'out_dir': out_dir,
             'out_prom': out_prom,
             'out_spec': out_spec,
             'out_rec': out_rec,
+            'out_evol': out_evol,
             'pulse_time': t_pulso,
             # --- NUEVO: Añadir datos para poder regenerar el gráfico de recortes ---
             't_recortada': t_recortada,
@@ -1469,6 +1629,7 @@ def procesar_wavs_promedio(
             'muestras_pulso': muestras_pulso,
             'display_name_for_plot': final_plot_title,
             'excluded_windows': excluded_windows,
+            'interactive_excluded_windows': interactive_excluded,
             'start_sample_noise': start_sample_noise,
             'measurement_date': measurement_date,
             'comentario': comentario
@@ -1494,13 +1655,13 @@ class ProcessingOptionsDialog(tk.Toplevel):
         self.grab_set()
 
         self.mediciones_a_procesar = []
-        self.canales_seleccionados = {} # { 'medicion/canal': var_bool }
+        self.canales_seleccionados = {} # { 'canal': var_bool }
 
         main_frame = tk.Frame(self, padx=15, pady=15)
         main_frame.pack(fill="both", expand=True)
 
         # --- Sección de Selección de Canales ---
-        channels_frame = tk.LabelFrame(main_frame, text="2. Seleccionar Canales a Procesar", padx=10, pady=10)
+        channels_frame = tk.LabelFrame(main_frame, text="2. Seleccionar Canales a Procesar (Global)", padx=10, pady=10)
         channels_frame.pack(fill="both", expand=True, pady=(0, 15))
 
         self.channel_list_frame = tk.Frame(channels_frame)
@@ -1514,17 +1675,31 @@ class ProcessingOptionsDialog(tk.Toplevel):
         self.var_mostrar_espectrograma = tk.BooleanVar(value=False)
         self.var_excluded_windows = tk.StringVar(value="")
         # --- NUEVO: Opción para filtro pasa-bajos ---
-        self.var_lowpass_cutoff = tk.StringVar(value="1000") # Valor por defecto para el filtro pasa-bajos
+        self.var_lowpass_cutoff = tk.StringVar(value="500") # Valor por defecto para el filtro pasa-bajos
+        # --- NUEVO: Opción para filtro pasa-altos ---
+        self.var_highpass_cutoff = tk.StringVar(value="20") # Valor por defecto para pasa-altos
         # --- NUEVO: Opción para filtro notch ---
         self.var_notch_filter = tk.BooleanVar(value=True) # Por defecto activado
         # --- NUEVO: Opción para análisis interactivo en 2 pasos ---
         self.var_interactive_analysis = tk.BooleanVar(value=True)
+        # --- NUEVO: Opción Evolución Temporal ---
+        self.var_mostrar_evolucion = tk.BooleanVar(value=False)
+        self.var_evol_t_start = tk.StringVar(value="25")
+        self.var_evol_t_end = tk.StringVar(value="1000")
 
 
         tk.Checkbutton(individual_plots_frame, text="Generar gráfico de recortes (pulses.png)", variable=self.var_mostrar_recortes).pack(anchor="w")
         tk.Checkbutton(individual_plots_frame, text="Generar espectrograma (spec.png)", variable=self.var_mostrar_espectrograma).pack(anchor="w")
         # --- NUEVO: Checkbox para el filtro notch ---
         tk.Checkbutton(individual_plots_frame, text="Aplicar filtro Notch 50 Hz (ruido de línea)", variable=self.var_notch_filter).pack(anchor="w", pady=(5,0))
+
+        evol_frame = tk.Frame(individual_plots_frame)
+        evol_frame.pack(fill='x', pady=(5,0))
+        tk.Checkbutton(evol_frame, text="Gráfico Evolución Temporal SNR y Ruido", variable=self.var_mostrar_evolucion).pack(side="left")
+        tk.Label(evol_frame, text=" | Inicio (s):").pack(side="left")
+        tk.Entry(evol_frame, textvariable=self.var_evol_t_start, width=6).pack(side="left", padx=(0,5))
+        tk.Label(evol_frame, text="Fin (s):").pack(side="left")
+        tk.Entry(evol_frame, textvariable=self.var_evol_t_end, width=6).pack(side="left", padx=(0,5))
 
         exclude_frame = tk.Frame(individual_plots_frame)
         exclude_frame.pack(fill='x', pady=(5,0))
@@ -1533,6 +1708,12 @@ class ProcessingOptionsDialog(tk.Toplevel):
 
         # --- NUEVO: Checkbox para el modo interactivo ---
         tk.Checkbutton(individual_plots_frame, text="Mostrar gráfico de recortes para curación", variable=self.var_interactive_analysis).pack(anchor="w", pady=(5,0))
+
+        # --- NUEVO: Opción para filtro pasa-altos ---
+        highpass_frame = tk.Frame(individual_plots_frame)
+        highpass_frame.pack(fill='x', pady=(5,0))
+        tk.Label(highpass_frame, text="Filtro Pasa-Altos (Hz, 0 para desactivar):").pack(side="left")
+        tk.Entry(highpass_frame, textvariable=self.var_highpass_cutoff, width=10).pack(side="left", padx=(5,0))
 
         # --- NUEVO: Opción para filtro pasa-bajos ---
         lowpass_frame = tk.Frame(individual_plots_frame)
@@ -1548,25 +1729,41 @@ class ProcessingOptionsDialog(tk.Toplevel):
         self.mediciones_a_procesar = mediciones
         self.BASE_DIR = base_dir
         
+        canales_unicos = set()
         for nombre_medicion in self.mediciones_a_procesar:
             path_medicion = os.path.join(self.BASE_DIR, nombre_medicion)
             try:
-                canales = sorted([item for item in os.listdir(path_medicion) if os.path.isdir(os.path.join(path_medicion, item)) and item.startswith("canal_")])
-                if canales:
-                    med_frame = tk.LabelFrame(self.channel_list_frame, text=nombre_medicion, padx=5, pady=5)
-                    med_frame.pack(fill="x", expand=True, pady=2)
-                    for canal in canales:
-                        var = tk.BooleanVar(value=True)
-                        key = os.path.join(nombre_medicion, canal)
-                        self.canales_seleccionados[key] = var
-                        tk.Checkbutton(med_frame, text=canal, variable=var).pack(anchor="w")
+                canales = [item for item in os.listdir(path_medicion) if os.path.isdir(os.path.join(path_medicion, item)) and item.startswith("canal_")]
+                canales_unicos.update(canales)
             except Exception as e:
                 print(f"Error al leer canales de {nombre_medicion}: {e}")
 
+        canales_ordenados = sorted(list(canales_unicos), key=lambda x: int(x.split('_')[-1]) if x.split('_')[-1].isdigit() else 0)
+
+        if canales_ordenados:
+            for canal in canales_ordenados:
+                var = tk.BooleanVar(value=True)
+                self.canales_seleccionados[canal] = var
+                tk.Checkbutton(self.channel_list_frame, text=canal, variable=var).pack(anchor="w")
+        else:
+            tk.Label(self.channel_list_frame, text="No se encontraron canales en las mediciones seleccionadas.", fg="red").pack(anchor="w")
+
     def procesar(self):
-        canales_a_procesar = [key for key, var in self.canales_seleccionados.items() if var.get()]
-        if not canales_a_procesar:
+        canales_globales = [canal for canal, var in self.canales_seleccionados.items() if var.get()]
+        if not canales_globales:
             tk.messagebox.showerror("Error", "No se ha seleccionado ningún canal para procesar.", parent=self)
+            return
+
+        canales_a_procesar = []
+        for nombre_medicion in self.mediciones_a_procesar:
+            for canal in canales_globales:
+                canal_path_rel = os.path.join(nombre_medicion, canal)
+                canal_path_abs = os.path.join(self.BASE_DIR, canal_path_rel)
+                if os.path.exists(canal_path_abs) and os.path.isdir(canal_path_abs):
+                    canales_a_procesar.append(canal_path_rel)
+                    
+        if not canales_a_procesar:
+            tk.messagebox.showerror("Error", "Los canales seleccionados no existen en las mediciones elegidas.", parent=self)
             return
 
         try:
@@ -1575,11 +1772,14 @@ class ProcessingOptionsDialog(tk.Toplevel):
             tk.messagebox.showerror("Error de Formato", "El formato de las ventanas a excluir es incorrecto.", parent=self)
             return
 
-        # --- NUEVO: Validar la entrada del filtro pasa-bajos ---
+        # --- NUEVO: Validar la entrada de los filtros ---
         try:
             lowpass_freq = float(self.var_lowpass_cutoff.get())
+            highpass_freq = float(self.var_highpass_cutoff.get())
+            evol_t_start = float(self.var_evol_t_start.get())
+            evol_t_end = float(self.var_evol_t_end.get())
         except ValueError:
-            tk.messagebox.showerror("Error de Formato", "La frecuencia del filtro pasa-bajos debe ser un número.", parent=self)
+            tk.messagebox.showerror("Error de Formato", "Las frecuencias de los filtros y tiempos deben ser números.", parent=self)
             return
             
         # --- NUEVO: Obtener el estado del checkbox del filtro notch ---
@@ -1591,8 +1791,8 @@ class ProcessingOptionsDialog(tk.Toplevel):
         # --- NUEVO: Cerrar la ventana de opciones al iniciar el procesamiento ---
         self.destroy()
 
-        # --- NUEVO: Cerrar también la ventana principal para liberar recursos ---
-        self.root.destroy()
+        # --- NUEVO: Ocultar la ventana principal en lugar de destruirla para que funcionen los pop-ups ---
+        self.root.withdraw()
 
         total_canales = len(canales_a_procesar)
         print_progress_bar(0, total_canales, prefix='Procesando Canales:', suffix='Completado', length=50)
@@ -1630,49 +1830,87 @@ class ProcessingOptionsDialog(tk.Toplevel):
                 # --- NUEVO: Preguntar si se quiere curar si ya hay ventanas excluidas ---
                 if initial_excluded_windows:
                     perform_curation = tk.messagebox.askyesno("Curación Opcional",
-                        f"Ya existen ventanas excluidas: {initial_excluded_windows}.\n\n"
+                        f"Canal: {nombre_medicion} - {item}\nYa existen ventanas excluidas: {initial_excluded_windows}.\n\n"
                         "¿Desea realizar una nueva curación para modificar esta lista?")
 
             if is_interactive and perform_curation:
                 print("\n[Paso 1 de 2] Realizando análisis inicial para visualización...")
                 # Primer paso: siempre genera el gráfico de recortes, mostrando las ventanas ya excluidas.
                 # Esto permite ver todas las ventanas para decidir cuáles quitar.
-                procesar_wavs_promedio(
+                res_inicial = procesar_wavs_promedio(
                     carpeta=carpeta_a_analizar, output_root=carpeta_a_analizar, nombre_salida="analisis_inicial.png",
                     bpm=bpm_a_usar, mostrar_individuales=False, mostrar_recortes=True, mostrar_espectrograma=False,
                     mostrar_tabla=False, display_name_for_plot=f"{nombre_medicion} ({item})",
-                    noise_seconds=noise_seconds_a_usar, n_pulsos_manual=pulsos_a_usar, excluded_windows=[],
+                    noise_seconds=noise_seconds_a_usar, n_pulsos_manual=pulsos_a_usar, excluded_windows=initial_excluded_windows,
                     show_interactive_plot=True, # <-- Mostrar el gráfico
-                    apply_notch_filter=apply_notch # <-- Pasar estado del filtro
+                    apply_notch_filter=apply_notch, # <-- Pasar estado del filtro
+                    lowpass_cutoff_hz=lowpass_freq,
+                    highpass_cutoff_hz=highpass_freq,
+                    mostrar_evolucion=False,
+                    evol_t_start=evol_t_start,
+                    evol_t_end=evol_t_end
                 )
                 
+                interactive_excl = initial_excluded_windows
+                if res_inicial:
+                    for fname, res in res_inicial.items():
+                        if 'interactive_excluded_windows' in res:
+                            interactive_excl = res['interactive_excluded_windows']
+                            break
+
                 print("\n[Paso 2 de 2] Curación de datos (opcional).")
                 print("Se ha generado el gráfico 'pulses.png' en la carpeta del canal.")
-                print("Por favor, revísalo e introduce la LISTA COMPLETA de ventanas a excluir, separadas por comas.")
                 
-                user_input = input(f"Ventanas a excluir (actual: {initial_excluded_windows}): ")
+                # --- NUEVO: Mostrar y actualizar root para evitar que el diálogo falle en canal 0 ---
+                self.root.deiconify()
+                self.root.update()
+                
+                # --- NUEVO: Pop-up interactivo en lugar de consola ---
+                user_input = simpledialog.askstring(
+                    "Curación de datos",
+                    f"Medición: {nombre_medicion} ({item})\n\n"
+                    "Se han registrado tus selecciones interactivas.\n"
+                    "Puedes editar la LISTA COMPLETA de ventanas a excluir, separadas por comas:\n"
+                    f"(Exclusiones actuales: {interactive_excl})",
+                    initialvalue=str(interactive_excl).strip("[]"),
+                    parent=self.root
+                )
+                
+                self.root.withdraw() # Volver a ocultar la ventana
                 
                 additional_exclusions = []
-                if user_input.strip():
+                if user_input is not None and user_input.strip():
                     try:
                         additional_exclusions = [int(x.strip()) for x in user_input.split(',') if x.strip()]
                         # La lista final para guardar es la unión de las que ya había y las nuevas
                         windows_to_save = sorted(list(set(additional_exclusions))) # La nueva entrada reemplaza a la anterior
                         print(f"Se re-analizará excluyendo las ventanas: {windows_to_save}")
-                        
-                        # --- NUEVO: Guardar las ventanas excluidas en metadata.json ---
-                        meta_data['excluded_windows'] = windows_to_save
-                        with open(meta_path, 'w') as f:
-                            json.dump(meta_data, f, indent=4)
-                        print(f"Lista de exclusión guardada en '{meta_path}'.")
                         final_excluded_windows = windows_to_save # Actualizar la lista final
 
                     except ValueError:
-                        print("Entrada inválida. No se excluirán ventanas adicionales.")
-                        final_excluded_windows = initial_excluded_windows
+                        print("Entrada inválida. Se usarán las exclusiones interactivas.")
+                        final_excluded_windows = interactive_excl
+                elif user_input is not None and not user_input.strip():
+                    # Si el usuario borra todo y da OK
+                    print("Se limpió la lista de exclusiones.")
+                    final_excluded_windows = []
                 else:
-                    print("Entrada vacía. Se mantendrán las exclusiones anteriores si existen.")
-                    final_excluded_windows = initial_excluded_windows
+                    print("Operación cancelada. Se mantendrán las exclusiones interactivas.")
+                    final_excluded_windows = interactive_excl
+                    
+                # --- NUEVO: Guardar las ventanas excluidas en metadata.json de forma segura ---
+                try:
+                    md_temp = {}
+                    if os.path.exists(meta_path):
+                        with open(meta_path, 'r', encoding='utf-8') as f:
+                            md_temp = json.load(f)
+                    md_temp['excluded_windows'] = final_excluded_windows
+                    with open(meta_path, 'w', encoding='utf-8') as f:
+                        json.dump(md_temp, f, indent=4)
+                    print(f"Lista de exclusión ({final_excluded_windows}) guardada en '{meta_path}'.")
+                except Exception as e:
+                    print(f"Advertencia: No se pudo actualizar metadata.json: {e}")
+                    
                 print("\nRealizando análisis final con las ventanas seleccionadas...")
             else: # Modo no interactivo o el usuario eligió no curar
                 final_excluded_windows = initial_excluded_windows
@@ -1691,11 +1929,15 @@ class ProcessingOptionsDialog(tk.Toplevel):
                     display_name_for_plot=f"{nombre_medicion} ({item})",
                     noise_seconds=noise_seconds_a_usar,
                     lowpass_cutoff_hz=lowpass_freq, # <-- Pasar la frecuencia del filtro
+                    highpass_cutoff_hz=highpass_freq, # <-- Pasar la frecuencia del filtro pasa-altos
                     n_pulsos_manual=pulsos_a_usar,
                     show_average_plot=is_interactive, # <-- Mostrar el gráfico promedio si es interactivo
                     show_interactive_plot=False, # <-- El análisis final no necesita ser mostrado
                     excluded_windows=final_excluded_windows, # Usar la lista final de exclusión
-                    apply_notch_filter=apply_notch # <-- Pasar estado del filtro
+                    apply_notch_filter=apply_notch, # <-- Pasar estado del filtro
+                    mostrar_evolucion=self.var_mostrar_evolucion.get(),
+                    evol_t_start=evol_t_start,
+                    evol_t_end=evol_t_end
                 )
 
             print_progress_bar(i + 1, total_canales, prefix='Procesando Canales:', suffix='Completado', length=50)
@@ -1718,6 +1960,8 @@ class ProcessingOptionsDialog(tk.Toplevel):
             print("\n--- ¡Procesamiento de mediciones individuales completado! ---")
             print("Ahora puedes volver a abrir el script para lanzar un análisis comparativo.")
         
+        # --- NUEVO: Cerrar completamente la aplicación al finalizar ---
+        self.root.destroy()
 
 
 class ComparativeOptionsDialog(tk.Toplevel):

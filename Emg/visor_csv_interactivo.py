@@ -26,7 +26,7 @@ try:
     SCIPY_AVAILABLE = True
 except ImportError:
     SCIPY_AVAILABLE = False
-
+    
 import matplotlib
 matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
@@ -206,24 +206,24 @@ class CSVViewerApp:
         filter_frame.pack(fill="x", pady=10)
 
         self.var_notch_filter = tk.BooleanVar(value=False)
-        self.chk_notch = tk.Checkbutton(filter_frame, text="Notch 50 Hz", variable=self.var_notch_filter, command=self.on_channel_toggle, bg="#f0f0f0", font=self.font_label)
+        self.chk_notch = tk.Checkbutton(filter_frame, text="Notch 50 Hz", variable=self.var_notch_filter, command=self.on_filter_toggle, bg="#f0f0f0", font=self.font_label)
         self.chk_notch.pack(anchor="w")
 
         self.var_bandpass_filter = tk.BooleanVar(value=False)
-        self.chk_bandpass = tk.Checkbutton(filter_frame, text="Pasa-Banda", variable=self.var_bandpass_filter, command=self.on_channel_toggle, bg="#f0f0f0", font=self.font_label)
+        self.chk_bandpass = tk.Checkbutton(filter_frame, text="Pasa-Banda", variable=self.var_bandpass_filter, command=self.on_filter_toggle, bg="#f0f0f0", font=self.font_label)
         self.chk_bandpass.pack(anchor="w")
 
         bandpass_options_frame = tk.Frame(filter_frame, bg="#f0f0f0")
         bandpass_options_frame.pack(fill="x", padx=(20, 0))
 
         tk.Label(bandpass_options_frame, text="Baja (Hz):", font=self.font_label, bg="#f0f0f0").pack(side="left")
-        self.spin_low_cut = tk.Spinbox(bandpass_options_frame, from_=1, to=20000, width=6, command=self.on_channel_toggle)
+        self.spin_low_cut = tk.Spinbox(bandpass_options_frame, from_=1, to=20000, width=6, command=self.on_filter_toggle)
         self.spin_low_cut.delete(0, "end")
         self.spin_low_cut.insert(0, "20")
         self.spin_low_cut.pack(side="left", padx=5)
 
         tk.Label(bandpass_options_frame, text="Alta (Hz):", font=self.font_label, bg="#f0f0f0").pack(side="left")
-        self.spin_high_cut = tk.Spinbox(bandpass_options_frame, from_=2, to=22000, width=6, command=self.on_channel_toggle)
+        self.spin_high_cut = tk.Spinbox(bandpass_options_frame, from_=2, to=22000, width=6, command=self.on_filter_toggle)
         self.spin_high_cut.delete(0, "end")
         self.spin_high_cut.insert(0, "500")
         self.spin_high_cut.pack(side="left", padx=5)
@@ -405,8 +405,8 @@ class CSVViewerApp:
             chk.grid(row=row, column=col, sticky="w", padx=2)
             self.channel_vars[col_name] = var
 
-    def plot_full_data(self):
-        """Limpia y dibuja los datos completos de los canales seleccionados. Es lento."""
+    def plot_full_data(self, reset_y_zoom=False):
+        """Limpia y dibuja los datos completos de los canales seleccionados. Aplica filtros."""
         if self.df is None:
             return
         
@@ -427,6 +427,9 @@ class CSVViewerApp:
         fs = 1 / (time_data[1] - time_data[0]) if len(time_data) > 1 else 2000 # Fs por defecto
         apply_notch = self.var_notch_filter.get()
         apply_bandpass = self.var_bandpass_filter.get()
+
+        y_min_plot = np.inf
+        y_max_plot = -np.inf
 
         for col_name in self.channel_cols:
             if self.channel_vars.get(col_name) and self.channel_vars[col_name].get():
@@ -459,6 +462,11 @@ class CSVViewerApp:
 
                 # Submuestreo inteligente sobre los datos procesados
                 x_data, y_data = downsample_lttb_fast(time_data, y_data_processed, MAX_POINTS_TO_PLOT)
+                
+                if len(y_data) > 0:
+                    y_min_plot = min(y_min_plot, np.min(y_data))
+                    y_max_plot = max(y_max_plot, np.max(y_data))
+                    
                 self.ax.plot(x_data, y_data, label=col_name, lw=1.2)
         
         if self.ax.has_data():
@@ -466,12 +474,27 @@ class CSVViewerApp:
             if self.ax.get_legend() is not None: self.ax.get_legend().remove()
             self.ax.legend(loc='upper right') # <-- SOLUCIÓN: Posición fija para evitar cálculo lento.
         
+            # --- NUEVO: Actualizar los límites globales basados en los datos procesados ---
+            if y_min_plot != np.inf and y_max_plot != -np.inf:
+                y_range = y_max_plot - y_min_plot
+                if y_range == 0: y_range = 1.0
+                self.min_y_global = y_min_plot - 0.1 * y_range
+                self.max_y_global = y_max_plot + 0.1 * y_range
+        
         # Restaurar zoom si el usuario había hecho zoom manual
         if is_zoomed_x:
             self.ax.set_xlim(current_xlim)
-            self.ax.set_ylim(current_ylim)
+            if not reset_y_zoom:
+                self.ax.set_ylim(current_ylim)
+            else:
+                self.ax.set_ylim(self.min_y_global, self.max_y_global)
+        else:
+            if reset_y_zoom:
+                self.ax.set_ylim(self.min_y_global, self.max_y_global)
 
         self.canvas.draw()
+        if reset_y_zoom:
+            self.update_y_scrollbar()
 
     def on_ax_ylim_changed(self, ax):
         """Se activa cuando los límites del eje Y del gráfico cambian (por zoom, etc.)."""
@@ -481,6 +504,14 @@ class CSVViewerApp:
 
     def on_channel_toggle(self):
         self.plot_full_data()
+        self.update_view_from_controls()
+        
+    def on_filter_toggle(self, *args):
+        """Se llama cuando se cambia algún filtro para resetear el zoom vertical y no perder de vista la señal."""
+        self._is_programmatically_updating_sliders = True
+        self.y_zoom_slider.set(100)
+        self._is_programmatically_updating_sliders = False
+        self.plot_full_data(reset_y_zoom=True)
         self.update_view_from_controls()
 
 
@@ -660,11 +691,38 @@ class CSVViewerApp:
         export_ax.set_ylabel("Amplitud (µV)")
         export_ax.set_title(f"Exportación de Vista: {os.path.basename(self.last_loaded_filepath)}")
         
-        # 4. Dibujar los datos de alta calidad en la nueva figura
-        time_data = visible_df[self.time_col]
+        # 4. Dibujar los datos de alta calidad con filtros aplicados
+        time_data = self.df[self.time_col].values
+        fs = 1 / (time_data[1] - time_data[0]) if len(time_data) > 1 else 2000
+        apply_notch = self.var_notch_filter.get()
+        apply_bandpass = self.var_bandpass_filter.get()
+
         for col_name in self.channel_cols:
             if self.channel_vars.get(col_name) and self.channel_vars[col_name].get():
-                export_ax.plot(time_data, visible_df[col_name], label=col_name, lw=1.2)
+                y_data_processed = self.df[col_name].values
+                
+                # Aplicar mismos filtros a la exportación
+                if apply_notch and SCIPY_AVAILABLE:
+                    try:
+                        b, a = signal.iirnotch(50.0, 2.0, fs)
+                        y_data_processed = signal.filtfilt(b, a, y_data_processed)
+                    except Exception: pass
+                
+                if apply_bandpass and SCIPY_AVAILABLE:
+                    try:
+                        low_cut = float(self.spin_low_cut.get())
+                        high_cut = float(self.spin_high_cut.get())
+                        if low_cut < high_cut:
+                            nyquist = 0.5 * fs
+                            low = low_cut / nyquist
+                            high = min(high_cut / nyquist, 0.99)
+                            sos = signal.butter(4, [low, high], btype='band', output='sos')
+                            y_data_processed = signal.sosfiltfilt(sos, y_data_processed)
+                    except Exception: pass
+
+                # Graficar solo el segmento visible de los datos ya filtrados
+                mask = (time_data >= current_xlim[0]) & (time_data <= current_xlim[1])
+                export_ax.plot(time_data[mask], y_data_processed[mask], label=col_name, lw=1.2)
 
         # 5. Aplicar los mismos límites de zoom y leyenda
         export_ax.set_xlim(current_xlim)

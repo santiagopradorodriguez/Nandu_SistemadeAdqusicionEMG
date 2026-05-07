@@ -70,12 +70,16 @@ except ImportError:
 # =============================================================================
 # BLOQUE 1: HILO DE ADQUISICIÓN (Sin cambios)
 # =============================================================================
-def acquisition_thread(device_channels, sample_rate, chunk_samples, num_canales, data_queue, stop_event):
+def acquisition_thread(device_channels, sample_rate, chunk_samples, num_canales, data_queue, stop_event, terminal_config_val=None):
     print(f"Iniciando hilo de adquisición con SR={sample_rate} Hz...")
     try:
         with nidaqmx.Task() as task:
             for canal in device_channels:
-                task.ai_channels.add_ai_voltage_chan(canal, terminal_config=TerminalConfiguration.RSE)
+                # --- CORRECCIÓN: Forzar rango de voltaje explícito para evitar auto-escalado de la DAQ ---
+                if terminal_config_val is not None:
+                    task.ai_channels.add_ai_voltage_chan(canal, terminal_config=terminal_config_val, min_val=-10.0, max_val=10.0)
+                else:
+                    task.ai_channels.add_ai_voltage_chan(canal, terminal_config=TerminalConfiguration.RSE, min_val=-10.0, max_val=10.0)
             
             task.timing.cfg_samp_clk_timing(
                 rate=sample_rate,
@@ -109,9 +113,40 @@ def acquisition_thread(device_channels, sample_rate, chunk_samples, num_canales,
         if not stop_event.is_set():
             stop_event.set()
 
-def simulador_thread(chunk_samples, sample_rate, num_canales, data_queue, stop_event, test_freq=50):
-    print(f"Iniciando hilo de simulación con SR={sample_rate} Hz y Frec. Prueba={test_freq} Hz...")
+def simulador_thread(chunk_samples, sample_rate, num_canales, data_queue, stop_event, test_freq=50, tipo_prueba="Senoidal"):
+    print(f"Iniciando hilo de simulación con SR={sample_rate} Hz, Tipo={tipo_prueba}...")
     
+    datos_archivo = None
+    total_samples_archivo = 0
+    
+    if "Archivo" in tipo_prueba:
+        try:
+            import pandas as pd
+            import os
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            test_dir = os.path.join(script_dir, "base_de_datos_electrodos", "senal_de_prueba")
+            os.makedirs(test_dir, exist_ok=True)
+            csv_path = os.path.join(test_dir, "grabacion.csv")
+            
+            if os.path.exists(csv_path):
+                df = pd.read_csv(csv_path)
+                canales_cols = [c for c in df.columns if "Canal" in c]
+                if canales_cols:
+                    datos_archivo = df[canales_cols].values.T
+                    if datos_archivo.shape[0] < num_canales:
+                        pad = np.zeros((num_canales - datos_archivo.shape[0], datos_archivo.shape[1]))
+                        datos_archivo = np.vstack((datos_archivo, pad))
+                    else:
+                        datos_archivo = datos_archivo[:num_canales, :]
+                    total_samples_archivo = datos_archivo.shape[1]
+                    print(f"Archivo de prueba cargado correctamente ({total_samples_archivo} muestras).")
+                else:
+                    print("El CSV no tiene columnas de 'Canal'. Usando Senoidal.")
+            else:
+                print(f"Archivo no encontrado en {csv_path}. Asegúrate de crearlo. Usando Senoidal.")
+        except Exception as e:
+            print(f"Error al cargar el archivo de prueba: {e}. Usando Senoidal.")
+
     # --- MEJORA: Usar el tiempo real para una simulación más fluida ---
     # En lugar de un tiempo_acumulado propenso a errores por la imprecisión de time.sleep(),
     # usamos el tiempo real del sistema para generar la señal.
@@ -119,10 +154,19 @@ def simulador_thread(chunk_samples, sample_rate, num_canales, data_queue, stop_e
     samples_generados = 0
 
     while not stop_event.is_set():
-        # Calculamos el tiempo actual basado en el número de muestras que ya hemos generado.
-        # Esto asegura que la fase de la onda sinusoidal sea siempre continua.
-        tiempo_actual_bloque = samples_generados / sample_rate
-        datos_leidos = generar_senales_prueba(tiempo_actual_bloque, chunk_samples, sample_rate, num_canales, test_freq)
+        if datos_archivo is not None:
+            idx_start = samples_generados % total_samples_archivo
+            idx_end = idx_start + chunk_samples
+            if idx_end <= total_samples_archivo:
+                datos_leidos = datos_archivo[:, idx_start:idx_end]
+            else:
+                part1 = datos_archivo[:, idx_start:]
+                part2 = datos_archivo[:, :idx_end - total_samples_archivo]
+                datos_leidos = np.hstack((part1, part2))
+        else:
+            tiempo_actual_bloque = samples_generados / sample_rate
+            datos_leidos = generar_senales_prueba(tiempo_actual_bloque, chunk_samples, sample_rate, num_canales, test_freq)
+            
         data_queue.put(datos_leidos)
         samples_generados += chunk_samples
 
@@ -305,6 +349,61 @@ def generar_grafico_grabacion(datos_completos, sample_rate, output_dir, num_cana
         plt.close(fig) # Liberar memoria
 
 # =============================================================================
+# BLOQUE 3.4: GENERADOR DE GRÁFICOS ESTADÍSTICOS
+# =============================================================================
+def generar_grafico_estadisticas(stats_time, stats_snr, stats_noise_mean, stats_noise_std, output_dir, num_canales, canales_daq, base_name="estadisticas_evolucion"):
+    # Verificar si hay datos que graficar
+    hay_datos = any(len(t) > 0 for t in stats_time)
+    if not hay_datos:
+        print("No hay datos estadísticos para graficar.")
+        return False
+
+    print("Generando gráfico de evolución temporal de estadísticas...")
+    fig, axs = plt.subplots(num_canales, 2, figsize=(15, 4 * num_canales), squeeze=False)
+    fig.suptitle(f"Evolución Temporal: SNR y Ruido Inter-pulso", fontsize=16)
+
+    for i in range(num_canales):
+        t = stats_time[i]
+        if not t:
+            continue
+        
+        # --- NUEVO: Filtrar los primeros 20 segundos para el gráfico ---
+        t_arr = np.array(t)
+        mask = t_arr >= 20.0
+        
+        # Si la grabación duró menos de 20 segundos, graficamos todo
+        if not np.any(mask):
+            mask = np.ones_like(t_arr, dtype=bool)
+            
+        t_plot = t_arr[mask]
+        snr_plot = np.array(stats_snr[i])[mask]
+        noise_mean_plot = np.array(stats_noise_mean[i])[mask]
+        noise_std_plot = np.array(stats_noise_std[i])[mask]
+
+        # Subplot Izquierdo: SNR
+        axs[i, 0].plot(t_plot, snr_plot, marker='o', linestyle='-', color='b', linewidth=2)
+        axs[i, 0].set_title(f"Canal {i} ({canales_daq[i]}) - Evolución SNR Promedio")
+        axs[i, 0].set_xlabel("Tiempo de Señal (s)")
+        axs[i, 0].set_ylabel("SNR Promedio Acumulado")
+        axs[i, 0].grid(True, alpha=0.5)
+
+        # Subplot Derecho: Ruido (x̄ y σ)
+        axs[i, 1].plot(t_plot, noise_mean_plot, marker='o', linestyle='-', color='r', label='Promedio (x̄)', linewidth=2)
+        axs[i, 1].plot(t_plot, noise_std_plot, marker='x', linestyle='--', color='orange', label='Desviación (σ)', linewidth=2)
+        axs[i, 1].set_title(f"Canal {i} ({canales_daq[i]}) - Evolución Ruido Inter-pulso")
+        axs[i, 1].set_xlabel("Tiempo de Señal (s)")
+        axs[i, 1].set_ylabel("Amplitud (µV)")
+        axs[i, 1].legend()
+        axs[i, 1].grid(True, alpha=0.5)
+
+    nombre_archivo = os.path.join(output_dir, f"{base_name}.png")
+    plt.tight_layout(rect=[0, 0.03, 1, 0.96])
+    plt.savefig(nombre_archivo, dpi=200)
+    plt.close(fig)
+    print(f"   ✅ Gráfico de estadísticas guardado como: {nombre_archivo}")
+    return True
+
+# =============================================================================
 # BLOQUE 4: INTERFAZ GRÁFICA (GUI) (MODIFICADO v3.12)
 # =============================================================================
 
@@ -429,6 +528,10 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.noise_data_accumulated = []
         self.noise_levels = []
         self.noise_lines = []
+        self.noise_lines_neg = []
+        self.noise_regions = []
+        self.dynamic_noise_lines_pos = []
+        self.dynamic_noise_lines_neg = []
         self.noise_calculated = False
 
         # --- NUEVO: Buffers y configuración del espectrograma ---
@@ -477,15 +580,18 @@ class RealTimePlotter(QtWidgets.QWidget):
     def _load_protocol_config(self):
         bpm = 60
         pulse_count = 30
+        notch_enabled = True # Por defecto activado
         if os.path.exists('metronome_config.json'):
             try:
                 with open('metronome_config.json', 'r') as f:
                     data = json.load(f)
                     bpm = data.get('last_bpm', 60)
                     pulse_count = data.get('last_beat_count', 30)
+                    notch_enabled = data.get('notch_enabled', True) # Recuperar el estado anterior
             except Exception:
                 pass # Usar defaults si hay error
         self.spin_bpm.setValue(bpm)
+        self.chk_notch_enable.setChecked(notch_enabled) # Aplicar a la casilla
 
     def _setup_ui_layouts(self):
         self.main_layout = QtWidgets.QVBoxLayout()
@@ -518,6 +624,11 @@ class RealTimePlotter(QtWidgets.QWidget):
         # --- NUEVO: Checkbox para Modo Prueba ---
         self.chk_modo_prueba = QtWidgets.QCheckBox("Modo Prueba")
         self.chk_modo_prueba.setToolTip("Usa datos simulados en lugar de la tarjeta NI-DAQ.")
+        
+        self.cmb_fuente_prueba = QtWidgets.QComboBox()
+        self.cmb_fuente_prueba.addItems(["Senoidal", "Archivo 'senal_de_prueba'"])
+        self.cmb_fuente_prueba.setEnabled(False)
+        self.cmb_fuente_prueba.setToolTip("Elige si simular con onda senoidal o cargar 'grabacion.csv' de la carpeta 'senal_de_prueba'")
 
         # --- NUEVO: Checkbox para el Metrónomo ---
         self.chk_use_metronome = QtWidgets.QCheckBox("Usar Metrónomo")
@@ -561,9 +672,10 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.config_layout.addWidget(self.label_device, 0, 0)
         self.config_layout.addWidget(self.cmb_device, 0, 1)
         self.config_layout.addWidget(self.chk_modo_prueba, 0, 2)
-        self.config_layout.addWidget(self.chk_use_metronome, 0, 3)
-        self.config_layout.addWidget(self.label_test_freq, 0, 4)
-        self.config_layout.addWidget(self.spin_test_freq, 0, 5)
+        self.config_layout.addWidget(self.cmb_fuente_prueba, 0, 3)
+        self.config_layout.addWidget(self.chk_use_metronome, 0, 4)
+        self.config_layout.addWidget(self.label_test_freq, 0, 5)
+        self.config_layout.addWidget(self.spin_test_freq, 0, 6)
         self.config_layout.addWidget(self.label_sample_rate, 1, 0) # Fila 1
         self.config_layout.addWidget(self.cmb_sample_rate, 1, 1) 
         self.config_layout.addWidget(self.label_plot_duration, 1, 2)
@@ -574,6 +686,16 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.config_layout.addWidget(self.spin_noise_duration, 2, 6) # Ruido
         self.config_layout.addWidget(self.label_channels, 2, 0)
         self.config_layout.addLayout(self.channel_layout, 2, 1, 1, 4) # row, col, rowspan, colspan
+        
+        # --- NUEVO: Control de Modo Terminal ---
+        self.label_terminal_config = QtWidgets.QLabel("Modo Terminal:")
+        self.cmb_terminal_config = QtWidgets.QComboBox()
+        self.cmb_terminal_config.addItems(["RSE", "DIFF", "NRSE", "DEFAULT"])
+        self.cmb_terminal_config.setCurrentText("RSE")
+        self.cmb_terminal_config.setToolTip("Modo de conexión a tierra. Usa 'DIFF' si tienes mucho ruido de 50 Hz.")
+        self.config_layout.addWidget(self.label_terminal_config, 3, 0)
+        self.config_layout.addWidget(self.cmb_terminal_config, 3, 1)
+
         self.config_layout.addWidget(self.btn_start_acq, 0, 7, 4, 1) # Ocupa 4 filas
 
     def _setup_ui_filter_panel(self):
@@ -758,6 +880,7 @@ class RealTimePlotter(QtWidgets.QWidget):
 
         # --- NUEVO: Conectar Checkbox de Modo Prueba ---
         self.chk_modo_prueba.toggled.connect(self._on_modo_prueba_toggled)
+        self.cmb_terminal_config.currentIndexChanged.connect(self.on_terminal_mode_changed) # <-- NUEVO
 
         # --- NUEVO: Conectar Widgets del Espectrograma ---
         self.chk_spectrogram_enable.clicked.connect(self.on_spectrogram_enable_toggle)
@@ -773,10 +896,45 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.curvas = []
         self.colores_curvas = ['y', 'c', 'm', 'g', 'r', 'w', (255, 165, 0), (128, 0, 128)] # y,c,m,g,r,w,orange,purple
 
+    # --- NUEVO: Cambio de modo de conexión en tiempo real ---
+    def on_terminal_mode_changed(self):
+        if self.is_acquiring and not self.chk_modo_prueba.isChecked() and NIDAQMX_DISPONIBLE:
+            print(f"Cambiando modo terminal a {self.cmb_terminal_config.currentText()} en tiempo real...")
+            
+            # 1. Detener hilo actual DAQ temporalmente
+            self.stop_event.set()
+            if self.acquisition_thread:
+                self.acquisition_thread.join(timeout=2.0)
+            
+            # 2. Vaciar la cola de datos para evitar un desborde con el salto de tiempo
+            while not self.data_queue.empty():
+                try: self.data_queue.get_nowait()
+                except queue.Empty: break
+            
+            # 3. Obtener el nuevo modo seleccionado
+            terminal_config_str = self.cmb_terminal_config.currentText()
+            terminal_modes = {
+                "RSE": TerminalConfiguration.RSE, "DIFF": TerminalConfiguration.DIFF,
+                "NRSE": TerminalConfiguration.NRSE, "DEFAULT": TerminalConfiguration.DEFAULT
+            }
+            terminal_config_val = terminal_modes.get(terminal_config_str, TerminalConfiguration.DEFAULT)
+            
+            # 4. Reiniciar el hilo inmediatamente con la nueva configuración
+            self.stop_event.clear()
+            chunk_samples_dinamico = int(self.SAMPLE_RATE * 0.05)
+            self.acquisition_thread = threading.Thread(
+                target=acquisition_thread, 
+                args=(self.CANALES_DAQ, self.SAMPLE_RATE, chunk_samples_dinamico, self.NUM_CANALES, self.data_queue, self.stop_event, terminal_config_val), 
+                daemon=True
+            )
+            self.acquisition_thread.start()
+
     def _on_modo_prueba_toggled(self, checked):
         """Se llama cuando el checkbox de Modo Prueba cambia."""
         self.cmb_device.setEnabled(not checked)
+        self.cmb_terminal_config.setEnabled(not checked)
         # --- NUEVO: Habilitar/deshabilitar control de frecuencia ---
+        self.cmb_fuente_prueba.setEnabled(checked)
         self.label_test_freq.setEnabled(checked)
         self.spin_test_freq.setEnabled(checked)
         print(f"Modo Prueba {'Activado' if checked else 'Desactivado'}.")
@@ -832,8 +990,10 @@ class RealTimePlotter(QtWidgets.QWidget):
             self.btn_start_acq.setText("Iniciar Adquisición")
             self.btn_start_acq.setStyleSheet(self.BTN_START_STYLE)
             self.cmb_device.setEnabled(True)
+            self.cmb_terminal_config.setEnabled(True)
             self.cmb_sample_rate.setEnabled(True)
             self.chk_modo_prueba.setEnabled(True)
+            self.cmb_fuente_prueba.setEnabled(self.chk_modo_prueba.isChecked())
             self.spin_plot_duration.setEnabled(True)
             self.chk_use_metronome.setEnabled(True)
             for chk in self.channel_checkboxes: chk.setEnabled(True)
@@ -867,7 +1027,20 @@ class RealTimePlotter(QtWidgets.QWidget):
 
             self.CANALES_DAQ = [f"{device}/{ch}" for ch in selected_channels]
             self.NUM_CANALES = len(self.CANALES_DAQ)
-            print(f"Iniciando con SR={self.SAMPLE_RATE}, Plot={self.PLOT_DURATION_S}s, Canales={self.CANALES_DAQ}")
+            
+            # --- NUEVO: Obtener modo terminal ---
+            terminal_config_str = self.cmb_terminal_config.currentText()
+            terminal_config_val = None
+            if NIDAQMX_DISPONIBLE:
+                terminal_modes = {
+                    "RSE": TerminalConfiguration.RSE,
+                    "DIFF": TerminalConfiguration.DIFF,
+                    "NRSE": TerminalConfiguration.NRSE,
+                    "DEFAULT": TerminalConfiguration.DEFAULT
+                }
+                terminal_config_val = terminal_modes.get(terminal_config_str, TerminalConfiguration.DEFAULT)
+
+            print(f"Iniciando con SR={self.SAMPLE_RATE}, Plot={self.PLOT_DURATION_S}s, Canales={self.CANALES_DAQ}, Terminal={terminal_config_str}")
 
             # --- NUEVO: Vaciar la cola de datos antes de empezar ---
             # Esto previene que datos de una adquisición anterior (con diferente N de canales)
@@ -898,15 +1071,21 @@ class RealTimePlotter(QtWidgets.QWidget):
             self.stop_event.clear()
             if self.chk_modo_prueba.isChecked():
                 test_freq = self.spin_test_freq.value()
-                self.acquisition_thread = threading.Thread(target=simulador_thread, args=(chunk_samples_dinamico, self.SAMPLE_RATE, self.NUM_CANALES, self.data_queue, self.stop_event, test_freq), daemon=True)
+                tipo_prueba = self.cmb_fuente_prueba.currentText()
+                self.acquisition_thread = threading.Thread(target=simulador_thread, args=(chunk_samples_dinamico, self.SAMPLE_RATE, self.NUM_CANALES, self.data_queue, self.stop_event, test_freq, tipo_prueba), daemon=True)
             else:
                 if not NIDAQMX_DISPONIBLE:
                     print("Error: nidaqmx no encontrado. No se puede correr en modo real.")
                     return
-                self.acquisition_thread = threading.Thread(target=acquisition_thread, args=(self.CANALES_DAQ, self.SAMPLE_RATE, chunk_samples_dinamico, self.NUM_CANALES, self.data_queue, self.stop_event), daemon=True)
+                self.acquisition_thread = threading.Thread(target=acquisition_thread, args=(self.CANALES_DAQ, self.SAMPLE_RATE, chunk_samples_dinamico, self.NUM_CANALES, self.data_queue, self.stop_event, terminal_config_val), daemon=True)
             
             self.acquisition_thread.start()
             self.is_acquiring = True
+            
+            # --- NUEVO: Preparar el auto-ajuste de barras al iniciar ---
+            self.needs_auto_threshold = True
+            self.acq_start_time = time.perf_counter()
+            self._raw_print_done = False # Para imprimir el voltaje RAW de depuración
             
             # --- CORRECCIÓN: Inicializar filtros ahora que is_acquiring es True ---
             self.on_filter_settings_changed()
@@ -914,8 +1093,10 @@ class RealTimePlotter(QtWidgets.QWidget):
             self.btn_start_acq.setText("Detener Adquisición")
             self.btn_start_acq.setStyleSheet(self.BTN_STOP_STYLE)
             self.cmb_device.setEnabled(False)
+            # self.cmb_terminal_config.setEnabled(False) # <-- ELIMINADO para poder cambiar en vivo
             self.cmb_sample_rate.setEnabled(False)
             self.chk_modo_prueba.setEnabled(False)
+            self.cmb_fuente_prueba.setEnabled(False)
             self.spin_plot_duration.setEnabled(False)
             self.chk_use_metronome.setEnabled(False)
             for chk in self.channel_checkboxes: chk.setEnabled(False)
@@ -945,12 +1126,24 @@ class RealTimePlotter(QtWidgets.QWidget):
         # Limpiar curvas, labels de medida y combo de trigger
         for curva in self.curvas: self.plot.removeItem(curva)
         for line in getattr(self, 'noise_lines', []): self.plot.removeItem(line)
+        for line in getattr(self, 'noise_lines_neg', []): self.plot.removeItem(line)
+        for reg in getattr(self, 'noise_regions', []): self.plot.removeItem(reg)
+        for line in getattr(self, 'dynamic_noise_lines_pos', []): self.plot.removeItem(line)
+        for line in getattr(self, 'dynamic_noise_lines_neg', []): self.plot.removeItem(line)
         for scatter in getattr(self, 'peak_scatters', []): self.plot.removeItem(scatter)
         for label in self.measure_labels: label.deleteLater()
         self.curvas.clear()
         self.noise_lines.clear()
+        self.noise_lines_neg.clear()
+        self.noise_regions.clear()
+        self.dynamic_noise_lines_pos.clear()
+        self.dynamic_noise_lines_neg.clear()
         self.peak_scatters = []
         self.measure_labels.clear()
+        if hasattr(self, 'noise_status_labels'):
+            self.noise_status_labels.clear()
+        else:
+            self.noise_status_labels = []
         self.cmb_spectrogram_chan.clear()
         self.cmb_trig_chan.clear()
         
@@ -981,15 +1174,38 @@ class RealTimePlotter(QtWidgets.QWidget):
             self.curvas.append(self.plot.plot(pen=color, name=f'Canal {i}'))
             
             # --- NUEVO: Línea de piso de ruido ---
-            line_ruido = pg.InfiniteLine(angle=0, pen=pg.mkPen('r', style=QtCore.Qt.DashLine))
+            line_ruido = pg.InfiniteLine(angle=0, pen=pg.mkPen('r', width=4, style=QtCore.Qt.DashLine))
             line_ruido.hide()
             self.plot.addItem(line_ruido)
             self.noise_lines.append(line_ruido)
+            
+            line_ruido_n = pg.InfiniteLine(angle=0, pen=pg.mkPen('r', width=4, style=QtCore.Qt.DashLine))
+            line_ruido_n.hide()
+            self.plot.addItem(line_ruido_n)
+            self.noise_lines_neg.append(line_ruido_n)
+            
+            region_ruido = pg.LinearRegionItem(orientation='horizontal', brush=pg.mkBrush(255, 0, 0, 40), movable=False)
+            region_ruido.lines[0].setPen(pg.mkPen(None)) # Ocultar bordes propios
+            region_ruido.lines[1].setPen(pg.mkPen(None))
+            region_ruido.hide()
+            self.plot.addItem(region_ruido)
+            self.noise_regions.append(region_ruido)
             
             # --- NUEVO: Marcador visual para el pico máximo (SNR) ---
             scatter = pg.ScatterPlotItem(size=12, pen=pg.mkPen('w', width=1.5), brush=pg.mkBrush(color))
             self.plot.addItem(scatter)
             self.peak_scatters.append(scatter)
+            
+            # --- NUEVO: Líneas dinámicas de ruido inter-pulso ---
+            dyn_line_p = pg.InfiniteLine(angle=0, pen=pg.mkPen('g', width=2, style=QtCore.Qt.DotLine))
+            dyn_line_p.hide()
+            self.plot.addItem(dyn_line_p)
+            self.dynamic_noise_lines_pos.append(dyn_line_p)
+            
+            dyn_line_n = pg.InfiniteLine(angle=0, pen=pg.mkPen('g', width=2, style=QtCore.Qt.DotLine))
+            dyn_line_n.hide()
+            self.plot.addItem(dyn_line_n)
+            self.dynamic_noise_lines_neg.append(dyn_line_n)
 
             # --- NUEVO: Crear un QFrame para cada medición ---
             measurement_frame = QtWidgets.QFrame()
@@ -1001,6 +1217,12 @@ class RealTimePlotter(QtWidgets.QWidget):
             label = QtWidgets.QLabel(f"<b>Ch {i}:</b> -- µVp-p, -- µVrms")
             label.setStyleSheet(f"color: {pg.mkColor(color).name()};") # Color del texto igual al de la curva
             frame_layout.addWidget(label)
+            
+            # --- NUEVO: Etiqueta para el tester de ruido ---
+            label_ruido = QtWidgets.QLabel("Ruido inter-pulso: Esperando grabación...")
+            label_ruido.setStyleSheet("color: gray; font-size: 11px; background-color: transparent;")
+            frame_layout.addWidget(label_ruido)
+            self.noise_status_labels.append(label_ruido)
             
             self.measure_layout.addWidget(measurement_frame)
             self.measure_labels.append(label) # Guardar solo el label para actualizar su texto
@@ -1014,7 +1236,10 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.trigger_last_values = np.zeros(self.NUM_CANALES)
 
         # Inicializar buffer del espectrograma
-        self.spectrogram_buffer = np.zeros((self.SPECTROGRAM_HISTORY_LEN, self.SPECTROGRAM_FFT_LEN // 2 + 1))
+        chunk_samples_dinamico = int(self.SAMPLE_RATE * 0.05)
+        self.CURRENT_FFT_LEN = min(self.SPECTROGRAM_FFT_LEN, chunk_samples_dinamico)
+        if self.CURRENT_FFT_LEN % 2 != 0: self.CURRENT_FFT_LEN -= 1
+        self.spectrogram_buffer = np.zeros((self.SPECTROGRAM_HISTORY_LEN, self.CURRENT_FFT_LEN // 2 + 1))
         self.on_spectrogram_enable_toggle() # Para mostrar/ocultar la vista
 
         # --- CORRECCIÓN v3: Configurar la transformación del espectrograma una sola vez ---
@@ -1025,11 +1250,11 @@ class RealTimePlotter(QtWidgets.QWidget):
         
         # Eje Y (Frecuencia): Va de 0 a Frecuencia de Nyquist.
         nyquist = self.SAMPLE_RATE / 2.0
-        freq_scale = nyquist / (self.SPECTROGRAM_FFT_LEN / 2 + 1)
+        freq_scale = nyquist / (self.CURRENT_FFT_LEN / 2 + 1)
 
         # Eje X (Tiempo): El ancho total del historial del espectrograma en segundos.
         # Cada columna representa un segmento de tiempo (nperseg - noverlap) / fs.
-        time_per_column = (self.SPECTROGRAM_FFT_LEN - (self.SPECTROGRAM_FFT_LEN // 2)) / self.SAMPLE_RATE
+        time_per_column = (self.CURRENT_FFT_LEN - (self.CURRENT_FFT_LEN // 2)) / self.SAMPLE_RATE
         time_scale = time_per_column
 
         view.setAspectLocked(False) # Desbloquear la relación de aspecto para escalar ejes independientemente
@@ -1112,6 +1337,8 @@ class RealTimePlotter(QtWidgets.QWidget):
             # --- Deshabilitar filtro Notch ---
             self.notch_sos = None
             self.notch_zi = None
+            
+        self._init_filter_state = True # <-- NUEVO: Bandera para eliminar el pico transitorio inicial
 
     # --- FUNCIONES v3.7 (Trigger) ---
     def on_trigger_enable_toggle(self):
@@ -1240,12 +1467,33 @@ class RealTimePlotter(QtWidgets.QWidget):
             self.is_recording = True
             self.counting_started = False # Reiniciar la bandera de conteo
             self.current_recording.clear()
+            self.cmb_terminal_config.setEnabled(False) # <-- NUEVO: Bloquear cambio en plena grabación
             
             # --- NUEVO: Reiniciar variables de ruido ---
             self.noise_data_accumulated = [[] for _ in range(self.NUM_CANALES)]
             self.noise_levels = [0.0] * self.NUM_CANALES
             self.noise_calculated = False
             for line in getattr(self, 'noise_lines', []): line.hide()
+            for line in getattr(self, 'noise_lines_neg', []): line.hide()
+            for reg in getattr(self, 'noise_regions', []): reg.hide()
+            for line in getattr(self, 'dynamic_noise_lines_pos', []): line.hide()
+            for line in getattr(self, 'dynamic_noise_lines_neg', []): line.hide()
+            
+            # --- NUEVO: Reiniciar tester de ruido ---
+            self.initial_noise_mean = [0.0] * self.NUM_CANALES
+            self.initial_noise_std = [0.0] * self.NUM_CANALES
+            self.last_phase = 0.0
+            
+            # --- NUEVO: Variables para gráfico final de estadísticas ---
+            self.stats_time = [[] for _ in range(self.NUM_CANALES)]
+            self.stats_snr = [[] for _ in range(self.NUM_CANALES)]
+            self.stats_noise_mean = [[] for _ in range(self.NUM_CANALES)]
+            self.stats_noise_std = [[] for _ in range(self.NUM_CANALES)]
+            
+            if hasattr(self, 'noise_status_labels'):
+                for label in self.noise_status_labels:
+                    label.setText("Ruido inter-pulso: Evaluando base...")
+                    label.setStyleSheet("color: gray; font-size: 11px; background-color: transparent;")
             
             # --- NUEVO: Re-lanzar el metrónomo si es necesario ---
             # Si se usó el metrónomo en la adquisición actual pero el proceso ya no existe
@@ -1273,6 +1521,7 @@ class RealTimePlotter(QtWidgets.QWidget):
             self.btn_record.setText("Empezar a Grabar")
             self.btn_record.setStyleSheet(self.BTN_REC_START_STYLE)
             self.label_rec_time.setVisible(False)
+            self.cmb_terminal_config.setEnabled(not self.chk_modo_prueba.isChecked()) # <-- NUEVO: Desbloquear
             self.recording_start_time = None
             
             # --- MEJORA: Terminar el proceso del metrónomo solo si todavía existe ---
@@ -1391,6 +1640,12 @@ class RealTimePlotter(QtWidgets.QWidget):
             print(f"--- ❌ ERROR FATAL AL GUARDAR .PNG ---\n{e}")
             print("   (¿Estás seguro de que 'matplotlib' está instalado? -> pip install matplotlib)")
 
+        # 4. Genera el gráfico de estadísticas (Evolución de SNR y Ruido)
+        try:
+            generar_grafico_estadisticas(self.stats_time, self.stats_snr, self.stats_noise_mean, self.stats_noise_std, output_dir, self.NUM_CANALES, self.CANALES_DAQ)
+        except Exception as e:
+            print(f"--- ❌ ERROR FATAL AL GUARDAR GRÁFICO ESTADÍSTICO ---\n{e}")
+
         print("--- EXPORTACIÓN FINALIZADA ---")
 
     def actualizar_plot(self):
@@ -1416,8 +1671,23 @@ class RealTimePlotter(QtWidgets.QWidget):
                 self.current_recording.append(all_new_data.copy())
 
             # 4. Calibrar para la visualización y análisis en tiempo real
+            
+            # --- NUEVO: Imprimir el voltaje RAW de la placa 1 vez por medición para depurar ---
+            if not getattr(self, '_raw_print_done', False) and not self.chk_modo_prueba.isChecked():
+                print(f"\n[DEBUG DAQ] Voltaje RAW puro entregado por la placa (Canal 0): {all_new_data[0, 0]:.6f} V")
+                self._raw_print_done = True
+
             # Calibración a microvoltios (Ganancia = 495 con R_electrodo = 100 ohm)
             processed_data = (all_new_data / 495.0) * 1000000.0
+
+            # --- NUEVO: Matar el pico transitorio al iniciar/cambiar el filtro ---
+            if getattr(self, '_init_filter_state', False):
+                for i in range(self.NUM_CANALES):
+                    if self.notch_zi is not None:
+                        self.notch_zi[:, :, i] *= processed_data[i, 0] # Escalar estado a la 1ra muestra
+                    if self.filter_zi is not None:
+                        self.filter_zi[:, :, i] *= processed_data[i, 0]
+                self._init_filter_state = False
 
             # Aplicar filtros (si están habilitados) al bloque calibrado
             # --- NUEVO: Aplicar filtro Notch primero ---
@@ -1440,6 +1710,21 @@ class RealTimePlotter(QtWidgets.QWidget):
             self.plot_buffer_datos = np.roll(self.plot_buffer_datos, -total_muestras_leidas, axis=1)
             self.plot_buffer_datos[:, -total_muestras_leidas:] = processed_data
 
+            # --- NUEVO: Auto-ajuste de umbral ANTES de grabar ---
+            if getattr(self, 'needs_auto_threshold', False):
+                # Esperar 1.5 segundos desde que inició para que la señal se estabilice
+                if time.perf_counter() - getattr(self, 'acq_start_time', 0) > 1.5:
+                    samples_1s = int(self.SAMPLE_RATE * 1.0) # Tomar el último segundo de datos
+                    if samples_1s <= self.PLOT_SAMPLES and self.NUM_CANALES > 0:
+                        last_1s_data = self.plot_buffer_datos[:, -samples_1s:]
+                        # Calcular la desviación estándar de cada canal
+                        stds = [np.std(last_1s_data[i, :]) for i in range(self.NUM_CANALES)]
+                        max_std = max(stds)
+                        if max_std > 0:
+                            self.spin_peak_th.setValue(max_std * 5.0)
+                            print(f"[Auto-Ajuste] Umbral de picos fijado en {max_std * 5.0:.1f} µV (basado en el ruido inicial en reposo).")
+                    self.needs_auto_threshold = False # Solo se hace una vez por adquisición
+
             # --- NUEVO: Acumular datos de ruido y establecer promedio automáticamente ---
             if self.is_recording and self.recording_start_time is not None:
                 elapsed_time = time.perf_counter() - self.recording_start_time
@@ -1455,9 +1740,32 @@ class RealTimePlotter(QtWidgets.QWidget):
                                 all_noise = np.concatenate(self.noise_data_accumulated[i])
                                 # Promedio de amplitud absoluta del ruido
                                 self.noise_levels[i] = np.mean(np.abs(all_noise))
+                                
+                                # --- NUEVO: Guardar también para el tester de ruido ---
+                                self.initial_noise_mean[i] = self.noise_levels[i]
+                                self.initial_noise_std[i] = np.std(all_noise)
+                                
                                 self.noise_lines[i].setPos(self.noise_levels[i])
                                 self.noise_lines[i].show()
+                                
+                                self.noise_lines_neg[i].setPos(-self.noise_levels[i])
+                                self.noise_lines_neg[i].show()
+                                
+                                self.noise_regions[i].setRegion([-self.noise_levels[i], self.noise_levels[i]])
+                                self.noise_regions[i].show()
+                                
+                                if hasattr(self, 'noise_status_labels'):
+                                    self.noise_status_labels[i].setText(f"Ruido Base: x̄={self.initial_noise_mean[i]:.1f}µV, σ={self.initial_noise_std[i]:.1f}µV")
+                                    self.noise_status_labels[i].setStyleSheet("color: #17A2B8; font-size: 11px;")
                         self.noise_calculated = True
+                        
+                        # --- NUEVO: Auto-ajuste de barras de threshold ---
+                        # Se ajusta a 5 veces la desviación estándar (ruido sin offset) del canal con más ruido.
+                        if self.NUM_CANALES > 0:
+                            ruido_maximo_std = max(self.initial_noise_std)
+                            if ruido_maximo_std > 0:
+                                umbral_recomendado = ruido_maximo_std * 5.0
+                                self.spin_peak_th.setValue(umbral_recomendado)
 
             # 6. Actualizar la GUI
             for i in range(self.NUM_CANALES):
@@ -1499,6 +1807,75 @@ class RealTimePlotter(QtWidgets.QWidget):
                         self.counting_started = True
 
                     self.label_rec_time.setStyleSheet("font-weight: bold; color: #E91E63;")
+                    
+                    # --- NUEVO: Evaluador de Ruido Inter-pulso (Tester de relajación) ---
+                    period_s = 60.0 / max(1, self.spin_bpm.value())
+                    phase = signal_time % period_s
+                    
+                    # Al cruzar la mitad del ciclo (punto de máxima relajación teórica)
+                    if getattr(self, 'last_phase', 0) < period_s * 0.5 <= phase:
+                        window_s = period_s / 8.0 # Ventana de 1/8 del pulso
+                        samples_window = int(window_s * self.SAMPLE_RATE)
+                        
+                        if samples_window > 0 and samples_window <= self.PLOT_SAMPLES:
+                            for i in range(self.NUM_CANALES):
+                                noise_segment = self.plot_buffer_datos[i, -samples_window:]
+                                curr_mean = np.mean(np.abs(noise_segment))
+                                curr_std = np.std(noise_segment)
+                                
+                                init_std = getattr(self, 'initial_noise_std', [0]*self.NUM_CANALES)[i]
+                                init_mean = getattr(self, 'initial_noise_mean', [0]*self.NUM_CANALES)[i]
+                                
+                                # Calcular el radio de deterioro (manejar división por cero en señales perfectas simuladas)
+                                if init_std > 0.01:
+                                    ratio = curr_std / init_std
+                                elif init_mean > 0.01:
+                                    ratio = curr_mean / init_mean
+                                else:
+                                    ratio = 1.0 # Señal base sin ruido
+                                
+                                if hasattr(self, 'noise_status_labels'):
+                                    # Verde si se mantiene por debajo del 120% del original, si no, Rojo
+                                    bg_color = "#28A745" if ratio <= 1.20 else "#DC3545" 
+                                    fg_color = "white"
+                                    
+                                    text = f"Inter-pulso: x̄={curr_mean:.1f}µV, σ={curr_std:.1f}µV ({ratio*100:.0f}%)"
+                                    self.noise_status_labels[i].setText(text)
+                                    self.noise_status_labels[i].setStyleSheet(f"color: {fg_color}; background-color: {bg_color}; border-radius: 3px; padding: 2px; font-weight: bold; font-size: 11px;")
+                                
+                                # --- NUEVO: Actualizar líneas dinámicas en el gráfico ---
+                                if hasattr(self, 'dynamic_noise_lines_pos'):
+                                    line_color = 'g' if ratio <= 1.20 else 'r'
+                                    self.dynamic_noise_lines_pos[i].setPos(curr_mean)
+                                    self.dynamic_noise_lines_pos[i].setPen(pg.mkPen(line_color, width=2, style=QtCore.Qt.DotLine))
+                                    self.dynamic_noise_lines_pos[i].show()
+                                    
+                                    self.dynamic_noise_lines_neg[i].setPos(-curr_mean)
+                                    self.dynamic_noise_lines_neg[i].setPen(pg.mkPen(line_color, width=2, style=QtCore.Qt.DotLine))
+                                    self.dynamic_noise_lines_neg[i].show()
+                                
+                                # --- NUEVO: Guardar métricas para el gráfico final ---
+                                samples_period = int(period_s * self.SAMPLE_RATE)
+                                if samples_period <= self.PLOT_SAMPLES:
+                                    full_period_segment = self.plot_buffer_datos[i, -samples_period:]
+                                    peak_val = np.max(np.abs(full_period_segment))
+                                    baseline_noise = self.initial_noise_mean[i] if self.initial_noise_mean[i] > 0 else 1e-12
+                                    curr_snr = peak_val / baseline_noise
+                                    
+                                    self.stats_time[i].append(signal_time)
+                                    
+                                    # --- MODIFICADO: Calcular SNR Promedio Acumulado ---
+                                    if len(self.stats_snr[i]) > 0:
+                                        n = len(self.stats_snr[i])
+                                        snr_acumulado = (self.stats_snr[i][-1] * n + curr_snr) / (n + 1)
+                                    else:
+                                        snr_acumulado = curr_snr
+                                        
+                                    self.stats_snr[i].append(snr_acumulado)
+                                    self.stats_noise_mean[i].append(curr_mean)
+                                    self.stats_noise_std[i].append(curr_std)
+                    
+                    self.last_phase = phase
 
                 self.label_rec_time.setText(time_str)
             
@@ -1575,7 +1952,7 @@ class RealTimePlotter(QtWidgets.QWidget):
             data_canal = new_data[self.spectrogram_channel_index]
 
             # Calcular STFT (Short-Time Fourier Transform)
-            f, t, Zxx = signal.stft(data_canal, fs=self.SAMPLE_RATE, nperseg=self.SPECTROGRAM_FFT_LEN)
+            f, t, Zxx = signal.stft(data_canal, fs=self.SAMPLE_RATE, nperseg=self.CURRENT_FFT_LEN)
             
             # Tomar la magnitud y aplicar escala logarítmica para mejor visualización
             Zxx_mag = np.abs(Zxx)
@@ -1600,6 +1977,20 @@ class RealTimePlotter(QtWidgets.QWidget):
         print("Ventana de ploteo cerrada. Deteniendo hilos...")
         self.stop_event.set() # Envía la señal a TODOS los hilos
         self.timer.stop() # Detiene el timer de la GUI
+        
+        # --- NUEVO: Guardar estado de la GUI al cerrar el programa ---
+        try:
+            config_data = {}
+            if os.path.exists('metronome_config.json'):
+                with open('metronome_config.json', 'r', encoding='utf-8') as f:
+                    config_data = json.load(f)
+            config_data['last_bpm'] = self.spin_bpm.value()
+            config_data['notch_enabled'] = self.chk_notch_enable.isChecked()
+            with open('metronome_config.json', 'w', encoding='utf-8') as f:
+                json.dump(config_data, f, indent=4)
+        except Exception as e:
+            print(f"Error guardando configuración al cerrar: {e}")
+            
         event.accept() # Acepta el cierre
 
 # =============================================================================

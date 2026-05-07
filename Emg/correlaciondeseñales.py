@@ -17,7 +17,7 @@ import subprocess
 
 # --- Imports para GUI ---
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, simpledialog
 
 # --- Versión del script de análisis ---
 __version__ = "7.1 (Con Espectrograma del Promedio)"
@@ -356,6 +356,7 @@ def _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds,
             plt.axvline(x=cut_line_t, color="Black", linestyle="--", alpha=0.6)
 
     excluded_set_plot = set(excluded_windows) if excluded_windows else set()
+    spans = []
 
     for i in range(n_pulsos):
         beat_t = offset_start + i * periodo
@@ -367,14 +368,20 @@ def _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds,
         alpha = 0.2 if window_number in excluded_set_plot else 0.05
         
         if end_t > t_recortada[0]:
-             plt.axvspan(start_t, end_t, color=color, alpha=alpha)
+             span = plt.axvspan(start_t, end_t, color=color, alpha=alpha)
+             spans.append((window_number, start_t, end_t, span))
 
     if len(centros_metronomo) > 0:
         t_centers = [t_recortada[idx] for idx in centros_metronomo if idx < len(t_recortada)]
         v_env = [env_recortada[idx] for idx in centros_metronomo if idx < len(env_recortada)]
         plt.scatter(t_centers, v_env, color='green', s=50, zorder=5, label='Beat (Centro)')
     
-    plt.title(f"Señal y Ventanas (Beat al Centro) - {filename}")
+    fig = plt.gcf()
+    ax = plt.gca()
+    if show_plot:
+        plt.title(f"Señal y Ventanas (Click para excluir/incluir) - {filename}")
+    else:
+        plt.title(f"Señal y Ventanas (Beat al Centro) - {filename}")
     plt.xlabel("Tiempo [s]")
     plt.ylabel("Amplitud [V]")
     max_y_val = np.max(env_recortada) if len(env_recortada) > 0 else 1.3
@@ -387,9 +394,30 @@ def _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds,
     print_progress_bar(1, 1, prefix='Graficando recortes:', suffix='OK', length=20)
 
     if show_plot:
-        plt.show()
+        print("\nMostrando gráfico... Haz click en las ventanas para excluirlas/incluirlas interactivamente. Cierra la ventana al terminar.")
+        
+        def onclick(event):
+            if event.inaxes != ax: return
+            x = event.xdata
+            for window_number, start_t, end_t, span in spans:
+                if start_t <= x <= end_t:
+                    if window_number in excluded_set_plot:
+                        excluded_set_plot.remove(window_number)
+                        span.set_color("orange")
+                        span.set_alpha(0.05)
+                    else:
+                        excluded_set_plot.add(window_number)
+                        span.set_color("red")
+                        span.set_alpha(0.2)
+                    fig.canvas.draw_idle()
+                    break
+        
+        cid = fig.canvas.mpl_connect('button_press_event', onclick)
+        plt.show(block=True)
     else:
         plt.close(plt.gcf())
+        
+    return sorted(list(excluded_set_plot))
 
 # ---------------------- NUEVA FUNCIÓN: Overlay de Músculos ---------------------
 def _plot_muscle_overlay(measure_name, channels_dict, out_dir):
@@ -730,8 +758,9 @@ def procesar_wavs_promedio(
         if mostrar_espectrograma:
             _plot_espectrograma(pulso_promedio, samplerate, final_plot_title, out_spec)
 
+        interactive_excluded = excluded_windows
         if mostrar_recortes:
-            _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds,
+            interactive_excluded = _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds,
                            start_sample_noise, samplerate, centros_metronomo, periodo, muestras_pulso, out_rec, final_plot_title, 
                            excluded_windows=excluded_windows, show_plot=show_interactive_plot,
                            signal_original_unfiltered=signal_unfiltered[mask])
@@ -748,7 +777,8 @@ def procesar_wavs_promedio(
             'periodo': periodo,
             'umbral': umbral,
             'shifts': shifts_to_save,
-            'valid_indices': valid_indices_local # IMPORTANTE: Pasar indices al GUI
+            'valid_indices': valid_indices_local, # IMPORTANTE: Pasar indices al GUI
+            'interactive_excluded_windows': interactive_excluded
         }
 
         export_results_for_file(out_dir, filename, resultados[filename])
@@ -877,23 +907,43 @@ class ProcessingOptionsDialog(tk.Toplevel):
 
                 # Modo Interactivo (solo Master)
                 if interactive and i == 0:
-                    procesar_wavs_promedio(
+                    res_inicial = procesar_wavs_promedio(
                         full_path, output_root=full_path, nombre_salida="dummy.png",
-                        bpm=bpm, n_pulsos_manual=pulsos, noise_seconds=noise_sec, excluded_windows=[],
+                        bpm=bpm, n_pulsos_manual=pulsos, noise_seconds=noise_sec, excluded_windows=final_excl,
                         show_interactive_plot=True, apply_notch_filter=apply_notch, 
                         lowpass_cutoff_hz=lp_freq, highpass_cutoff_hz=hp_freq
                     )
-                    user_in = input(f"Excluir ventanas para {chan_name} (actual {final_excl}): ")
-                    if user_in.strip():
+                    
+                    interactive_excl = final_excl
+                    if res_inicial:
+                        for fname, res in res_inicial.items():
+                            if 'interactive_excluded_windows' in res:
+                                interactive_excl = res['interactive_excluded_windows']
+                                break
+                                
+                    self.root.deiconify()
+                    self.root.update()
+                    user_in = simpledialog.askstring("Curación", f"Excluir ventanas para {chan_name}\n(Se han registrado tus selecciones interactivas)\nPuedes editar la lista completa separada por comas:", initialvalue=str(interactive_excl).strip("[]"), parent=self.root)
+                    self.root.withdraw()
+                    
+                    if user_in is not None and user_in.strip():
                         try:
                             new_excl = [int(x) for x in user_in.split(',')]
                             final_excl = sorted(list(set(new_excl)))
-                            try:
-                                with open(meta_path) as f: md = json.load(f)
-                                md['excluded_windows'] = final_excl
-                                with open(meta_path, 'w') as f: json.dump(md, f, indent=4)
-                            except: pass
                         except: pass
+                    elif user_in is not None and not user_in.strip():
+                        final_excl = []
+                    else:
+                        final_excl = interactive_excl
+                        
+                    # Guardado seguro
+                    try:
+                        md = {}
+                        if os.path.exists(meta_path):
+                            with open(meta_path, 'r', encoding='utf-8') as f: md = json.load(f)
+                        md['excluded_windows'] = final_excl
+                        with open(meta_path, 'w', encoding='utf-8') as f: json.dump(md, f, indent=4)
+                    except: pass
                 
                 # Input para Slave
                 shifts_input = master_shifts if i > 0 else None
@@ -957,6 +1007,9 @@ class ProcessingOptionsDialog(tk.Toplevel):
             _plot_muscle_overlay(med_name, chans_data, meas_dir)
 
         print("\n=== PROCESAMIENTO FINALIZADO ===")
+        
+        # --- NUEVO: Cerrar completamente la aplicación al finalizar ---
+        self.root.destroy()
 
 class ComparativeOptionsDialog(tk.Toplevel):
     def __init__(self, root):

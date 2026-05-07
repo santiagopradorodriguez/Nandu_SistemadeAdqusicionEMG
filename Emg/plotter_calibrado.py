@@ -241,7 +241,21 @@ def plotear_medicion_secuencial(nombre_medicion, config):
         nom_limpio = nombre_canal.strip()
         
         raw = df[nombre_canal].values
+        
+        # --- CORRECCIÓN: Leer ganancia desde metadata.json si existe ---
         ganancia = FACTORES_G.get(nom_limpio, 1.0)
+        try:
+            ch_idx = int(nom_limpio.split()[-1])
+            meta_path = os.path.join(path_medicion, f"canal_{ch_idx}", "metadata.json")
+            if os.path.exists(meta_path):
+                with open(meta_path, 'r') as f_meta:
+                    md_ch = json.load(f_meta)
+                    if 'resistencia_ohm' in md_ch:
+                        res_ohm = float(md_ch['resistencia_ohm'])
+                        ganancia = 1.0 + (49400.0 / res_ohm)
+        except Exception:
+            pass
+            
         sig = (raw / ganancia) * 1e6 
 
         # --- NUEVO: Restar offset DC antes de filtrar (solo para modos con envolvente) ---
