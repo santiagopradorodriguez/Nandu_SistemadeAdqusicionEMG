@@ -385,7 +385,7 @@ def _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds,
     plt.xlabel("Tiempo [s]")
     plt.ylabel("Amplitud [V]")
     max_y_val = np.max(env_recortada) if len(env_recortada) > 0 else 1.3
-    plt.ylim(0, max_y_val * 1.5)
+    plt.ylim(-max_y_val * 1.2, max_y_val * 1.5)
     plt.grid(True, alpha=0.5)
     plt.legend(loc='upper right')
     

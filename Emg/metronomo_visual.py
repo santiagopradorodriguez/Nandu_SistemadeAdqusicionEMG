@@ -28,6 +28,9 @@ class MetronomeApp:
         self.root.geometry("350x500") # Aumentar altura para el contador
         self.root.configure(bg="#2E2E2E")
         self.root.resizable(False, False)
+        
+        # --- NUEVO: Mantener la ventana del metrónomo siempre al frente ---
+        self.root.attributes("-topmost", True)
 
         # Asegura que save_config se llama al cerrar la ventana
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)

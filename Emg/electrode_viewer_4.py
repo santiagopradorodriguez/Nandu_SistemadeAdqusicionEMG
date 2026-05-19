@@ -6,7 +6,7 @@ Reestructurado para una vista por Medición en lugar de por Canal.
 
 Requisitos: pillow, matplotlib, numpy
 """
-import os, io, json
+import os, io, json, re
 from datetime import datetime
 import tkinter as tk
 from tkinter import filedialog, messagebox
@@ -145,6 +145,7 @@ class Channel:
             "Promedio (Ajustado Por Correlación)": find_file_with_any(self.path, ["avg_lider.png"]),
             "Pico Maximo Promedio ": find_file_with_any(self.path, ["avg.png"]),
             "Recortes (Original)": find_file_with_any(self.path, ["pulses.png"]),
+            "Evolución Temporal (SNR/Ruido)": find_file_with_any(self.path, ["evolucion.png"]),
             "Espectrograma de Promedio por Correlacion": find_file_with_any(self.path, ["spec_lider.png"]),
             "Espectrograma Pico Maximo promedio": find_file_with_any(self.path, ["spec.png"]),
         }
@@ -306,9 +307,10 @@ class App:
         self.root = root
         root.title(f"Electrode Viewer - v{VERSION}")
         self.base_folder = "base_de_datos_electrodos" # <-- CARPETA POR DEFECTO
-        self.measurements = []
+        self.measurements_by_date = {}
+        self.dates = []
+        self.current_date = None
         self.thumb_cache = {}
-        self.selected = {}
         self.columns = DEFAULT_COLUMNS
         self.sort_by = tk.StringVar(value="SNR")
 
@@ -328,8 +330,28 @@ class App:
         tk.Button(top, text="Compare Selected", command=self.compare_selected).pack(side="right")
         self.info_label = tk.Label(top, text=f"Mostrando: {os.path.abspath(self.base_folder)}"); self.info_label.pack(side="left", padx=8)
 
-        self.canvas = tk.Canvas(root, height=700)
-        self.v_scroll = tk.Scrollbar(root, orient="vertical", command=self.canvas.yview)
+        self.paned = ttk.PanedWindow(root, orient=tk.HORIZONTAL)
+        self.paned.pack(fill="both", expand=True, padx=5, pady=5)
+
+        self.left_frame = tk.Frame(self.paned, width=220)
+        self.paned.add(self.left_frame, weight=0)
+
+        tk.Label(self.left_frame, text="Fechas de Medición:", font=("Arial", 11, "bold")).pack(pady=5, anchor="w", padx=5)
+
+        list_frame = tk.Frame(self.left_frame)
+        list_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        self.date_listbox = tk.Listbox(list_frame, font=("Arial", 10), exportselection=False)
+        self.date_listbox.pack(side="left", fill="both", expand=True)
+        date_scroll = tk.Scrollbar(list_frame, command=self.date_listbox.yview)
+        date_scroll.pack(side="right", fill="y")
+        self.date_listbox.config(yscrollcommand=date_scroll.set)
+        self.date_listbox.bind("<<ListboxSelect>>", self.on_date_selected)
+
+        self.right_frame = tk.Frame(self.paned)
+        self.paned.add(self.right_frame, weight=1)
+
+        self.canvas = tk.Canvas(self.right_frame, height=700)
+        self.v_scroll = tk.Scrollbar(self.right_frame, orient="vertical", command=self.canvas.yview)
         self.grid_container = tk.Frame(self.canvas)
         self.grid_container.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
         self.canvas.create_window((0,0), window=self.grid_container, anchor="nw")
@@ -348,17 +370,77 @@ class App:
         self.load_measurements(); self.build_grid()
 
     def open_comparisons_folder(self):
-        """Abre la carpeta donde se guardan los análisis comparativos."""
+        """Explora análisis comparativos en subcarpetas de fecha, ordenados por fecha."""
         comp_dir = "analisis_comparativos"
         abs_path = os.path.abspath(comp_dir)
         if not os.path.isdir(abs_path):
-            messagebox.showinfo("Información", f"La carpeta de análisis comparativos no existe aún.\n({abs_path})")
+            messagebox.showinfo("Información", f"La carpeta de análisis comparativos no existe aún.")
             return
+
+        # 1. Escaneo recursivo para encontrar imágenes en subcarpetas
         try:
-            print(f"Abriendo carpeta de comparaciones: {abs_path}")
-            os.startfile(abs_path)
+            files_with_dates = []
+            for root_dir, dirs, files in os.walk(abs_path):
+                for filename in files:
+                    if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+                        filepath = os.path.join(root_dir, filename)
+                        mod_time = os.path.getmtime(filepath)
+                        # Guardamos ruta relativa para mostrar la fecha en la lista
+                        rel_folder = os.path.basename(root_dir)
+                        files_with_dates.append((mod_time, rel_folder, filename, filepath))
+            
+            files_with_dates.sort(key=lambda x: x[0], reverse=True)
+
+            if not files_with_dates:
+                messagebox.showinfo("Información", "No se encontraron imágenes de análisis.")
+                return
         except Exception as e:
-            messagebox.showerror("Error", f"No se pudo abrir la carpeta:\n{e}")
+            messagebox.showerror("Error", f"Error al leer carpeta: {e}"); return
+
+        # 2. Crear la ventana del visor
+        win = tk.Toplevel(self.root)
+        win.title("Explorador de Análisis Comparativos")
+        win.geometry("900x600")
+
+        left = tk.Frame(win, width=350); left.pack(side="left", fill="y", padx=5, pady=5); left.pack_propagate(False)
+        right = tk.Frame(win); right.pack(side="right", fill="both", expand=True, padx=5, pady=5)
+
+        tk.Label(left, text="Análisis encontrados:", font=("Arial", 10, "bold")).pack(anchor="w")
+        
+        list_fr = tk.Frame(left); list_fr.pack(fill="both", expand=True)
+        listbox = tk.Listbox(list_fr, font=("Consolas", 9)); listbox.pack(side="left", fill="both", expand=True)
+        sc = tk.Scrollbar(list_fr, command=listbox.yview); sc.pack(side="right", fill="y"); listbox.config(yscrollcommand=sc.set)
+
+        for _, folder, name, _ in files_with_dates:
+            # Mostrar como: [2023-10-27] comparacion_...
+            display_name = f"[{folder}] {name}" if folder != "analisis_comparativos" else name
+            listbox.insert(tk.END, display_name)
+        
+        listbox.paths = [item[3] for item in files_with_dates]
+        preview = tk.Label(right, text="Selecciona un archivo para previsualizar"); preview.pack(fill="both", expand=True)
+
+        def show_preview(event):
+            idx = listbox.curselection()
+            if not idx: return
+            path = listbox.paths[idx[0]]
+            try:
+                img = Image.open(path)
+                w, h = img.size
+                max_w, max_h = right.winfo_width(), right.winfo_height()
+                if max_w < 10: win.after(100, lambda: show_preview(None)); return
+                ratio = min(max_w/w, max_h/h)
+                tk_img = pil_image_to_tk_photoimage(img, (int(w*ratio), int(h*ratio)))
+                preview.config(image=tk_img, text=""); preview.image = tk_img
+            except Exception as e:
+                preview.config(text=f"Error: {e}", image=None)
+
+        def open_file_external(event=None):
+            idx = listbox.curselection()
+            if idx: os.startfile(listbox.paths[idx[0]])
+
+        listbox.bind("<<ListboxSelect>>", update_preview)
+        listbox.bind("<Double-Button-1>", open_file_external)
+        tk.Button(left, text="Abrir Archivo Original", command=open_file_external).pack(fill="x", pady=5)
 
     def refresh(self):
         if not self.base_folder:
@@ -366,35 +448,77 @@ class App:
         self.load_measurements(); self.build_grid()
 
     def load_measurements(self):
-        self.measurements = []
-        if not self.base_folder: return
-        for name in sorted(os.listdir(self.base_folder)):
-            measurement_path = os.path.join(self.base_folder, name)
-            if os.path.isdir(measurement_path):
-                self.measurements.append(Measurement(measurement_path))
-        self.apply_sorting()
+        self.measurements_by_date = {}
+        self.dates = []
+        if not self.base_folder or not os.path.isdir(self.base_folder): return
+        
+        # Expresión regular para identificar carpetas de fecha
+        date_folder_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
-    def apply_sorting(self):
-        key = self.sort_by.get()
-        if key == "Measurement date":
-            def mk(m): return m.measurement_date.timestamp() if m.measurement_date else -1e12
-            self.measurements.sort(key=lambda x: mk(x), reverse=True)
-        else: # Por defecto, ordena por nombre (SNR no está en Measurement)
-            self.measurements.sort(key=lambda x: x.name)
+        for item in sorted(os.listdir(self.base_folder), reverse=True):
+            path1 = os.path.join(self.base_folder, item)
+            # Si es una carpeta de fecha, buscar mediciones dentro
+            if os.path.isdir(path1) and date_folder_pattern.match(item):
+                self.dates.append(item)
+                self.measurements_by_date[item] = []
+                for sub_item in sorted(os.listdir(path1)):
+                    path2 = os.path.join(path1, sub_item)
+                    if os.path.isdir(path2):
+                        # GUARDAMOS SOLO LA RUTA (Carga Perezosa / Lazy Loading)
+                        self.measurements_by_date[item].append(path2)
+        
+        self.date_listbox.delete(0, tk.END)
+        for d in self.dates:
+            count = len(self.measurements_by_date[d])
+            self.date_listbox.insert(tk.END, f"{d} ({count} mediciones)")
+            
+        if self.dates:
+            self.date_listbox.selection_set(0)
+            self.current_date = self.dates[0]
+        else:
+            self.current_date = None
+            
 
     def on_columns_change(self):
         try: v = int(self.spin_cols.get()); self.columns = max(1, min(8, v))
         except: self.columns = DEFAULT_COLUMNS
         self.build_grid()
 
+    def on_date_selected(self, event=None):
+        selection = self.date_listbox.curselection()
+        if not selection: return
+        idx = selection[0]
+        self.current_date = self.dates[idx]
+        self.build_grid()
+
     def build_grid(self):
-        self.apply_sorting()
         for child in self.grid_container.winfo_children(): child.destroy()
-        self.thumb_cache.clear(); self.selected.clear()
+        self.thumb_cache.clear()
+        
+        if not self.current_date or self.current_date not in self.measurements_by_date:
+            return
+            
+        # --- Carga Perezosa (Lazy Loading) y Ordenamiento Local ---
+        raw_list = self.measurements_by_date[self.current_date]
+        meas_list = []
+        for i in range(len(raw_list)):
+            if isinstance(raw_list[i], str):
+                m = Measurement(raw_list[i])
+                m.selected_var = tk.IntVar(value=0)
+                raw_list[i] = m # Cachear el objeto para no volver a cargarlo al cambiar de pestaña
+            meas_list.append(raw_list[i])
+            
+        key = self.sort_by.get()
+        if key == "Measurement date":
+            def mk(m): return m.measurement_date.timestamp() if m.measurement_date else -1e12
+            meas_list.sort(key=lambda x: mk(x), reverse=True)
+        else: # Por defecto, ordena por nombre
+            meas_list.sort(key=lambda x: x.name)
+
         cols = self.columns
         pad = 8
         r = c = 0
-        for m in self.measurements:
+        for m in meas_list:
             frame = tk.Frame(self.grid_container, bd=1, relief="groove", padx=6, pady=6)
             frame.grid(row=r, column=c, padx=pad, pady=pad, sticky="n")
             
@@ -409,8 +533,7 @@ class App:
             
             md_text = f'Fecha: {m.measurement_date.strftime("%Y-%m-%d")}' if m.measurement_date else "Fecha: N/A"
             info_lbl = tk.Label(frame, text=md_text, font=("Arial", 9), justify="left"); info_lbl.pack(anchor="w", pady=(4,0))
-            var = tk.IntVar(value=0); chk = tk.Checkbutton(frame, text="Select", variable=var); chk.pack(anchor="w", pady=(4,0))
-            self.selected[m.name] = (var, m)
+            chk = tk.Checkbutton(frame, text="Select", variable=m.selected_var); chk.pack(anchor="w", pady=(4,0))
             c += 1
             if c >= cols: c = 0; r += 1
 
@@ -470,7 +593,7 @@ class App:
             ax.axis("off")
             canvas.draw()
 
-        # --- NUEVO: Pestaña para el gráfico combinado (plot_calibrado_*) ---
+        # --- Pestaña para el gráfico combinado (plot_calibrado_*) ---
         combined_plot_path = os.path.join(measurement.path, f"plot_calibrado_{measurement.name}.png")
         if os.path.isfile(combined_plot_path):
             tab_comb = tk.Frame(notebook)
@@ -497,26 +620,62 @@ class App:
                 tk.Label(notebook, text="No se encontraron carpetas de canal analizadas ni plot calibrado.").pack(pady=50)
             return
 
+        # --- LAZY LOADING PARA PESTAÑAS DE CANAL ---
+        created_tabs = set()
+
+        def on_tab_changed(event):
+            try:
+                selected_tab_widget_name = notebook.select()
+                if not selected_tab_widget_name or selected_tab_widget_name in created_tabs:
+                    return
+                
+                tab_frame = notebook.nametowidget(selected_tab_widget_name)
+                tab_text = notebook.tab(tab_frame, "text").strip()
+                channel = next((ch for ch in measurement.channels if ch.name.upper() == tab_text), None)
+
+                if channel:
+                    # Destruir placeholder si lo hubiera
+                    for widget in tab_frame.winfo_children():
+                        widget.destroy()
+                    
+                    # Crear el contenido real de la pestaña
+                    self.create_channel_tab_content(tab_frame, channel, show_on_main)
+                    created_tabs.add(selected_tab_widget_name)
+            except tk.TclError:
+                # Puede ocurrir si la ventana se cierra mientras el evento se dispara
+                pass
+
+        # Crear los frames vacíos para cada pestaña de canal
         for channel in measurement.channels:
-            self.create_channel_tab(notebook, channel, show_on_main)
+            tab_frame = tk.Frame(notebook)
+            notebook.add(tab_frame, text=f"  {channel.name.upper()}  ")
+        
+        notebook.bind("<<NotebookTabChanged>>", on_tab_changed)
+
+        # Cargar manualmente el contenido de la primera pestaña visible
+        def initial_load():
+            if win.winfo_exists():
+                on_tab_changed(None)
+        win.after(50, initial_load)
             
     # ---------------- Compare window ----------------
     def compare_selected(self):
         selected_list = []
-        for name,(var,e) in self.selected.items():
-            if var.get(): selected_list.append(e)
+        for meas_list in self.measurements_by_date.values():
+            for m in meas_list:
+                # Evitar fallos si 'm' sigue siendo un string (ruta no visitada aún)
+                if not isinstance(m, str) and getattr(m, 'selected_var', None) and m.selected_var.get():
+                    selected_list.append(m)
         if not selected_list:
             messagebox.showinfo("Info", "Seleccioná 1-3 electrodos (casillas) para comparar."); return
         if len(selected_list) > MAX_SELECT:
             messagebox.showwarning("Warning", f"Seleccioná hasta {MAX_SELECT} electrodos."); return
         self.open_compare_window(selected_list)
 
-    def create_channel_tab(self, notebook, channel: Channel, show_on_main_func):
-        tab = tk.Frame(notebook)
-        notebook.add(tab, text=f"  {channel.name.upper()}  ")
-
-        left = tk.Frame(tab); left.pack(side="left", fill="y", padx=10, pady=10)
-        right = tk.Frame(tab); right.pack(side="left", fill="both", expand=True, padx=10, pady=10)
+    def create_channel_tab_content(self, tab_frame, channel: Channel, show_on_main_func):
+        """Crea el contenido de una pestaña de canal (llamado por Lazy Loading)."""
+        left = tk.Frame(tab_frame); left.pack(side="left", fill="y", padx=10, pady=10)
+        right = tk.Frame(tab_frame); right.pack(side="left", fill="both", expand=True, padx=10, pady=10)
 
         info_text = ""
         if channel.analysis_snr is not None:

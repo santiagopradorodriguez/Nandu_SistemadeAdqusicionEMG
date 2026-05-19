@@ -87,7 +87,11 @@ class CSVViewerApp:
 
         self.BASE_DIR = "base_de_datos_electrodos"
         self.mediciones_disponibles = []
+        # --- NUEVO: Variables para selección en dos pasos ---
+        self.fechas_disponibles = []
+        self.var_fecha_seleccionada = tk.StringVar()
         self.var_medicion_seleccionada = tk.StringVar()
+        self.var_fecha_seleccionada.trace_add("write", self.on_date_selected)
         self.var_medicion_seleccionada.trace_add("write", self.on_measurement_selected)
 
         # --- Control para evitar bucles de actualización de sliders ---
@@ -122,12 +126,17 @@ class CSVViewerApp:
         plot_frame.pack(side="left", fill="both", expand=True)
 
         # --- Controles Superiores ---
-        tk.Label(top_frame, text="Seleccionar Medición:", font=self.font_bold, bg="#f0f0f0").pack(side="left", padx=(5, 2))
+        tk.Label(top_frame, text="Fecha:", font=self.font_bold, bg="#f0f0f0").pack(side="left", padx=(5, 2))
+        self.date_menu = tk.OptionMenu(top_frame, self.var_fecha_seleccionada, "")
+        self.date_menu.config(width=12)
+        self.date_menu.pack(side="left", padx=5)
+
+        tk.Label(top_frame, text="Medición:", font=self.font_bold, bg="#f0f0f0").pack(side="left", padx=(10, 2))
         self.measurement_menu = tk.OptionMenu(top_frame, self.var_medicion_seleccionada, "")
-        self.measurement_menu.config(width=30)
+        self.measurement_menu.config(width=25)
         self.measurement_menu.pack(side="left", padx=5)
 
-        self.btn_refresh = tk.Button(top_frame, text="Refrescar Lista", command=self.cargar_mediciones, font=self.font_label)
+        self.btn_refresh = tk.Button(top_frame, text="Refrescar", command=self.cargar_fechas, font=self.font_label)
         self.btn_refresh.pack(side="left", padx=5)
 
         # Se actualiza al cargar
@@ -233,40 +242,75 @@ class CSVViewerApp:
                 widget.config(state="disabled")
             tk.Label(filter_frame, text="Scipy no instalado.", fg="red", bg="#f0f0f0").pack(anchor="w")
 
-        # Carga inicial
-        self.cargar_mediciones()
+        # Carga inicial de fechas
+        self.cargar_fechas()
 
-    def cargar_mediciones(self):
-        """Carga la lista de mediciones (carpetas) desde el directorio base."""
-        self.mediciones_disponibles = []
-        menu = self.measurement_menu["menu"]
+    def cargar_fechas(self):
+        """Carga la lista de carpetas de fecha (YYYY-MM-DD) desde el directorio base."""
+        self.fechas_disponibles = []
+        menu = self.date_menu["menu"]
         menu.delete(0, "end")
+        
+        # Limpiar mediciones también
+        self.var_medicion_seleccionada.set("")
 
         try:
             if os.path.isdir(self.BASE_DIR):
-                # Carpetas de medición que contienen directamente un archivo .csv
-                carpetas_validas = [
-                    item for item in sorted(os.listdir(self.BASE_DIR))
-                    if os.path.isdir(os.path.join(self.BASE_DIR, item)) and any(f.lower().endswith('.csv') for f in os.listdir(os.path.join(self.BASE_DIR, item)))
-                ]
-                self.mediciones_disponibles = carpetas_validas
-                if carpetas_validas:
-                    for medicion in carpetas_validas:
-                        menu.add_command(label=medicion, command=tk._setit(self.var_medicion_seleccionada, medicion))
-                    self.var_medicion_seleccionada.set(carpetas_validas[0]) # Esto disparará el trace
+                # Buscamos carpetas que sigan el formato de fecha
+                date_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+                items = sorted(os.listdir(self.BASE_DIR), reverse=True) # Más reciente primero
+                self.fechas_disponibles = [d for d in items if os.path.isdir(os.path.join(self.BASE_DIR, d)) and date_pattern.match(d)]
+                
+                if self.fechas_disponibles:
+                    for fecha in self.fechas_disponibles:
+                        menu.add_command(label=fecha, command=tk._setit(self.var_fecha_seleccionada, fecha))
+                    self.var_fecha_seleccionada.set(self.fechas_disponibles[0])
                 else:
-                    self.var_medicion_seleccionada.set("") # Limpia la variable si no hay mediciones
-                    self.lbl_file.config(text=f"No se encontraron mediciones con CSV en '{self.BASE_DIR}'")
-        except FileNotFoundError:
-            messagebox.showerror("Error", f"No se encontró el directorio base: '{self.BASE_DIR}'")
+                    self.var_fecha_seleccionada.set("")
+                    self.lbl_file.config(text=f"No se encontraron carpetas de fecha en '{self.BASE_DIR}'")
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al cargar fechas: {e}")
+
+    def on_date_selected(self, *args):
+        """Se llama al seleccionar una fecha. Carga las mediciones de esa subcarpeta."""
+        fecha = self.var_fecha_seleccionada.get()
+        if not fecha: return
+        
+        fecha_path = os.path.join(self.BASE_DIR, fecha)
+        self.mediciones_disponibles = []
+        menu = self.measurement_menu["menu"]
+        menu.delete(0, "end")
+        self.var_medicion_seleccionada.set("")
+
+        try:
+            if os.path.isdir(fecha_path):
+                items = sorted(os.listdir(fecha_path))
+                for item in items:
+                    item_path = os.path.join(fecha_path, item)
+                    if os.path.isdir(item_path):
+                        # Verificamos si tiene archivos CSV
+                        if any(f.lower().endswith('.csv') for f in os.listdir(item_path)):
+                            self.mediciones_disponibles.append(item)
+                
+                if self.mediciones_disponibles:
+                    for med in self.mediciones_disponibles:
+                        menu.add_command(label=med, command=tk._setit(self.var_medicion_seleccionada, med))
+                    self.var_medicion_seleccionada.set(self.mediciones_disponibles[0])
+                else:
+                    self.lbl_file.config(text=f"No hay mediciones con CSV en {fecha}")
+        except Exception as e:
+            print(f"Error al cargar mediciones de {fecha}: {e}")
 
     def on_measurement_selected(self, *args):
         """Se llama al seleccionar una medición del menú. Busca y carga el CSV."""
         selection = self.var_medicion_seleccionada.get()
-        if not selection: return
+        fecha = self.var_fecha_seleccionada.get()
+        if not selection or not fecha: return
 
-        measurement_path = os.path.join(self.BASE_DIR, selection)
+        measurement_path = os.path.join(self.BASE_DIR, fecha, selection)
         csv_file = None
+        if not os.path.exists(measurement_path): return
+        
         for f in sorted(os.listdir(measurement_path)):
             if f.lower().endswith('.csv'):
                 csv_file = os.path.join(measurement_path, f)

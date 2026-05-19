@@ -1560,7 +1560,10 @@ class RealTimePlotter(QtWidgets.QWidget):
 
         # Crear la estructura de directorios
         base_dir = "base_de_datos_electrodos"
-        output_dir = os.path.join(base_dir, measurement_name)
+        # --- NUEVO: Crear carpeta de fecha ---
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        date_dir = os.path.join(base_dir, today_str)
+        output_dir = os.path.join(date_dir, measurement_name)
         try:
             os.makedirs(output_dir, exist_ok=True)
         except Exception as e:

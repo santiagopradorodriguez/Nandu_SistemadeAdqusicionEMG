@@ -477,7 +477,7 @@ def _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds,
     plt.ylabel("Amplitud [µV]")
     # --- MODIFICACIÓN: Ajustar ylim al 90% por encima del máximo de la envolvente ---
     max_y_val = np.max(env_recortada) if len(env_recortada) > 0 else 1.3
-    plt.ylim(0, max_y_val * 1.9)
+    plt.ylim(-max_y_val * 1.2, max_y_val * 1.9)
     plt.grid(True, alpha=0.5)
     plt.legend(loc='best')
     
@@ -617,7 +617,8 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
                        show_overlay=True,
                        show_snr=True,
                        show_amplitude=True,
-                       show_table=True
+                       show_table=True,
+                       show_snr_time=True
                        ):
     """
     Comparative plots and table (autocontenida).
@@ -655,6 +656,29 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
     if n_files == 0:
         print("No hay pulsos para comparar.")
         return
+        
+    # --- NUEVO: Ordenar cronológicamente por defecto ---
+    try:
+        from datetime import datetime
+        sorted_indices = []
+        for i, name in enumerate(nombres_globales):
+            r = resultados.get(name, {})
+            m_date = r.get('measurement_date', '')
+            dt = datetime.max # Pone al final los que no tienen fecha
+            if m_date:
+                try:
+                    dt = datetime.fromisoformat(m_date)
+                except Exception:
+                    pass
+            sorted_indices.append((dt, i))
+        sorted_indices.sort(key=lambda x: x[0])
+        sorted_idx = [idx for _, idx in sorted_indices]
+        
+        promedios_globales = [promedios_globales[i] for i in sorted_idx]
+        tiempos_globales = [tiempos_globales[i] for i in sorted_idx]
+        nombres_globales = [nombres_globales[i] for i in sorted_idx]
+    except Exception as e:
+        print(f"Advertencia al ordenar cronológicamente: {e}")
 
     # --- CORRECCIÓN: Remuestrear todos los pulsos a una longitud común (la mediana) ---
     # Esto evita el error de np.vstack si los pulsos tienen longitudes diferentes,
@@ -680,7 +704,7 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
         t_plot = np.linspace(0, 1, pulse_matrix.shape[1])
 
     # --- NUEVO: Barra de progreso para los gráficos comparativos ---
-    num_plots = sum([show_overlay, show_snr, show_amplitude, show_table])
+    num_plots = sum([show_overlay, show_snr, show_amplitude, show_table, show_snr_time])
     plot_counter = 0
     print_progress_bar(plot_counter, num_plots, prefix='Generando Gráficos Comparativos:', suffix='Completado', length=50)
 
@@ -708,8 +732,6 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
     rows = []
     snr_manual_vals = []
     snr_manual_uncs = []
-    snr_energy_vals = []
-    snr_energy_uncs = []
     short_names = []
     bpms = []
 
@@ -725,10 +747,11 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
         measurement_date = r.get('measurement_date', '')
         comentario = r.get('comentario', '')
         hora_str = ""
+        dt_obj = None
         if measurement_date:
             try:
-                dt = datetime.fromisoformat(measurement_date)
-                hora_str = dt.strftime("%H:%M:%S")
+                dt_obj = datetime.fromisoformat(measurement_date)
+                hora_str = dt_obj.strftime("%H:%M:%S")
             except Exception:
                 hora_str = str(measurement_date)
 
@@ -739,60 +762,23 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
         bpm_str = f"{bpm_calculado:.1f}" if not np.isnan(bpm_calculado) else "N/A"
         print(f"  - Archivo {len(short_names) + 1} ({os.path.splitext(name)[0]}): BPM = {bpm_str}")
 
-        # Recalculo robusto de snr_energy si es posible:
-        # Recalculo robusto de snr_energy (Energía Normalizada):
-        snr_energy = np.nan
-        snr_energy_unc = np.nan
-
-        # intentar reconstruir pulse_rms desde segmentos_rs (cada fila = un segmento)
-        segmentos_rs = r.get('segmentos_rs', None)
-
-        if segmentos_rs is not None:
-            try:
-                # pulse_rms por pulso
-                pulse_rms = np.array([_local_rms(seg) for seg in segmentos_rs])
-                
-                # Obtener el ruido base para normalizar la energía
-                noise_base = r.get('noise_rms_from_noise_window')
-                if noise_base is None or noise_base <= 0:
-                    noise_base = r.get('noise_rms')
-                
-                if noise_base is not None and noise_base > 0:
-                    # Calcular Energía Normalizada (SNR Energía) -> (RMS_pulso / RMS_ruido)^2
-                    energy_ratio_per_pulse = (pulse_rms**2) / (noise_base**2)
-                    if energy_ratio_per_pulse.size > 0:
-                        snr_energy = float(np.nanmean(energy_ratio_per_pulse))
-                        if energy_ratio_per_pulse.size > 1:
-                            snr_energy_unc = float(np.nanstd(energy_ratio_per_pulse, ddof=1) / np.sqrt(energy_ratio_per_pulse.size))
-                        else:
-                            snr_energy_unc = 0.0
-            except Exception:
-                snr_energy = np.nan
-                snr_energy_unc = np.nan
-
-
         snr_manual_vals.append(np.nan if snr_manual is None else float(snr_manual))
         snr_manual_uncs.append(np.nan if snr_manual_unc is None else float(snr_manual_unc))
-        snr_energy_vals.append(np.nan if snr_energy is None else float(snr_energy))
-        snr_energy_uncs.append(np.nan if snr_energy_unc is None else float(snr_energy_unc))
         short_names.append(os.path.splitext(name)[0])
 
         rows.append({
             'filename': name,
             'snr_manual': snr_manual if snr_manual is not None else np.nan,
             'snr_manual_unc': snr_manual_unc if snr_manual_unc is not None else np.nan,
-            'snr_energy': snr_energy if snr_energy is not None else np.nan,
-            'snr_energy_unc': snr_energy_unc if snr_energy_unc is not None else np.nan,
             'hora': hora_str,
             'comentario': comentario,
             'noise_drift': noise_drift,
-            'snr_drop': snr_drop
+            'snr_drop': snr_drop,
+            'dt_obj': dt_obj
         })
 
     snr_manual_arr = np.array(snr_manual_vals, dtype=float)
     snr_manual_unc_arr = np.array(snr_manual_uncs, dtype=float)
-    snr_energy_arr = np.array(snr_energy_vals, dtype=float)
-    snr_energy_unc_arr = np.array(snr_energy_uncs, dtype=float)
 
     x = np.arange(n_files)
 
@@ -873,11 +859,11 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
         print(f"No se pudo generar la tabla LaTeX: {e}")
         
 
-    # -------------- Grouped bar plot per-file: SNR manual + SNR energy --------------
+    # -------------- Bar plot per-file: SNR manual --------------
     if show_snr:
         print("Cargando... Generando gráfico de SNR.")
         fig_snrs, ax_snrs = plt.subplots(figsize=(max(8, 0.6 * n_files), 6))
-        width = 0.4
+        width = 0.6
 
         # --- MODIFICACIÓN: Ordenar el gráfico por SNR de amplitud descendente ---
         # Reemplazar NaNs con un valor muy bajo para que no afecten el ordenamiento
@@ -887,8 +873,6 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
         # Reordenar todos los arrays de datos del SNR
         sorted_snr_manual = snr_manual_arr[sort_indices_snr]
         sorted_snr_manual_unc = snr_manual_unc_arr[sort_indices_snr]
-        sorted_snr_energy = snr_energy_arr[sort_indices_snr]
-        sorted_snr_energy_unc = snr_energy_unc_arr[sort_indices_snr]
         sorted_plot_colors_snr = plot_colors[sort_indices_snr]
         
         # Mantener los números originales para las etiquetas del eje X
@@ -896,17 +880,12 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
 
         for i in range(n_files):
             y_manual = sorted_snr_manual[i] if not np.isnan(sorted_snr_manual[i]) else 0.0
-            y_energy = sorted_snr_energy[i] if not np.isnan(sorted_snr_energy[i]) else 0.0
 
             yerr_manual = sorted_snr_manual_unc[i] if (not np.isnan(sorted_snr_manual_unc[i])) else None
-            yerr_energy = sorted_snr_energy_unc[i] if (not np.isnan(sorted_snr_energy_unc[i])) else None
 
-            ax_snrs.bar(x[i] - width/2, y_manual, width,
+            ax_snrs.bar(x[i], y_manual, width,
                         yerr=(yerr_manual if yerr_manual is not None else None),
-                        capsize=5, alpha=0.9, facecolor='white', edgecolor=sorted_plot_colors_snr[i], hatch='-') 
-            ax_snrs.bar(x[i] + width/2, y_energy, width,
-                        yerr=(yerr_energy if yerr_energy is not None else None),
-                        capsize=5, alpha=0.9, facecolor='white', edgecolor=sorted_plot_colors_snr[i], hatch='\\\\')
+                        capsize=5, alpha=0.9, color=sorted_plot_colors_snr[i]) 
 
         ax_snrs.set_xticks(x)
         ax_snrs.set_xticklabels([str(idx + 1) for idx in original_indices_snr], rotation=0, fontsize=10)
@@ -915,20 +894,10 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
         # --- MODIFICACIÓN: Ajustar el límite Y al máximo SNR + 10% de margen ---
         # Se consideran los valores de SNR y sus incertidumbres para el cálculo del máximo.
         max_snr_manual = np.nanmax(snr_manual_arr + np.nan_to_num(snr_manual_unc_arr)) if len(snr_manual_arr) > 0 else 0
-        max_snr_energy = np.nanmax(snr_energy_arr + np.nan_to_num(snr_energy_unc_arr)) if len(snr_energy_arr) > 0 else 0
-        max_y_val = max(max_snr_manual, max_snr_energy)
-        ax_snrs.set_ylim(0, max_y_val * 1.1 if max_y_val > 0 else 10) # Poner un 10% de margen superior
+        ax_snrs.set_ylim(0, max_snr_manual * 1.1 if max_snr_manual > 0 else 10)
 
-        ax_snrs.set_title('SNR: Amplitud (izq) y Energía (der) (ordenado por SNR Amplitud)')
+        ax_snrs.set_title('SNR: Amplitud (ordenado por SNR Amplitud)')
         ax_snrs.grid(True, axis='y', alpha=0.5)
-
-        hatch_handles = [
-            mpatches.Patch(facecolor='white', edgecolor='black', hatch='-', label='SNR Amplitud'),
-            mpatches.Patch(facecolor='white', edgecolor='black', hatch='\\\\', label='SNR Energia')
-        ]
-
-        # --- MODIFICACIÓN: Simplificar la leyenda para no usar 'brands' ---
-        ax_snrs.legend(handles=hatch_handles, fontsize=9, loc='upper right')
 
         plt.tight_layout(rect=[0, 0.06 - 0.04*len(lines), 1, 1])
         out_snrs_grouped = f"{os.path.splitext(nombre_salida)[0]}_snr_grouped.png"
@@ -1023,7 +992,7 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
 
         csv_path = f"{os.path.splitext(nombre_salida)[0]}_snr_table.csv"
         with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
-            fieldnames = ['filename', 'Hora', 'Comentario', 'SNR_manual ± unc', 'SNR_energy ± unc', 'Deriva Ruido (%)', 'Caida SNR (%)']
+            fieldnames = ['filename', 'Hora', 'Comentario', 'SNR_manual ± unc', 'Deriva Ruido (%)', 'Caida SNR (%)']
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             for r in rows_sorted:
@@ -1034,19 +1003,11 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
                         manual_str = f"{r['snr_manual']:.6g}"
                     else:
                         manual_str = f"{r['snr_manual']:.6g} ± {r['snr_manual_unc']:.6g}"
-                if r['snr_energy'] is None or np.isnan(r['snr_energy']):
-                    energy_str = ""
-                else:
-                    if r['snr_energy_unc'] is None or np.isnan(r['snr_energy_unc']):
-                        energy_str = f"{r['snr_energy']:.6g}"
-                    else:
-                        energy_str = f"{r['snr_energy']:.6g} ± {r['snr_energy_unc']:.6g}"
                 writer.writerow({
                     'filename': r['filename'],
                     'Hora': r['hora'],
                     'Comentario': r['comentario'],
                     'SNR_manual ± unc': manual_str,
-                    'SNR_energy ± unc': energy_str,
                     'Deriva Ruido (%)': f"{r['noise_drift']:.1f}%" if not np.isnan(r['noise_drift']) else "",
                     'Caida SNR (%)': f"{r['snr_drop']:.1f}%" if not np.isnan(r['snr_drop']) else ""
                 })
@@ -1064,26 +1025,19 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
                         manual_cell = f"{r['snr_manual']:.3f}"
                     else:
                         manual_cell = f"{r['snr_manual']:.3f} ± {r['snr_manual_unc']:.3f}"
-                if r['snr_energy'] is None or np.isnan(r['snr_energy']):
-                    energy_cell = ""
-                else:
-                    if r['snr_energy_unc'] is None or np.isnan(r['snr_energy_unc']):
-                        energy_cell = f"{r['snr_energy']:.3f}"
-                    else:
-                        energy_cell = f"{r['snr_energy']:.3f} ± {r['snr_energy_unc']:.3f}"
                         
                 drift_cell = f"{r['noise_drift']:.1f}%" if not np.isnan(r['noise_drift']) else ""
                 drop_cell = f"{r['snr_drop']:.1f}%" if not np.isnan(r['snr_drop']) else ""
                 
                 comentario_corto = r['comentario'][:25] + ('...' if len(r['comentario']) > 25 else '')
-                table_data.append([fname_noext, r['hora'], comentario_corto, manual_cell, energy_cell, drift_cell, drop_cell])
+                table_data.append([fname_noext, r['hora'], comentario_corto, manual_cell, drift_cell, drop_cell])
 
-            col_labels = ['Filename', 'Hora', 'Comentario', 'SNR_m ± unc', 'SNR_e ± unc', 'Deriva Ruido', 'Fatiga(SNR)']
+            col_labels = ['Filename', 'Hora', 'Comentario', 'SNR ± unc', 'Deriva Ruido', 'Fatiga(SNR)']
             nrows = len(table_data)
             fig_tab, ax_tab = plt.subplots(figsize=(16, max(2, 0.35 * nrows)))
             ax_tab.axis('off')
             table = ax_tab.table(cellText=table_data, colLabels=col_labels, cellLoc='left', loc='center',
-                                 colWidths=[0.20, 0.08, 0.22, 0.15, 0.15, 0.10, 0.10])
+                                 colWidths=[0.25, 0.08, 0.27, 0.15, 0.12, 0.13])
             table.auto_set_font_size(False)
             table.set_fontsize(9)
             table.scale(1, 1.2)
@@ -1102,14 +1056,49 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
         for r in rows_sorted:
             man = ("" if (r['snr_manual'] is None or np.isnan(r['snr_manual'])) else f"{r['snr_manual']:.3f}")
             man_unc = ("" if (r['snr_manual_unc'] is None or np.isnan(r['snr_manual_unc'])) else f"{r['snr_manual_unc']:.3f}")
-            en = ("" if (r['snr_energy'] is None or np.isnan(r['snr_energy'])) else f"{r['snr_energy']:.3f}")
-            en_unc = ("" if (r['snr_energy_unc'] is None or np.isnan(r['snr_energy_unc'])) else f"{r['snr_energy_unc']:.3f}")
             combined_man = f"{man} ± {man_unc}" if man_unc != "" else man
-            combined_en = f"{en} ± {en_unc}" if en_unc != "" else en
             
             drift_str = f"{r['noise_drift']:+.1f}%" if not np.isnan(r['noise_drift']) else "N/A"
             drop_str = f"{r['snr_drop']:+.1f}%" if not np.isnan(r['snr_drop']) else "N/A"
-            print(f"{r['filename']}: SNR_m={combined_man} | SNR_e={combined_en} | Deriva Ruido={drift_str} | Caída SNR={drop_str}")
+            print(f"{r['filename']}: SNR={combined_man} | Deriva Ruido={drift_str} | Caída SNR={drop_str}")
+
+    # -------------- SNR vs Time Plot --------------
+    if show_snr_time:
+        print("Cargando... Generando gráfico de SNR vs Tiempo.")
+        valid_rows = [(i, r) for i, r in enumerate(rows) if r['dt_obj'] is not None and not np.isnan(r['snr_manual'])]
+        if len(valid_rows) > 1:
+            import matplotlib.dates as mdates
+            times = [r['dt_obj'] for i, r in valid_rows]
+            snrs = [r['snr_manual'] for i, r in valid_rows]
+            snrs_unc = [r['snr_manual_unc'] for i, r in valid_rows]
+            
+            fig_time, ax_time = plt.subplots(figsize=(10, 5))
+            yerrs = [u if not np.isnan(u) else 0.0 for u in snrs_unc]
+            
+            ax_time.errorbar(times, snrs, yerr=yerrs, fmt='-o', capsize=5, markersize=8, color='darkorange', ecolor='red', linewidth=2)
+            
+            ax_time.set_xlabel('Hora de Medición')
+            ax_time.set_ylabel('SNR Amplitud')
+            ax_time.set_title('Evolución del SNR a lo largo de la sesión')
+            ax_time.grid(True, alpha=0.5)
+            
+            ax_time.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
+            fig_time.autofmt_xdate() # Rota las horas para que no se pisen
+            
+            for index_in_valid, (original_i, r) in enumerate(valid_rows):
+                ax_time.annotate(str(original_i + 1), (times[index_in_valid], snrs[index_in_valid]), 
+                                 textcoords="offset points", xytext=(0,10), ha='center', fontsize=9, fontweight='bold')
+                
+            plt.tight_layout()
+            out_snr_time = f"{os.path.splitext(nombre_salida)[0]}_snr_vs_tiempo.png"
+            plt.savefig(out_snr_time, dpi=300, bbox_inches='tight')
+            plt.show()
+            plt.close(fig_time)
+            
+        plot_counter += 1
+        print_progress_bar(plot_counter, num_plots, prefix='Generando Gráficos Comparativos:', suffix='Completado', length=50)
+        if len(valid_rows) > 1: print(f"Gráfico SNR vs Tiempo guardado en: {out_snr_time}")
+        else: print("No hay suficientes datos con hora válida para graficar SNR vs Tiempo.")
 
 # ---------------------- Main function (misma firma y lógica) ----------------
 def procesar_wavs_promedio(
@@ -1145,7 +1134,7 @@ def procesar_wavs_promedio(
     # ADICIONES
     fixed_umbral_abs=0.5,    # umbral fijo ABSOLUTO para comparar con el pulso promedio
     apply_envelope=True,     # calcula envolvente sobre la señal completa antes de recortar
-    smooth_ms=5,             # suavizado por media móvil de la envolvente en ms (0 = sin suavizado)
+    smooth_ms=50,             # suavizado por media móvil de la envolvente en ms (0 = sin suavizado)
     # NUEVAS OPCIONES (ruido inicial)
     noise_seconds=2,         # primeros segundos (relativos al inicio de la señal recortada) a usar como ruido
     excluded_windows=None,   # Lista de ventanas a excluir
@@ -1680,8 +1669,8 @@ class ProcessingOptionsDialog(tk.Toplevel):
         self.var_highpass_cutoff = tk.StringVar(value="20") # Valor por defecto para pasa-altos
         # --- NUEVO: Opción para filtro notch ---
         self.var_notch_filter = tk.BooleanVar(value=True) # Por defecto activado
-        # --- NUEVO: Opción para análisis interactivo en 2 pasos ---
-        self.var_interactive_analysis = tk.BooleanVar(value=True)
+        # --- NUEVO: Parámetro de suavizado de envolvente ---
+        self.var_smooth_ms = tk.StringVar(value="50")
         # --- NUEVO: Opción Evolución Temporal ---
         self.var_mostrar_evolucion = tk.BooleanVar(value=False)
         self.var_evol_t_start = tk.StringVar(value="25")
@@ -1706,8 +1695,11 @@ class ProcessingOptionsDialog(tk.Toplevel):
         tk.Label(exclude_frame, text="Excluir ventanas (ej: 1,24):").pack(side="left")
         tk.Entry(exclude_frame, textvariable=self.var_excluded_windows).pack(side="left", fill="x", expand=True, padx=(5,0))
 
-        # --- NUEVO: Checkbox para el modo interactivo ---
-        tk.Checkbutton(individual_plots_frame, text="Mostrar gráfico de recortes para curación", variable=self.var_interactive_analysis).pack(anchor="w", pady=(5,0))
+        # --- NUEVO: Campo para suavizado de envolvente ---
+        smooth_frame = tk.Frame(individual_plots_frame)
+        smooth_frame.pack(fill='x', pady=(5,0))
+        tk.Label(smooth_frame, text="Suavizado Envolvente (ms):").pack(side="left")
+        tk.Entry(smooth_frame, textvariable=self.var_smooth_ms, width=8).pack(side="left", padx=(5,0))
 
         # --- NUEVO: Opción para filtro pasa-altos ---
         highpass_frame = tk.Frame(individual_plots_frame)
@@ -1721,9 +1713,15 @@ class ProcessingOptionsDialog(tk.Toplevel):
         tk.Label(lowpass_frame, text="Filtro Pasa-Bajos (Hz, 0 para desactivar):").pack(side="left")
         tk.Entry(lowpass_frame, textvariable=self.var_lowpass_cutoff, width=10).pack(side="left", padx=(5,0))
 
-        # --- Botón de Procesar ---
-        btn_procesar = tk.Button(main_frame, text="Procesar Canales Seleccionados", command=self.procesar, bg="#007BFF", fg="white", font=("Helvetica", 10, "bold"))
-        btn_procesar.pack(fill="x", ipady=5, pady=(10, 0))
+        # --- Botones de Procesar ---
+        btn_frame = tk.Frame(main_frame)
+        btn_frame.pack(fill="x", pady=(10, 0))
+        
+        btn_procesar = tk.Button(btn_frame, text="Procesar y Curar", command=lambda: self.procesar(interactivo=True), bg="#007BFF", fg="white", font=("Helvetica", 10, "bold"))
+        btn_procesar.pack(side="left", fill="x", expand=True, ipady=5, padx=(0, 5))
+        
+        btn_rapido = tk.Button(btn_frame, text="Reprocesar Rápido (Silencioso)", command=lambda: self.procesar(interactivo=False), bg="#28A745", fg="white", font=("Helvetica", 10, "bold"))
+        btn_rapido.pack(side="right", fill="x", expand=True, ipady=5, padx=(5, 0))
 
     def populate_channels(self, base_dir, mediciones):
         self.mediciones_a_procesar = mediciones
@@ -1748,7 +1746,7 @@ class ProcessingOptionsDialog(tk.Toplevel):
         else:
             tk.Label(self.channel_list_frame, text="No se encontraron canales en las mediciones seleccionadas.", fg="red").pack(anchor="w")
 
-    def procesar(self):
+    def procesar(self, interactivo=True):
         canales_globales = [canal for canal, var in self.canales_seleccionados.items() if var.get()]
         if not canales_globales:
             tk.messagebox.showerror("Error", "No se ha seleccionado ningún canal para procesar.", parent=self)
@@ -1778,6 +1776,7 @@ class ProcessingOptionsDialog(tk.Toplevel):
             highpass_freq = float(self.var_highpass_cutoff.get())
             evol_t_start = float(self.var_evol_t_start.get())
             evol_t_end = float(self.var_evol_t_end.get())
+            smooth_val = float(self.var_smooth_ms.get())
         except ValueError:
             tk.messagebox.showerror("Error de Formato", "Las frecuencias de los filtros y tiempos deben ser números.", parent=self)
             return
@@ -1800,7 +1799,7 @@ class ProcessingOptionsDialog(tk.Toplevel):
         for i, canal_path_rel in enumerate(canales_a_procesar):
             nombre_medicion, item = os.path.split(canal_path_rel)
             carpeta_a_analizar = os.path.join(self.BASE_DIR, canal_path_rel)
-            is_interactive = self.var_interactive_analysis.get()
+            is_interactive = interactivo
             print(f"\n--- Procesando: {canal_path_rel} ---")
             
             # --- LÓGICA MEJORADA: Cargar metadata, incluyendo ventanas excluidas ---
@@ -1846,6 +1845,7 @@ class ProcessingOptionsDialog(tk.Toplevel):
                     apply_notch_filter=apply_notch, # <-- Pasar estado del filtro
                     lowpass_cutoff_hz=lowpass_freq,
                     highpass_cutoff_hz=highpass_freq,
+                    smooth_ms=smooth_val, # <-- NUEVO
                     mostrar_evolucion=False,
                     evol_t_start=evol_t_start,
                     evol_t_end=evol_t_end
@@ -1935,6 +1935,7 @@ class ProcessingOptionsDialog(tk.Toplevel):
                     show_interactive_plot=False, # <-- El análisis final no necesita ser mostrado
                     excluded_windows=final_excluded_windows, # Usar la lista final de exclusión
                     apply_notch_filter=apply_notch, # <-- Pasar estado del filtro
+                    smooth_ms=smooth_val, # <-- NUEVO
                     mostrar_evolucion=self.var_mostrar_evolucion.get(),
                     evol_t_start=evol_t_start,
                     evol_t_end=evol_t_end
@@ -1970,7 +1971,7 @@ class ComparativeOptionsDialog(tk.Toplevel):
         self.root = root
         super().__init__(root)
         self.title("Opciones de Comparación")
-        self.geometry("450x450")
+        self.geometry("450x520")
         self.transient(root)
         self.grab_set()
 
@@ -1979,6 +1980,13 @@ class ComparativeOptionsDialog(tk.Toplevel):
 
         main_frame = tk.Frame(self, padx=15, pady=15)
         main_frame.pack(fill="both", expand=True)
+
+        # --- Nombre del Set de Análisis ---
+        name_frame = tk.Frame(main_frame)
+        name_frame.pack(fill="x", pady=(0, 10))
+        tk.Label(name_frame, text="Nombre del Set de Análisis (opcional):").pack(side="left")
+        self.var_nombre_analisis = tk.StringVar()
+        tk.Entry(name_frame, textvariable=self.var_nombre_analisis).pack(side="left", fill="x", expand=True, padx=(10, 0))
 
         # --- Sección de Selección de Canal ---
         self.channel_frame = tk.LabelFrame(main_frame, text="2. Comparar datos del Canal:", padx=10, pady=5)
@@ -1997,10 +2005,12 @@ class ComparativeOptionsDialog(tk.Toplevel):
         self.var_show_snr = tk.BooleanVar(value=True)
         self.var_show_amplitude = tk.BooleanVar(value=True)
         self.var_show_table = tk.BooleanVar(value=True)
+        self.var_show_snr_time = tk.BooleanVar(value=True)
 
         tk.Checkbutton(comparative_plots_frame, text="Generar Overlay de Pulsos", variable=self.var_show_overlay).pack(anchor="w")
-        tk.Checkbutton(comparative_plots_frame, text="Generar Gráfico SNR (Amplitud y Energía)", variable=self.var_show_snr).pack(anchor="w")
+        tk.Checkbutton(comparative_plots_frame, text="Generar Gráfico SNR (Amplitud)", variable=self.var_show_snr).pack(anchor="w")
         tk.Checkbutton(comparative_plots_frame, text="Generar Gráfico Amplitud Máxima", variable=self.var_show_amplitude).pack(anchor="w")
+        tk.Checkbutton(comparative_plots_frame, text="Generar Gráfico SNR vs Tiempo", variable=self.var_show_snr_time).pack(anchor="w")
         tk.Checkbutton(comparative_plots_frame, text="Generar Tabla de Resultados (CSV y PNG)", variable=self.var_show_table).pack(anchor="w")
 
         # --- Botón de Lanzar ---
@@ -2050,6 +2060,9 @@ class ComparativeOptionsDialog(tk.Toplevel):
             tk.messagebox.showerror("Error", "Debes seleccionar al menos dos mediciones y un canal común.", parent=self)
             return
 
+        nombre_custom = self.var_nombre_analisis.get().strip()
+        nombre_custom = re.sub(r'[\\/*?:"<>|]', "", nombre_custom) # Quitar caracteres inválidos para carpetas
+
         self.destroy()
         self.root.destroy()
 
@@ -2096,16 +2109,25 @@ class ComparativeOptionsDialog(tk.Toplevel):
             tiempos_globales = [res['pulse_time'] for res in resultados_globales.values() if 'pulse_time' in res]
             nombres_globales = [res['file'] for res in resultados_globales.values() if 'file' in res]
             
-            output_comp_dir = "analisis_comparativos"
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            timestamp = datetime.now().strftime("%H%M%S")
+            
+            if not nombre_custom:
+                nombre_carpeta = f"comparacion_{timestamp}"
+            else:
+                nombre_carpeta = nombre_custom
+                
+            output_comp_dir = os.path.join("analisis_comparativos", today_str, nombre_carpeta)
             os.makedirs(output_comp_dir, exist_ok=True)
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            nombre_salida_comp = os.path.join(output_comp_dir, f"comparacion_{timestamp}.png")
+            
+            nombre_salida_comp = os.path.join(output_comp_dir, "comparativa.png")
             
             _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, resultados_globales, nombre_salida_comp,
                                show_overlay=self.var_show_overlay.get(),
                                show_snr=self.var_show_snr.get(),
                                show_amplitude=self.var_show_amplitude.get(),
-                               show_table=self.var_show_table.get())
+                               show_table=self.var_show_table.get(),
+                               show_snr_time=self.var_show_snr_time.get())
         else:
             print("\nNo se generaron gráficos comparativos. Se necesitan al menos dos mediciones con resultados válidos.")
 
@@ -2154,11 +2176,22 @@ class AnalysisGUI:
         self.listbox_mediciones.delete(0, tk.END)
         try:
             if os.path.isdir(self.BASE_DIR):
-                for item in sorted(os.listdir(self.BASE_DIR)):
-                    if os.path.isdir(os.path.join(self.BASE_DIR, item)):
-                        self.listbox_mediciones.insert(tk.END, item)
-        except FileNotFoundError:
-            tk.messagebox.showerror("Error", f"No se encontró el directorio base: '{self.BASE_DIR}'")
+                date_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+                # Primero listamos carpetas de fecha
+                for date_folder in sorted(os.listdir(self.BASE_DIR), reverse=True):
+                    date_path = os.path.join(self.BASE_DIR, date_folder)
+                    if os.path.isdir(date_path) and date_pattern.match(date_folder):
+                        # Luego iteramos sobre mediciones en cada fecha
+                        for med_folder in sorted(os.listdir(date_path)):
+                            med_path = os.path.join(date_path, med_folder)
+                            if os.path.isdir(med_path):
+                                # Verificamos si contiene canales
+                                has_channels = any(f.startswith("canal_") for f in os.listdir(med_path) if os.path.isdir(os.path.join(med_path, f)))
+                                if has_channels:
+                                    rel_path = os.path.join(date_folder, med_folder)
+                                    self.listbox_mediciones.insert(tk.END, rel_path)
+        except Exception as e:
+            tk.messagebox.showerror("Error", f"No se pudo leer el directorio base:\n{e}")
 
     def on_selection_change(self, event=None):
         """Habilita los botones según la cantidad de mediciones seleccionadas."""

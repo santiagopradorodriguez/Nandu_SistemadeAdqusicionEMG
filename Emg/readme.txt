@@ -32,7 +32,7 @@ source venv/bin/activate
 
 ### Paso 2: Instalar las Librerías de Python
 
-Este proyecto utiliza un archivo `requirements.txt` que contiene la lista de todas las librerías necesarias. Con tu entorno virtual activado, ejecuta:
+Este proyecto utiliza un archivo `requirements.txt` que contiene la lista de todas las librerías necesarias (incluyendo PyQt6, pyqtgraph, scipy, etc.). Con tu entorno virtual activado, ejecuta:
 
 ```bash
 pip install -r requirements.txt
