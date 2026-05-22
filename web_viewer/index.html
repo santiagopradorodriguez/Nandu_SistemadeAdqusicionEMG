@@ -1,57 +1,21 @@
-<!-- <!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ñandú - Visualizador EMG</title>
-    <link rel="stylesheet" href="style.css">
-    Librería para leer el CSV rápido
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-    <!-- Librería para los gráficos interactivos -->
-    <!-- <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
-</head>
-<body>
-    <header class="top-bar">
-        <div class="brand">
-            <h1>ÑANDÚ LSD<span class="subtitle">VISUALIZADOR</span></h1>
-        </div>
-        <div class="controls">
-            <label for="csvFileInput" class="custom-file-upload">
-                CARGAR ARCHIVO .CSV
-            </label>
-            <input type="file" id="csvFileInput" accept=".csv">
-        </div>
-    </header>
-
-    <main class="chart-container">
-        <div id="emgChart">
-            <p class="placeholder-text">Cargá un archivo .csv para comenzar la visualización.</p>
-        </div>
-    </main>
-
-    <script src="app.js"></script>
-</body>
-</html> -->
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ñandú LSD Viewer</title>
+    <link rel="icon" type="image/jpeg" href="logo_nandu_lsd.png">
     <link rel="stylesheet" href="style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fili@2.0.3/dist/fili.min.js"></script>
 </head>
 <body>
     <header class="top-bar">
         <div class="brand">
-            <!-- Referencia al archivo local en la misma carpeta -->
             <img src="logo_nandu_lsd.png" alt="Logo Ñandú" class="logo">
             <h1>ÑANDÚ LSD <span class="subtitle">Viewer</span></h1>
         </div>
-        
-        <!-- Pestañas de navegación -->
         <div class="tabs">
             <button class="tab-btn active" onclick="openTab(event, 'tab-datos')">Datos Crudos</button>
             <button class="tab-btn" onclick="openTab(event, 'tab-comparador')">Comparador</button>
@@ -61,30 +25,80 @@
     <main class="main-content">
         <!-- PESTAÑA 1: DATOS CRUDOS -->
         <div id="tab-datos" class="tab-content active">
-            <div class="control-panel">
-                <label for="csvFileInput" class="custom-file-upload">CARGAR ARCHIVO .CSV</label>
-                <input type="file" id="csvFileInput" accept=".csv">
-                <span class="info-text" id="csvFileInfo">Ningún archivo seleccionado. (Tip: Usá el mouse para Zoom/Pan)</span>
-            </div>
-            <div class="canvas-wrapper">
-                <div id="emgChart">
-                    <p class="placeholder-text">Cargá un archivo .csv para comenzar la visualización.</p>
+            
+            <div class="workspace">
+                <!-- PANEL IZQUIERDO: Selector y Gráfico -->
+                <div class="main-chart-area">
+                    <div class="folder-controls">
+                        <label class="custom-file-upload">
+                            ELEGIR CARPETA BASE
+                            <input type="file" id="folderInput" webkitdirectory directory multiple>
+                        </label>
+                        
+                        <!-- Lista oculta por defecto -->
+                        <select id="measurementSelect" class="cyber-select" style="display: none;">
+                            <option value="">Seleccione una medición</option>
+                        </select>
+                        <span id="selectedFolderName" class="info-text-folder"></span>
+                    </div>
+
+                    <div class="canvas-wrapper" id="canvasWrapper">
+                        <p id="placeholderText" class="placeholder-text">Seleccioná la carpeta de la base de datos para comenzar.</p>
+                        <!-- El gráfico se inyecta acá -->
+                        <div id="emgChart" style="width: 100%; height: 100%; display: none;"></div>
+                    </div>
                 </div>
+
+                <!-- PANEL DERECHO: Herramientas Cyberpunk (Oculto por defecto) -->
+                <aside class="tools-panel" id="toolsPanel" style="display: none;">
+                    <h3>HERRAMIENTAS</h3>
+                    
+                    <button id="btnExport" class="cyber-btn">Exportar Gráfico (.PNG)</button>
+
+                    <div class="filter-box">
+                        <div class="filter-header">
+                            <label class="cyber-label">
+                                <input type="checkbox" id="chkNotch" class="cyber-check">
+                                Filtro Notch
+                            </label>
+                            <span class="gear-icon" title="Configuración del filtro Notch" onclick="configurarNotch()">⚙️</span>
+                        </div>
+                        <div class="filter-inputs">
+                            <input type="number" id="freqNotch" value="50" class="cyber-input"> Hz
+                        </div>
+                    </div>
+
+                    <div class="filter-box">
+                        <div class="filter-header">
+                            <label class="cyber-label">
+                                <input type="checkbox" id="chkBP" class="cyber-check">
+                                Filtro Pasabanda
+                            </label>
+                            <span class="gear-icon" title="Configuración del filtro Pasabanda" onclick="configurarPasabanda()">⚙️</span>
+                        </div>
+                        <div class="filter-inputs">
+                            <input type="number" id="freqLow" value="20" class="cyber-input"> Hz - 
+                            <input type="number" id="freqHigh" value="500" class="cyber-input"> Hz
+                        </div>
+                    </div>
+
+                    <h3 style="margin-top: 20px;">METADATA (Canal 0)</h3>
+                    <div class="metadata-box">
+                        <pre id="metadataDisplay">Esperando datos...</pre>
+                    </div>
+                </aside>
             </div>
         </div>
 
         <!-- PESTAÑA 2: COMPARADOR -->
         <div id="tab-comparador" class="tab-content">
-            <div class="control-panel">
+            <div class="folder-controls" style="margin-bottom: 15px;">
                 <label for="pngFileInput" class="custom-file-upload">CARGAR GRÁFICOS .PNG</label>
-                <!-- accept=".png" y multiple permite seleccionar varios archivos a la vez -->
-                <input type="file" id="pngFileInput" accept=".png, .jpg" multiple>
+                <input type="file" id="pngFileInput" accept=".png, .jpg" multiple style="display:none;">
                 <span class="info-text">Seleccioná múltiples imágenes para comparar.</span>
             </div>
             <div class="canvas-wrapper">
-                <div id="imageGallery" class="gallery-grid">
-                    <p class="placeholder-text">Acá aparecerán las imágenes PNG para comparar.</p>
-                </div>
+                <div id="imageGallery" class="gallery-grid"></div>
             </div>
         </div>
     </main>

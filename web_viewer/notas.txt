@@ -1,5 +1,8 @@
 Dejo asentadas lo que me gustaria que sean las próximas mejoras.
 
+Sobre la pestaña
+Me gustaria que en la pestaña, al lado de la palabra "Ñandú LSD Viewer" aparezca el loguito. Asi es más pro.
+
 Datos Crudos
 
 Tengo que revisar bien la estructura de la base de datos, pero me gustaria que pida elegir una carpeta y que en una lista desplegable esten a disposición todos los archivos .csv de las mediciones. Es decir, lo primero que hay que hacer es elegir una carpeta, dentro de esa carpeta, seguro hay varias carpetas que dentro tienen el .csv que quiero. La lista desplegable tiene que mostrarme el nombre de la carpeta, cuando la selecciono, tiene que seleccionarse el .csv que tiene dentro y al costado en gris, mostrar el nombre del archivo que se abrio.
