@@ -132,6 +132,48 @@ class ReaperStyleHub(QMainWindow):
         lyt_daq = QHBoxLayout(self.tab_daq)
         
         import os
+        from pathlib import Path
+        
+        # --- NUEVO: Cargar Logo del Programa ---
+        logo_path = None
+        try:
+            # Buscar en varias ubicaciones posibles
+            root_dir = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            gui_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+            assets_dir = gui_dir / "assets"
+            pictures_dir = Path.home() / "Pictures"
+            
+            search_dirs = [assets_dir, gui_dir, root_dir, pictures_dir]
+            
+            for search_dir in search_dirs:
+                if search_dir.exists():
+                    for filename in os.listdir(search_dir):
+                        if filename.lower().startswith("logo") and filename.lower().endswith((".png", ".jpg", ".jpeg")):
+                            logo_path = str(search_dir / filename)
+                            break
+                if logo_path:
+                    break
+        except Exception as e:
+            print(f"> Error buscando logo: {e}")
+
+        # Contenedor izquierdo para logo e info
+        vbox_info = QVBoxLayout()
+        
+        # Etiqueta para el Logo
+        lbl_logo = QLabel()
+        lbl_logo.setAlignment(Qt.AlignCenter)
+        if logo_path and os.path.exists(logo_path):
+            from PySide6.QtGui import QPixmap
+            pix = QPixmap(logo_path)
+            pix = pix.scaled(400, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            lbl_logo.setPixmap(pix)
+            lbl_logo.setStyleSheet("padding: 10px; background-color: #050505; border-radius: 8px; border: 1px solid #222;")
+        else:
+            lbl_logo.setText("<h2>[ÑANDÚ LSD LOGO]</h2><p style='color:#888;'>Coloca un archivo 'logo.png' en la carpeta Imágenes</p>")
+            lbl_logo.setStyleSheet("color: #FF0000; background-color: #111; border: 1px dashed #FF4444; padding: 20px; border-radius: 8px;")
+        
+        vbox_info.addWidget(lbl_logo)
+        
         md_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "justificacion_matematica.md"))
         file_url = f"file:///{md_path.replace(chr(92), '/')}"
         
@@ -165,13 +207,32 @@ class ReaperStyleHub(QMainWindow):
         lbl_intro.setTextFormat(Qt.RichText)
         lbl_intro.setTextInteractionFlags(Qt.TextBrowserInteraction)
         lbl_intro.setOpenExternalLinks(True)
-        lbl_intro.setStyleSheet("QLabel { background-color: #111111; color: white; border: 1px solid #333333; border-radius: 8px; }")
+        lbl_intro.setStyleSheet("QLabel { background-color: #111111; color: white; border: 1px solid #333333; border-radius: 8px; margin-top: 10px; }")
         
-        btn_daq = QPushButton("🔴 INICIAR ADQUISICIÓN DE SEÑALES (DAQ)")
-        btn_daq.setStyleSheet("font-size: 20px; font-weight: bold; background-color: #AA0000; color: white; padding: 30px;")
+        btn_daq = QPushButton("🔴 INICIAR ADQUISICIÓN\nDE SEÑALES (DAQ)")
+        btn_daq.setStyleSheet("""
+            QPushButton {
+                font-size: 22px; 
+                font-weight: bold; 
+                background-color: #880000; 
+                color: white; 
+                padding: 40px 20px;
+                border-radius: 15px;
+                border: 2px solid #ff4444;
+            }
+            QPushButton:hover {
+                background-color: #aa0000;
+                border: 2px solid #ff7777;
+            }
+            QPushButton:pressed {
+                background-color: #550000;
+                border: 2px solid #aa0000;
+            }
+        """)
         btn_daq.clicked.connect(lambda: self._launch_external("CodigoUnificador_integrado.py"))
         
-        lyt_daq.addWidget(lbl_intro, stretch=2)
+        vbox_info.addWidget(lbl_intro, stretch=2)
+        lyt_daq.addLayout(vbox_info, stretch=2)
         lyt_daq.addSpacing(20)
         
         vbox_btn = QVBoxLayout()
@@ -219,6 +280,15 @@ class ReaperStyleHub(QMainWindow):
         
         lyt_view.addWidget(self.tabs_viz)
         self.tabs.addTab(self.tab_view, "3. VISUALIZACIÓN")
+        
+        # --- TAB 4: HISTORIAL DE COMPARATIVAS ---
+        from views.comparative_explorer_widget import ComparativeViewerWidget
+        import os
+        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        comparative_path = os.path.join(root_dir, "analisis_comparativos")
+        
+        self.comparative_viewer = ComparativeViewerWidget(root_path=comparative_path)
+        self.tabs.addTab(self.comparative_viewer, "4. HISTORIAL DE COMPARATIVAS")
 
     def _create_dock_explorer(self):
         """Panel tipo 'Media Explorer' o 'Gestor de Sesiones'"""

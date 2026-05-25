@@ -52,9 +52,24 @@ class ElectrodeViewerWidget(QWidget):
         # Header toolbar
         self.toolbar = QHBoxLayout()
         self.lbl_info = QLabel("Mostrando 0 electrodos seleccionados.")
-        self.lbl_info.setStyleSheet("color: #888; font-family: monospace;")
+        self.lbl_info.setStyleSheet("color: #00ffaa; font-family: 'Courier New', monospace; font-size: 14px; font-weight: bold;")
         self.btn_refresh = QPushButton("🔄 Sincronizar con Sesiones Marcadas")
-        self.btn_refresh.setStyleSheet("background-color: #333; color: white; padding: 5px 15px; font-weight: bold;")
+        self.btn_refresh.setStyleSheet("""
+            QPushButton {
+                background-color: #880000; 
+                color: white; 
+                padding: 8px 15px; 
+                font-weight: bold;
+                border-radius: 5px;
+                border: 1px solid #ff4444;
+            }
+            QPushButton:hover {
+                background-color: #aa0000;
+            }
+            QPushButton:pressed {
+                background-color: #550000;
+            }
+        """)
         self.toolbar.addWidget(self.btn_refresh)
         self.toolbar.addWidget(self.lbl_info)
         self.toolbar.addStretch()
@@ -67,8 +82,50 @@ class ElectrodeViewerWidget(QWidget):
         self.list_widget.setViewMode(QListWidget.IconMode)
         self.list_widget.setIconSize(QSize(220, 140))
         self.list_widget.setResizeMode(QListWidget.Adjust)
-        self.list_widget.setSpacing(10)
-        self.list_widget.setStyleSheet("QListWidget { background-color: #111; border: 1px solid #333; } QListWidget::item { color: white; }")
+        self.list_widget.setSpacing(15)
+        self.list_widget.setStyleSheet("""
+            QListWidget { 
+                background-color: #0a0a0a; 
+                border: 1px solid #333; 
+                border-radius: 8px;
+                padding: 10px;
+                outline: none;
+            } 
+            QListWidget::item { 
+                color: #ddd; 
+                background-color: #1a1a1a;
+                border: 1px solid #222;
+                border-radius: 8px;
+                padding: 5px;
+            }
+            QListWidget::item:hover {
+                background-color: #2a2a2a;
+                border: 1px solid #FF4444;
+                color: white;
+            }
+            QListWidget::item:selected {
+                background-color: #440000;
+                border: 2px solid #FF0000;
+                color: #FFaaaa;
+            }
+            QScrollBar:vertical {
+                border: none;
+                background: #111;
+                width: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical {
+                background: #444;
+                min-height: 20px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #FF4444;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+        """)
         self.list_widget.itemDoubleClicked.connect(self._on_item_double_clicked)
         self.list_widget.itemClicked.connect(self._on_item_double_clicked) # Click simple también abre
         
@@ -78,10 +135,38 @@ class ElectrodeViewerWidget(QWidget):
         self.detail_widget = QWidget()
         self.detail_layout = QVBoxLayout(self.detail_widget)
         self.lbl_detail_title = QLabel("Haz clic en una miniatura para ver los detalles.")
-        self.lbl_detail_title.setStyleSheet("font-size: 16px; font-weight: bold; color: #FF4444;")
+        self.lbl_detail_title.setStyleSheet("font-size: 18px; font-weight: bold; color: #FF4444; padding: 5px; background-color: #111; border-radius: 4px; border: 1px solid #333;")
         self.detail_layout.addWidget(self.lbl_detail_title)
         
         self.tabs_channels = QTabWidget()
+        self.tabs_channels.setStyleSheet("""
+            QTabWidget::pane {
+                border: 1px solid #444;
+                background: #0f0f0f;
+                border-radius: 4px;
+            }
+            QTabBar::tab {
+                background: #1a1a1a;
+                color: #888;
+                padding: 8px 16px;
+                border: 1px solid #333;
+                border-bottom: none;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+                margin-right: 2px;
+                font-weight: bold;
+            }
+            QTabBar::tab:hover {
+                background: #2a2a2a;
+                color: #fff;
+            }
+            QTabBar::tab:selected {
+                background: #880000;
+                color: #fff;
+                border: 1px solid #ff4444;
+                border-bottom: none;
+            }
+        """)
         self.detail_layout.addWidget(self.tabs_channels)
         
         self.splitter.addWidget(self.detail_widget)
@@ -143,7 +228,12 @@ class ElectrodeViewerWidget(QWidget):
         for canal in canales:
             canal_path = os.path.join(path, canal)
             canal_tab = QTabWidget()
-            canal_tab.setStyleSheet("QTabBar::tab { font-size: 12px; padding: 5px 10px; }")
+            canal_tab.setStyleSheet("""
+                QTabBar::tab { font-size: 12px; padding: 5px 15px; background: #111; color: #888; border: 1px solid #222; }
+                QTabBar::tab:selected { background: #333; color: #fff; border-color: #555; font-weight: bold; }
+                QTabBar::tab:hover { background: #222; color: #aaa; }
+                QTabWidget::pane { border: 1px solid #333; background: #0a0a0a; }
+            """)
             
             # Read metadata
             meta_path = os.path.join(canal_path, "metadata.json")
