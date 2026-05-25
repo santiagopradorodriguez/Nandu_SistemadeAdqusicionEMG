@@ -291,8 +291,7 @@ def _plot_pulse_full(
     print_progress_bar(1, 1, prefix='Graficando Avg:', suffix='OK', length=20)
     if show_plot:
         plt.show()
-    else:
-        plt.close(plt.gcf())
+    plt.close(plt.gcf())
 
 # ---------------------- Plot ESPECTROGRAMA (NUEVO) -----------------------
 def _plot_espectrograma(pulso_promedio, samplerate, filename, out_spec):
@@ -334,8 +333,8 @@ def _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds,
     
     plt.figure(figsize=(12, 4))
     if signal_original_unfiltered is not None:
-        plt.plot(t_recortada, signal_original_unfiltered, color="red", linewidth=1.0, alpha=0.4, label="Original")
-    plt.plot(t_recortada, signal_recortada, color="black", linewidth=1.2, alpha=0.7, label="Procesada")
+        plt.plot(t_recortada, np.abs(signal_original_unfiltered), color="red", linewidth=1.0, alpha=0.4, label="Módulo Original")
+    plt.plot(t_recortada, np.abs(signal_recortada), color="black", linewidth=1.2, alpha=0.7, label="Módulo Procesada")
     
     noise_t0 = t_recortada[0]
     noise_t1 = noise_t0 + noise_seconds
@@ -385,7 +384,7 @@ def _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds,
     plt.xlabel("Tiempo [s]")
     plt.ylabel("Amplitud [V]")
     max_y_val = np.max(env_recortada) if len(env_recortada) > 0 else 1.3
-    plt.ylim(-max_y_val * 1.2, max_y_val * 1.5)
+    plt.ylim(-0.05 * max_y_val, max_y_val * 1.5)
     plt.grid(True, alpha=0.5)
     plt.legend(loc='upper right')
     
@@ -414,8 +413,7 @@ def _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds,
         
         cid = fig.canvas.mpl_connect('button_press_event', onclick)
         plt.show(block=True)
-    else:
-        plt.close(plt.gcf())
+    plt.close(fig)
         
     return sorted(list(excluded_set_plot))
 
@@ -782,6 +780,8 @@ def procesar_wavs_promedio(
         }
 
         export_results_for_file(out_dir, filename, resultados[filename])
+
+        plt.close('all') # --- Limpieza forzada ---
 
     if mostrar_tabla and promedios_globales:
         _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, resultados, nombre_salida)

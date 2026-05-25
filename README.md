@@ -17,24 +17,23 @@ Este repositorio aloja el  software para la **adquisición, almacenamiento  y an
 
 ---
 
-##  Características del Sistema
+##  Características del Sistema (v3.0 - PySide6)
 
-El proyecto se gestiona en la carpeta EMG  **Lanzador** (`Sistema_de_Adquisicion_Emg.py`) que integra cuatro módulos principales:
+El proyecto se gestiona desde el **Lanzador Principal** (`gui_app/main_app.py`) que integra módulos con estética Cyberpunk y aceleración de hardware:
 
-1.  **Adquisición (`CodigoUnificador_integrado.py`)**: 
+1.  **Adquisición (DAQ)**: 
     - Captura señales vía NI-DAQmx.
-    - Visualización en tiempo real con filtros aplicables.
-    - Metrónomo visual/auditivo integrado para protocolos experimentales.
-    - Modo "Prueba" para simulación sin hardware y probar el software.
-2.  **Análisis de Señal Ruido (`analisis_por_track_integrado.py`)**: 
-    - Procesa grabaciones masivas.
-    - Calcula SNR (Relación Señal-Ruido), latencia y amplitud.
-    - Detecta y alinea picos de actividad muscular automáticamente.
-3.  **Visor de Resultados (`electrode_viewer_4.py`)**: 
-    - Comparativa visual de "Tracks" (promedios de pulsos).
-    - Ideal para comparar diferentes electrodos o sesiones.
-4.  **Inspector de Datos (`visor_csv_interactivo.py`)**: 
-    - Ploteo interactivo de archivos `.csv` crudos para inspección fina.
+    - Visualización en tiempo real con filtros (Notch, Pasa-Banda) y auto-escala.
+    - Metrónomo visual interactivo y semáforo de cuenta regresiva sincronizado.
+    - "Tester de Relajación" para evaluar el ruido inter-pulso.
+2.  **Análisis de Señal y Curación**: 
+    - Procesa grabaciones masivas o de forma individual.
+    - Visualizador de imágenes reactivo integrado en la interfaz.
+3.  **Visores Nativos de Datos (CSV Viewer)**: 
+    - Ploteo interactivo de archivos `.csv` crudos con downsampling extremo (LTTB).
+    - Filtros dinámicos (Notch, Lowpass, Highpass) aplicables en tiempo real sin recargar el archivo.
+4.  **Análisis Comparativo**: 
+    - Superposición de mediciones del mismo canal para evaluar la evolución de la relación Señal-Ruido.
 
 ---
 ### Herramientas de Gestión y Utilidades
@@ -192,16 +191,16 @@ Sistema_de_Adquisicion_Emg.py
 
 ---
 
-## Roadmap y Tareas Pendientes
+## Roadmap y Tareas Pendientes (v4.0+)
 
-El proyecto está en desarrollo activo. Consulta `CONTRIBUTING.md` si quieres ayudar con:
+El proyecto está en desarrollo activo. Consulta `ROADMAP.md` para más detalles o `CONTRIBUTING.md` si quieres ayudar con:
 
-- [ ] **UI:** Corregir bug visual en el checkbox del filtro Notch (no se destilda al parar adquisición).
-- [ ] **Rendimiento:** Optimizar `visor_csv_interactivo.py` para archivos de larga duración.
-- [ ] **Procesamiento:** Corregir la generación de espectrogramas en el análisis por track.
-- [ ] **Calibración:** Implementar lógica para resistencias de 100 Ohms.
-- [ ] **Señal Ruido en Tiempo Real:**  en el visor de señales estaría bueno despues de cada pulso o periado tomar el maximo y dividirlo por el ruido calculado.
-- [ ] **Docs:** Documentar internamente las funciones críticas.
+- [ ] **Ventana de Curación Híbrida:** Integrar nativamente Matplotlib dentro del flujo de PySide6 para la curación interactiva sin depender de popups.
+- [ ] **Modo Prueba (Simulador):** Arreglar el bug de cierre/cuelgue de la aplicación al presionar "Detener Adquisición" con archivos pre-grabados.
+- [ ] **ElectrodeViewer Expandido:** Agregar gráficos de "Evolución Temporal" y "Espectrogramas".
+- [ ] **Visualización Anatómica:** Permitir mostrar fotos (ej. `configuracion.jpg`) automáticamente en la interfaz para documentar la disposición física de los electrodos.
+- [ ] **Adquisición Dual (EMG + Audio):** Grabar audio desde un micrófono sincronizado en paralelo a la captura de la placa EMG.
+- [ ] **Refactorización PySide6:** Portar completamente al nuevo ecosistema los scripts legados como `extractor_de_datos_procesados.py` y `editor_mediciones.py`.
 
 ---
 

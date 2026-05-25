@@ -25,6 +25,11 @@ import json
 import subprocess # <-- NUEVO: para guardar el metadata
 import os # Necesario para separar nombres de archivo
 
+try:
+    import winsound
+except ImportError:
+    winsound = None
+
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtWidgets, QtCore, QtGui 
 
@@ -124,11 +129,12 @@ def simulador_thread(chunk_samples, sample_rate, num_canales, data_queue, stop_e
             import pandas as pd
             import os
             script_dir = os.path.dirname(os.path.abspath(__file__))
-            test_dir = os.path.join(script_dir, "base_de_datos_electrodos", "senal_de_prueba")
-            os.makedirs(test_dir, exist_ok=True)
+            # --- MODIFICADO: Usar señal trenzada de prueba ---
+            test_dir = os.path.join(script_dir, "base_de_datos_electrodos", "2026-05-18", "_E0_1_TRENZADOMALLADOGND_Sujeto1")
             csv_path = os.path.join(test_dir, "grabacion.csv")
             
             if os.path.exists(csv_path):
+                print(f"Cargando archivo de prueba {csv_path}...")
                 df = pd.read_csv(csv_path)
                 canales_cols = [c for c in df.columns if "Canal" in c]
                 if canales_cols:
@@ -492,10 +498,10 @@ class RealTimePlotter(QtWidgets.QWidget):
         super().__init__()
 
         # --- Constantes de la GUI ---
-        self.BTN_START_STYLE = "background-color: #007BFF; color: white; font-weight: bold; padding: 5px;"
-        self.BTN_STOP_STYLE = "background-color: #DC3545; color: white; font-weight: bold; padding: 5px;"
-        self.BTN_REC_START_STYLE = "background-color: #4CAF50; color: white; font-weight: bold; padding: 5px;"
-        self.BTN_REC_STOP_STYLE = "background-color: #F44336; color: white; font-weight: bold; padding: 5px;"
+        self.BTN_START_STYLE = "background-color: #050505; color: #00FF00; font-weight: bold; font-family: 'Courier New'; font-size: 14px; padding: 8px; border: 2px solid #00FF00; border-radius: 4px;"
+        self.BTN_STOP_STYLE = "background-color: #050505; color: #FF0000; font-weight: bold; font-family: 'Courier New'; font-size: 14px; padding: 8px; border: 2px solid #FF0000; border-radius: 4px;"
+        self.BTN_REC_START_STYLE = "background-color: #050505; color: #00FFFF; font-weight: bold; font-family: 'Courier New'; font-size: 14px; padding: 8px; border: 2px solid #00FFFF; border-radius: 4px;"
+        self.BTN_REC_STOP_STYLE = "background-color: #FF0000; color: #000000; font-weight: bold; font-family: 'Courier New'; font-size: 14px; padding: 8px; border: 2px solid #FF0000; border-radius: 4px;"
 
         # --- Estado interno ---
         self.is_recording = False
@@ -688,8 +694,10 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.config_layout.addLayout(self.channel_layout, 2, 1, 1, 4) # row, col, rowspan, colspan
         
         # --- NUEVO: Control de Modo Terminal ---
-        self.label_terminal_config = QtWidgets.QLabel("Modo Terminal:")
+        self.label_terminal_config = QtWidgets.QLabel("⚡ CONEXIÓN DAQ (Voltaje):")
+        self.label_terminal_config.setStyleSheet("color: #FFFF00; font-weight: bold; font-size: 13px;")
         self.cmb_terminal_config = QtWidgets.QComboBox()
+        self.cmb_terminal_config.setStyleSheet("background-color: #000000; color: #FFFF00; border: 2px solid #FFFF00; font-size: 14px; font-weight: bold; padding: 4px;")
         self.cmb_terminal_config.addItems(["RSE", "DIFF", "NRSE", "DEFAULT"])
         self.cmb_terminal_config.setCurrentText("RSE")
         self.cmb_terminal_config.setToolTip("Modo de conexión a tierra. Usa 'DIFF' si tienes mucho ruido de 50 Hz.")
@@ -842,6 +850,16 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.plot.addItem(self.peak_th_line_pos)
         self.plot.addItem(self.peak_th_line_neg)
 
+        # --- NUEVO: Texto de Cuenta Regresiva ---
+        self.countdown_text = pg.TextItem(text="", color=(0, 255, 255), anchor=(0.5, 0.5))
+        font = QtGui.QFont()
+        font.setPixelSize(80) # Un poco más pequeño para evitar clipping OpenGL
+        font.setBold(True)
+        self.countdown_text.setFont(font)
+        self.countdown_text.setZValue(10000) # Traer al frente
+        self.plot.addItem(self.countdown_text)
+        self.countdown_text.hide()
+
     def _setup_ui_final_layout(self):
         
         # --- NUEVO: Divisor para los gráficos ---
@@ -978,7 +996,11 @@ class RealTimePlotter(QtWidgets.QWidget):
                     print(f"Advertencia: No se pudo comunicar con el proceso del metrónomo (puede que ya estuviera cerrado). Error: {e}")
             
             if self.metronome_process:
-                self.metronome_process.wait(timeout=2) # Esperar a que se cierre solo
+                try:
+                    self.metronome_process.wait(timeout=2) # Esperar a que se cierre solo
+                except subprocess.TimeoutExpired:
+                    print("Advertencia: El metrónomo no se cerró a tiempo. Forzando cierre...")
+                    self.metronome_process.kill()
                 self.metronome_process = None
 
             self._on_modo_prueba_toggled(self.chk_modo_prueba.isChecked()) # Restaurar estado de habilitación
@@ -1209,13 +1231,13 @@ class RealTimePlotter(QtWidgets.QWidget):
 
             # --- NUEVO: Crear un QFrame para cada medición ---
             measurement_frame = QtWidgets.QFrame()
-            measurement_frame.setStyleSheet("background-color: black; border: 1px solid gray; border-radius: 5px;")
+            measurement_frame.setStyleSheet("background-color: #050505; border: 2px solid #00FFFF; border-radius: 5px;")
             
             frame_layout = QtWidgets.QVBoxLayout(measurement_frame)
-            frame_layout.setContentsMargins(5, 2, 5, 2) # Pequeño padding interno
+            frame_layout.setContentsMargins(5, 5, 5, 5) # Padding interno
             
             label = QtWidgets.QLabel(f"<b>Ch {i}:</b> -- µVp-p, -- µVrms")
-            label.setStyleSheet(f"color: {pg.mkColor(color).name()};") # Color del texto igual al de la curva
+            label.setStyleSheet(f"color: {pg.mkColor(color).name()}; font-size: 14px; font-weight: bold; background-color: transparent; border: none;")
             frame_layout.addWidget(label)
             
             # --- NUEVO: Etiqueta para el tester de ruido ---
@@ -1473,6 +1495,8 @@ class RealTimePlotter(QtWidgets.QWidget):
             self.noise_data_accumulated = [[] for _ in range(self.NUM_CANALES)]
             self.noise_levels = [0.0] * self.NUM_CANALES
             self.noise_calculated = False
+            self.noise_initialized = False # <-- NUEVO: Resetear estado
+            self.countdown_active = False # Permitir lanzar el countdown de nuevo
             for line in getattr(self, 'noise_lines', []): line.hide()
             for line in getattr(self, 'noise_lines_neg', []): line.hide()
             for reg in getattr(self, 'noise_regions', []): reg.hide()
@@ -1534,7 +1558,11 @@ class RealTimePlotter(QtWidgets.QWidget):
                     print(f"Advertencia: No se pudo comunicar con el proceso del metrónomo. Error: {e}")
             
             if self.metronome_process:
-                self.metronome_process.wait(timeout=2) # Esperar a que el proceso termine y guarde el archivo
+                try:
+                    self.metronome_process.wait(timeout=2) # Esperar a que el proceso termine
+                except subprocess.TimeoutExpired:
+                    print("Advertencia: El metrónomo no se cerró a tiempo. Forzando cierre...")
+                    self.metronome_process.kill()
                 self.metronome_process = None
 
             if self.current_recording:
@@ -1736,39 +1764,60 @@ class RealTimePlotter(QtWidgets.QWidget):
                 if elapsed_time < noise_dur:
                     for i in range(self.NUM_CANALES):
                         self.noise_data_accumulated[i].append(processed_data[i, :])
+                        
+                    # --- NUEVO: Lógica de Cuenta Regresiva dentro del ruido ---
+                    time_remaining = noise_dur - elapsed_time
+                    if time_remaining <= 3.0:
+                        import math
+                        current_countdown = int(math.ceil(time_remaining))
+                        if not hasattr(self, 'last_countdown') or self.last_countdown != current_countdown:
+                            self.last_countdown = current_countdown
+                            self.countdown_text.setPos(-self.PLOT_DURATION_S/2.0, 0)
+                            if winsound:
+                                import threading
+                                threading.Thread(target=winsound.Beep, args=(800, 200), daemon=True).start()
+                        
+                        self.countdown_text.setText(f"PREPÁRATE...\n{current_countdown}")
+                        self.countdown_text.show()
+                        self.countdown_active = True
+                    else:
+                        self.countdown_text.hide()
                 else:
                     if not getattr(self, 'noise_calculated', False):
-                        for i in range(self.NUM_CANALES):
-                            if self.noise_data_accumulated[i]:
-                                all_noise = np.concatenate(self.noise_data_accumulated[i])
-                                # Promedio de amplitud absoluta del ruido
-                                self.noise_levels[i] = np.mean(np.abs(all_noise))
-                                
-                                # --- NUEVO: Guardar también para el tester de ruido ---
-                                self.initial_noise_mean[i] = self.noise_levels[i]
-                                self.initial_noise_std[i] = np.std(all_noise)
-                                
-                                self.noise_lines[i].setPos(self.noise_levels[i])
-                                self.noise_lines[i].show()
-                                
-                                self.noise_lines_neg[i].setPos(-self.noise_levels[i])
-                                self.noise_lines_neg[i].show()
-                                
-                                self.noise_regions[i].setRegion([-self.noise_levels[i], self.noise_levels[i]])
-                                self.noise_regions[i].show()
-                                
-                                if hasattr(self, 'noise_status_labels'):
-                                    self.noise_status_labels[i].setText(f"Ruido Base: x̄={self.initial_noise_mean[i]:.1f}µV, σ={self.initial_noise_std[i]:.1f}µV")
-                                    self.noise_status_labels[i].setStyleSheet("color: #17A2B8; font-size: 11px;")
-                        self.noise_calculated = True
+                        if not getattr(self, 'noise_initialized', False):
+                            # --- GO! ---
+                            if winsound and getattr(self, 'countdown_active', False):
+                                import threading
+                                threading.Thread(target=winsound.Beep, args=(1200, 500), daemon=True).start()
+                            self.countdown_text.setText("¡GO!")
+                            QtCore.QTimer.singleShot(1000, self.countdown_text.hide)
+                            self.countdown_active = False
                         
-                        # --- NUEVO: Auto-ajuste de barras de threshold ---
-                        # Se ajusta a 5 veces la desviación estándar (ruido sin offset) del canal con más ruido.
-                        if self.NUM_CANALES > 0:
-                            ruido_maximo_std = max(self.initial_noise_std)
-                            if ruido_maximo_std > 0:
-                                umbral_recomendado = ruido_maximo_std * 5.0
-                                self.spin_peak_th.setValue(umbral_recomendado)
+                            for i in range(self.NUM_CANALES):
+                                if self.noise_data_accumulated[i]:
+                                    all_noise = np.concatenate(self.noise_data_accumulated[i])
+                                    self.noise_levels[i] = np.mean(np.abs(all_noise))
+                                    self.initial_noise_mean[i] = self.noise_levels[i]
+                                    self.initial_noise_std[i] = np.std(all_noise)
+                                    
+                                    self.noise_lines[i].setPos(self.noise_levels[i])
+                                    self.noise_lines[i].show()
+                                    self.noise_lines_neg[i].setPos(-self.noise_levels[i])
+                                    self.noise_lines_neg[i].show()
+                                    self.noise_regions[i].setRegion([-self.noise_levels[i], self.noise_levels[i]])
+                                    self.noise_regions[i].show()
+                                    
+                                    if hasattr(self, 'noise_status_labels'):
+                                        self.noise_status_labels[i].setText(f"Ruido Base: x̄={self.initial_noise_mean[i]:.1f}µV, σ={self.initial_noise_std[i]:.1f}µV")
+                                        self.noise_status_labels[i].setStyleSheet("color: #00FFFF; font-size: 11px; font-weight: bold; background-color: #111111; border: 1px solid #00FFFF;")
+                            
+                            if self.NUM_CANALES > 0:
+                                ruido_maximo_std = max(getattr(self, 'initial_noise_std', [0]))
+                                if ruido_maximo_std > 0:
+                                    self.spin_peak_th.setValue(ruido_maximo_std * 5.0)
+
+                            self.noise_initialized = True
+                            self.noise_calculated = True
 
             # 6. Actualizar la GUI
             for i in range(self.NUM_CANALES):
@@ -1787,9 +1836,14 @@ class RealTimePlotter(QtWidgets.QWidget):
                 noise_dur = self.spin_noise_duration.value()
 
                 if elapsed_time < noise_dur:
-                    time_str = f"GRABANDO RUIDO ({elapsed_time:.1f}s / {noise_dur:.1f}s)"
-                    # (Opcional pero recomendado) Cambiar el color para la fase de ruido
-                    self.label_rec_time.setStyleSheet("font-weight: bold; color: #FFA500;") # Naranja
+                    time_remaining = noise_dur - elapsed_time
+                    if time_remaining <= 3.0:
+                        countdown = int(math.ceil(time_remaining))
+                        time_str = f"PREPÁRATE... {countdown}"
+                        self.label_rec_time.setStyleSheet("font-weight: bold; color: #FF8800; font-size: 30px;") # Naranja gigante
+                    else:
+                        time_str = f"GRABANDO RUIDO ({elapsed_time:.1f}s / {noise_dur:.1f}s)"
+                        self.label_rec_time.setStyleSheet("font-weight: bold; color: #FFFF00;") # Amarillo neón
                 else:
                     signal_time = elapsed_time - noise_dur
                     minutes = int(signal_time // 60)
@@ -1809,7 +1863,7 @@ class RealTimePlotter(QtWidgets.QWidget):
                             except (OSError, ValueError): pass # Ignorar si la pipe ya se cerró
                         self.counting_started = True
 
-                    self.label_rec_time.setStyleSheet("font-weight: bold; color: #E91E63;")
+                    self.label_rec_time.setStyleSheet("font-weight: bold; color: #FF00FF; text-shadow: 0 0 5px #FF00FF;") # Magenta neón
                     
                     # --- NUEVO: Evaluador de Ruido Inter-pulso (Tester de relajación) ---
                     period_s = 60.0 / max(1, self.spin_bpm.value())
@@ -1838,13 +1892,12 @@ class RealTimePlotter(QtWidgets.QWidget):
                                     ratio = 1.0 # Señal base sin ruido
                                 
                                 if hasattr(self, 'noise_status_labels'):
-                                    # Verde si se mantiene por debajo del 120% del original, si no, Rojo
-                                    bg_color = "#28A745" if ratio <= 1.20 else "#DC3545" 
-                                    fg_color = "white"
-                                    
-                                    text = f"Inter-pulso: x̄={curr_mean:.1f}µV, σ={curr_std:.1f}µV ({ratio*100:.0f}%)"
+                                    # Neón verde si se mantiene por debajo del 120% del original, si no, Rojo Cyberpunk
+                                    bg_color = "#000000"
+                                    fg_color = "#00FF00" if ratio <= 1.20 else "#FF0000" 
+                                    text = f"Inter-pulso: x̄={curr_mean:.1f}µV (Base={init_mean:.1f}µV) | {ratio*100:.0f}%"
                                     self.noise_status_labels[i].setText(text)
-                                    self.noise_status_labels[i].setStyleSheet(f"color: {fg_color}; background-color: {bg_color}; border-radius: 3px; padding: 2px; font-weight: bold; font-size: 11px;")
+                                    self.noise_status_labels[i].setStyleSheet(f"color: {fg_color}; background-color: {bg_color}; border: 1px solid {fg_color}; border-radius: 3px; padding: 2px; font-weight: bold; font-size: 11px;")
                                 
                                 # --- NUEVO: Actualizar líneas dinámicas en el gráfico ---
                                 if hasattr(self, 'dynamic_noise_lines_pos'):
@@ -2002,6 +2055,35 @@ class RealTimePlotter(QtWidgets.QWidget):
 if __name__ == '__main__':
     # Inicia la GUI
     app = QtWidgets.QApplication(sys.argv)
+    app.setStyleSheet("""
+        QWidget {
+            background-color: #050505;
+            color: #00FF00;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 12px;
+        }
+        QGroupBox {
+            border: 1px solid #FF0000;
+            border-radius: 5px;
+            margin-top: 1ex;
+            font-weight: bold;
+            color: #FF0000;
+        }
+        QGroupBox::title {
+            subcontrol-origin: margin;
+            subcontrol-position: top left;
+            padding: 0 3px;
+            background-color: #050505;
+        }
+        QLabel { color: #00FF00; font-weight: bold; }
+        QCheckBox { color: #00FF00; }
+        QComboBox, QSpinBox, QDoubleSpinBox, QLineEdit {
+            background-color: #111111;
+            color: #00FF00;
+            border: 1px solid #FF0000;
+            padding: 2px;
+        }
+    """)
     gui = RealTimePlotter()
     gui.show()
     

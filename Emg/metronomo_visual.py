@@ -24,9 +24,9 @@ except ImportError:
 class MetronomeApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Metrónomo Visual")
+        self.root.title("Metrónomo Cyberpunk")
         self.root.geometry("350x500") # Aumentar altura para el contador
-        self.root.configure(bg="#2E2E2E")
+        self.root.configure(bg="#050505")
         self.root.resizable(False, False)
         
         # --- NUEVO: Mantener la ventana del metrónomo siempre al frente ---
@@ -47,8 +47,8 @@ class MetronomeApp:
         self.command_thread = threading.Thread(target=self._listen_for_commands, daemon=True)
         self.command_thread.start()
         # --- Colores para el pulso visual ---
-        self.COLOR_BEAT = "#FFFFFF"  # Blanco para el pulso
-        self.COLOR_IDLE = "#3C3C3C"  # Gris oscuro cuando está en reposo
+        self.COLOR_BEAT = "#00FFFF"  # Cian Neón para el pulso
+        self.COLOR_IDLE = "#111111"  # Negro profundo cuando está en reposo
 
         # --- Fuentes ---
         title_font = font.Font(family="Helvetica", size=14, weight="bold")
@@ -62,18 +62,17 @@ class MetronomeApp:
         self.pulse_frame.pack(fill="x", padx=20, pady=20)
 
         # --- Controles ---
-        controls_frame = tk.Frame(root, bg="#2E2E2E")
+        controls_frame = tk.Frame(root, bg="#050505")
         controls_frame.pack(fill="both", expand=True, padx=20)
 
         # --- NUEVO: Display del contador de pulsos ---
-        tk.Label(controls_frame, text="Pulso Actual", font=title_font, fg="white", bg="#2E2E2E").pack()
-        self.counter_label = tk.Label(controls_frame, textvariable=self.beat_count, font=counter_font, fg=self.COLOR_BEAT, bg="#2E2E2E")
+        tk.Label(controls_frame, text="PULSO ACTUAL", font=title_font, fg="#00FF00", bg="#050505").pack()
+        self.counter_label = tk.Label(controls_frame, textvariable=self.beat_count, font=counter_font, fg=self.COLOR_BEAT, bg="#050505")
         self.counter_label.pack(pady=(5, 15))
 
-
         # Display de BPM
-        tk.Label(controls_frame, text="BPM", font=title_font, fg="white", bg="#2E2E2E").pack()
-        self.bpm_label = tk.Label(controls_frame, textvariable=self.bpm, font=value_font, fg="white", bg="#2E2E2E")
+        tk.Label(controls_frame, text="BPM", font=title_font, fg="#00FF00", bg="#050505").pack()
+        self.bpm_label = tk.Label(controls_frame, textvariable=self.bpm, font=value_font, fg="#00FF00", bg="#050505")
         self.bpm_label.pack(pady=(5, 15))
 
         # Slider para ajustar BPM
@@ -85,25 +84,25 @@ class MetronomeApp:
             variable=self.bpm,
             showvalue=0,
             length=300,
-            bg="#2E2E2E",
-            fg="white",
+            bg="#050505",
+            fg="#00FF00",
             highlightthickness=0,
-            troughcolor="#555555"
+            troughcolor="#222222"
         )
         self.bpm_slider.pack(pady=10)
 
         # Botones de Start/Stop
-        button_container = tk.Frame(controls_frame, bg="#2E2E2E")
+        button_container = tk.Frame(controls_frame, bg="#050505")
         button_container.pack(pady=20)
 
-        self.btn_start = tk.Button(button_container, text="Iniciar", command=self.start, font=button_font, width=10, bg="#28A745", fg="white")
+        self.btn_start = tk.Button(button_container, text="INICIAR", command=self.start, font=button_font, width=10, bg="#AA0000", fg="white", activebackground="#FF0000")
         self.btn_start.pack(side="left", padx=10)
 
-        self.btn_stop = tk.Button(button_container, text="Detener", command=self.stop, font=button_font, width=10, bg="#DC3545", fg="white", state="disabled")
+        self.btn_stop = tk.Button(button_container, text="DETENER", command=self.stop, font=button_font, width=10, bg="#550000", fg="white", state="disabled")
         self.btn_stop.pack(side="left", padx=10)
         
         # --- NUEVO: Botón de Reset ---
-        self.btn_reset = tk.Button(button_container, text="Reset", command=self.reset_counter, font=button_font, width=8, bg="#6C757D", fg="white")
+        self.btn_reset = tk.Button(button_container, text="RESET", command=self.reset_counter, font=button_font, width=8, bg="#333333", fg="white")
         self.btn_reset.pack(side="left", padx=10)
 
         # --- NUEVO: Cargar la última configuración guardada ---

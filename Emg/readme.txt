@@ -3,6 +3,8 @@ Sistema de Adquisición y Análisis EMG
 
 Este documento proporciona las instrucciones para configurar y utilizar el conjunto de herramientas de software para la adquisición y análisis de señales electromiográficas (EMG).
 
+*Nota: Para conocer la lista de bugs conocidos y las características planeadas para futuras versiones (v4.0+), por favor consulta el archivo ROADMAP.md incluido en esta carpeta.*
+
 Instalación Rápida (Recomendado)
 ---------------------------------
 Para usuarios de Windows, se ha proporcionado un script que automatiza todo el proceso de configuración.
