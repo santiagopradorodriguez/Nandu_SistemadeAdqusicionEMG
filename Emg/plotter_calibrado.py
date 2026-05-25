@@ -12,13 +12,24 @@ import numpy as np
 import json
 from scipy import signal
 
-# --- IMPORTANTE: Forzar backend TkAgg antes de importar pyplot ---
-import matplotlib
-matplotlib.use('TkAgg')
+import os
+import pandas as pd
+import numpy as np
+import json
+import sys
+from scipy import signal
+
+# --- Mantenemos Matplotlib para los gráficos, pero sin backend forzado a TkAgg ---
 import matplotlib.pyplot as plt
 
-# Imports de Tkinter
-from tkinter import Tk, Label, Button, Frame, Checkbutton, Radiobutton, Entry, StringVar, BooleanVar, Toplevel, Listbox, Scrollbar, MULTIPLE, END
+# Imports de PySide6
+from PySide6.QtWidgets import (
+    QApplication, QDialog, QVBoxLayout, QHBoxLayout, 
+    QListWidget, QLabel, QLineEdit, QPushButton, 
+    QMessageBox, QGroupBox, QFormLayout, QCheckBox, 
+    QRadioButton, QButtonGroup, QAbstractItemView
+)
+from PySide6.QtCore import Qt
 
 # --- 1. CONFIGURACIÓN GENERAL ---
 
@@ -43,111 +54,138 @@ FREQ_PASABANDA = [20, 1000]
 ORDEN_PASABANDA = 4          
 RMS_WINDOW_MS = 75           
 
-# --- 2. CLASES DE INTERFAZ (GUI) ---
+# --- 2. CLASES DE INTERFAZ (GUI) PySide6 ---
 
-class VentanaSeleccion:
-    def __init__(self, master, base_dir):
-        self.master = master
-        self.master.title("Selección de Mediciones")
-        self.seleccionadas = []
-        self.base_dir = base_dir
-
-        Label(master, text="Seleccione las mediciones a procesar:", font=("Arial", 11, "bold")).pack(pady=10)
-        Label(master, text="(Use Ctrl o Shift para selección múltiple)", font=("Arial", 8, "italic")).pack(pady=(0,5))
-
-        frame_lista = Frame(master)
-        frame_lista.pack(fill="both", expand=True, padx=10)
-
-        scrollbar = Scrollbar(frame_lista)
-        scrollbar.pack(side="right", fill="y")
-
-        self.lista_items = Listbox(frame_lista, selectmode=MULTIPLE, width=50, height=15, yscrollcommand=scrollbar.set)
-        self.lista_items.pack(side="left", fill="both", expand=True)
-        scrollbar.config(command=self.lista_items.yview)
-
-        # Poblar lista
-        self.items = self.obtener_carpetas()
-        for item in self.items:
-            self.lista_items.insert(END, item)
-
-        Button(master, text="Continuar a Configuración >>", command=self.confirmar, bg="#DDDDDD", font=("Arial", 10, "bold")).pack(pady=15)
-
-    def obtener_carpetas(self):
-        if not os.path.exists(self.base_dir):
-            os.makedirs(self.base_dir)
-            return []
-        return [d for d in os.listdir(self.base_dir) if os.path.isdir(os.path.join(self.base_dir, d))]
-
-    def confirmar(self):
-        indices = self.lista_items.curselection()
-        self.seleccionadas = [self.items[i] for i in indices]
-        self.master.destroy()
-
-class VentanaConfiguracion:
-    def __init__(self, master):
-        self.master = master
-        self.master.title("Configuración de Procesamiento")
-        self.resultado = None
-
-        self.usar_notch = BooleanVar(value=True)
-        self.usar_bandpass = BooleanVar(value=True)
-        self.tipo_envolvente = StringVar(value="ninguna") 
-        self.t_inicio = StringVar(value="") 
-        self.t_fin = StringVar(value="")    
-        self.graficar_fft = BooleanVar(value=False)
-
-        # Filtros
-        frame_filtros = Frame(master, padx=10, pady=10, borderwidth=1, relief="groove")
-        frame_filtros.pack(fill="x", padx=10, pady=5)
-        Label(frame_filtros, text="Filtros Digitales", font=("Arial", 10, "bold")).pack(anchor="w")
-        Checkbutton(frame_filtros, text=f"Filtro Notch ({int(FREQ_NOTCH)} Hz)", variable=self.usar_notch).pack(anchor="w")
-        Checkbutton(frame_filtros, text=f"Filtro Pasabanda ({FREQ_PASABANDA[0]}-{FREQ_PASABANDA[1]} Hz)", variable=self.usar_bandpass).pack(anchor="w")
-
-        # Envolvente
-        frame_env = Frame(master, padx=10, pady=10, borderwidth=1, relief="groove")
-        frame_env.pack(fill="x", padx=10, pady=5)
-        Label(frame_env, text="Procesamiento / Envolvente", font=("Arial", 10, "bold")).pack(anchor="w")
-        Radiobutton(frame_env, text="Solo Señal Filtrada (Sin envolvente)", variable=self.tipo_envolvente, value="ninguna").pack(anchor="w")
-        Radiobutton(frame_env, text="Envolvente de Hilbert (Analítica)", variable=self.tipo_envolvente, value="hilbert").pack(anchor="w")
-        Radiobutton(frame_env, text=f"Envolvente RMS (Ventana {RMS_WINDOW_MS}ms)", variable=self.tipo_envolvente, value="rms").pack(anchor="w")
-
-        # Tiempo
-        frame_tiempo = Frame(master, padx=10, pady=10, borderwidth=1, relief="groove")
-        frame_tiempo.pack(fill="x", padx=10, pady=5)
-        Label(frame_tiempo, text="Intervalo de Tiempo (s)", font=("Arial", 10, "bold")).pack(anchor="w")
-        Label(frame_tiempo, text="Dejar en blanco para graficar todo.", font=("Arial", 8, "italic")).pack(anchor="w", pady=(0, 5))
-
-        frame_inputs = Frame(frame_tiempo)
-        frame_inputs.pack(fill="x")
-        Label(frame_inputs, text="Inicio:").pack(side="left")
-        Entry(frame_inputs, textvariable=self.t_inicio, width=8).pack(side="left", padx=5)
-        Label(frame_inputs, text="Fin:").pack(side="left")
-        Entry(frame_inputs, textvariable=self.t_fin, width=8).pack(side="left", padx=5)
+class PlotterConfigDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Configuración de Graficador v2.0 (PySide6)")
+        self.resize(800, 500)
+        self.setStyleSheet("background-color: #050505; color: #00ffcc; font-family: 'Courier New', monospace;")
         
-        # Opciones de Gráficos
-        frame_graficos = Frame(master, padx=10, pady=10, borderwidth=1, relief="groove")
-        frame_graficos.pack(fill="x", padx=10, pady=5)
-        Label(frame_graficos, text="Opciones de Visualización", font=("Arial", 10, "bold")).pack(anchor="w")
-        Checkbutton(frame_graficos, text="Añadir Espectro de Frecuencias (FFT)", variable=self.graficar_fft).pack(anchor="w")
-
-        Button(master, text="Empezar Secuencia", command=self.confirmar, bg="#DDDDDD", font=("Arial", 10, "bold")).pack(pady=15)
+        self.resultado = None
+        self.seleccionadas = []
+        
+        main_layout = QHBoxLayout(self)
+        
+        # --- PANEL IZQUIERDO: SELECCIÓN ---
+        left_group = QGroupBox("1. Seleccionar Mediciones")
+        left_group.setStyleSheet("QGroupBox { border: 1px solid #00ffcc; border-radius: 5px; margin-top: 10px; } QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 3px 0 3px; }")
+        left_layout = QVBoxLayout(left_group)
+        
+        lbl_info = QLabel("(Use Ctrl o Shift para selección múltiple)")
+        lbl_info.setStyleSheet("color: #888; font-size: 10px;")
+        left_layout.addWidget(lbl_info)
+        
+        self.listbox = QListWidget()
+        self.listbox.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.listbox.setStyleSheet("background-color: #111; color: #fff; border: 1px solid #333;")
+        
+        if not os.path.exists(BASE_DIR):
+            os.makedirs(BASE_DIR)
+        
+        items = [d for d in os.listdir(BASE_DIR) if os.path.isdir(os.path.join(BASE_DIR, d))]
+        for item in items:
+            self.listbox.addItem(item)
+            
+        left_layout.addWidget(self.listbox)
+        main_layout.addWidget(left_group, stretch=1)
+        
+        # --- PANEL DERECHO: CONFIGURACIÓN ---
+        right_group = QGroupBox("2. Configuración de Procesamiento")
+        right_group.setStyleSheet("QGroupBox { border: 1px solid #00ffcc; border-radius: 5px; margin-top: 10px; } QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 3px 0 3px; }")
+        right_layout = QVBoxLayout(right_group)
+        
+        # Filtros
+        filtros_group = QGroupBox("Filtros Digitales")
+        filtros_layout = QVBoxLayout(filtros_group)
+        self.chk_notch = QCheckBox(f"Filtro Notch ({int(FREQ_NOTCH)} Hz)")
+        self.chk_notch.setChecked(True)
+        self.chk_bandpass = QCheckBox(f"Filtro Pasabanda ({FREQ_PASABANDA[0]}-{FREQ_PASABANDA[1]} Hz)")
+        self.chk_bandpass.setChecked(True)
+        filtros_layout.addWidget(self.chk_notch)
+        filtros_layout.addWidget(self.chk_bandpass)
+        right_layout.addWidget(filtros_group)
+        
+        # Envolvente
+        env_group = QGroupBox("Procesamiento / Envolvente")
+        env_layout = QVBoxLayout(env_group)
+        self.rb_ninguna = QRadioButton("Solo Señal Filtrada")
+        self.rb_ninguna.setChecked(True)
+        self.rb_hilbert = QRadioButton("Envolvente de Hilbert")
+        self.rb_rms = QRadioButton(f"Envolvente RMS ({RMS_WINDOW_MS}ms)")
+        
+        self.env_btn_group = QButtonGroup()
+        self.env_btn_group.addButton(self.rb_ninguna, id=1)
+        self.env_btn_group.addButton(self.rb_hilbert, id=2)
+        self.env_btn_group.addButton(self.rb_rms, id=3)
+        
+        env_layout.addWidget(self.rb_ninguna)
+        env_layout.addWidget(self.rb_hilbert)
+        env_layout.addWidget(self.rb_rms)
+        right_layout.addWidget(env_group)
+        
+        # Tiempo
+        time_group = QGroupBox("Intervalo de Tiempo (s)")
+        time_layout = QHBoxLayout(time_group)
+        time_layout.addWidget(QLabel("Inicio:"))
+        self.entry_inicio = QLineEdit()
+        self.entry_inicio.setStyleSheet("background-color: #111; color: #fff; border: 1px solid #444;")
+        time_layout.addWidget(self.entry_inicio)
+        time_layout.addWidget(QLabel("Fin:"))
+        self.entry_fin = QLineEdit()
+        self.entry_fin.setStyleSheet("background-color: #111; color: #fff; border: 1px solid #444;")
+        time_layout.addWidget(self.entry_fin)
+        right_layout.addWidget(time_group)
+        
+        lbl_time_hint = QLabel("Dejar en blanco para graficar todo.")
+        lbl_time_hint.setStyleSheet("color: #888; font-size: 10px;")
+        right_layout.addWidget(lbl_time_hint)
+        
+        # Opciones extra
+        extra_group = QGroupBox("Visualización")
+        extra_layout = QVBoxLayout(extra_group)
+        self.chk_fft = QCheckBox("Añadir Espectro de Frecuencias (FFT)")
+        extra_layout.addWidget(self.chk_fft)
+        right_layout.addWidget(extra_group)
+        
+        right_layout.addStretch()
+        
+        self.btn_run = QPushButton("Empezar Secuencia")
+        self.btn_run.setStyleSheet("QPushButton { background-color: #00ffcc; color: #000; font-weight: bold; padding: 10px; border-radius: 3px; }")
+        self.btn_run.clicked.connect(self.confirmar)
+        right_layout.addWidget(self.btn_run)
+        
+        main_layout.addWidget(right_group, stretch=1)
 
     def confirmar(self):
+        selected_items = self.listbox.selectedItems()
+        if not selected_items:
+            QMessageBox.warning(self, "Advertencia", "Debe seleccionar al menos una medición.")
+            return
+            
+        self.seleccionadas = [item.text() for item in selected_items]
+        
         start, end = None, None
         try:
-            if self.t_inicio.get().strip(): start = float(self.t_inicio.get())
-            if self.t_fin.get().strip(): end = float(self.t_fin.get())
-        except ValueError: pass
+            if self.entry_inicio.text().strip(): start = float(self.entry_inicio.text())
+            if self.entry_fin.text().strip(): end = float(self.entry_fin.text())
+        except ValueError:
+            pass
+            
+        tipo_env = "ninguna"
+        if self.rb_hilbert.isChecked(): tipo_env = "hilbert"
+        elif self.rb_rms.isChecked(): tipo_env = "rms"
         
         self.resultado = {
-            "notch": self.usar_notch.get(),
-            "bandpass": self.usar_bandpass.get(),
-            "tipo_env": self.tipo_envolvente.get(),
+            "notch": self.chk_notch.isChecked(),
+            "bandpass": self.chk_bandpass.isChecked(),
+            "tipo_env": tipo_env,
             "start_time": start,
             "end_time": end,
-            "graficar_fft": self.graficar_fft.get()
+            "graficar_fft": self.chk_fft.isChecked()
         }
-        self.master.destroy()
+        self.accept()
 
 # --- 3. FUNCIONES DE PROCESAMIENTO ---
 
@@ -241,7 +279,21 @@ def plotear_medicion_secuencial(nombre_medicion, config):
         nom_limpio = nombre_canal.strip()
         
         raw = df[nombre_canal].values
+        
+        # --- CORRECCIÓN: Leer ganancia desde metadata.json si existe ---
         ganancia = FACTORES_G.get(nom_limpio, 1.0)
+        try:
+            ch_idx = int(nom_limpio.split()[-1])
+            meta_path = os.path.join(path_medicion, f"canal_{ch_idx}", "metadata.json")
+            if os.path.exists(meta_path):
+                with open(meta_path, 'r') as f_meta:
+                    md_ch = json.load(f_meta)
+                    if 'resistencia_ohm' in md_ch:
+                        res_ohm = float(md_ch['resistencia_ohm'])
+                        ganancia = 1.0 + (49400.0 / res_ohm)
+        except Exception:
+            pass
+            
         sig = (raw / ganancia) * 1e6 
 
         # --- NUEVO: Restar offset DC antes de filtrar (solo para modos con envolvente) ---
@@ -370,39 +422,26 @@ def plotear_medicion_secuencial(nombre_medicion, config):
     print(f"⏭️ Pasando a la siguiente...\n")
 
 def flujo_principal():
-    root = Tk()
-    root.withdraw() 
-    
-    # 1. Selección
-    ventana_sel = Toplevel(root)
-    app_sel = VentanaSeleccion(ventana_sel, BASE_DIR)
-    root.wait_window(ventana_sel)
-    
-    mediciones = app_sel.seleccionadas
-    if not mediciones:
-        print("No se seleccionaron mediciones.")
-        root.destroy()
-        return
+    app = QApplication.instance()
+    if not app:
+        app = QApplication(sys.argv)
+        
+    dialog = PlotterConfigDialog()
+    if dialog.exec() == QDialog.Accepted:
+        mediciones = dialog.seleccionadas
+        config = dialog.resultado
+        
+        if not mediciones or not config:
+            return
 
-    # 2. Configuración
-    ventana_conf = Toplevel(root)
-    app_conf = VentanaConfiguracion(ventana_conf)
-    root.wait_window(ventana_conf)
-    
-    config = app_conf.resultado
-    root.destroy() 
+        total = len(mediciones)
+        print(f"--- Iniciando secuencia de {total} mediciones ---")
+        
+        for i, nombre_medicion in enumerate(mediciones):
+            print(f"[{i+1}/{total}] Cargando datos...")
+            plotear_medicion_secuencial(nombre_medicion, config)
 
-    if not config: return
-
-    # 3. Bucle Secuencial
-    total = len(mediciones)
-    print(f"--- Iniciando secuencia de {total} mediciones ---")
-    
-    for i, nombre_medicion in enumerate(mediciones):
-        print(f"[{i+1}/{total}] Cargando datos...")
-        plotear_medicion_secuencial(nombre_medicion, config)
-
-    print("--- Todas las mediciones procesadas ---")
+        print("--- Todas las mediciones procesadas ---")
 
 if __name__ == "__main__":
     flujo_principal()

@@ -26,7 +26,7 @@ try:
     SCIPY_AVAILABLE = True
 except ImportError:
     SCIPY_AVAILABLE = False
-
+    
 import matplotlib
 matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
@@ -87,7 +87,11 @@ class CSVViewerApp:
 
         self.BASE_DIR = "base_de_datos_electrodos"
         self.mediciones_disponibles = []
+        # --- NUEVO: Variables para selección en dos pasos ---
+        self.fechas_disponibles = []
+        self.var_fecha_seleccionada = tk.StringVar()
         self.var_medicion_seleccionada = tk.StringVar()
+        self.var_fecha_seleccionada.trace_add("write", self.on_date_selected)
         self.var_medicion_seleccionada.trace_add("write", self.on_measurement_selected)
 
         # --- Control para evitar bucles de actualización de sliders ---
@@ -122,12 +126,17 @@ class CSVViewerApp:
         plot_frame.pack(side="left", fill="both", expand=True)
 
         # --- Controles Superiores ---
-        tk.Label(top_frame, text="Seleccionar Medición:", font=self.font_bold, bg="#f0f0f0").pack(side="left", padx=(5, 2))
+        tk.Label(top_frame, text="Fecha:", font=self.font_bold, bg="#f0f0f0").pack(side="left", padx=(5, 2))
+        self.date_menu = tk.OptionMenu(top_frame, self.var_fecha_seleccionada, "")
+        self.date_menu.config(width=12)
+        self.date_menu.pack(side="left", padx=5)
+
+        tk.Label(top_frame, text="Medición:", font=self.font_bold, bg="#f0f0f0").pack(side="left", padx=(10, 2))
         self.measurement_menu = tk.OptionMenu(top_frame, self.var_medicion_seleccionada, "")
-        self.measurement_menu.config(width=30)
+        self.measurement_menu.config(width=25)
         self.measurement_menu.pack(side="left", padx=5)
 
-        self.btn_refresh = tk.Button(top_frame, text="Refrescar Lista", command=self.cargar_mediciones, font=self.font_label)
+        self.btn_refresh = tk.Button(top_frame, text="Refrescar", command=self.cargar_fechas, font=self.font_label)
         self.btn_refresh.pack(side="left", padx=5)
 
         # Se actualiza al cargar
@@ -206,67 +215,119 @@ class CSVViewerApp:
         filter_frame.pack(fill="x", pady=10)
 
         self.var_notch_filter = tk.BooleanVar(value=False)
-        self.chk_notch = tk.Checkbutton(filter_frame, text="Notch 50 Hz", variable=self.var_notch_filter, command=self.on_channel_toggle, bg="#f0f0f0", font=self.font_label)
+        self.chk_notch = tk.Checkbutton(filter_frame, text="Notch 50 Hz", variable=self.var_notch_filter, command=self.on_filter_toggle, bg="#f0f0f0", font=self.font_label)
         self.chk_notch.pack(anchor="w")
 
         self.var_bandpass_filter = tk.BooleanVar(value=False)
-        self.chk_bandpass = tk.Checkbutton(filter_frame, text="Pasa-Banda", variable=self.var_bandpass_filter, command=self.on_channel_toggle, bg="#f0f0f0", font=self.font_label)
+        self.chk_bandpass = tk.Checkbutton(filter_frame, text="Pasa-Banda", variable=self.var_bandpass_filter, command=self.on_filter_toggle, bg="#f0f0f0", font=self.font_label)
         self.chk_bandpass.pack(anchor="w")
 
         bandpass_options_frame = tk.Frame(filter_frame, bg="#f0f0f0")
         bandpass_options_frame.pack(fill="x", padx=(20, 0))
 
         tk.Label(bandpass_options_frame, text="Baja (Hz):", font=self.font_label, bg="#f0f0f0").pack(side="left")
-        self.spin_low_cut = tk.Spinbox(bandpass_options_frame, from_=1, to=20000, width=6, command=self.on_channel_toggle)
+        self.spin_low_cut = tk.Spinbox(bandpass_options_frame, from_=1, to=20000, width=6, command=self.on_filter_toggle)
         self.spin_low_cut.delete(0, "end")
         self.spin_low_cut.insert(0, "20")
         self.spin_low_cut.pack(side="left", padx=5)
 
         tk.Label(bandpass_options_frame, text="Alta (Hz):", font=self.font_label, bg="#f0f0f0").pack(side="left")
-        self.spin_high_cut = tk.Spinbox(bandpass_options_frame, from_=2, to=22000, width=6, command=self.on_channel_toggle)
+        self.spin_high_cut = tk.Spinbox(bandpass_options_frame, from_=2, to=22000, width=6, command=self.on_filter_toggle)
         self.spin_high_cut.delete(0, "end")
         self.spin_high_cut.insert(0, "500")
         self.spin_high_cut.pack(side="left", padx=5)
+
+        # --- NUEVO: Controles de Envolvente ---
+        env_frame = tk.LabelFrame(right_panel, text="Envolvente", font=self.font_bold, bg="#f0f0f0", padx=10, pady=10)
+        env_frame.pack(fill="x", pady=10)
+
+        self.var_envolvente = tk.BooleanVar(value=False)
+        self.chk_envolvente = tk.Checkbutton(env_frame, text="Media Móvil", variable=self.var_envolvente, command=self.on_filter_toggle, bg="#f0f0f0", font=self.font_label)
+        self.chk_envolvente.pack(anchor="w")
+
+        env_options_frame = tk.Frame(env_frame, bg="#f0f0f0")
+        env_options_frame.pack(fill="x", padx=(20, 0))
+
+        tk.Label(env_options_frame, text="Ventana (ms):", font=self.font_label, bg="#f0f0f0").pack(side="left")
+        self.spin_env_window = tk.Spinbox(env_options_frame, from_=1, to=5000, width=6, command=self.on_filter_toggle)
+        self.spin_env_window.delete(0, "end")
+        self.spin_env_window.insert(0, "50")
+        self.spin_env_window.pack(side="left", padx=5)
 
         if not SCIPY_AVAILABLE:
             for widget in [self.chk_notch, self.chk_bandpass, self.spin_low_cut, self.spin_high_cut]:
                 widget.config(state="disabled")
             tk.Label(filter_frame, text="Scipy no instalado.", fg="red", bg="#f0f0f0").pack(anchor="w")
 
-        # Carga inicial
-        self.cargar_mediciones()
+        # Carga inicial de fechas
+        self.cargar_fechas()
 
-    def cargar_mediciones(self):
-        """Carga la lista de mediciones (carpetas) desde el directorio base."""
-        self.mediciones_disponibles = []
-        menu = self.measurement_menu["menu"]
+    def cargar_fechas(self):
+        """Carga la lista de carpetas de fecha (YYYY-MM-DD) desde el directorio base."""
+        self.fechas_disponibles = []
+        menu = self.date_menu["menu"]
         menu.delete(0, "end")
+        
+        # Limpiar mediciones también
+        self.var_medicion_seleccionada.set("")
 
         try:
             if os.path.isdir(self.BASE_DIR):
-                # Carpetas de medición que contienen directamente un archivo .csv
-                carpetas_validas = [
-                    item for item in sorted(os.listdir(self.BASE_DIR))
-                    if os.path.isdir(os.path.join(self.BASE_DIR, item)) and any(f.lower().endswith('.csv') for f in os.listdir(os.path.join(self.BASE_DIR, item)))
-                ]
-                self.mediciones_disponibles = carpetas_validas
-                if carpetas_validas:
-                    for medicion in carpetas_validas:
-                        menu.add_command(label=medicion, command=tk._setit(self.var_medicion_seleccionada, medicion))
-                    self.var_medicion_seleccionada.set(carpetas_validas[0]) # Esto disparará el trace
+                # Buscamos carpetas que sigan el formato de fecha
+                date_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+                items = sorted(os.listdir(self.BASE_DIR), reverse=True) # Más reciente primero
+                self.fechas_disponibles = [d for d in items if os.path.isdir(os.path.join(self.BASE_DIR, d)) and date_pattern.match(d)]
+                
+                if self.fechas_disponibles:
+                    for fecha in self.fechas_disponibles:
+                        menu.add_command(label=fecha, command=tk._setit(self.var_fecha_seleccionada, fecha))
+                    self.var_fecha_seleccionada.set(self.fechas_disponibles[0])
                 else:
-                    self.var_medicion_seleccionada.set("") # Limpia la variable si no hay mediciones
-                    self.lbl_file.config(text=f"No se encontraron mediciones con CSV en '{self.BASE_DIR}'")
-        except FileNotFoundError:
-            messagebox.showerror("Error", f"No se encontró el directorio base: '{self.BASE_DIR}'")
+                    self.var_fecha_seleccionada.set("")
+                    self.lbl_file.config(text=f"No se encontraron carpetas de fecha en '{self.BASE_DIR}'")
+        except Exception as e:
+            messagebox.showerror("Error", f"Error al cargar fechas: {e}")
+
+    def on_date_selected(self, *args):
+        """Se llama al seleccionar una fecha. Carga las mediciones de esa subcarpeta."""
+        fecha = self.var_fecha_seleccionada.get()
+        if not fecha: return
+        
+        fecha_path = os.path.join(self.BASE_DIR, fecha)
+        self.mediciones_disponibles = []
+        menu = self.measurement_menu["menu"]
+        menu.delete(0, "end")
+        self.var_medicion_seleccionada.set("")
+
+        try:
+            if os.path.isdir(fecha_path):
+                items = sorted(os.listdir(fecha_path))
+                for item in items:
+                    item_path = os.path.join(fecha_path, item)
+                    if os.path.isdir(item_path):
+                        # Verificamos si tiene archivos CSV
+                        if any(f.lower().endswith('.csv') for f in os.listdir(item_path)):
+                            self.mediciones_disponibles.append(item)
+                
+                if self.mediciones_disponibles:
+                    for med in self.mediciones_disponibles:
+                        menu.add_command(label=med, command=tk._setit(self.var_medicion_seleccionada, med))
+                    self.var_medicion_seleccionada.set(self.mediciones_disponibles[0])
+                else:
+                    self.lbl_file.config(text=f"No hay mediciones con CSV en {fecha}")
+        except Exception as e:
+            print(f"Error al cargar mediciones de {fecha}: {e}")
 
     def on_measurement_selected(self, *args):
         """Se llama al seleccionar una medición del menú. Busca y carga el CSV."""
         selection = self.var_medicion_seleccionada.get()
-        if not selection: return
+        fecha = self.var_fecha_seleccionada.get()
+        if not selection or not fecha: return
 
-        measurement_path = os.path.join(self.BASE_DIR, selection)
+        measurement_path = os.path.join(self.BASE_DIR, fecha, selection)
         csv_file = None
+        if not os.path.exists(measurement_path): return
+        
         for f in sorted(os.listdir(measurement_path)):
             if f.lower().endswith('.csv'):
                 csv_file = os.path.join(measurement_path, f)
@@ -405,8 +466,8 @@ class CSVViewerApp:
             chk.grid(row=row, column=col, sticky="w", padx=2)
             self.channel_vars[col_name] = var
 
-    def plot_full_data(self):
-        """Limpia y dibuja los datos completos de los canales seleccionados. Es lento."""
+    def plot_full_data(self, reset_y_zoom=False):
+        """Limpia y dibuja los datos completos de los canales seleccionados. Aplica filtros."""
         if self.df is None:
             return
         
@@ -427,6 +488,10 @@ class CSVViewerApp:
         fs = 1 / (time_data[1] - time_data[0]) if len(time_data) > 1 else 2000 # Fs por defecto
         apply_notch = self.var_notch_filter.get()
         apply_bandpass = self.var_bandpass_filter.get()
+        apply_env = self.var_envolvente.get()
+
+        y_min_plot = np.inf
+        y_max_plot = -np.inf
 
         for col_name in self.channel_cols:
             if self.channel_vars.get(col_name) and self.channel_vars[col_name].get():
@@ -457,21 +522,70 @@ class CSVViewerApp:
                     except (ValueError, TypeError) as e:
                         print(f"Error en valores de filtro Pasa-Banda: {e}")
 
+                # Aplicar envolvente de media móvil si está habilitado
+                y_data_env = None
+                if apply_env:
+                    try:
+                        window_ms = float(self.spin_env_window.get())
+                        if window_ms > 0:
+                            # Rectificar y aplicar envolvente de Hilbert
+                            if SCIPY_AVAILABLE:
+                                try:
+                                    y_data_env = np.abs(signal.hilbert(np.abs(y_data_processed)))
+                                except Exception:
+                                    y_data_env = np.abs(y_data_processed)
+                            else:
+                                y_data_env = np.abs(y_data_processed)
+                            
+                            win_len = int(max(1, round(window_ms * fs / 1000.0)))
+                            if win_len > 1:
+                                window = np.ones(win_len, dtype=float) / float(win_len)
+                                y_data_env = np.convolve(y_data_env, window, mode='same')
+                    except (ValueError, TypeError) as e:
+                        print(f"Error en valores de envolvente: {e}")
+
                 # Submuestreo inteligente sobre los datos procesados
                 x_data, y_data = downsample_lttb_fast(time_data, y_data_processed, MAX_POINTS_TO_PLOT)
-                self.ax.plot(x_data, y_data, label=col_name, lw=1.2)
+                
+                if len(y_data) > 0:
+                    y_min_plot = min(y_min_plot, np.min(y_data))
+                    y_max_plot = max(y_max_plot, np.max(y_data))
+                    
+                line, = self.ax.plot(x_data, y_data, label=col_name, lw=1.2, alpha=0.5 if apply_env else 1.0)
+                
+                if y_data_env is not None:
+                    x_env, y_env = downsample_lttb_fast(time_data, y_data_env, MAX_POINTS_TO_PLOT)
+                    if len(y_env) > 0:
+                        y_min_plot = min(y_min_plot, np.min(y_env))
+                        y_max_plot = max(y_max_plot, np.max(y_env))
+                    self.ax.plot(x_env, y_env, label=f"{col_name} (Env)", lw=1.5, color=line.get_color())
         
         if self.ax.has_data():
             # Limpiar y re-crear la leyenda para evitar duplicados
             if self.ax.get_legend() is not None: self.ax.get_legend().remove()
             self.ax.legend(loc='upper right') # <-- SOLUCIÓN: Posición fija para evitar cálculo lento.
         
+            # --- NUEVO: Actualizar los límites globales basados en los datos procesados ---
+            if y_min_plot != np.inf and y_max_plot != -np.inf:
+                y_range = y_max_plot - y_min_plot
+                if y_range == 0: y_range = 1.0
+                self.min_y_global = y_min_plot - 0.1 * y_range
+                self.max_y_global = y_max_plot + 0.1 * y_range
+        
         # Restaurar zoom si el usuario había hecho zoom manual
         if is_zoomed_x:
             self.ax.set_xlim(current_xlim)
-            self.ax.set_ylim(current_ylim)
+            if not reset_y_zoom:
+                self.ax.set_ylim(current_ylim)
+            else:
+                self.ax.set_ylim(self.min_y_global, self.max_y_global)
+        else:
+            if reset_y_zoom:
+                self.ax.set_ylim(self.min_y_global, self.max_y_global)
 
         self.canvas.draw()
+        if reset_y_zoom:
+            self.update_y_scrollbar()
 
     def on_ax_ylim_changed(self, ax):
         """Se activa cuando los límites del eje Y del gráfico cambian (por zoom, etc.)."""
@@ -481,6 +595,14 @@ class CSVViewerApp:
 
     def on_channel_toggle(self):
         self.plot_full_data()
+        self.update_view_from_controls()
+        
+    def on_filter_toggle(self, *args):
+        """Se llama cuando se cambia algún filtro para resetear el zoom vertical y no perder de vista la señal."""
+        self._is_programmatically_updating_sliders = True
+        self.y_zoom_slider.set(100)
+        self._is_programmatically_updating_sliders = False
+        self.plot_full_data(reset_y_zoom=True)
         self.update_view_from_controls()
 
 
@@ -660,11 +782,60 @@ class CSVViewerApp:
         export_ax.set_ylabel("Amplitud (µV)")
         export_ax.set_title(f"Exportación de Vista: {os.path.basename(self.last_loaded_filepath)}")
         
-        # 4. Dibujar los datos de alta calidad en la nueva figura
-        time_data = visible_df[self.time_col]
+        # 4. Dibujar los datos de alta calidad con filtros aplicados
+        time_data = self.df[self.time_col].values
+        fs = 1 / (time_data[1] - time_data[0]) if len(time_data) > 1 else 2000
+        apply_notch = self.var_notch_filter.get()
+        apply_bandpass = self.var_bandpass_filter.get()
+        apply_env = self.var_envolvente.get()
+
         for col_name in self.channel_cols:
             if self.channel_vars.get(col_name) and self.channel_vars[col_name].get():
-                export_ax.plot(time_data, visible_df[col_name], label=col_name, lw=1.2)
+                y_data_processed = self.df[col_name].values
+                
+                # Aplicar mismos filtros a la exportación
+                if apply_notch and SCIPY_AVAILABLE:
+                    try:
+                        b, a = signal.iirnotch(50.0, 2.0, fs)
+                        y_data_processed = signal.filtfilt(b, a, y_data_processed)
+                    except Exception: pass
+                
+                if apply_bandpass and SCIPY_AVAILABLE:
+                    try:
+                        low_cut = float(self.spin_low_cut.get())
+                        high_cut = float(self.spin_high_cut.get())
+                        if low_cut < high_cut:
+                            nyquist = 0.5 * fs
+                            low = low_cut / nyquist
+                            high = min(high_cut / nyquist, 0.99)
+                            sos = signal.butter(4, [low, high], btype='band', output='sos')
+                            y_data_processed = signal.sosfiltfilt(sos, y_data_processed)
+                    except Exception: pass
+
+                y_data_env = None
+                if apply_env:
+                    try:
+                        window_ms = float(self.spin_env_window.get())
+                        if window_ms > 0:
+                            if SCIPY_AVAILABLE:
+                                try:
+                                    y_data_env = np.abs(signal.hilbert(np.abs(y_data_processed)))
+                                except Exception:
+                                    y_data_env = np.abs(y_data_processed)
+                            else:
+                                y_data_env = np.abs(y_data_processed)
+                            
+                            win_len = int(max(1, round(window_ms * fs / 1000.0)))
+                            if win_len > 1:
+                                window = np.ones(win_len, dtype=float) / float(win_len)
+                                y_data_env = np.convolve(y_data_env, window, mode='same')
+                    except Exception: pass
+
+                # Graficar solo el segmento visible de los datos ya filtrados
+                mask = (time_data >= current_xlim[0]) & (time_data <= current_xlim[1])
+                line, = export_ax.plot(time_data[mask], y_data_processed[mask], label=col_name, lw=1.2, alpha=0.5 if apply_env else 1.0)
+                if y_data_env is not None:
+                    export_ax.plot(time_data[mask], y_data_env[mask], label=f"{col_name} (Env)", lw=1.5, color=line.get_color())
 
         # 5. Aplicar los mismos límites de zoom y leyenda
         export_ax.set_xlim(current_xlim)

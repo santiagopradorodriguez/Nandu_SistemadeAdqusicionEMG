@@ -1,7 +1,11 @@
 Emg/base_de_datos_electrodos/
 Emg/base_de_datos_letras/
+Emg/analisis_comparativos/
 *.wav
 *.csv
 *.png
 *.json
 nandu/
+
+*.rar
+*.zip

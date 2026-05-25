@@ -429,12 +429,12 @@ def _plot_espectro_and_spectrogram(pulso_promedio, target_len, pre_w, post_w,
 # ---------------------- Plot recortes (idéntico) --------------------------
 def _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds,
                    start_sample_noise, samplerate, maxima_per_cut, periodo, muestras_pulso, out_rec, filename, 
-                   excluded_windows=None, show_plot=False, signal_original_unfiltered=None, mostrar_senal_cruda=True):
+                   excluded_windows=None, show_plot=False, signal_original_unfiltered=None):
     
     plt.figure(figsize=(12, 4))
     # --- NUEVO: Graficar la señal original sin filtrar para comparación ---
-    if signal_original_unfiltered is not None and mostrar_senal_cruda:
-        plt.plot(t_recortada, np.abs(signal_original_unfiltered), color="red", linewidth=1.0, alpha=0.4, label="Módulo original (sin filtrar)")
+    if signal_original_unfiltered is not None:
+        plt.plot(t_recortada, signal_original_unfiltered, color="red", linewidth=1.0, alpha=0.4, label="Señal original (sin filtrar)")
 
     # sombrear ventana inicial de ruido en violeta
     noise_t0 = t_recortada[0]
@@ -484,9 +484,9 @@ def _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds,
     plt.ylabel("Amplitud [µV]")
     # --- MODIFICACIÓN: Ajustar ylim al 90% por encima del máximo de la envolvente ---
     max_y_val = np.max(env_recortada) if len(env_recortada) > 0 else 1.3
-    plt.ylim(0, max_y_val * 1.9)
+    plt.ylim(-max_y_val * 1.2, max_y_val * 1.9)
     plt.grid(True, alpha=0.5)
-    plt.legend(loc='best', fontsize=8)
+    plt.legend(loc='best')
     
     # --- MODIFICACIÓN: Añadir mensaje de carga antes de guardar ---
     print_progress_bar(0, 1, prefix='Cargando gráfico de recortes (pulses.png):', suffix='Guardando...', length=40)
@@ -520,7 +520,7 @@ def _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds,
 
 
 # ---------------------- Plot evolucion temporal --------------------------
-def _plot_evolucion_temporal(stats_time, stats_snr, stats_snr_err, stats_snr_inst, stats_snr_inst_err, stats_noise_mean, stats_noise_err, stats_cv_snr, out_path, filename, t_start, t_end):
+def _plot_evolucion_temporal(stats_time, stats_snr, stats_noise_mean, stats_noise_std, out_path, filename, t_start, t_end):
     if not stats_time:
         return
     
@@ -533,55 +533,30 @@ def _plot_evolucion_temporal(stats_time, stats_snr, stats_snr_err, stats_snr_ins
         
     t_plot = t_arr[mask]
     snr_plot = np.array(stats_snr)[mask]
-    snr_err_plot = np.array(stats_snr_err)[mask]
-    snr_inst_plot = np.array(stats_snr_inst)[mask]
-    snr_inst_err_plot = np.array(stats_snr_inst_err)[mask]
     noise_mean_plot = np.array(stats_noise_mean)[mask]
-    noise_err_plot = np.array(stats_noise_err)[mask]
-    cv_snr_plot = np.array(stats_cv_snr)[mask]
+    noise_std_plot = np.array(stats_noise_std)[mask]
 
     print_progress_bar(0, 1, prefix='Cargando gráfico de evolución (evolucion.png):', suffix='Guardando...', length=40)
-    fig = plt.figure(figsize=(20, 10))
-    gs = fig.add_gridspec(2, 2)
-    ax0 = fig.add_subplot(gs[0, 0])
-    ax1 = fig.add_subplot(gs[0, 1])
-    ax2 = fig.add_subplot(gs[1, :])
-    fig.suptitle(f"Evolución Temporal: SNR, Ruido Inter-pulso y CV - {filename}", fontsize=16)
+    fig, axs = plt.subplots(1, 2, figsize=(15, 4))
+    fig.suptitle(f"Evolución Temporal: SNR y Ruido Inter-pulso - {filename}", fontsize=16)
 
-    # Subplot Izquierdo (Arriba): SNR
-    ax0.errorbar(t_plot, snr_plot, yerr=snr_err_plot, marker='o', linestyle='-', color='b', ecolor='lightblue', capsize=3, linewidth=2, label="SNR Acumulado")
-    ax0.plot(t_plot, snr_inst_plot, marker='x', linestyle='--', color='orange', linewidth=2, label="SNR Instantáneo (t)")
-    ax0.fill_between(t_plot, snr_inst_plot - snr_inst_err_plot, snr_inst_plot + snr_inst_err_plot, color='orange', alpha=0.2, label="± Error (SNR Inst.)")
-    ax0.set_title(f"Evolución SNR Acumulado y Snr Instantaneo (t)")
-    ax0.set_xlabel("t(s)")
-    ax0.set_ylabel("SNR")
-    ax0.legend(loc='best', fontsize=10)
-    ax0.grid(True, alpha=0.5)
+    # Subplot Izquierdo: SNR
+    axs[0].plot(t_plot, snr_plot, marker='o', linestyle='-', color='b', linewidth=2)
+    axs[0].set_title(f"Evolución SNR Promedio")
+    axs[0].set_xlabel("Tiempo de Señal (s)")
+    axs[0].set_ylabel("SNR Promedio Acumulado")
+    axs[0].legend(loc='best', fontsize=10)
+    axs[0].grid(True, alpha=0.5)
 
-    # Subplot Derecho (Arriba): Ruido (x̄ y error)
-    ax1.plot(t_plot, noise_mean_plot, marker='o', linestyle='-', color='r', label='Ruido entre Pulsos (x̄)', linewidth=2)
-    ax1.fill_between(t_plot, noise_mean_plot - noise_err_plot, noise_mean_plot + noise_err_plot, color='r', alpha=0.2, label='± Error (σ/√N)')
-    ax1.axhline(100.0, color='green', linestyle='--', alpha=0.7, label='Ruido Basal (100%)')
-    
-    if len(noise_mean_plot) > 0:
-        overall_mean = np.mean(noise_mean_plot)
-        overall_std = np.std(noise_mean_plot)
-        ax1.axhline(overall_mean, color='purple', linestyle=':', linewidth=2, label=f'Promedio Ruido Entre Pulsos  ({overall_mean:.1f}%)')
-        ax1.fill_between(t_plot, overall_mean - overall_std, overall_mean + overall_std, color='purple', alpha=0.1, label=f'± 1σ Total ({overall_std:.1f}%)')
-
-    ax1.set_title(f"Evolución Ruido Inter-pulso Normalizado")
-    ax1.set_xlabel("t(s)")
-    ax1.set_ylabel("Nivel de Ruido (%)")
-    ax1.legend(loc='best', fontsize=10)
-    ax1.grid(True, alpha=0.5)
-
-    # Subplot Abajo: CV SNR
-    ax2.plot(t_plot, cv_snr_plot, marker='o', linestyle='-', color='purple', linewidth=2, label=r"$CV_{SNR} = \frac{\sigma(SNR_{inst})}{\mu(SNR_{inst})}$")
-    ax2.set_title(f"Coeficiente de Variación del SNR Instantáneo")
-    ax2.set_xlabel("t(s)")
-    ax2.set_ylabel("CV SNR")
-    ax2.legend(loc='best', fontsize=10)
-    ax2.grid(True, alpha=0.5)
+    # Subplot Derecho: Ruido (x̄ y σ)
+    axs[1].plot(t_plot, noise_mean_plot, marker='o', linestyle='-', color='r', label='Promedio (x̄)', linewidth=2)
+    axs[1].plot(t_plot, noise_std_plot, marker='x', linestyle='--', color='orange', label='Desviación (σ)', linewidth=2)
+    axs[1].axhline(100.0, color='green', linestyle='--', alpha=0.7, label='Línea Base (100%)')
+    axs[1].set_title(f"Evolución Ruido Inter-pulso Normalizado")
+    axs[1].set_xlabel("Tiempo de Señal (s)")
+    axs[1].set_ylabel("Nivel de Ruido (%)")
+    axs[1].legend(fontsize=10, loc='best')
+    axs[1].grid(True, alpha=0.5)
 
     plt.tight_layout(rect=[0, 0.03, 1, 0.96])
     plt.savefig(out_path, dpi=300, bbox_inches='tight')
@@ -651,6 +626,7 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
                        show_amplitude=True,
                        show_table=True,
                        show_snr_time=True,
+                       show_noise_base=True,
                        show_amp_time=True
                        ):
     """
@@ -737,7 +713,8 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
         t_plot = np.linspace(0, 1, pulse_matrix.shape[1])
 
     # --- NUEVO: Barra de progreso para los gráficos comparativos ---
-    num_plots = sum([show_overlay, show_snr, show_amplitude, show_table, show_snr_time, show_amp_time])
+    num_plots = sum([show_overlay, show_snr, show_amplitude, show_table, show_snr_time])
+    num_plots = sum([show_overlay, show_snr, show_amplitude, show_table, show_snr_time, show_noise_base])
     plot_counter = 0
     print_progress_bar(plot_counter, num_plots, prefix='Generando Gráficos Comparativos:', suffix='Completado', length=50)
 
@@ -776,6 +753,10 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
         snr_manual_unc = r.get('snr_uncertainty', np.nan)
         noise_drift = r.get('noise_drift_pct', np.nan)
         snr_drop = r.get('snr_drop_pct', np.nan)
+        
+        noise_base = r.get('noise_rms_from_noise_window', np.nan)
+        if noise_base is None or np.isnan(noise_base): 
+            noise_base = r.get('noise_rms', np.nan)
 
         measurement_date = r.get('measurement_date', '')
         comentario = r.get('comentario', '')
@@ -816,6 +797,9 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
             'noise_drift': noise_drift,
             'snr_drop': snr_drop,
             'dt_obj': dt_obj,
+            'noise_base': noise_base,
+            'snr_dict': r.get('snr_dict', {50: snr_manual if snr_manual is not None else np.nan}),
+            'snr_unc_dict': r.get('snr_unc_dict', {50: snr_manual_unc if snr_manual_unc is not None else np.nan}),
             'max_amp': max_amp,
             'amp_unc': amp_unc
         })
@@ -901,6 +885,40 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
     except Exception as e:
         print(f"No se pudo generar la tabla LaTeX: {e}")
         
+
+    # -------------- Bar plot per-file: Ruido Base Inicial --------------
+    if show_noise_base:
+        print("Cargando... Generando gráfico de Ruido Base Inicial.")
+        noise_bases = [r['noise_base'] if not np.isnan(r['noise_base']) else 0.0 for r in rows]
+        noise_bases = np.array(noise_bases, dtype=float)
+
+        # Ordenar de menor a mayor ruido (mejor a peor)
+        sort_indices_noise = np.argsort(noise_bases)
+        sorted_noise = noise_bases[sort_indices_noise]
+        sorted_plot_colors_noise = plot_colors[sort_indices_noise]
+        original_indices_noise = [np.where(np.array(nombres_globales) == nombres_globales[i])[0][0] for i in sort_indices_noise]
+
+        fig_noise, ax_noise = plt.subplots(figsize=(max(8, 0.6 * n_files), 6))
+        bars_noise = ax_noise.bar(x, sorted_noise, capsize=5, alpha=0.85, color=sorted_plot_colors_noise)
+
+        ax_noise.set_xticks(x)
+        ax_noise.set_xticklabels([str(i + 1) for i in original_indices_noise], rotation=0, fontsize=10)
+        ax_noise.set_ylabel('Ruido Base Inicial [µV]')
+        ax_noise.set_title('Ruido Base en Reposo (ordenado de menor a mayor)')
+        ax_noise.grid(True, axis='y', alpha=0.3)
+
+        for i, bar in enumerate(bars_noise):
+            height = bar.get_height()
+            if not np.isnan(height):
+                ax_noise.text(bar.get_x() + bar.get_width() / 2.0, height, f"{height:.2f}", ha='center', va='bottom', fontsize=9)
+
+        plt.tight_layout()
+        out_noise_bar = f"{os.path.splitext(nombre_salida)[0]}_ruido_base_bar.png"
+        plt.savefig(out_noise_bar, dpi=300, bbox_inches='tight')
+        plt.close(fig_noise)
+        plot_counter += 1
+        print_progress_bar(plot_counter, num_plots, prefix='Generando Gráficos Comparativos:', suffix='Completado', length=50)
+        print(f"Gráfico de Ruido Base guardado en: {out_noise_bar}")
 
     # -------------- Bar plot per-file: SNR manual --------------
     if show_snr:
@@ -1036,6 +1054,7 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
         csv_path = f"{os.path.splitext(nombre_salida)[0]}_snr_table.csv"
         with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
             fieldnames = ['filename', 'Hora', 'Comentario', 'SNR_manual ± unc', 'Deriva Ruido (%)', 'Caida SNR (%)']
+            fieldnames = ['filename', 'Hora', 'Comentario', 'Ruido Base (uV)', 'SNR_manual ± unc', 'Deriva Ruido (%)', 'Caida SNR (%)']
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             for r in rows_sorted:
@@ -1050,6 +1069,7 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
                     'filename': r['filename'],
                     'Hora': r['hora'],
                     'Comentario': r['comentario'],
+                    'Ruido Base (uV)': f"{r['noise_base']:.2f}" if not np.isnan(r['noise_base']) else "",
                     'SNR_manual ± unc': manual_str,
                     'Deriva Ruido (%)': f"{r['noise_drift']:.1f}%" if not np.isnan(r['noise_drift']) else "",
                     'Caida SNR (%)': f"{r['snr_drop']:.1f}%" if not np.isnan(r['snr_drop']) else ""
@@ -1071,16 +1091,20 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
                         
                 drift_cell = f"{r['noise_drift']:.1f}%" if not np.isnan(r['noise_drift']) else ""
                 drop_cell = f"{r['snr_drop']:.1f}%" if not np.isnan(r['snr_drop']) else ""
+                base_cell = f"{r['noise_base']:.2f}" if not np.isnan(r['noise_base']) else ""
                 
                 comentario_corto = r['comentario'][:25] + ('...' if len(r['comentario']) > 25 else '')
                 table_data.append([fname_noext, r['hora'], comentario_corto, manual_cell, drift_cell, drop_cell])
+                table_data.append([fname_noext, r['hora'], comentario_corto, base_cell, manual_cell, drift_cell, drop_cell])
 
             col_labels = ['Filename', 'Hora', 'Comentario', 'SNR ± unc', 'Deriva Ruido', 'Fatiga(SNR)']
+            col_labels = ['Filename', 'Hora', 'Comentario', 'Ruido(µV)', 'SNR ± unc', 'Deriva Ruido', 'Fatiga']
             nrows = len(table_data)
             fig_tab, ax_tab = plt.subplots(figsize=(16, max(2, 0.35 * nrows)))
             ax_tab.axis('off')
             table = ax_tab.table(cellText=table_data, colLabels=col_labels, cellLoc='left', loc='center',
                                  colWidths=[0.25, 0.08, 0.27, 0.15, 0.12, 0.13])
+                                 colWidths=[0.2, 0.08, 0.22, 0.1, 0.15, 0.12, 0.13])
             table.auto_set_font_size(False)
             table.set_fontsize(9)
             table.scale(1, 1.2)
@@ -1104,30 +1128,37 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
             drift_str = f"{r['noise_drift']:+.1f}%" if not np.isnan(r['noise_drift']) else "N/A"
             drop_str = f"{r['snr_drop']:+.1f}%" if not np.isnan(r['snr_drop']) else "N/A"
             print(f"{r['filename']}: SNR={combined_man} | Deriva Ruido={drift_str} | Caída SNR={drop_str}")
+            base_str = f"{r['noise_base']:.2f}µV" if not np.isnan(r['noise_base']) else "N/A"
+            print(f"{r['filename']}: Ruido={base_str} | SNR={combined_man} | Deriva Ruido={drift_str}")
 
     # -------------- SNR vs Time Plot --------------
     if show_snr_time:
         print("Cargando... Generando gráfico de SNR vs Tiempo.")
-        valid_rows = [(i, r) for i, r in enumerate(rows) if r['dt_obj'] is not None and not np.isnan(r['snr_manual'])]
+        valid_rows = [(i, r) for i, r in enumerate(rows) if r['dt_obj'] is not None and len(r.get('snr_dict', {})) > 0]
         if len(valid_rows) > 1:
             times_dt = [r['dt_obj'] for i, r in valid_rows]
             t0 = min(times_dt)
             rel_times = [(t - t0).total_seconds() / 60.0 for t in times_dt]
-            snrs = [r['snr_manual'] for i, r in valid_rows]
-            snrs_unc = [r['snr_manual_unc'] for i, r in valid_rows]
             
             fig_time, ax_time = plt.subplots(figsize=(10, 5))
-            yerrs = [u if not np.isnan(u) else 0.0 for u in snrs_unc]
+            colors = {5: 'blue', 25: 'green', 50: 'red'}
             
-            ax_time.errorbar(rel_times, snrs, yerr=yerrs, fmt='-o', capsize=5, markersize=8, color='darkorange', ecolor='red', linewidth=2)
+            for s in [5, 25, 50]:
+                snrs = [r['snr_dict'].get(s, np.nan) for i, r in valid_rows]
+                snrs_unc = [r['snr_unc_dict'].get(s, 0.0) for i, r in valid_rows]
+                yerrs = [u if not np.isnan(u) else 0.0 for u in snrs_unc]
+                ax_time.errorbar(rel_times, snrs, yerr=yerrs, fmt='-o', capsize=5, markersize=8, color=colors.get(s, 'darkorange'), linewidth=2, label=f"SNR {s}ms")
             
             ax_time.set_xlabel('Tiempo desde inicio (minutos)')
             ax_time.set_ylabel('SNR Amplitud')
             ax_time.set_title('Evolución del SNR a lo largo de la sesión')
             ax_time.grid(True, alpha=0.5)
+            ax_time.legend(loc='best')
             
             for index_in_valid, (original_i, r) in enumerate(valid_rows):
-                ax_time.annotate(str(original_i + 1), (rel_times[index_in_valid], snrs[index_in_valid]), 
+                snr_val = r['snr_dict'].get(50, np.nan)
+                if np.isnan(snr_val): snr_val = list(r['snr_dict'].values())[0] if len(r['snr_dict']) > 0 else 0
+                ax_time.annotate(str(original_i + 1), (rel_times[index_in_valid], snr_val), 
                                  textcoords="offset points", xytext=(0,10), ha='center', fontsize=9, fontweight='bold')
                 
             plt.tight_layout()
@@ -1178,7 +1209,7 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
         else: print("No hay suficientes datos con hora válida para graficar Amplitud vs Tiempo.")
 
 # ---------------------- Main function (misma firma y lógica) ----------------
-def procesar_wavs_promedio(
+def _procesar_un_smooth(
     carpeta,
     bpm=50,
     colorgrafico="blue",
@@ -1229,7 +1260,7 @@ def procesar_wavs_promedio(
     mostrar_evolucion=False,
     evol_t_start=25.0,
     evol_t_end=100.0,
-    mostrar_senal_cruda=True
+    skip_plots=False
 ):
     rng = np.random.RandomState(seed)
     archivos = [f for f in os.listdir(carpeta) if f.lower().endswith(".wav")]
@@ -1304,7 +1335,7 @@ def procesar_wavs_promedio(
         r_fija = 49400.0
         ganancia = 1.0 + (r_fija / resistencia_ohm)
         signal = (signal_v / ganancia) * 1e6
-        print(f"[Calibración a uV] Resistencia: {resistencia_ohm} Ohms | Ganancia: {ganancia:.2f} | Señal convertida a microvoltios (uV).")
+        print(f"[Calibración a µV] Resistencia: {resistencia_ohm} Ω | Ganancia: {ganancia:.2f} | Señal convertida a microvoltios (µV).")
 
         # --- NUEVO: Filtro Pasa-Altos ---
         if highpass_cutoff_hz is not None and highpass_cutoff_hz > 0:
@@ -1465,7 +1496,7 @@ def procesar_wavs_promedio(
 
         # ---------- Calculo SNR ----------
         # ---------- Calculo SNR y Ruido Interpulso Normalizado ----------
-        # Calcular ruido base (ahora usando la envolvente)
+        # Calcular ruido base (como en unificador)
         if start_sample_noise > 0:
             initial_noise_segment = env_recortada[:start_sample_noise]
             initial_noise_mean = np.mean(np.abs(initial_noise_segment))
@@ -1492,7 +1523,7 @@ def procesar_wavs_promedio(
         stats_cv_snr = []
 
         # longitud (en muestras) de la ventana local de ruido (1/16 del periodo)
-        noise_win_samples = max(3, int(round((periodo / 8.0) * samplerate)))
+        noise_win_samples = max(3, int(round((periodo / 16.0) * samplerate)))
         
         valid_idx = 0
         n_pulsos_total = int(n_pulsos_manual) if n_pulsos_manual is not None and n_pulsos_manual > 0 else n_pulsos
@@ -1524,6 +1555,23 @@ def procesar_wavs_promedio(
             t_pulso_abs = t_recortada[int(max_idx)]
             stats_time.append(t_pulso_abs)
             
+            # SNR como en unificador: pico del pulso / ruido base
+            # Calculamos el pico máximo sobre la envolvente filtrada, tal como se solicitó para el análisis experimental
+            seg_end = int(max_idx) + post_samples
+            raw_segment = env_recortada[max(0, seg_start):min(len(env_recortada), seg_end)]
+            peak_val = np.max(np.abs(raw_segment)) if len(raw_segment) > 0 else 0.0
+            
+            curr_snr = peak_val / initial_noise_mean
+            snr_per_pulse[valid_idx] = curr_snr
+            
+            # Calcular SNR acumulado y su error estándar
+            current_snrs = snr_per_pulse[:valid_idx+1]
+            snr_acumulado = np.mean(current_snrs)
+            snr_err = np.std(current_snrs, ddof=1) / np.sqrt(len(current_snrs)) if len(current_snrs) > 1 else 0.0
+
+            stats_snr.append(snr_acumulado)
+            stats_snr_err.append(snr_err)
+            
             if noise_end - noise_start >= 3:
                 noise_segment_sig = env_recortada[noise_start:noise_end]
                 
@@ -1549,36 +1597,21 @@ def procesar_wavs_promedio(
                 # Mantenemos esto por si se usa en otro lado
                 noise_rms_per_pulse[valid_idx] = rms(valid_noise)
             else:
-                curr_mean = initial_noise_mean if initial_noise_mean > 0 else 1e-12
-                curr_err = initial_noise_std / np.sqrt(3) if initial_noise_std > 0 else 0.0
                 stats_noise_mean.append(100.0)
                 stats_noise_err.append(0.0)
                 noise_rms_per_pulse[valid_idx] = noise_rms if noise_rms is not None else 1e-12
                 
-            # SNR como en unificador: pico del pulso / ruido base
-            # Calculamos el pico máximo sobre la envolvente
-            seg_end = int(max_idx) + post_samples
-            env_segment = env_recortada[max(0, seg_start):min(len(env_recortada), seg_end)]
-            peak_val = np.max(np.abs(env_segment)) if len(env_segment) > 0 else 0.0
-            
-            curr_snr = peak_val / initial_noise_mean
-            snr_per_pulse[valid_idx] = curr_snr
-            
-            # --- NUEVO: SNR Instantáneo ---
+            # --- SNR Instantáneo y CV SNR ---
             curr_snr_inst = peak_val / curr_mean if curr_mean > 0 else 0.0
             stats_snr_inst.append(curr_snr_inst)
             
-            # Error de la amplitud en la ventana (error estándar de la media)
-            amp_err_ventana = np.std(np.abs(env_segment), ddof=1) / np.sqrt(len(env_segment)) if len(env_segment) > 1 else 0.0
-            
-            # Error propagado para SNR instantáneo: d(P/N) = (P/N) * sqrt((dP/P)^2 + (dN/N)^2)
+            amp_err_ventana = np.std(np.abs(raw_segment), ddof=1) / np.sqrt(len(raw_segment)) if len(raw_segment) > 1 else 0.0
             if curr_mean > 0 and peak_val > 0:
                 curr_snr_inst_err = curr_snr_inst * np.sqrt((amp_err_ventana / peak_val)**2 + (curr_err / curr_mean)**2)
             else:
                 curr_snr_inst_err = 0.0
             stats_snr_inst_err.append(curr_snr_inst_err)
-
-            # --- NUEVO: CV SNR ---
+            
             current_snrs_inst = stats_snr_inst[:valid_idx+1]
             if len(current_snrs_inst) > 1:
                 mu_snr_inst = np.mean(current_snrs_inst)
@@ -1588,14 +1621,6 @@ def procesar_wavs_promedio(
                 cv_snr = 0.0
             stats_cv_snr.append(cv_snr)
 
-            # Calcular SNR acumulado y su error estándar
-            current_snrs = snr_per_pulse[:valid_idx+1]
-            snr_acumulado = np.mean(current_snrs)
-            snr_err = np.std(current_snrs, ddof=1) / np.sqrt(len(current_snrs)) if len(current_snrs) > 1 else 0.0
-
-            stats_snr.append(snr_acumulado)
-            stats_snr_err.append(snr_err)
-            
             valid_idx += 1
                 
         snr_mean = np.mean(snr_per_pulse)
@@ -1654,60 +1679,8 @@ def procesar_wavs_promedio(
         # Usar el output_root directamente como directorio de salida para los archivos de este canal.
         out_dir = output_root
 
-        # nombres de archivo simplificados para que tu otro programa los lea fácilmente
-        out_prom = os.path.join(out_dir, "avg.png")       # pulso promedio
-        out_spec = os.path.join(out_dir, "spec.png")      # espectro/espectrograma
-        out_rec = os.path.join(out_dir, "pulses.png")       # recortes / señal original
-        out_evol = os.path.join(out_dir, "evolucion.png")   # evolucion temporal
-
-        # --- GRAFICO: pulsos individuales y promedio (restaurado completo) ---
-        _plot_pulse_full(
-            t_pulso=t_pulso,
-            segmentos_norm=segmentos_norm,
-            pulso_promedio=pulso_promedio,
-            pulso_err=pulso_err, # <- Se envía el error estándar del promedio
-            color_prom=color_prom,
-            snr_manual=snr_manual,
-            snr_uncertainty=snr_uncertainty,
-            noise_signal_from_fixed=noise_signal_from_fixed,
-            umbral=umbral,
-            calcular_umbral=calcular_umbral,
-            mostrar_umbral=mostrar_umbral,
-            factor_umbral=factor_umbral,
-            filename=final_plot_title,
-            out_prom=out_prom,
-            plot_mode=plot_mode,
-            individual_alpha=individual_alpha,
-            mostrar_individuales=mostrar_individuales,
-            show_plot=show_average_plot, # <-- Pasar el nuevo parámetro
-            noise_drift_pct=noise_drift_pct,
-            snr_drop_pct=snr_drop_pct,
-            pulso_sigma=pulso_sigma
-        )
-
-        # --- BLOQUE: Espectrograma y espectro de frecuencias del pulso promedio ---
-        if mostrar_espectrograma:
-            _plot_espectro_and_spectrogram(pulso_promedio, target_len, pre_w, post_w,
-                                           espectrograma_db, frecuenciamaxima, frecuenciaminima, out_spec, final_plot_title)
-
-        # --- GRAFICO: señal original recortada con cortes periódicos y puntos de máximo (deteccion en envolvente) ---
-        interactive_excluded = excluded_windows
-        if mostrar_recortes:
-            interactive_excluded = _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds, start_sample_noise, samplerate, maxima_per_cut, periodo, muestras_pulso, out_rec, final_plot_title, excluded_windows=excluded_windows,
-                           show_plot=show_interactive_plot,
-                           signal_original_unfiltered=signal_unfiltered[mask], # <-- Pasar la señal original recortada
-                           mostrar_senal_cruda=mostrar_senal_cruda
-                           )
-                           
-        # --- GRAFICO: Evolución Temporal ---
-        if mostrar_evolucion:
-            _plot_evolucion_temporal(
-                stats_time, stats_snr, stats_snr_err, stats_snr_inst, stats_snr_inst_err, stats_noise_mean, stats_noise_err, stats_cv_snr, 
-                out_evol, final_plot_title, evol_t_start, evol_t_end
-            )
-
         # --- NUEVO: Mensaje de resumen mejorado ---
-        print(f"\nCargando, por favor espere... RESUMEN para {filename}:\nVentanas totales={n_pulsos}, Ventanas promediadas={len(segmentos_rs)}\nSNR_manual={snr_manual:.2f}, Deriva Ruido={noise_drift_pct:+.1f}%, Caída SNR={snr_drop_pct:+.1f}%")
+        print(f"\\nCargando, por favor espere... RESUMEN para {filename}:\\nVentanas totales={n_pulsos}, Ventanas promediadas={len(segmentos_rs)}\\nSNR_manual={snr_manual:.2f}, Deriva Ruido={noise_drift_pct:+.1f}%, Caída SNR={snr_drop_pct:+.1f}%")
 
         promedios_globales.append(np.mean(segmentos_norm, axis=0))
         tiempos_globales.append(t_pulso)
@@ -1736,12 +1709,7 @@ def procesar_wavs_promedio(
             'noise_drift_pct': noise_drift_pct,
             'snr_drop_pct': snr_drop_pct,
             'out_dir': out_dir,
-            'out_prom': out_prom,
-            'out_spec': out_spec,
-            'out_rec': out_rec,
-            'out_evol': out_evol,
             'pulse_time': t_pulso,
-            # --- NUEVO: Añadir datos para poder regenerar el gráfico de recortes ---
             't_recortada': t_recortada,
             'signal_recortada': signal_recortada,
             'env_recortada': env_recortada,
@@ -1750,7 +1718,7 @@ def procesar_wavs_promedio(
             'muestras_pulso': muestras_pulso,
             'display_name_for_plot': final_plot_title,
             'excluded_windows': excluded_windows,
-            'interactive_excluded_windows': interactive_excluded,
+            'interactive_excluded_windows': excluded_windows,
             'start_sample_noise': start_sample_noise,
             'measurement_date': measurement_date,
             'comentario': comentario,
@@ -1763,17 +1731,351 @@ def procesar_wavs_promedio(
             'stats_noise_err': stats_noise_err,
             'stats_cv_snr': stats_cv_snr
         }
-
-        # ---------------------- Export results into per-file folder -----------------
-        export_results_for_file(out_dir, filename, resultados[filename])
         
-        plt.close('all') # --- NUEVO: Forzar limpieza de memoria de Matplotlib ---
-
-    # tabla comparativa y histogramas (modificada)
-    if mostrar_tabla and promedios_globales:
-        _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, resultados, nombre_salida)
-
+        plt.close('all') # Limpieza forzada
+        
     return resultados
+
+
+def _plot_pulse_full_experimental(dict_resultados, filename, out_prom, show_plot=False):
+    import numpy as np
+    import matplotlib.pyplot as plt
+    plt.figure(figsize=(12, 8))
+    colors = {5: 'blue', 25: 'green', 50: 'red'}
+    
+    sigma_texts = []
+
+    for smooth, res in dict_resultados.items():
+        if 'pulse_time' not in res or 'mean_pulse' not in res:
+            continue
+        t_pulso = res['pulse_time']
+        pulso_promedio = res['mean_pulse']
+        
+        pulso_sigma = res.get('std_pulse', np.zeros_like(pulso_promedio))
+        max_sigma = np.max(pulso_sigma) if len(pulso_sigma) > 0 else 0.0
+        
+        pulso_err = pulso_sigma / np.sqrt(max(1, len(res.get('segmentos_norm', [1]))))
+        snr = res.get('snr_manual', 0)
+        snr_unc = res.get('snr_uncertainty', 0)
+        
+        sigma_texts.append(f"Desviación estándar ({smooth}ms): {max_sigma:.2f} µV")
+        
+        plt.plot(t_pulso, pulso_promedio, color=colors.get(smooth, 'black'), linewidth=2,
+                 label=f"Promedio {smooth}ms (SNR={snr:.2f} ± {snr_unc:.2f})")
+        plt.fill_between(t_pulso,
+                         pulso_promedio - pulso_err,
+                         pulso_promedio + pulso_err,
+                         color=colors.get(smooth, 'black'),
+                         alpha=0.15)
+        plt.fill_between(t_pulso,
+                         pulso_promedio - pulso_sigma,
+                         pulso_promedio + pulso_sigma,
+                         color=colors.get(smooth, 'black'),
+                         alpha=0.05)
+                         
+    if sigma_texts:
+        text_str = "\n".join(sigma_texts)
+        plt.annotate(text_str, xy=(0.02, 0.98), xycoords='axes fraction', ha='left', va='top', fontsize=10,
+                     bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="black", alpha=0.8))
+
+    plt.title(f"Pulso promedio comparativo - {filename}")
+    plt.xlabel("Tiempo [s]")
+    plt.ylabel("Amplitud [µV]")
+    plt.grid(True, alpha=0.5)
+    plt.legend(loc='best')
+    plt.savefig(out_prom, dpi=600, bbox_inches='tight')
+    if show_plot: plt.show()
+    plt.close()
+
+def _plot_recortes_experimental(dict_resultados, filename, out_rec, show_plot=False):
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import math
+    
+    plt.figure(figsize=(14, 6))
+    colors = {5: 'blue', 25: 'green', 50: 'red'}
+    
+    first_res = list(dict_resultados.values())[0]
+    t_recortada = first_res.get('t_recortada', [])
+    signal_recortada = first_res.get('signal_recortada', [])
+    
+    noise_seconds = first_res.get('noise_seconds_used', 2)
+    start_sample_noise = first_res.get('start_sample_noise', 0)
+    samplerate = first_res.get('samplerate', 2000)
+    periodo = first_res.get('periodo', 1.2)
+    muestras_pulso = first_res.get('muestras_pulso', int(periodo * samplerate))
+    excluded_windows = first_res.get('interactive_excluded_windows', first_res.get('excluded_windows', []))
+    if excluded_windows is None:
+        excluded_windows = []
+        
+    
+    # Sombrear ventana inicial de ruido en violeta
+    if len(t_recortada) > 0:
+        noise_t0 = t_recortada[0]
+        noise_t1 = noise_t0 + noise_seconds
+        plt.axvspan(noise_t0, noise_t1, color='violet', alpha=0.75, label=f"Ventana ruido ({noise_seconds}s)")
+
+        # Líneas verticales de corte y ventanas integradas
+        offset_start = t_recortada[0] + float(start_sample_noise)/samplerate
+        env_recortada_len = len(first_res.get('env_recortada', []))
+        duracion_analizable_grafico = env_recortada_len - start_sample_noise
+        n_pulsos = math.ceil(duracion_analizable_grafico / muestras_pulso) if muestras_pulso > 0 else 0
+        
+        spans = []
+        for i in range(n_pulsos+1):
+            xline = offset_start + i*muestras_pulso/samplerate
+            plt.axvline(x=xline, color="Black", linestyle="--", alpha=0.6)
+            
+        excluded_set_plot = set(excluded_windows)
+        for i in range(n_pulsos):
+            start_t = offset_start + i*muestras_pulso/samplerate
+            end_t = start_t + periodo
+            window_number = i + 1
+            color_span = "red" if window_number in excluded_set_plot else "orange"
+            alpha_span = 0.3 if window_number in excluded_set_plot else 0.06
+            span = plt.axvspan(start_t, end_t, color=color_span, alpha=alpha_span)
+            spans.append((window_number, start_t, end_t, span))
+            
+    for smooth, res in dict_resultados.items():
+        if 'env_recortada' not in res:
+            continue
+        env = res['env_recortada']
+        c = colors.get(smooth, 'black')
+        plt.plot(t_recortada, env, color=c, linewidth=1.2, alpha=0.8, label=f"Envolvente {smooth}ms")
+        
+        # Dibujar Picos máximos
+        maxima_per_cut = res.get('maxima_per_cut', [])
+        if len(maxima_per_cut) > 0:
+            t_maxima = [t_recortada[idx] for idx in maxima_per_cut if idx < len(t_recortada)]
+            v_max_env = [env[idx] for idx in maxima_per_cut if idx < len(env)]
+            plt.scatter(t_maxima, v_max_env, color=c, s=50, zorder=5, edgecolors='black', linewidths=0.5, label=f'Máximos {smooth}ms')
+            
+    fig = plt.gcf()
+    ax = plt.gca()
+    
+    if show_plot:
+        plt.title(f"Envolventes comparativas (Click para excluir/incluir) - {filename}")
+    else:
+        plt.title(f"Envolventes comparativas y ventanas integradas - {filename}")
+    plt.xlabel("Tiempo [s]")
+    plt.ylabel("Amplitud [µV]")
+    plt.grid(True, alpha=0.5)
+    
+    max_y_val = 1.3
+    for res in dict_resultados.values():
+        if 'env_recortada' in res and len(res['env_recortada']) > 0:
+            max_y_val = max(max_y_val, np.max(res['env_recortada']))
+    plt.ylim(0, max_y_val * 1.5)
+    
+    # Mover la leyenda afuera para que no tape las señales y picos
+    plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), fancybox=True, shadow=True, ncol=4, fontsize=6)
+    plt.savefig(out_rec, dpi=600, bbox_inches='tight')
+    
+    if show_plot:
+        print("\nMostrando gráfico... Haz click en las ventanas para excluirlas/incluirlas interactivamente. Haz zoom para revisar detalles. Cierra la ventana al terminar.")
+        
+        def onclick(event):
+            if event.inaxes != ax: return
+            x = event.xdata
+            for window_number, start_t, end_t, span in spans:
+                if start_t <= x <= end_t:
+                    if window_number in excluded_set_plot:
+                        excluded_set_plot.remove(window_number)
+                        span.set_color("orange")
+                        span.set_alpha(0.06)
+                    else:
+                        excluded_set_plot.add(window_number)
+                        span.set_color("red")
+                        span.set_alpha(0.3)
+                    fig.canvas.draw_idle()
+                    break
+        
+        cid = fig.canvas.mpl_connect('button_press_event', onclick)
+        plt.show(block=True)
+    plt.close(fig)
+    
+    return sorted(list(excluded_set_plot))
+
+def _plot_evolucion_temporal_experimental(dict_resultados, filename, out_path, t_start, t_end, show_plot=False):
+    import numpy as np
+    import matplotlib.pyplot as plt
+    fig = plt.figure(figsize=(15, 10))
+    colors = {5: 'blue', 25: 'green', 50: 'red'}
+    
+    plt.suptitle(f"Evolución Temporal Comparativa: SNR, Ruido y CV - {filename}", fontsize=14)
+    
+    gs = fig.add_gridspec(2, 2)
+    ax1 = fig.add_subplot(gs[0, 0])
+    ax2 = fig.add_subplot(gs[0, 1])
+    ax3 = fig.add_subplot(gs[1, :])
+    
+    for smooth, res in dict_resultados.items():
+        if 'stats_time' not in res or 'stats_snr' not in res:
+            continue
+        t_arr = np.array(res['stats_time'])
+        mask = (t_arr >= t_start) & (t_arr <= t_end)
+        if not np.any(mask): mask = np.ones_like(t_arr, dtype=bool)
+        
+        t_plot = t_arr[mask]
+        snr_plot = np.array(res['stats_snr'])[mask]
+        snr_err_plot = np.array(res['stats_snr_err'])[mask] if 'stats_snr_err' in res else np.zeros_like(snr_plot)
+        noise_mean_plot = np.array(res['stats_noise_mean'])[mask]
+        noise_err_plot = np.array(res['stats_noise_err'])[mask] if 'stats_noise_err' in res else np.zeros_like(noise_mean_plot)
+        
+        ax1.errorbar(t_plot, snr_plot, yerr=snr_err_plot, marker='o', linestyle='-', color=colors.get(smooth, 'black'), ecolor=colors.get(smooth, 'black'), capsize=3, label=f"SNR {smooth}ms", linewidth=2, alpha=0.7)
+        ax2.plot(t_plot, noise_mean_plot, marker='x', linestyle='--', color=colors.get(smooth, 'black'), label=f"Ruido {smooth}ms", linewidth=2, alpha=0.7)
+        ax2.fill_between(t_plot, noise_mean_plot - noise_err_plot, noise_mean_plot + noise_err_plot, color=colors.get(smooth, 'black'), alpha=0.15)
+        
+        if len(noise_mean_plot) > 0:
+            overall_mean = np.mean(noise_mean_plot)
+            overall_std = np.std(noise_mean_plot)
+            ax2.axhline(overall_mean, color=colors.get(smooth, 'black'), linestyle=':', linewidth=1.5, alpha=0.8, label=f"Media {smooth}ms ({overall_mean:.1f}%)")
+            ax2.fill_between(t_plot, overall_mean - overall_std, overall_mean + overall_std, color=colors.get(smooth, 'black'), alpha=0.05)
+            
+        if 'stats_cv_snr' in res:
+            cv_snr_plot = np.array(res['stats_cv_snr'])[mask]
+            ax3.plot(t_plot, cv_snr_plot, marker='o', linestyle='-', color=colors.get(smooth, 'black'), label=f"CV SNR {smooth}ms", linewidth=2, alpha=0.7)
+        
+    ax1.set_title("Evolución SNR Promedio Acumulado")
+    ax1.set_xlabel("Tiempo de Señal (s)")
+    ax1.set_ylabel("SNR")
+    ax1.grid(True, alpha=0.5)
+    ax1.legend(loc='best')
+    
+    ax2.axhline(100.0, color='gray', linestyle='--', alpha=0.7, label='Línea Base (100%)')
+    ax2.set_title("Evolución Ruido Inter-pulso")
+    ax2.set_xlabel("Tiempo de Señal (s)")
+    ax2.set_ylabel("Nivel de Ruido (%)")
+    ax2.grid(True, alpha=0.5)
+    ax2.legend(loc='best')
+    
+    ax3.set_title(r"Coeficiente de Variación del SNR Instantáneo ($CV_{SNR} = \frac{\sigma}{\mu}$)")
+    ax3.set_xlabel("Tiempo de Señal (s)")
+    ax3.set_ylabel("CV SNR")
+    ax3.grid(True, alpha=0.5)
+    ax3.legend(loc='best')
+    
+    plt.tight_layout(rect=[0, 0.03, 1, 0.96])
+    plt.savefig(out_path, dpi=600, bbox_inches='tight')
+    if show_plot: plt.show()
+    plt.close(fig)
+
+def _plot_espectro_and_spectrogram_experimental(dict_resultados, filename, out_spec, show_plot=False):
+    import numpy as np
+    import matplotlib.pyplot as plt
+    plt.figure(figsize=(10, 5))
+    colors = {5: 'blue', 25: 'green', 50: 'red'}
+    
+    for smooth, res in dict_resultados.items():
+        if 'mean_pulse' not in res:
+            continue
+        pulso_promedio = res['mean_pulse']
+        duration = res.get('periodo', 1.0)
+        
+        freqs = np.fft.rfftfreq(len(pulso_promedio), d=duration/float(len(pulso_promedio)))
+        spec = np.abs(np.fft.rfft(pulso_promedio))
+        spec_db = 20.0 * np.log10(spec / (np.max(spec) + 1e-20) + 1e-20)
+        
+        mask_freq = (freqs >= 0) & (freqs <= min(1000, len(pulso_promedio)/duration/2.0))
+        plt.plot(freqs[mask_freq], np.abs(spec_db[mask_freq]), color=colors.get(smooth, 'black'), label=f"Espectro {smooth}ms", alpha=0.8)
+        
+    plt.title(f"Espectro de Frecuencias Comparativo - {filename}")
+    plt.xlabel('Frecuencia [Hz]')
+    plt.ylabel('Amplitud [dB rel.]')
+    plt.grid(True, alpha=0.3)
+    plt.legend(loc='best')
+    plt.tight_layout()
+    plt.savefig(out_spec, dpi=600, bbox_inches='tight')
+    if show_plot: plt.show()
+    plt.close()
+
+def procesar_wavs_promedio(
+    carpeta, bpm=50, colorgrafico="blue", tiempoinicial=0, tiempofinal=25,
+    nombre_salida="resultado_promedio.png", mostrar_individuales=True,
+    mostrar_recortes=True, mostrar_espectrograma=True, frecuenciamaxima=1000,
+    frecuenciaminima=0, colores_aleatorios=False, seed=None,
+    espectrograma_db=False, calcular_umbral=True, metodo_umbral='outside_windows',
+    factor_umbral=6, mostrar_umbral=True, mostrar_tabla=True,
+    usar_picos=True, peak_prominence=None, peak_height=None,
+    peak_distance_sec=0.4, pre_window_sec=None, post_window_sec=None,
+    normalize_by='rms', resample_len=None, one_max_per_cut=True,
+    n_pulsos_manual=None, fixed_umbral_abs=0.5, apply_envelope=True,
+    smooth_ms=50, noise_seconds=2, excluded_windows=None,
+    peak_search_threshold=0.25, plot_mode='mean', individual_alpha=0.25,
+    lowpass_cutoff_hz=500.0, highpass_cutoff_hz=20.0,
+    output_root="", display_name_for_plot="", show_interactive_plot=False,
+    show_average_plot=False, apply_notch_filter=False,
+    mostrar_evolucion=False, evol_t_start=25.0, evol_t_end=100.0
+):
+    import os
+    smooths = [5, 25, 50]
+    archivos = [f for f in os.listdir(carpeta) if f.lower().endswith(".wav")]
+    if not archivos: return {}
+    
+    resultados_totales = {}
+    
+    # Ejecutar el análisis para cada suavizado de forma secuencial sobre toda la carpeta
+    resultados_por_smooth = {}
+    for s in smooths:
+        print(f"\n--- Procesando carpeta con filtro {s}ms ---")
+        resultados_por_smooth[s] = _procesar_un_smooth(
+            carpeta=carpeta, bpm=bpm, colorgrafico=colorgrafico,
+            tiempoinicial=tiempoinicial, tiempofinal=tiempofinal,
+            nombre_salida=nombre_salida, mostrar_individuales=mostrar_individuales,
+            mostrar_recortes=mostrar_recortes, mostrar_espectrograma=mostrar_espectrograma,
+            frecuenciamaxima=frecuenciamaxima, frecuenciaminima=frecuenciaminima,
+            colores_aleatorios=colores_aleatorios, seed=seed,
+            espectrograma_db=espectrograma_db, calcular_umbral=calcular_umbral,
+            metodo_umbral=metodo_umbral, factor_umbral=factor_umbral,
+            mostrar_umbral=mostrar_umbral, mostrar_tabla=mostrar_tabla,
+            usar_picos=usar_picos, peak_prominence=peak_prominence,
+            peak_height=peak_height, peak_distance_sec=peak_distance_sec,
+            pre_window_sec=pre_window_sec, post_window_sec=post_window_sec,
+            normalize_by=normalize_by, resample_len=resample_len,
+            one_max_per_cut=one_max_per_cut, n_pulsos_manual=n_pulsos_manual,
+            fixed_umbral_abs=fixed_umbral_abs, apply_envelope=apply_envelope,
+            smooth_ms=s, noise_seconds=noise_seconds, excluded_windows=excluded_windows,
+            peak_search_threshold=peak_search_threshold, plot_mode=plot_mode,
+            individual_alpha=individual_alpha, lowpass_cutoff_hz=lowpass_cutoff_hz,
+            highpass_cutoff_hz=highpass_cutoff_hz, output_root=output_root,
+            display_name_for_plot=display_name_for_plot, show_interactive_plot=False,
+            show_average_plot=False, apply_notch_filter=apply_notch_filter,
+            mostrar_evolucion=mostrar_evolucion, evol_t_start=evol_t_start,
+            evol_t_end=evol_t_end, skip_plots=True
+        )
+
+    for filename in archivos:
+        dict_resultados_smooth = {}
+        for s in smooths:
+            if filename in resultados_por_smooth[s]:
+                dict_resultados_smooth[s] = resultados_por_smooth[s][filename]
+                
+        if dict_resultados_smooth:
+            out_dir = output_root
+            final_plot_title = display_name_for_plot or filename
+            out_prom = os.path.join(out_dir, "avg_experimental.png")
+            out_rec = os.path.join(out_dir, "pulses_experimental.png")
+            out_evol = os.path.join(out_dir, "evolucion_experimental.png")
+            out_spec = os.path.join(out_dir, "spec_experimental.png")
+            
+            _plot_pulse_full_experimental(dict_resultados_smooth, final_plot_title, out_prom, show_plot=show_average_plot)
+            if mostrar_recortes:
+                interactive_excluded = _plot_recortes_experimental(dict_resultados_smooth, final_plot_title, out_rec, show_plot=show_interactive_plot)
+                if show_interactive_plot and interactive_excluded is not None:
+                    for s in smooths:
+                        if s in dict_resultados_smooth:
+                            dict_resultados_smooth[s]['interactive_excluded_windows'] = interactive_excluded
+            if mostrar_evolucion:
+                _plot_evolucion_temporal_experimental(dict_resultados_smooth, final_plot_title, out_evol, evol_t_start, evol_t_end, show_plot=False)
+            if mostrar_espectrograma:
+                _plot_espectro_and_spectrogram_experimental(dict_resultados_smooth, final_plot_title, out_spec, show_plot=False)
+            
+            resultados_totales[filename] = dict_resultados_smooth[50].copy() # Por compatibilidad
+            resultados_totales[filename]['snr_dict'] = {s: dict_resultados_smooth[s].get('snr_manual', np.nan) for s in [5, 25, 50]}
+            resultados_totales[filename]['snr_unc_dict'] = {s: dict_resultados_smooth[s].get('snr_uncertainty', np.nan) for s in [5, 25, 50]}
+                
+    plt.close('all')
+    return resultados_totales
 
 class ProcessingOptionsDialog(tk.Toplevel):
     """Diálogo para seleccionar canales y opciones de procesamiento individual."""
@@ -1803,7 +2105,6 @@ class ProcessingOptionsDialog(tk.Toplevel):
         individual_plots_frame.pack(fill="x", pady=(0, 15))
         
         self.var_mostrar_recortes = tk.BooleanVar(value=True)
-        self.var_mostrar_senal_cruda = tk.BooleanVar(value=True)
         self.var_mostrar_espectrograma = tk.BooleanVar(value=False)
         self.var_excluded_windows = tk.StringVar(value="")
         # --- NUEVO: Opción para filtro pasa-bajos ---
@@ -1811,17 +2112,15 @@ class ProcessingOptionsDialog(tk.Toplevel):
         # --- NUEVO: Opción para filtro pasa-altos ---
         self.var_highpass_cutoff = tk.StringVar(value="20") # Valor por defecto para pasa-altos
         # --- NUEVO: Opción para filtro notch ---
-        self.var_notch_filter = tk.BooleanVar(value=False) # Por defecto activado
+        self.var_notch_filter = tk.BooleanVar(value=True) # Por defecto activado
         # --- NUEVO: Parámetro de suavizado de envolvente ---
-        self.var_smooth_ms = tk.StringVar(value="50")
-        # --- NUEVO: Opción Evolución Temporal ---
-        self.var_mostrar_evolucion = tk.BooleanVar(value=True)
-        self.var_evol_t_start = tk.StringVar(value="10")
+                # --- NUEVO: Opción Evolución Temporal ---
+        self.var_mostrar_evolucion = tk.BooleanVar(value=False)
+        self.var_evol_t_start = tk.StringVar(value="25")
         self.var_evol_t_end = tk.StringVar(value="1000")
 
 
         tk.Checkbutton(individual_plots_frame, text="Generar gráfico de recortes (pulses.png)", variable=self.var_mostrar_recortes).pack(anchor="w")
-        tk.Checkbutton(individual_plots_frame, text="Incluir señal cruda en recortes", variable=self.var_mostrar_senal_cruda).pack(anchor="w")
         tk.Checkbutton(individual_plots_frame, text="Generar espectrograma (spec.png)", variable=self.var_mostrar_espectrograma).pack(anchor="w")
         # --- NUEVO: Checkbox para el filtro notch ---
         tk.Checkbutton(individual_plots_frame, text="Aplicar filtro Notch 50 Hz (ruido de línea)", variable=self.var_notch_filter).pack(anchor="w", pady=(5,0))
@@ -1840,11 +2139,7 @@ class ProcessingOptionsDialog(tk.Toplevel):
         tk.Entry(exclude_frame, textvariable=self.var_excluded_windows).pack(side="left", fill="x", expand=True, padx=(5,0))
 
         # --- NUEVO: Campo para suavizado de envolvente ---
-        smooth_frame = tk.Frame(individual_plots_frame)
-        smooth_frame.pack(fill='x', pady=(5,0))
-        tk.Label(smooth_frame, text="Suavizado Envolvente (ms):").pack(side="left")
-        tk.Entry(smooth_frame, textvariable=self.var_smooth_ms, width=8).pack(side="left", padx=(5,0))
-
+        
         # --- NUEVO: Opción para filtro pasa-altos ---
         highpass_frame = tk.Frame(individual_plots_frame)
         highpass_frame.pack(fill='x', pady=(5,0))
@@ -1920,7 +2215,7 @@ class ProcessingOptionsDialog(tk.Toplevel):
             highpass_freq = float(self.var_highpass_cutoff.get())
             evol_t_start = float(self.var_evol_t_start.get())
             evol_t_end = float(self.var_evol_t_end.get())
-            smooth_val = float(self.var_smooth_ms.get())
+            smooth_val = 50.0
         except ValueError:
             tk.messagebox.showerror("Error de Formato", "Las frecuencias de los filtros y tiempos deben ser números.", parent=self)
             return
@@ -1992,8 +2287,7 @@ class ProcessingOptionsDialog(tk.Toplevel):
                     smooth_ms=smooth_val, # <-- NUEVO
                     mostrar_evolucion=False,
                     evol_t_start=evol_t_start,
-                    evol_t_end=evol_t_end,
-                    mostrar_senal_cruda=self.var_mostrar_senal_cruda.get()
+                    evol_t_end=evol_t_end
                 )
                 
                 interactive_excl = initial_excluded_windows
@@ -2083,8 +2377,7 @@ class ProcessingOptionsDialog(tk.Toplevel):
                     smooth_ms=smooth_val, # <-- NUEVO
                     mostrar_evolucion=self.var_mostrar_evolucion.get(),
                     evol_t_start=evol_t_start,
-                    evol_t_end=evol_t_end,
-                    mostrar_senal_cruda=self.var_mostrar_senal_cruda.get()
+                    evol_t_end=evol_t_end
                 )
 
             print_progress_bar(i + 1, total_canales, prefix='Procesando Canales:', suffix='Completado', length=50)
@@ -2152,11 +2445,13 @@ class ComparativeOptionsDialog(tk.Toplevel):
         self.var_show_amplitude = tk.BooleanVar(value=True)
         self.var_show_table = tk.BooleanVar(value=True)
         self.var_show_snr_time = tk.BooleanVar(value=True)
+        self.var_show_noise_base = tk.BooleanVar(value=True)
         self.var_show_amp_time = tk.BooleanVar(value=True)
 
         tk.Checkbutton(comparative_plots_frame, text="Generar Overlay de Pulsos", variable=self.var_show_overlay).pack(anchor="w")
         tk.Checkbutton(comparative_plots_frame, text="Generar Gráfico SNR (Amplitud)", variable=self.var_show_snr).pack(anchor="w")
         tk.Checkbutton(comparative_plots_frame, text="Generar Gráfico Amplitud Máxima", variable=self.var_show_amplitude).pack(anchor="w")
+        tk.Checkbutton(comparative_plots_frame, text="Generar Gráfico de Ruido Base (Interferencia)", variable=self.var_show_noise_base).pack(anchor="w")
         tk.Checkbutton(comparative_plots_frame, text="Generar Gráfico SNR vs Tiempo", variable=self.var_show_snr_time).pack(anchor="w")
         tk.Checkbutton(comparative_plots_frame, text="Generar Gráfico Amplitud vs Tiempo", variable=self.var_show_amp_time).pack(anchor="w")
         tk.Checkbutton(comparative_plots_frame, text="Generar Tabla de Resultados (CSV y PNG)", variable=self.var_show_table).pack(anchor="w")
@@ -2275,7 +2570,9 @@ class ComparativeOptionsDialog(tk.Toplevel):
                                show_snr=self.var_show_snr.get(),
                                show_amplitude=self.var_show_amplitude.get(),
                                show_table=self.var_show_table.get(),
+                               show_snr_time=self.var_show_snr_time.get())
                                show_snr_time=self.var_show_snr_time.get(),
+                               show_noise_base=self.var_show_noise_base.get(),
                                show_amp_time=self.var_show_amp_time.get())
         else:
             print("\nNo se generaron gráficos comparativos. Se necesitan al menos dos mediciones con resultados válidos.")
@@ -2372,4 +2669,4 @@ if __name__ == "__main__":
     app = AnalysisGUI(root)
     root.mainloop()
 
-# %%
+# % 

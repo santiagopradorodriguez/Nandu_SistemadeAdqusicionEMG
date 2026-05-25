@@ -26,156 +26,204 @@ import json
 import numpy as np
 import re
 import shutil
-import pandas as pd # Usaremos pandas para escribir el CSV de resumen fácilmente
+import pandas as pd
+import sys
+from PySide6.QtWidgets import (
+    QApplication, QDialog, QVBoxLayout, QHBoxLayout, 
+    QLabel, QPushButton, QTextEdit, QProgressBar, QMessageBox
+)
+from PySide6.QtCore import Qt, QThread, Signal
 
 def calculate_real_amplitude(df):
-    """Calcula Ganancia (G), Amplitud Real (V_real) y propaga el error."""
-    R_fija = 49400.0 # 49.4 kΩ
-    # Asumimos que el error en R_fija y R_sg es despreciable
-    # V_real = V_med / G = V_med / (1 + R_fija / R_sg)
-    
-    df_copy = df.copy() # Evitar SettingWithCopyWarning
-    
-    # Calcular G para cada R
+    R_fija = 49400.0
+    df_copy = df.copy()
     df_copy['Ganancia (G)'] = 1 + (R_fija / df_copy['Resistencia'])
-    
-    # Calcular V_real = V_medida / G
-    df_copy['Amplitud_Real'] = df_copy['Amplitud_Medida'] / df_copy['Ganancia (G)']
-    
-    # Propagación de error para V_real = V_med / G
-    # σ(V_real) = |dV_real / dV_med| * σ(V_med) = (1/G) * σ(V_med)
-    # (Asumiendo que G es una constante sin error)
-    df_copy['Error_Amplitud_Real'] = df_copy['Error_Amplitud_Medida'] / df_copy['Ganancia (G)']
-    
+    df_copy['Amplitud_Real'] = df_copy['Amplitud_Medida']
+    df_copy['Error_Amplitud_Real'] = df_copy['Error_Amplitud_Medida']
     return df_copy
 
-def main():
-    """Función principal del script de extracción."""
-    
-    # --- Configuración de directorios ---
-    fuente_dir = "base_de_datos_electrodos" # Directorio de donde se leen los análisis
-    destino_dir = "base_de_datos_letras"   # Directorio donde se guardan los pulsos
-    R_FIJA = 49400.0                       # Resistencia fija del circuito en Ohms (49.4 kΩ)
-    
-    print(f"--- Iniciando Extractor de Datos Procesados v1.3 (con Calibración de Amplitud) ---")
+class ExtractorThread(QThread):
+    log_signal = Signal(str)
+    progress_signal = Signal(int)
+    finished_signal = Signal(bool, str)
 
-    if not os.path.isdir(fuente_dir):
-        print(f"❌ ERROR: El directorio fuente '{fuente_dir}' no existe. No hay nada que procesar.")
-        return
+    def __init__(self, fuente_dir, destino_dir, clean_dest):
+        super().__init__()
+        self.fuente_dir = fuente_dir
+        self.destino_dir = destino_dir
+        self.clean_dest = clean_dest
 
-    # Preguntar al usuario si desea limpiar la base de datos de destino
-    if os.path.isdir(destino_dir):
-        respuesta = input(f"⚠️  El directorio de destino '{destino_dir}' ya existe. ¿Desea limpiarlo antes de empezar? (s/n): ").lower()
-        if respuesta == 's':
-            try:
-                shutil.rmtree(destino_dir)
-                print(f"🗑️  Directorio '{destino_dir}' limpiado.")
-            except Exception as e:
-                print(f"❌ ERROR: No se pudo limpiar el directorio de destino. Error: {e}")
+    def run(self):
+        try:
+            self.log_signal.emit("--- Iniciando Extractor de Datos Procesados v1.3 ---")
+            
+            if not os.path.isdir(self.fuente_dir):
+                self.log_signal.emit(f"ERROR: El directorio fuente '{self.fuente_dir}' no existe.")
+                self.finished_signal.emit(False, "Error: Directorio fuente no existe.")
                 return
 
-    os.makedirs(destino_dir, exist_ok=True)
-    print(f"📂 Directorio de destino asegurado: '{destino_dir}'")
+            if self.clean_dest and os.path.isdir(self.destino_dir):
+                try:
+                    shutil.rmtree(self.destino_dir)
+                    self.log_signal.emit(f"Directorio '{self.destino_dir}' limpiado.")
+                except Exception as e:
+                    self.log_signal.emit(f"ERROR: No se pudo limpiar el directorio de destino. {e}")
+                    self.finished_signal.emit(False, f"Error al limpiar: {e}")
+                    return
 
-    # Regex para identificar carpetas de mediciones formales (Letra_...)
-    regex_formal = re.compile(r"^[A-Z]_")
-    
-    total_pulsos_extraidos = 0
-    amplitudes_data = [] # Inicializar la lista para todos los datos de amplitud
-    path_resumen_csv = os.path.join(destino_dir, "amplitudes_maximas.csv")
-
-
-    # 1. Recorrer todas las mediciones en la base de datos de electrodos
-    for nombre_medicion in sorted(os.listdir(fuente_dir)):
-        path_medicion = os.path.join(fuente_dir, nombre_medicion)
-
-        if os.path.isdir(path_medicion) and regex_formal.match(nombre_medicion):
-            print(f"\n✅ Encontrada medición formal: '{nombre_medicion}'")
+            os.makedirs(self.destino_dir, exist_ok=True)
             
-            letra = nombre_medicion[0]
+            regex_formal = re.compile(r"^[A-Z]_")
+            total_pulsos_extraidos = 0
+            amplitudes_data = []
+            path_resumen_csv = os.path.join(self.destino_dir, "amplitudes_maximas.csv")
             
-            # 2. Recorrer los canales dentro de la medición
-            for nombre_canal in sorted(os.listdir(path_medicion)):
-                path_canal = os.path.join(path_medicion, nombre_canal)
+            mediciones = [m for m in sorted(os.listdir(self.fuente_dir)) if os.path.isdir(os.path.join(self.fuente_dir, m)) and regex_formal.match(m)]
+            total_mediciones = len(mediciones)
+            
+            if total_mediciones == 0:
+                self.log_signal.emit("No se encontraron mediciones formales.")
+                self.finished_signal.emit(True, "No se encontraron mediciones.")
+                return
+
+            for idx, nombre_medicion in enumerate(mediciones):
+                path_medicion = os.path.join(self.fuente_dir, nombre_medicion)
+                self.log_signal.emit(f"Procesando: {nombre_medicion}")
+                letra = nombre_medicion[0]
                 
-                if os.path.isdir(path_canal) and nombre_canal.startswith("canal_"):
-                    # 3. Buscar el archivo de resultados del análisis
-                    # --- NUEVO: Leer la resistencia desde el metadata.json ---
+                canales = [c for c in sorted(os.listdir(path_medicion)) if os.path.isdir(os.path.join(path_medicion, c)) and c.startswith("canal_")]
+                for nombre_canal in canales:
+                    path_canal = os.path.join(path_medicion, nombre_canal)
                     path_metadata = os.path.join(path_canal, "metadata.json")
                     resistencia_ohm = None
+                    
                     if os.path.exists(path_metadata):
                         try:
                             with open(path_metadata, 'r', encoding='utf-8') as f_meta:
                                 metadata = json.load(f_meta)
                                 resistencia_ohm = metadata.get("resistencia_ohm")
-                                if resistencia_ohm is None:
-                                    print(f"    -> ⚠️  ADVERTENCIA: No se encontró 'resistencia_ohm' en '{path_metadata}'. No se podrá calibrar la amplitud para este canal.")
-                                else:
-                                    print(f"  - Resistencia detectada: {resistencia_ohm} Ω")
-                        except Exception as e:
-                            print(f"    -> ⚠️  ADVERTENCIA: Error al leer metadata.json en '{path_canal}': {e}")
-                    else:
-                        print(f"    -> ⚠️  ADVERTENCIA: No se encontró 'metadata.json' en '{path_canal}'. No se podrá calibrar la amplitud.")
-
+                        except: pass
+                        
                     path_json = os.path.join(path_canal, "analisis_results.json")
-                    
                     if os.path.exists(path_json):
-                        print(f"  - Procesando '{nombre_canal}'...")
                         try:
                             with open(path_json, 'r', encoding='utf-8') as f:
                                 datos_analisis = json.load(f)
-                            
                             segmentos = datos_analisis.get("segmentos_rs")
-
-                            if not segmentos or not isinstance(segmentos, list):
-                                print("    -> ⚠️  No se encontraron 'segmentos_rs' válidos en el JSON.")
-                                continue
-
-                            # 4. Crear la carpeta de destino final
-                            path_destino_final = os.path.join(destino_dir, letra, nombre_canal)
-                            os.makedirs(path_destino_final, exist_ok=True)
-
-                            # 5. Guardar cada segmento como un CSV individual
-                            for i, pulso in enumerate(segmentos):
-                                # --- MODIFICADO: Nombre de archivo único para evitar sobrescrituras ---
-                                nombre_medicion_base = os.path.splitext(nombre_medicion)[0]
-                                nombre_archivo_pulso = f"{nombre_medicion_base}_pulso_{i+1:03d}.csv"
-                                path_csv_pulso = os.path.join(path_destino_final, nombre_archivo_pulso)
-                                np.savetxt(path_csv_pulso, np.array(pulso), delimiter=",", header="amplitud", comments="")
-                                total_pulsos_extraidos += 1
+                            if segmentos and isinstance(segmentos, list):
+                                path_destino_final = os.path.join(self.destino_dir, letra, nombre_canal)
+                                os.makedirs(path_destino_final, exist_ok=True)
                                 
-                                # --- MODIFICADO: Calcular y guardar todos los datos de amplitud ---
-                                amplitud_medida = np.max(pulso)
-
-                                amplitudes_data.append({
-                                    "nombre_pulso": nombre_archivo_pulso,
-                                    "Amplitud_Medida": amplitud_medida,
-                                    "Resistencia": resistencia_ohm,
-                                    # Placeholder para el error, ajustar si se tiene el dato
-                                    "Error_Amplitud_Medida": 0.0 
-                                })
-
-                            print(f"    -> ✅ Se extrajeron y guardaron {len(segmentos)} pulsos desde '{nombre_medicion}'")
-
+                                for i, pulso in enumerate(segmentos):
+                                    nombre_medicion_base = os.path.splitext(nombre_medicion)[0]
+                                    nombre_archivo_pulso = f"{nombre_medicion_base}_pulso_{i+1:03d}.csv"
+                                    path_csv_pulso = os.path.join(path_destino_final, nombre_archivo_pulso)
+                                    np.savetxt(path_csv_pulso, np.array(pulso), delimiter=",", header="amplitud", comments="")
+                                    total_pulsos_extraidos += 1
+                                    
+                                    amplitudes_data.append({
+                                        "nombre_pulso": nombre_archivo_pulso,
+                                        "Amplitud_Medida": np.max(pulso),
+                                        "Resistencia": resistencia_ohm,
+                                        "Error_Amplitud_Medida": 0.0 
+                                    })
+                                self.log_signal.emit(f"  -> Extraídos {len(segmentos)} pulsos de {nombre_canal}")
                         except Exception as e:
-                            print(f"    -> ❌ ERROR al procesar el archivo JSON '{path_json}': {e}")
-                    else:
-                        print(f"  - Omitiendo '{nombre_canal}' (no se encontró 'analisis_results.json').")
+                            self.log_signal.emit(f"  -> ERROR en {path_json}: {e}")
+                
+                # Actualizar barra de progreso
+                progreso = int(((idx + 1) / total_mediciones) * 100)
+                self.progress_signal.emit(progreso)
 
-    # --- MODIFICADO: Guardar el archivo de resumen de amplitudes actualizado al final ---
-    if amplitudes_data:
-        df_amplitudes = pd.DataFrame(amplitudes_data)
-        df_final = calculate_real_amplitude(df_amplitudes)
+            if amplitudes_data:
+                df_amplitudes = pd.DataFrame(amplitudes_data)
+                df_final = calculate_real_amplitude(df_amplitudes)
+                column_order = ["nombre_pulso", "Amplitud_Medida", "Error_Amplitud_Medida", "Resistencia", "Ganancia (G)", "Amplitud_Real", "Error_Amplitud_Real"]
+                df_final = df_final[column_order]
+                df_final.to_csv(path_resumen_csv, index=False, float_format='%.6f')
+                self.log_signal.emit(f"\nResumen de amplitudes guardado en '{path_resumen_csv}'")
+
+            self.log_signal.emit(f"\n--- Proceso Finalizado ---")
+            self.log_signal.emit(f"Total extraídos: {total_pulsos_extraidos} pulsos.")
+            self.finished_signal.emit(True, f"Extracción completada. {total_pulsos_extraidos} pulsos.")
+            
+        except Exception as e:
+            self.log_signal.emit(f"ERROR FATAL: {e}")
+            self.finished_signal.emit(False, str(e))
+
+class ExtractorDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Extractor de Datos Procesados (ML)")
+        self.resize(600, 400)
+        self.setStyleSheet("background-color: #050505; color: #00ffcc; font-family: 'Courier New', monospace;")
         
-        # Ordenar columnas para mayor claridad
-        column_order = ["nombre_pulso", "Amplitud_Medida", "Error_Amplitud_Medida", "Resistencia", "Ganancia (G)", "Amplitud_Real", "Error_Amplitud_Real"]
-        df_final = df_final[column_order]
-        df_final.to_csv(path_resumen_csv, index=False, float_format='%.6f')
-        print(f"\n✅ Resumen de amplitudes guardado en '{path_resumen_csv}'")
+        self.fuente_dir = "base_de_datos_electrodos"
+        self.destino_dir = "base_de_datos_letras"
+        
+        layout = QVBoxLayout(self)
+        
+        lbl_info = QLabel("Extrae pulsos individuales (ventanas recortadas) de las mediciones formales ya procesadas y las organiza por letras para Machine Learning.")
+        lbl_info.setWordWrap(True)
+        lbl_info.setStyleSheet("color: #aaa; margin-bottom: 10px;")
+        layout.addWidget(lbl_info)
+        
+        self.text_log = QTextEdit()
+        self.text_log.setReadOnly(True)
+        self.text_log.setStyleSheet("background-color: #111; color: #fff; border: 1px solid #333;")
+        layout.addWidget(self.text_log)
+        
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setStyleSheet("QProgressBar { border: 1px solid #333; border-radius: 3px; text-align: center; color: white; } QProgressBar::chunk { background-color: #00ffcc; }")
+        self.progress_bar.setValue(0)
+        layout.addWidget(self.progress_bar)
+        
+        btn_layout = QHBoxLayout()
+        
+        self.btn_extract = QPushButton("Iniciar Extracción")
+        self.btn_extract.setStyleSheet("background-color: #00ffcc; color: #000; font-weight: bold; padding: 10px;")
+        self.btn_extract.clicked.connect(lambda: self.start_extraction(clean=False))
+        btn_layout.addWidget(self.btn_extract)
+        
+        self.btn_extract_clean = QPushButton("Limpiar Destino e Iniciar")
+        self.btn_extract_clean.setStyleSheet("background-color: #ff003c; color: #fff; font-weight: bold; padding: 10px;")
+        self.btn_extract_clean.clicked.connect(lambda: self.start_extraction(clean=True))
+        btn_layout.addWidget(self.btn_extract_clean)
+        
+        layout.addLayout(btn_layout)
+        
+        self.thread = None
 
-    print(f"\n--- ✨ Proceso Finalizado ---")
-    print(f"Se extrajeron un total de {total_pulsos_extraidos} pulsos.")
-    print(f"Los datos han sido organizados en la carpeta '{destino_dir}'.")
+    def start_extraction(self, clean):
+        if clean:
+            reply = QMessageBox.question(self, "Confirmar limpieza", f"¿Estás seguro de que quieres borrar completamente la carpeta '{self.destino_dir}' antes de extraer?", QMessageBox.Yes | QMessageBox.No)
+            if reply == QMessageBox.No:
+                return
+                
+        self.btn_extract.setEnabled(False)
+        self.btn_extract_clean.setEnabled(False)
+        self.text_log.clear()
+        self.progress_bar.setValue(0)
+        
+        self.thread = ExtractorThread(self.fuente_dir, self.destino_dir, clean)
+        self.thread.log_signal.connect(self.append_log)
+        self.thread.progress_signal.connect(self.progress_bar.setValue)
+        self.thread.finished_signal.connect(self.on_finished)
+        self.thread.start()
+
+    def append_log(self, text):
+        self.text_log.append(text)
+        self.text_log.verticalScrollBar().setValue(self.text_log.verticalScrollBar().maximum())
+
+    def on_finished(self, success, msg):
+        self.btn_extract.setEnabled(True)
+        self.btn_extract_clean.setEnabled(True)
+        if success:
+            QMessageBox.information(self, "Éxito", msg)
+        else:
+            QMessageBox.critical(self, "Error", msg)
 
 if __name__ == "__main__":
-    main()
+    app = QApplication(sys.argv)
+    dialog = ExtractorDialog()
+    dialog.exec()
