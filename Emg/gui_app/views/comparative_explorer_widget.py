@@ -3,10 +3,58 @@ import re
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
     QTreeWidget, QTreeWidgetItem, QPushButton, QSizePolicy,
-    QSplitter, QScrollArea, QTabWidget
+    QSplitter, QScrollArea, QTabWidget, QDialog
 )
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QPixmap, QCursor
+
+class ClickableImage(QLabel):
+    def __init__(self, img_path, max_width=500, parent=None):
+        super().__init__(parent)
+        self.img_path = img_path
+        self.setAlignment(Qt.AlignCenter)
+        self.setCursor(QCursor(Qt.PointingHandCursor))
+        self.setStyleSheet("background-color: #000; border: 1px solid #333; padding: 5px; border-radius: 4px;")
+        
+        self.pix = QPixmap(img_path)
+        if self.pix.width() > max_width:
+            self.setPixmap(self.pix.scaledToWidth(max_width, Qt.SmoothTransformation))
+        else:
+            self.setPixmap(self.pix)
+            
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.show_fullscreen_image()
+            
+    def show_fullscreen_image(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Visor de Imagen")
+        dialog.setStyleSheet("background-color: #050505;")
+        
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("border: none;")
+        
+        lbl = QLabel()
+        lbl.setAlignment(Qt.AlignCenter)
+        
+        screen = self.screen().availableGeometry()
+        max_w = int(screen.width() * 0.9)
+        max_h = int(screen.height() * 0.9)
+        
+        if self.pix.width() > max_w or self.pix.height() > max_h:
+            lbl.setPixmap(self.pix.scaled(max_w, max_h, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        else:
+            lbl.setPixmap(self.pix)
+            
+        scroll.setWidget(lbl)
+        layout.addWidget(scroll)
+        
+        dialog.resize(min(self.pix.width() + 40, max_w), min(self.pix.height() + 40, max_h))
+        dialog.exec()
 
 class ComparativeViewerWidget(QWidget):
     def __init__(self, root_path, parent=None):
@@ -151,17 +199,13 @@ class ComparativeViewerWidget(QWidget):
                 lbl_title.setAlignment(Qt.AlignCenter)
                 lyt_container.addWidget(lbl_title)
                 
-                lbl_img = QLabel()
-                lbl_img.setAlignment(Qt.AlignCenter)
-                pix = QPixmap(img_path)
+                lbl_hint = QLabel("🔍 Haz clic en la imagen para ampliar")
+                lbl_hint.setStyleSheet("color: #888; margin-bottom: 5px;")
+                lbl_hint.setAlignment(Qt.AlignCenter)
+                lyt_container.addWidget(lbl_hint)
                 
-                if pix.width() > 1000:
-                    lbl_img.setPixmap(pix.scaledToWidth(1000, Qt.SmoothTransformation))
-                else:
-                    lbl_img.setPixmap(pix)
-                    
-                lbl_img.setStyleSheet("background-color: #000; border: 1px solid #333; padding: 5px; border-radius: 4px;")
-                lyt_container.addWidget(lbl_img)
+                clickable_img = ClickableImage(img_path, max_width=500)
+                lyt_container.addWidget(clickable_img)
                 
             lyt_container.addStretch()
             scroll_imgs.setWidget(container_imgs)

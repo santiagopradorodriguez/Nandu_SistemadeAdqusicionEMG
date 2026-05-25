@@ -6,7 +6,57 @@ from PySide6.QtWidgets import (
     QPushButton, QHBoxLayout
 )
 from PySide6.QtCore import Qt, QThread, Signal, QSize
-from PySide6.QtGui import QIcon, QPixmap, QImage
+from PySide6.QtGui import QIcon, QPixmap, QImage, QCursor
+from PySide6.QtWidgets import QDialog, QVBoxLayout, QWidget
+
+class ClickableImage(QLabel):
+    def __init__(self, img_path, max_width=400, parent=None):
+        super().__init__(parent)
+        self.img_path = img_path
+        self.setAlignment(Qt.AlignCenter)
+        self.setCursor(QCursor(Qt.PointingHandCursor))
+        self.setStyleSheet("background-color: #000; border: 1px solid #333; padding: 5px; border-radius: 4px;")
+        
+        self.pix = QPixmap(img_path)
+        if self.pix.width() > max_width:
+            self.setPixmap(self.pix.scaledToWidth(max_width, Qt.SmoothTransformation))
+        else:
+            self.setPixmap(self.pix)
+            
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.show_fullscreen_image()
+            
+    def show_fullscreen_image(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Visor de Imagen")
+        dialog.setStyleSheet("background-color: #050505;")
+        
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("border: none;")
+        
+        lbl = QLabel()
+        lbl.setAlignment(Qt.AlignCenter)
+        
+        # Escalar al 90% de la pantalla actual para que quepa bien
+        screen = self.screen().availableGeometry()
+        max_w = int(screen.width() * 0.9)
+        max_h = int(screen.height() * 0.9)
+        
+        if self.pix.width() > max_w or self.pix.height() > max_h:
+            lbl.setPixmap(self.pix.scaled(max_w, max_h, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        else:
+            lbl.setPixmap(self.pix)
+            
+        scroll.setWidget(lbl)
+        layout.addWidget(scroll)
+        
+        dialog.resize(min(self.pix.width() + 40, max_w), min(self.pix.height() + 40, max_h))
+        dialog.exec()
 
 class ThumbnailLoader(QThread):
     finished = Signal(str, str, QPixmap) # path, name, pixmap
@@ -222,7 +272,7 @@ class ElectrodeViewerWidget(QWidget):
             scroll.setWidget(s_content)
             t_layout.addWidget(scroll)
             self.tabs_channels.addTab(tab, "Señales Musculares")
-        
+            
         # 2. Pestañas por canal
         canales = sorted([d for d in os.listdir(path) if d.startswith("canal_") and os.path.isdir(os.path.join(path, d))])
         for canal in canales:
@@ -266,17 +316,25 @@ class ElectrodeViewerWidget(QWidget):
                     scroll_img.setWidgetResizable(True)
                     scroll_img.setAlignment(Qt.AlignCenter)
                     
-                    lbl_img = QLabel()
-                    lbl_img.setAlignment(Qt.AlignCenter)
-                    pix = QPixmap(img_path)
+                    # Hint label
+                    lbl_hint = QLabel("🔍 Haz clic en la imagen para ampliar")
+                    lbl_hint.setStyleSheet("color: #888; margin-bottom: 5px;")
+                    lbl_hint.setAlignment(Qt.AlignCenter)
                     
-                    # Cargar a tamaño decente, el scrollarea hara el resto si es muy grande
-                    if pix.width() > 900:
-                        lbl_img.setPixmap(pix.scaledToWidth(900, Qt.SmoothTransformation))
-                    else:
-                        lbl_img.setPixmap(pix)
-                        
-                    scroll_img.setWidget(lbl_img)
+                    # Contenedor centralizado
+                    container = QWidget()
+                    lyt_container = QVBoxLayout(container)
+                    lyt_container.setAlignment(Qt.AlignCenter)
+                    
+                    # Custom Clickable Image (max_width 500 para hacerla chica inicialmente)
+                    clickable_img = ClickableImage(img_path, max_width=500)
+                    
+                    lyt_container.addStretch()
+                    lyt_container.addWidget(lbl_hint)
+                    lyt_container.addWidget(clickable_img)
+                    lyt_container.addStretch()
+                    
+                    scroll_img.setWidget(container)
                     canal_tab.addTab(scroll_img, tab_name)
                     
             self.tabs_channels.addTab(canal_tab, canal.upper())

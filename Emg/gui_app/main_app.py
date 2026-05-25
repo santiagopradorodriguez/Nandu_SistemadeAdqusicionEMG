@@ -94,19 +94,74 @@ class ReaperStyleHub(QMainWindow):
         self.log_console.ensureCursorVisible()
 
     def _launch_external(self, script_name):
-        """Lanza un script en un proceso independiente (Tkinter apps)"""
-        script_path = os.path.join(root_project_dir, script_name)
+        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        script_path = os.path.join(root_dir, script_name)
+        
         if not os.path.exists(script_path):
-            print(f"> ERROR: No se encontró '{script_name}' en {script_path}")
+            QMessageBox.critical(self, "Error", f"No se encontró el script: {script_name}")
             return
-        print(f"> [LAUNCHER] Abriendo {script_name}...")
+            
         try:
-            if sys.platform == "win32":
-                subprocess.Popen([sys.executable, script_path], creationflags=0x08000000)
+            if root_dir not in sys.path:
+                sys.path.insert(0, root_dir)
+                
+            if script_name == "editor_mediciones.py":
+                from editor_mediciones import MeasurementEditorDialog
+                dlg = MeasurementEditorDialog(self)
+                dlg.exec()
+            elif script_name == "extractor_de_datos_procesados.py":
+                from extractor_de_datos_procesados import ExtractorDialog
+                dlg = ExtractorDialog(self)
+                dlg.exec()
+            elif script_name == "plotter_calibrado.py":
+                from plotter_calibrado import PlotterConfigDialog, plotear_medicion_secuencial
+                dlg = PlotterConfigDialog(self)
+                if dlg.exec() == QDialog.Accepted:
+                    mediciones = dlg.seleccionadas
+                    config = dlg.resultado
+                    if mediciones and config:
+                        total = len(mediciones)
+                        for i, m in enumerate(mediciones):
+                            print(f"[{i+1}/{total}] Cargando datos de {m}...")
+                            plotear_medicion_secuencial(m, config)
+                        QMessageBox.information(self, "Éxito", "Secuencia de ploteo finalizada.")
+            elif script_name == "correlaciondeseñales.py":
+                from correlaciondeseñales import ProcessingOptionsDialog, select_directories, procesar_wavs_promedio, _plot_muscle_overlay
+                
+                master_dir, slave_dirs = select_directories()
+                if not master_dir: return
+                
+                dlg = ProcessingOptionsDialog(self)
+                if dlg.exec() == QDialog.Accepted:
+                    opts = dlg.result
+                    if not opts: return
+                    
+                    QMessageBox.information(self, "Procesando", "La aplicación podría congelarse durante el análisis masivo.\nMira la consola para ver el progreso.")
+                    
+                    resultados_master = procesar_wavs_promedio(carpeta=master_dir, output_root=master_dir, **opts)
+                    if not resultados_master: return
+                    master_shifts = {f: d['shifts'] for f, d in resultados_master.items()}
+                    master_valid_indices = {f: d.get('valid_indices') for f, d in resultados_master.items()}
+                    
+                    resultados_canales = {'canal_0': resultados_master}
+                    for i, s_dir in enumerate(slave_dirs):
+                        ch_name = f'canal_{i+1}'
+                        res_slave = procesar_wavs_promedio(carpeta=s_dir, output_root=s_dir, dict_shifts_externos=master_shifts, indices_validos_externos=master_valid_indices, **opts)
+                        resultados_canales[ch_name] = res_slave
+                        
+                    if slave_dirs:
+                        parent_meas_dir = os.path.dirname(master_dir)
+                        meas_name = os.path.basename(parent_meas_dir)
+                        _plot_muscle_overlay(meas_name, resultados_canales, parent_meas_dir)
+                    QMessageBox.information(self, "Éxito", "Procesamiento de correlación finalizado con éxito.")
             else:
-                subprocess.Popen([sys.executable, script_path])
+                import subprocess
+                if sys.platform == "win32":
+                    subprocess.Popen([sys.executable, script_path], creationflags=0x08000000)
+                else:
+                    subprocess.Popen([sys.executable, script_path])
         except Exception as e:
-            print(f"> ERROR al abrir {script_name}: {e}")
+            QMessageBox.critical(self, "Error Crítico", f"Error al abrir {script_name}:\n{e}")
 
     def _create_main_toolbar(self):
         toolbar = QToolBar("Herramientas Adicionales")
@@ -212,21 +267,28 @@ class ReaperStyleHub(QMainWindow):
         btn_daq = QPushButton("🔴 INICIAR ADQUISICIÓN\nDE SEÑALES (DAQ)")
         btn_daq.setStyleSheet("""
             QPushButton {
-                font-size: 22px; 
-                font-weight: bold; 
-                background-color: #880000; 
-                color: white; 
+                font-family: 'Consolas', 'Courier New', monospace;
+                font-size: 24px; 
+                font-weight: 900; 
+                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #110000, stop:1 #330000); 
+                color: #ff003c; 
                 padding: 40px 20px;
-                border-radius: 15px;
-                border: 2px solid #ff4444;
+                border-radius: 2px;
+                border: 2px solid #ff003c;
+                border-right: 6px solid #00ffcc;
+                border-bottom: 6px solid #00ffcc;
             }
             QPushButton:hover {
-                background-color: #aa0000;
-                border: 2px solid #ff7777;
+                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #330000, stop:1 #660000);
+                color: #ffffff;
+                border: 2px solid #00ffcc;
+                border-right: 6px solid #ff003c;
+                border-bottom: 6px solid #ff003c;
             }
             QPushButton:pressed {
-                background-color: #550000;
-                border: 2px solid #aa0000;
+                background-color: #00ffcc;
+                color: #000000;
+                border: 2px solid #000000;
             }
         """)
         btn_daq.clicked.connect(lambda: self._launch_external("CodigoUnificador_integrado.py"))

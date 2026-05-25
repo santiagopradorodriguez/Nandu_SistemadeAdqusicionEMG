@@ -45,7 +45,7 @@ except ImportError:
     print("Advertencia: La librería 'scipy' no está instalada. El espectrograma no funcionará.")
 
 # NUEVO: Import para generar el gráfico
-import matplotlib.pyplot as plt 
+# matplotlib.pyplot se importa de forma diferida en las funciones para que la GUI cargue más rápido.
 
 # Configuración de PyQtGraph para MÁXIMO rendimiento
 pg.setConfigOptions(antialias=False) # Optimización
@@ -305,6 +305,12 @@ def generar_grafico_grabacion(datos_completos, sample_rate, output_dir, num_cana
 
     print("Generando gráfico de la grabación completa...")
     try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print("Error: matplotlib no está instalado.")
+        return False
+        
+    try:
         grabacion = np.concatenate(datos_completos, axis=1)
     except ValueError:
         return False
@@ -365,6 +371,12 @@ def generar_grafico_estadisticas(stats_time, stats_snr, stats_noise_mean, stats_
         return False
 
     print("Generando gráfico de evolución temporal de estadísticas...")
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print("Error: matplotlib no está instalado.")
+        return False
+        
     fig, axs = plt.subplots(num_canales, 2, figsize=(15, 4 * num_canales), squeeze=False)
     fig.suptitle(f"Evolución Temporal: SNR y Ruido Inter-pulso", fontsize=16)
 

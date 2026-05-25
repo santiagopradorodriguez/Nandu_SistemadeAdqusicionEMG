@@ -16,8 +16,13 @@ import argparse
 import subprocess
 
 # --- Imports para GUI ---
-import tkinter as tk
-from tkinter import filedialog, messagebox, simpledialog
+import sys
+from PySide6.QtWidgets import (
+    QApplication, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
+    QLabel, QLineEdit, QPushButton, QCheckBox, QComboBox,
+    QMessageBox, QFileDialog, QGroupBox, QSpinBox, QDoubleSpinBox, QWidget
+)
+from PySide6.QtCore import Qt
 
 # --- Versión del script de análisis ---
 __version__ = "7.1 (Con Espectrograma del Promedio)"
@@ -50,6 +55,95 @@ def _resample_to(x, L):
     new = np.linspace(0, 1, L)
     f = interpolate.interp1d(old, x, kind='linear', fill_value="extrapolate")
     return f(new)
+
+# ---------------------- Entry point ----------------------
+def select_directories():
+    app = QApplication.instance()
+    if not app:
+        app = QApplication(sys.argv)
+        
+    master_dir = QFileDialog.getExistingDirectory(None, "SELECCIONA CARPETA DEL LÍDER (Ej: Canal 0)")
+    if not master_dir:
+        print("Operación cancelada (Falta Líder).")
+        return None, None
+        
+    reply = QMessageBox.question(None, "Modo Multicanal", "¿Deseas seleccionar canales Slave para aplicarles la misma alineación?", QMessageBox.Yes | QMessageBox.No)
+    slave_dirs = []
+    
+    if reply == QMessageBox.Yes:
+        while True:
+            slave_dir = QFileDialog.getExistingDirectory(None, "SELECCIONA CARPETA SLAVE (Ej: Canal 1 o 2). CANCELAR para terminar.")
+            if not slave_dir:
+                break
+            slave_dirs.append(slave_dir)
+            
+    return master_dir, slave_dirs
+
+def main():
+    app = QApplication.instance()
+    if not app:
+        app = QApplication(sys.argv)
+        
+    master_dir, slave_dirs = select_directories()
+    if not master_dir: return
+    
+    dialog = ProcessingOptionsDialog()
+    if dialog.exec() == QDialog.Accepted:
+        opts = dialog.result
+        if not opts: return
+    else:
+        return
+
+    # --- 1. PROCESAR MASTER ---
+    print(f"\n======================================")
+    print(f" PROCESANDO LÍDER: {os.path.basename(master_dir)}")
+    print(f"======================================")
+    
+    resultados_master = procesar_wavs_promedio(
+        carpeta=master_dir,
+        output_root=master_dir,
+        **opts
+    )
+    
+    if not resultados_master:
+        print("El procesamiento Líder falló o no devolvió resultados.")
+        return
+
+    # Extraer los shifts e índices válidos del Líder
+    master_shifts = {}
+    master_valid_indices = {}
+    for filename, data in resultados_master.items():
+        master_shifts[filename] = data['shifts']
+        master_valid_indices[filename] = data.get('valid_indices')
+
+    # --- 2. PROCESAR SLAVES (usando los shifts e índices del master) ---
+    resultados_canales = {'canal_0': resultados_master}
+    
+    for i, s_dir in enumerate(slave_dirs):
+        ch_name = f'canal_{i+1}'
+        print(f"\n======================================")
+        print(f" PROCESANDO SLAVE {i+1}: {os.path.basename(s_dir)}")
+        print(f"======================================")
+        
+        res_slave = procesar_wavs_promedio(
+            carpeta=s_dir,
+            output_root=s_dir,
+            dict_shifts_externos=master_shifts,
+            indices_validos_externos=master_valid_indices,
+            **opts
+        )
+        resultados_canales[ch_name] = res_slave
+        
+    # --- 3. OVERLAY FINAL ---
+    if slave_dirs:
+        print("\nGenerando Overlay de músculos sincronizados...")
+        # Obtenemos la carpeta padre de Master para guardar el overlay general
+        parent_meas_dir = os.path.dirname(master_dir)
+        meas_name = os.path.basename(parent_meas_dir)
+        _plot_muscle_overlay(meas_name, resultados_canales, parent_meas_dir)
+
+if __name__ == "__main__":
+    main()
 
 # ---------------------- ALINEACIÓN ESTRATEGIA "LÍDER" -------------------
 def _alinear_por_lider_calculo(segmentos_rs, samplerate):
@@ -788,250 +882,156 @@ def procesar_wavs_promedio(
 
     return resultados
 
-# ---------------------- GUI Classes ----------------------
-class ProcessingOptionsDialog(tk.Toplevel):
-    def __init__(self, root):
-        self.root = root
-        super().__init__(root)
-        self.title("Opciones de Procesamiento")
-        self.geometry("450x500")
-        self.transient(root)
-        self.grab_set()
-
-        self.mediciones_a_procesar = []
-        self.canales_seleccionados = {}
-
-        main_frame = tk.Frame(self, padx=15, pady=15)
-        main_frame.pack(fill="both", expand=True)
-
-        channels_frame = tk.LabelFrame(main_frame, text="2. Seleccionar Canales", padx=10, pady=10)
-        channels_frame.pack(fill="both", expand=True, pady=(0, 15))
-
-        self.channel_list_frame = tk.Frame(channels_frame)
-        self.channel_list_frame.pack(fill="both", expand=True)
-
-        opts_frame = tk.LabelFrame(main_frame, text="Opciones", padx=10, pady=5)
-        opts_frame.pack(fill="x", pady=(0, 15))
+# ---------------------- GUI Classes (PySide6) ----------------------
+class ProcessingOptionsDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Configuración de Análisis")
+        self.resize(500, 600)
+        self.setStyleSheet("background-color: #050505; color: #00ffcc; font-family: 'Courier New', monospace;")
         
-        self.var_mostrar_recortes = tk.BooleanVar(value=True)
-        self.var_mostrar_espectrograma = tk.BooleanVar(value=False) # Nueva variable
-        self.var_excluded_windows = tk.StringVar(value="")
-        self.var_lowpass_cutoff = tk.StringVar(value="1000")
-        self.var_highpass_cutoff = tk.StringVar(value="20")
-        self.var_notch_filter = tk.BooleanVar(value=True)
-        self.var_interactive_analysis = tk.BooleanVar(value=True)
-
-        tk.Checkbutton(opts_frame, text="Generar gráfico recortes", variable=self.var_mostrar_recortes).pack(anchor="w")
-        tk.Checkbutton(opts_frame, text="Generar espectrograma", variable=self.var_mostrar_espectrograma).pack(anchor="w") # Nueva casilla
-        tk.Checkbutton(opts_frame, text="Filtro Notch 50Hz", variable=self.var_notch_filter).pack(anchor="w")
-        tk.Checkbutton(opts_frame, text="Modo Interactivo (Curación)", variable=self.var_interactive_analysis).pack(anchor="w")
-
-        exclude_frame = tk.Frame(opts_frame)
-        exclude_frame.pack(fill='x', pady=5)
-        tk.Label(exclude_frame, text="Excluir ventanas:").pack(side="left")
-        tk.Entry(exclude_frame, textvariable=self.var_excluded_windows).pack(side="left", fill="x", expand=True)
-
-        filt_frame = tk.Frame(opts_frame)
-        filt_frame.pack(fill='x', pady=5)
-        tk.Label(filt_frame, text="Pasa-Altos (Hz):").pack(side="left")
-        tk.Entry(filt_frame, textvariable=self.var_highpass_cutoff, width=5).pack(side="left", padx=(0, 10))
-        tk.Label(filt_frame, text="Pasa-Bajos (Hz):").pack(side="left")
-        tk.Entry(filt_frame, textvariable=self.var_lowpass_cutoff, width=5).pack(side="left")
-
-        tk.Button(main_frame, text="PROCESAR", command=self.procesar, bg="#007BFF", fg="white").pack(fill="x", pady=10)
-
-    def populate_channels(self, base_dir, mediciones):
-        self.mediciones_a_procesar = mediciones
-        self.BASE_DIR = base_dir
-        for nombre in self.mediciones_a_procesar:
-            path = os.path.join(self.BASE_DIR, nombre)
-            try:
-                canales = sorted([x for x in os.listdir(path) if x.startswith("canal_")])
-                if channels_frame := tk.LabelFrame(self.channel_list_frame, text=nombre):
-                    channels_frame.pack(fill="x")
-                    for c in canales:
-                        var = tk.BooleanVar(value=True)
-                        self.canales_seleccionados[os.path.join(nombre, c)] = var
-                        tk.Checkbutton(channels_frame, text=c, variable=var).pack(anchor="w")
-            except: pass
-
-    def procesar(self):
-        canales = [k for k,v in self.canales_seleccionados.items() if v.get()]
-        if not canales: return
+        self.result = None
         
+        main_layout = QVBoxLayout(self)
+        
+        form_group = QGroupBox("Parámetros")
+        form_group.setStyleSheet("QGroupBox { border: 1px solid #00ffcc; border-radius: 5px; margin-top: 10px; } QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 3px 0 3px; }")
+        
+        self.form_layout = QFormLayout(form_group)
+        self.entries = {}
+        
+        self._add_entry("BPM (Metrónomo):", "50", "bpm")
+        self._add_entry("Frec. Mínima (Hz):", "0", "frecuenciaminima")
+        self._add_entry("Frec. Máxima (Hz):", "1000", "frecuenciamaxima")
+        self._add_entry("Tiempo Inicial (s):", "0", "tiempoinicial")
+        self._add_entry("Tiempo Final (s):", "25", "tiempofinal")
+        self._add_entry("Longitud Resample (pts):", "", "resample_len", hint="Opcional. Ej: 1000")
+        
+        self._add_entry("Ventana Ruido (s):", "2.0", "noise_seconds", hint="Ej: 2.0")
+        self._add_entry("Factor Umbral (x sigma):", "6.0", "factor_umbral", hint="Ej: 6.0")
+
+        self.chk_apply_envelope = QCheckBox("Aplicar Envolvente (Hilbert)")
+        self.chk_apply_envelope.setChecked(True)
+        self.form_layout.addRow(self.chk_apply_envelope)
+        
+        self._add_entry("Suavizado Env (ms):", "50", "smooth_ms", hint="0 para desactivar")
+        
+        self.chk_apply_notch = QCheckBox("Aplicar Filtro Notch (50Hz)")
+        self.chk_apply_notch.setChecked(False)
+        self.form_layout.addRow(self.chk_apply_notch)
+        
+        self._add_entry("Filtro Low-pass (Hz):", "", "lowpass_cutoff_hz", hint="Vacío para no usar")
+        self._add_entry("Filtro High-pass (Hz):", "", "highpass_cutoff_hz", hint="Vacío para no usar")
+
+        # Visualizaciones
+        self.chk_indiv = QCheckBox("Mostrar Recortes Individuales en Promedio")
+        self.chk_indiv.setChecked(True)
+        self.form_layout.addRow(self.chk_indiv)
+
+        self.chk_recortes = QCheckBox("Generar PNG de Recortes (Interactivo)")
+        self.chk_recortes.setChecked(True)
+        self.form_layout.addRow(self.chk_recortes)
+        
+        self.chk_spec = QCheckBox("Generar Espectrograma del Promedio")
+        self.chk_spec.setChecked(True)
+        self.form_layout.addRow(self.chk_spec)
+
+        self.chk_table = QCheckBox("Generar Comparativa Final (Overlay/Amplitud)")
+        self.chk_table.setChecked(True)
+        self.form_layout.addRow(self.chk_table)
+        
+        self.chk_rand_color = QCheckBox("Usar Colores Aleatorios")
+        self.chk_rand_color.setChecked(False)
+        self.form_layout.addRow(self.chk_rand_color)
+        
+        self._add_entry("Color Fijo (si no aleatorio):", "blue", "color_fijo")
+
+        main_layout.addWidget(form_group)
+        
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        
+        self.btn_run = QPushButton("Ejecutar")
+        self.btn_run.setStyleSheet("QPushButton { background-color: #00ffcc; color: #000; font-weight: bold; padding: 10px 20px; border-radius: 3px; }")
+        self.btn_run.clicked.connect(self.on_ok)
+        btn_layout.addWidget(self.btn_run)
+        
+        main_layout.addLayout(btn_layout)
+
+    def _add_entry(self, label_text, default_val, key, hint=None):
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        entry = QLineEdit(default_val)
+        entry.setStyleSheet("background-color: #111; color: #fff; border: 1px solid #444;")
+        layout.addWidget(entry)
+        
+        if hint:
+            lbl_hint = QLabel(hint)
+            lbl_hint.setStyleSheet("color: #888; font-size: 10px;")
+            layout.addWidget(lbl_hint)
+            
+        self.form_layout.addRow(label_text, widget)
+        self.entries[key] = entry
+
+    def on_ok(self):
         try:
-            lp_freq = float(self.var_lowpass_cutoff.get())
-            hp_freq = float(self.var_highpass_cutoff.get())
-            excl_list = [int(x) for x in self.var_excluded_windows.get().split(',') if x.strip()]
-        except: return
-
-        apply_notch = self.var_notch_filter.get()
-        interactive = self.var_interactive_analysis.get()
-
-        self.destroy()
-        self.root.destroy()
-
-        # Agrupar por medición para manejar Master-Slave
-        chans_by_meas = {}
-        for rel_path in canales:
-            med_name, chan_name = os.path.split(rel_path)
-            if med_name not in chans_by_meas: chans_by_meas[med_name] = []
-            chans_by_meas[med_name].append(chan_name)
-
-        results_global = {}
-
-        for med_name, chan_list in chans_by_meas.items():
-            chan_list.sort() 
-            master_shifts = None 
-            master_valid_indices = None # NUEVO: indices que el master aceptó
-            
-            if med_name not in results_global: results_global[med_name] = {}
-
-            for i, chan_name in enumerate(chan_list):
-                full_path = os.path.join(self.BASE_DIR, med_name, chan_name)
-                print(f"\n--- Procesando: {med_name}/{chan_name} ---")
+            self.result = {
+                "bpm": float(self.entries["bpm"].text()),
+                "frecuenciaminima": float(self.entries["frecuenciaminima"].text()),
+                "frecuenciamaxima": float(self.entries["frecuenciamaxima"].text()),
+                "tiempoinicial": float(self.entries["tiempoinicial"].text()),
+                "tiempofinal": float(self.entries["tiempofinal"].text()),
                 
-                bpm, pulsos, noise_sec = 50, None, 2.0
-                excl_meta = []
-                meta_path = os.path.join(full_path, 'metadata.json')
-                try:
-                    with open(meta_path) as f:
-                        d = json.load(f)
-                        bpm = d.get('bpm', 50)
-                        pulsos = d.get('pulse_count', None)
-                        noise_sec = d.get('noise_seconds', 2.0)
-                        excl_meta = d.get('excluded_windows', [])
-                except: pass
-
-                final_excl = sorted(list(set(excl_list + excl_meta)))
-
-                # Modo Interactivo (solo Master)
-                if interactive and i == 0:
-                    res_inicial = procesar_wavs_promedio(
-                        full_path, output_root=full_path, nombre_salida="dummy.png",
-                        bpm=bpm, n_pulsos_manual=pulsos, noise_seconds=noise_sec, excluded_windows=final_excl,
-                        show_interactive_plot=True, apply_notch_filter=apply_notch, 
-                        lowpass_cutoff_hz=lp_freq, highpass_cutoff_hz=hp_freq
-                    )
-                    
-                    interactive_excl = final_excl
-                    if res_inicial:
-                        for fname, res in res_inicial.items():
-                            if 'interactive_excluded_windows' in res:
-                                interactive_excl = res['interactive_excluded_windows']
-                                break
-                                
-                    self.root.deiconify()
-                    self.root.update()
-                    user_in = simpledialog.askstring("Curación", f"Excluir ventanas para {chan_name}\n(Se han registrado tus selecciones interactivas)\nPuedes editar la lista completa separada por comas:", initialvalue=str(interactive_excl).strip("[]"), parent=self.root)
-                    self.root.withdraw()
-                    
-                    if user_in is not None and user_in.strip():
-                        try:
-                            new_excl = [int(x) for x in user_in.split(',')]
-                            final_excl = sorted(list(set(new_excl)))
-                        except: pass
-                    elif user_in is not None and not user_in.strip():
-                        final_excl = []
-                    else:
-                        final_excl = interactive_excl
-                        
-                    # Guardado seguro
-                    try:
-                        md = {}
-                        if os.path.exists(meta_path):
-                            with open(meta_path, 'r', encoding='utf-8') as f: md = json.load(f)
-                        md['excluded_windows'] = final_excl
-                        with open(meta_path, 'w', encoding='utf-8') as f: json.dump(md, f, indent=4)
-                    except: pass
+                "resample_len": int(self.entries["resample_len"].text()) if self.entries["resample_len"].text() else None,
+                "noise_seconds": float(self.entries["noise_seconds"].text()),
+                "factor_umbral": float(self.entries["factor_umbral"].text()),
+                "smooth_ms": float(self.entries["smooth_ms"].text()),
                 
-                # Input para Slave
-                shifts_input = master_shifts if i > 0 else None
-                valid_indices_input = master_valid_indices if i > 0 else None
+                "lowpass_cutoff_hz": float(self.entries["lowpass_cutoff_hz"].text()) if self.entries["lowpass_cutoff_hz"].text() else None,
+                "highpass_cutoff_hz": float(self.entries["highpass_cutoff_hz"].text()) if self.entries["highpass_cutoff_hz"].text() else None,
+
+                "apply_envelope": self.chk_apply_envelope.isChecked(),
+                "apply_notch_filter": self.chk_apply_notch.isChecked(),
                 
-                # Análisis Final
-                res_dict = procesar_wavs_promedio(
-                    full_path, output_root=full_path, nombre_salida="analisis_final.png",
-                    bpm=bpm, n_pulsos_manual=pulsos, noise_seconds=noise_sec, excluded_windows=final_excl,
-                    show_interactive_plot=False, apply_notch_filter=apply_notch, 
-                    lowpass_cutoff_hz=lp_freq, highpass_cutoff_hz=hp_freq,
-                    mostrar_recortes=self.var_mostrar_recortes.get(),
-                    mostrar_espectrograma=self.var_mostrar_espectrograma.get(), # Pasa el estado del checkbox
-                    dict_shifts_externos=shifts_input,
-                    indices_validos_externos=valid_indices_input # Pasamos indices al Slave
-                )
-                
-                # Guardar info del Master
-                if i == 0:
-                    master_shifts = {}
-                    master_valid_indices = {}
-                    for fname, data in res_dict.items():
-                        if 'shifts' in data: master_shifts[fname] = data['shifts']
-                        if 'valid_indices' in data: master_valid_indices[fname] = data['valid_indices']
-                    print(f"-> Canal Maestro ({chan_name}) definió {len(master_shifts)} archivos para sincronizar.")
+                "mostrar_individuales": self.chk_indiv.isChecked(),
+                "mostrar_recortes": self.chk_recortes.isChecked(),
+                "mostrar_espectrograma": self.chk_spec.isChecked(),
+                "mostrar_tabla": self.chk_table.isChecked(),
+                "colores_aleatorios": self.chk_rand_color.isChecked(),
+                "colorgrafico": self.entries["color_fijo"].text(),
+            }
+            self.accept()
+        except ValueError as e:
+            QMessageBox.critical(self, "Error de Validación", f"Por favor verifica los valores numéricos.\n{e}")
 
-                results_global[med_name][chan_name] = res_dict
-
-                if interactive and i==0:
-                    try: subprocess.run(["start", os.path.join(full_path, "pulses_centrados.png")], shell=True)
-                    except: pass
-
-        # --- APLICAR RECENTRADO POST-PROCESO (NUEVO EN V7.0) ---
-        print("\n--- Aplicando Centrado Global basado en Músculo 1 ---")
-        for med_name, chans_data in results_global.items():
-            if 'canal_0' not in chans_data: continue # Necesitamos el Master
-            
-            # Iterar sobre cada archivo wav común
-            archivos_wav = list(chans_data['canal_0'].keys())
-            
-            for fname in archivos_wav:
-                # 1. Obtener datos del master
-                master_pulse = chans_data['canal_0'][fname]['mean_pulse']
-                center_idx = len(master_pulse) // 2
-                peak_idx = np.argmax(master_pulse)
-                
-                # 2. Calcular shift necesario
-                shift_centering = center_idx - peak_idx
-                
-                # 3. Aplicar a TODOS los canales de esta medición
-                for ch in chans_data:
-                    if fname in chans_data[ch]:
-                        y_old = chans_data[ch][fname]['mean_pulse']
-                        # Shift circular (np.roll) es seguro aquí porque los bordes son ruido bajo
-                        y_new = np.roll(y_old, shift_centering)
-                        chans_data[ch][fname]['mean_pulse'] = y_new
-
-        print("\n--- Generando Patrones Musculares ---")
-        for med_name, chans_data in results_global.items():
-            meas_dir = os.path.join(self.BASE_DIR, med_name)
-            _plot_muscle_overlay(med_name, chans_data, meas_dir)
-
-        print("\n=== PROCESAMIENTO FINALIZADO ===")
-        
-        # --- NUEVO: Cerrar completamente la aplicación al finalizar ---
-        self.root.destroy()
-
-class ComparativeOptionsDialog(tk.Toplevel):
-    def __init__(self, root):
-        self.root = root
-        super().__init__(root)
-        self.title("Comparación")
-        self.geometry("400x300")
+class ComparativeOptionsDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Comparación")
+        self.resize(400, 300)
         
         self.mediciones = []
         self.BASE_DIR = ""
         
-        self.var_canal = tk.StringVar()
-        tk.Label(self, text="Canal común:").pack(pady=5)
-        self.menu = tk.OptionMenu(self, self.var_canal, "")
-        self.menu.pack()
+        layout = QVBoxLayout(self)
         
-        self.var_ov = tk.BooleanVar(value=True)
-        self.var_amp = tk.BooleanVar(value=True)
-        tk.Checkbutton(self, text="Overlay", variable=self.var_ov).pack()
-        tk.Checkbutton(self, text="Amplitud Max", variable=self.var_amp).pack()
+        self.combo_canal = QComboBox()
+        layout.addWidget(QLabel("Canal común:"))
+        layout.addWidget(self.combo_canal)
         
-        tk.Button(self, text="LANZAR", command=self.lanzar, bg="green", fg="white").pack(pady=20)
+        self.chk_ov = QCheckBox("Overlay")
+        self.chk_ov.setChecked(True)
+        layout.addWidget(self.chk_ov)
+        
+        self.chk_amp = QCheckBox("Amplitud Max")
+        self.chk_amp.setChecked(True)
+        layout.addWidget(self.chk_amp)
+        
+        btn = QPushButton("LANZAR")
+        btn.clicked.connect(self.lanzar)
+        layout.addWidget(btn)
 
     def populate_common_channels(self, base_dir, mediciones):
         self.mediciones = mediciones
