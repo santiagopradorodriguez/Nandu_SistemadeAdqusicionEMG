@@ -68,7 +68,12 @@ class ProcessingTab(QWidget):
 
         # Suavizado Envolvente
         row_smooth = QHBoxLayout()
-        row_smooth.addWidget(QLabel("Suavizado Envolvente (ms):"))
+        row_smooth.addWidget(QLabel("Envolvente:"))
+        self.cmb_tipo_env = QComboBox()
+        self.cmb_tipo_env.addItems(["media_movil", "rms", "ninguna"])
+        row_smooth.addWidget(self.cmb_tipo_env)
+        
+        row_smooth.addWidget(QLabel("Suavizado (ms):"))
         self.inp_smooth = QLineEdit("50")
         row_smooth.addWidget(self.inp_smooth)
         l_ind.addLayout(row_smooth)
@@ -263,9 +268,12 @@ class AnalysisPanel(QWidget):
 
         try: ev_end = float(self.tab_procesamiento.inp_evol_end.text())
         except ValueError: ev_end = 1000.0
+        
+        tipo_env = self.tab_procesamiento.cmb_tipo_env.currentText()
 
         return {
             'smooth_ms': smooth,
+            'tipo_envolvente': tipo_env,
             'apply_notch_filter': self.tab_procesamiento.chk_notch.isChecked(),
             'highpass_cutoff_hz': hp,
             'lowpass_cutoff_hz': lp,
