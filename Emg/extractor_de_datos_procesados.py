@@ -53,21 +53,25 @@ class ExtractorThread(QThread):
         self.destino_dir = destino_dir
         self.clean_dest = clean_dest
 
+    def log(self, msg):
+        print(msg)
+        self.log_signal.emit(msg)
+
     def run(self):
         try:
-            self.log_signal.emit("--- Iniciando Extractor de Datos Procesados v1.3 ---")
+            self.log("--- Iniciando Extractor de Datos Procesados v1.3 ---")
             
             if not os.path.isdir(self.fuente_dir):
-                self.log_signal.emit(f"ERROR: El directorio fuente '{self.fuente_dir}' no existe.")
+                self.log(f"ERROR: El directorio fuente '{self.fuente_dir}' no existe.")
                 self.finished_signal.emit(False, "Error: Directorio fuente no existe.")
                 return
 
             if self.clean_dest and os.path.isdir(self.destino_dir):
                 try:
                     shutil.rmtree(self.destino_dir)
-                    self.log_signal.emit(f"Directorio '{self.destino_dir}' limpiado.")
+                    self.log(f"Directorio '{self.destino_dir}' limpiado.")
                 except Exception as e:
-                    self.log_signal.emit(f"ERROR: No se pudo limpiar el directorio de destino. {e}")
+                    self.log(f"ERROR: No se pudo limpiar el directorio de destino. {e}")
                     self.finished_signal.emit(False, f"Error al limpiar: {e}")
                     return
 
@@ -82,13 +86,13 @@ class ExtractorThread(QThread):
             total_mediciones = len(mediciones)
             
             if total_mediciones == 0:
-                self.log_signal.emit("No se encontraron mediciones formales.")
+                self.log("No se encontraron mediciones formales.")
                 self.finished_signal.emit(True, "No se encontraron mediciones.")
                 return
 
             for idx, nombre_medicion in enumerate(mediciones):
                 path_medicion = os.path.join(self.fuente_dir, nombre_medicion)
-                self.log_signal.emit(f"Procesando: {nombre_medicion}")
+                self.log(f"Procesando: {nombre_medicion}")
                 letra = nombre_medicion[0]
                 
                 canales = [c for c in sorted(os.listdir(path_medicion)) if os.path.isdir(os.path.join(path_medicion, c)) and c.startswith("canal_")]
@@ -127,9 +131,9 @@ class ExtractorThread(QThread):
                                         "Resistencia": resistencia_ohm,
                                         "Error_Amplitud_Medida": 0.0 
                                     })
-                                self.log_signal.emit(f"  -> Extraídos {len(segmentos)} pulsos de {nombre_canal}")
+                                self.log(f"  -> Extraídos {len(segmentos)} pulsos de {nombre_canal}")
                         except Exception as e:
-                            self.log_signal.emit(f"  -> ERROR en {path_json}: {e}")
+                            self.log(f"  -> ERROR en {path_json}: {e}")
                 
                 # Actualizar barra de progreso
                 progreso = int(((idx + 1) / total_mediciones) * 100)
@@ -141,9 +145,9 @@ class ExtractorThread(QThread):
                 column_order = ["nombre_pulso", "Amplitud_Medida", "Error_Amplitud_Medida", "Resistencia", "Ganancia (G)", "Amplitud_Real", "Error_Amplitud_Real"]
                 df_final = df_final[column_order]
                 df_final.to_csv(path_resumen_csv, index=False, float_format='%.6f')
-                self.log_signal.emit(f"\nResumen de amplitudes guardado en '{path_resumen_csv}'")
+                self.log(f"\nResumen de amplitudes guardado en '{path_resumen_csv}'")
 
-            self.log_signal.emit(f"\n--- Proceso Finalizado ---")
+            self.log(f"\n--- Proceso Finalizado ---")
             self.log_signal.emit(f"Total extraídos: {total_pulsos_extraidos} pulsos.")
             self.finished_signal.emit(True, f"Extracción completada. {total_pulsos_extraidos} pulsos.")
             

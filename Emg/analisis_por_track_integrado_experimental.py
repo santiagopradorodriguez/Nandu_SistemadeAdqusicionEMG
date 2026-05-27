@@ -1521,6 +1521,9 @@ def _procesar_un_smooth(
         stats_snr_inst = []
         stats_snr_inst_err = []
         stats_cv_snr = []
+        
+        stats_peak_vals = []
+        stats_raw_noise_vals = []
 
         # longitud (en muestras) de la ventana local de ruido (1/16 del periodo)
         noise_win_samples = max(3, int(round((periodo / 16.0) * samplerate)))
@@ -1586,33 +1589,58 @@ def _procesar_un_smooth(
                 if len(valid_noise) < 3:
                     valid_noise = abs_noise # Fallback
 
-                curr_mean = np.mean(valid_noise)
-                curr_std = np.std(valid_noise, ddof=1) if len(valid_noise) > 1 else 0.0
-                curr_err = curr_std / np.sqrt(len(valid_noise)) if len(valid_noise) > 0 else 0.0
+                curr_mean_temp = np.mean(valid_noise)
+                
+                # --- NUEVO: Filtro de outliers del 300% ---
+                if initial_noise_mean > 0 and (curr_mean_temp / initial_noise_mean) > 3.0:
+                    curr_mean = np.nan
+                    curr_std = np.nan
+                    curr_err = np.nan
+                    noise_rms_per_pulse[valid_idx] = np.nan
+                else:
+                    curr_mean = curr_mean_temp
+                    curr_std = np.std(valid_noise, ddof=1) if len(valid_noise) > 1 else 0.0
+                    curr_err = curr_std / np.sqrt(len(valid_noise)) if len(valid_noise) > 0 else 0.0
+                    noise_rms_per_pulse[valid_idx] = rms(valid_noise)
                 
                 # Normalizado (porcentaje respecto al inicial)
-                stats_noise_mean.append((curr_mean / initial_noise_mean) * 100.0)
-                stats_noise_err.append((curr_err / initial_noise_mean) * 100.0)
+                stats_noise_mean.append((curr_mean / initial_noise_mean) * 100.0 if not np.isnan(curr_mean) else np.nan)
+                stats_noise_err.append((curr_err / initial_noise_mean) * 100.0 if not np.isnan(curr_err) else np.nan)
                 
-                # Mantenemos esto por si se usa en otro lado
-                noise_rms_per_pulse[valid_idx] = rms(valid_noise)
             else:
                 stats_noise_mean.append(100.0)
                 stats_noise_err.append(0.0)
                 noise_rms_per_pulse[valid_idx] = noise_rms if noise_rms is not None else 1e-12
                 
-            # --- SNR Instantáneo y CV SNR ---
-            curr_snr_inst = peak_val / curr_mean if curr_mean > 0 else 0.0
-            stats_snr_inst.append(curr_snr_inst)
-            
-            amp_err_ventana = np.std(np.abs(raw_segment), ddof=1) / np.sqrt(len(raw_segment)) if len(raw_segment) > 1 else 0.0
-            if curr_mean > 0 and peak_val > 0:
-                curr_snr_inst_err = curr_snr_inst * np.sqrt((amp_err_ventana / peak_val)**2 + (curr_err / curr_mean)**2)
+            # --- SNR Interpulso Acumulado y CV SNR ---
+            if curr_mean > 0 and not np.isnan(curr_mean):
+                stats_peak_vals.append(peak_val)
+                stats_raw_noise_vals.append(curr_mean)
+                
+                avg_peak_accum = np.mean(stats_peak_vals)
+                avg_noise_accum = np.mean(stats_raw_noise_vals)
+                
+                curr_snr_inter_acum = avg_peak_accum / avg_noise_accum
+                
+                if len(stats_peak_vals) > 1:
+                    err_peak = np.std(stats_peak_vals, ddof=1) / np.sqrt(len(stats_peak_vals))
+                    err_noise = np.std(stats_raw_noise_vals, ddof=1) / np.sqrt(len(stats_raw_noise_vals))
+                else:
+                    err_peak = 0.0
+                    err_noise = 0.0
+                
+                if avg_peak_accum > 0 and avg_noise_accum > 0:
+                    curr_snr_inter_acum_err = curr_snr_inter_acum * np.sqrt((err_peak / avg_peak_accum)**2 + (err_noise / avg_noise_accum)**2)
+                else:
+                    curr_snr_inter_acum_err = 0.0
             else:
-                curr_snr_inst_err = 0.0
-            stats_snr_inst_err.append(curr_snr_inst_err)
+                curr_snr_inter_acum = np.nan
+                curr_snr_inter_acum_err = 0.0
+                
+            stats_snr_inst.append(curr_snr_inter_acum)
+            stats_snr_inst_err.append(curr_snr_inter_acum_err)
             
-            current_snrs_inst = stats_snr_inst[:valid_idx+1]
+            current_snrs_inst = [val for val in stats_snr_inst[:valid_idx+1] if not np.isnan(val)]
             if len(current_snrs_inst) > 1:
                 mu_snr_inst = np.mean(current_snrs_inst)
                 std_snr_inst = np.std(current_snrs_inst, ddof=1)
@@ -1630,10 +1658,13 @@ def _procesar_un_smooth(
         valid_snr = snr_per_pulse[:valid_idx]
         valid_noise = noise_rms_per_pulse[:valid_idx]
         
-        if len(valid_noise) >= 4:
-            q = max(1, len(valid_noise) // 4) # Tomar el 25% inicial y final
-            noise_start = np.mean(valid_noise[:q])
-            noise_end = np.mean(valid_noise[-q:])
+        # Filtrar nans
+        valid_noise_clean = valid_noise[~np.isnan(valid_noise)]
+        
+        if len(valid_noise_clean) >= 4:
+            q = max(1, len(valid_noise_clean) // 4) # Tomar el 25% inicial y final
+            noise_start = np.mean(valid_noise_clean[:q])
+            noise_end = np.mean(valid_noise_clean[-q:])
             noise_drift_pct = ((noise_end / noise_start) - 1.0) * 100.0 if noise_start > 0 else 0.0
 
             snr_start = np.mean(valid_snr[:q])
@@ -1926,11 +1957,14 @@ def _plot_evolucion_temporal_experimental(dict_resultados, filename, out_path, t
         ax2.plot(t_plot, noise_mean_plot, marker='x', linestyle='--', color=colors.get(smooth, 'black'), label=f"Ruido {smooth}ms", linewidth=2, alpha=0.7)
         ax2.fill_between(t_plot, noise_mean_plot - noise_err_plot, noise_mean_plot + noise_err_plot, color=colors.get(smooth, 'black'), alpha=0.15)
         
+        # Filtrar NaN antes de calcular la media y desviación estándar globales
         if len(noise_mean_plot) > 0:
-            overall_mean = np.mean(noise_mean_plot)
-            overall_std = np.std(noise_mean_plot)
-            ax2.axhline(overall_mean, color=colors.get(smooth, 'black'), linestyle=':', linewidth=1.5, alpha=0.8, label=f"Media {smooth}ms ({overall_mean:.1f}%)")
-            ax2.fill_between(t_plot, overall_mean - overall_std, overall_mean + overall_std, color=colors.get(smooth, 'black'), alpha=0.05)
+            noise_mean_valid = noise_mean_plot[~np.isnan(noise_mean_plot)]
+            if len(noise_mean_valid) > 0:
+                overall_mean = np.mean(noise_mean_valid)
+                overall_std = np.std(noise_mean_valid)
+                ax2.axhline(overall_mean, color=colors.get(smooth, 'black'), linestyle=':', linewidth=1.5, alpha=0.8, label=f"Media {smooth}ms ({overall_mean:.1f}%)")
+                ax2.fill_between(t_plot, overall_mean - overall_std, overall_mean + overall_std, color=colors.get(smooth, 'black'), alpha=0.05)
             
         if 'stats_cv_snr' in res:
             cv_snr_plot = np.array(res['stats_cv_snr'])[mask]

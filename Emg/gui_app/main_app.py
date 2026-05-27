@@ -94,6 +94,9 @@ class ReaperStyleHub(QMainWindow):
         self.log_console.ensureCursorVisible()
 
     def _launch_external(self, script_name):
+        import subprocess
+        import os
+        
         root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         script_path = os.path.join(root_dir, script_name)
         
@@ -102,64 +105,10 @@ class ReaperStyleHub(QMainWindow):
             return
             
         try:
-            if root_dir not in sys.path:
-                sys.path.insert(0, root_dir)
-                
-            if script_name == "editor_mediciones.py":
-                from editor_mediciones import MeasurementEditorDialog
-                dlg = MeasurementEditorDialog(self)
-                dlg.exec()
-            elif script_name == "extractor_de_datos_procesados.py":
-                from extractor_de_datos_procesados import ExtractorDialog
-                dlg = ExtractorDialog(self)
-                dlg.exec()
-            elif script_name == "plotter_calibrado.py":
-                from plotter_calibrado import PlotterConfigDialog, plotear_medicion_secuencial
-                dlg = PlotterConfigDialog(self)
-                if dlg.exec() == QDialog.Accepted:
-                    mediciones = dlg.seleccionadas
-                    config = dlg.resultado
-                    if mediciones and config:
-                        total = len(mediciones)
-                        for i, m in enumerate(mediciones):
-                            print(f"[{i+1}/{total}] Cargando datos de {m}...")
-                            plotear_medicion_secuencial(m, config)
-                        QMessageBox.information(self, "Éxito", "Secuencia de ploteo finalizada.")
-            elif script_name == "correlaciondeseñales.py":
-                from correlaciondeseñales import ProcessingOptionsDialog, select_directories, procesar_wavs_promedio, _plot_muscle_overlay
-                
-                master_dir, slave_dirs = select_directories()
-                if not master_dir: return
-                
-                dlg = ProcessingOptionsDialog(self)
-                if dlg.exec() == QDialog.Accepted:
-                    opts = dlg.result
-                    if not opts: return
-                    
-                    QMessageBox.information(self, "Procesando", "La aplicación podría congelarse durante el análisis masivo.\nMira la consola para ver el progreso.")
-                    
-                    resultados_master = procesar_wavs_promedio(carpeta=master_dir, output_root=master_dir, **opts)
-                    if not resultados_master: return
-                    master_shifts = {f: d['shifts'] for f, d in resultados_master.items()}
-                    master_valid_indices = {f: d.get('valid_indices') for f, d in resultados_master.items()}
-                    
-                    resultados_canales = {'canal_0': resultados_master}
-                    for i, s_dir in enumerate(slave_dirs):
-                        ch_name = f'canal_{i+1}'
-                        res_slave = procesar_wavs_promedio(carpeta=s_dir, output_root=s_dir, dict_shifts_externos=master_shifts, indices_validos_externos=master_valid_indices, **opts)
-                        resultados_canales[ch_name] = res_slave
-                        
-                    if slave_dirs:
-                        parent_meas_dir = os.path.dirname(master_dir)
-                        meas_name = os.path.basename(parent_meas_dir)
-                        _plot_muscle_overlay(meas_name, resultados_canales, parent_meas_dir)
-                    QMessageBox.information(self, "Éxito", "Procesamiento de correlación finalizado con éxito.")
+            if sys.platform == "win32":
+                subprocess.Popen([sys.executable, script_path], creationflags=subprocess.CREATE_NEW_CONSOLE)
             else:
-                import subprocess
-                if sys.platform == "win32":
-                    subprocess.Popen([sys.executable, script_path], creationflags=0x08000000)
-                else:
-                    subprocess.Popen([sys.executable, script_path])
+                subprocess.Popen([sys.executable, script_path])
         except Exception as e:
             QMessageBox.critical(self, "Error Crítico", f"Error al abrir {script_name}:\n{e}")
 
@@ -551,15 +500,26 @@ else:
         from PySide6.QtGui import QPixmap
         from PySide6.QtCore import Qt
         
-        self.comparative_process = QProcess(self)
-        env = QProcessEnvironment.systemEnvironment()
-        env.insert("PYTHONIOENCODING", "utf-8")
-        self.comparative_process.setProcessEnvironment(env)
+        from PySide6.QtCore import QThread, Signal
+        from PySide6.QtGui import QPixmap
+        from PySide6.QtCore import Qt
         
-        def on_comparative_finished(exit_code, exit_status):
+        class ComparativeRunner(QThread):
+            finished_signal = Signal(object)
+            def __init__(self, spath):
+                super().__init__()
+                self.spath = spath
+            def run(self):
+                import subprocess
+                p = subprocess.run([sys.executable, self.spath], creationflags=subprocess.CREATE_NEW_CONSOLE)
+                self.finished_signal.emit(p.returncode)
+                
+        self.comparative_thread = ComparativeRunner(script_path)
+        
+        def on_comparative_finished(exit_code):
             self.analysis_panel.tab_comparativo.btn_run_comparativo.setText("LANZAR ANÁLISIS COMPARATIVO")
             self.analysis_panel.tab_comparativo.btn_run_comparativo.setEnabled(True)
-            self.log_console.append(f"> Análisis comparativo finalizado (código {exit_code}).")
+            self.log_console.append(f"> Análisis comparativo finalizado en terminal nativa.")
             
             # Intentar cargar resultado_promedio_overlay.png
             out_dir = os.path.join(emg_root, "analisis_comparativos", "estadisticas_globales")
@@ -571,10 +531,10 @@ else:
             else:
                 self.img_viewer.setText("[Proceso Comparativo Finalizado: No se encontraron gráficos de overlay]")
                 
-        self.comparative_process.finished.connect(on_comparative_finished)
-        self.comparative_process.start(sys.executable, [script_path])
+        self.comparative_thread.finished_signal.connect(on_comparative_finished)
+        self.comparative_thread.start()
         
-        self.log_console.append(f"> Tarea enviada exitosamente al Procesador Aislado (Tkinter).")
+        self.log_console.append(f"> Tarea enviada exitosamente. Abriendo terminal CMD nativa...")
 
     def _sync_electrode_viewer(self):
         """Sincroniza el visor de electrodos con las mediciones seleccionadas en el gestor."""
@@ -667,6 +627,7 @@ dialog.var_mostrar_evolucion.set({kwargs['mostrar_evolucion']})
 dialog.var_evol_t_start.set("{kwargs['evol_t_start']}")
 dialog.var_evol_t_end.set("{kwargs['evol_t_end']}")
 dialog.var_smooth_ms.set("{kwargs['smooth_ms']}")
+dialog.var_tipo_env.set("{kwargs.get('tipo_envolvente', 'media_movil')}")
 dialog.var_highpass_cutoff.set("{kwargs['highpass_cutoff_hz']}")
 dialog.var_lowpass_cutoff.set("{kwargs['lowpass_cutoff_hz']}")
 
@@ -682,20 +643,28 @@ dialog.procesar(interactivo={interactivo})
         with open(script_path, "w", encoding="utf-8") as f:
             f.write(bridge_script)
             
-        # Ejecutar con QProcess para poder interceptar el cierre de la ventana y actualizar el visor
-        from PySide6.QtCore import QProcess, QProcessEnvironment
+        from PySide6.QtCore import QThread, Signal
         from PySide6.QtGui import QPixmap
         from PySide6.QtCore import Qt
         
-        self.procesador_process = QProcess(self)
-        env = QProcessEnvironment.systemEnvironment()
-        env.insert("PYTHONIOENCODING", "utf-8")
-        self.procesador_process.setProcessEnvironment(env)
+        class ProcessRunner(QThread):
+            finished_signal = Signal(object)
+            def __init__(self, spath):
+                super().__init__()
+                self.spath = spath
+                
+            def run(self):
+                import subprocess
+                # Run in new console!
+                p = subprocess.run([sys.executable, self.spath], creationflags=subprocess.CREATE_NEW_CONSOLE)
+                self.finished_signal.emit(p.returncode)
+                
+        self.procesador_thread = ProcessRunner(script_path)
         
-        def on_procesador_finished(exit_code, exit_status):
+        def on_procesador_finished(exit_code):
             self.analysis_panel.tab_procesamiento.btn_run_procesar.setText("🧠 PROCESAR Y CURAR INDIVIDUALES")
             self.analysis_panel.tab_procesamiento.btn_run_procesar.setEnabled(True)
-            self.log_console.append(f"> Tarea de curación finalizada.")
+            self.log_console.append(f"> Tarea de curación finalizada en terminal nativa.")
             
             # Intentar cargar pulses.png de la primera medición seleccionada
             img_path = os.path.join(rutas[0], canales_elegidos[0], "pulses.png")
@@ -704,14 +673,15 @@ dialog.procesar(interactivo={interactivo})
                 
             if os.path.exists(img_path):
                 pix = QPixmap(img_path)
+                pix = pix.scaled(self.img_viewer.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
                 self.img_viewer.setPixmap(pix)
             else:
                 self.img_viewer.setText("[Proceso Completado: Sin Imágenes Encontradas (pulses.png)]")
                 
-        self.procesador_process.finished.connect(on_procesador_finished)
-        self.procesador_process.start(sys.executable, [script_path])
+        self.procesador_thread.finished_signal.connect(on_procesador_finished)
+        self.procesador_thread.start()
         
-        self.log_console.append(f"> Tarea enviada exitosamente al Procesador Aislado (Tkinter).")
+        self.log_console.append(f"> Tarea enviada exitosamente. Abriendo terminal CMD nativa...")
 
     def _on_analysis_result(self, result):
         if isinstance(result, list) and len(result) > 0:

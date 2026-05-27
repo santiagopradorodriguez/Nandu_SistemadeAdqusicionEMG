@@ -66,25 +66,37 @@ def _read_wav_mono(filepath):
     return np.asarray(signal, dtype=float), sr
 
 
-def _compute_env_full(signal_abs, apply_envelope, smooth_ms, samplerate):
+def _compute_env_full(signal_abs, apply_envelope, smooth_ms, samplerate, tipo_env="media_movil"):
+    if tipo_env == "rms" and smooth_ms is not None and smooth_ms > 0:
+        win_len = int(max(1, round(smooth_ms * samplerate / 1000.0)))
+        if win_len > 1:
+            sig_sq = signal_abs ** 2
+            window = np.ones(win_len, dtype=float) / float(win_len)
+            rms = np.sqrt(np.convolve(sig_sq, window, mode='same'))
+            return rms
+        else:
+            return signal_abs.copy()
+
     if apply_envelope:
         try:
+            from scipy.signal import hilbert
             env_full = np.abs(hilbert(signal_abs))
         except Exception:
             env_full = signal_abs.copy()
     else:
         env_full = signal_abs.copy()
 
-    if smooth_ms is not None and smooth_ms > 0:
+    if tipo_env == "media_movil" and smooth_ms is not None and smooth_ms > 0:
         win_len = int(max(1, round(smooth_ms * samplerate / 1000.0)))
         if win_len > 1:
             window = np.ones(win_len, dtype=float) / float(win_len)
             env_full = np.convolve(env_full, window, mode='same')
+            
     return env_full
 
 
 # ---------------------- Noise estimation (initial window) -------------------
-def _estimate_noise_window(signal_recortada, samplerate, noise_seconds, smooth_ms, factor_umbral):
+def _estimate_noise_window(signal_recortada, samplerate, noise_seconds, smooth_ms, factor_umbral, tipo_env="media_movil"):
     start_sample_noise = int(round(noise_seconds * samplerate))
     if start_sample_noise <= 0:
         start_sample_noise = 0
@@ -93,13 +105,11 @@ def _estimate_noise_window(signal_recortada, samplerate, noise_seconds, smooth_m
 
     if start_sample_noise > 0:
         noise_segment = signal_recortada[:start_sample_noise]
-        env_noise = np.abs(hilbert(np.abs(noise_segment))) if len(noise_segment) > 0 else np.array([])
-        if smooth_ms is not None and smooth_ms > 0 and len(env_noise) > 1:
-            win_len_n = int(max(1, round(smooth_ms * samplerate / 1000.0)))
-            if win_len_n > 1:
-                window_n = np.ones(win_len_n, dtype=float) / float(win_len_n)
-                env_noise = np.convolve(env_noise, window_n, mode='same')
-
+        if len(noise_segment) > 0:
+            env_noise = _compute_env_full(np.abs(noise_segment), True, smooth_ms, samplerate, tipo_env)
+        else:
+            env_noise = np.array([])
+        
         if len(env_noise) >= 5:
             mad = np.median(np.abs(env_noise - np.median(env_noise)))
             sigma_est = mad * 1.4826
@@ -550,9 +560,8 @@ def _plot_evolucion_temporal(stats_time, stats_snr, stats_snr_err, stats_snr_ins
 
     # Subplot Izquierdo (Arriba): SNR
     ax0.errorbar(t_plot, snr_plot, yerr=snr_err_plot, marker='o', linestyle='-', color='b', ecolor='lightblue', capsize=3, linewidth=2, label="SNR Acumulado")
-    ax0.plot(t_plot, snr_inst_plot, marker='x', linestyle='--', color='orange', linewidth=2, label="SNR Instantáneo (t)")
-    ax0.fill_between(t_plot, snr_inst_plot - snr_inst_err_plot, snr_inst_plot + snr_inst_err_plot, color='orange', alpha=0.2, label="± Error (SNR Inst.)")
-    ax0.set_title(f"Evolución SNR Acumulado y Snr Instantaneo (t)")
+    ax0.errorbar(t_plot, snr_inst_plot, yerr=snr_inst_err_plot, marker='x', linestyle='--', color='orange', ecolor='bisque', capsize=3, linewidth=2, label="SNR Interpulso Acumulado")
+    ax0.set_title(f"Evolución SNR Acumulado y SNR Interpulso Acumulado")
     ax0.set_xlabel("t(s)")
     ax0.set_ylabel("SNR")
     ax0.legend(loc='best', fontsize=10)
@@ -564,10 +573,12 @@ def _plot_evolucion_temporal(stats_time, stats_snr, stats_snr_err, stats_snr_ins
     ax1.axhline(100.0, color='green', linestyle='--', alpha=0.7, label='Ruido Basal (100%)')
     
     if len(noise_mean_plot) > 0:
-        overall_mean = np.mean(noise_mean_plot)
-        overall_std = np.std(noise_mean_plot)
-        ax1.axhline(overall_mean, color='purple', linestyle=':', linewidth=2, label=f'Promedio Ruido Entre Pulsos  ({overall_mean:.1f}%)')
-        ax1.fill_between(t_plot, overall_mean - overall_std, overall_mean + overall_std, color='purple', alpha=0.1, label=f'± 1σ Total ({overall_std:.1f}%)')
+        noise_mean_valid = noise_mean_plot[~np.isnan(noise_mean_plot)]
+        if len(noise_mean_valid) > 0:
+            overall_mean = np.mean(noise_mean_valid)
+            overall_std = np.std(noise_mean_valid)
+            ax1.axhline(overall_mean, color='purple', linestyle=':', linewidth=2, label=f'Promedio Ruido Entre Pulsos  ({overall_mean:.1f}%)')
+            ax1.fill_between(t_plot, overall_mean - overall_std, overall_mean + overall_std, color='purple', alpha=0.1, label=f'± 1σ Total ({overall_std:.1f}%)')
 
     ax1.set_title(f"Evolución Ruido Inter-pulso Normalizado")
     ax1.set_xlabel("t(s)")
@@ -576,8 +587,8 @@ def _plot_evolucion_temporal(stats_time, stats_snr, stats_snr_err, stats_snr_ins
     ax1.grid(True, alpha=0.5)
 
     # Subplot Abajo: CV SNR
-    ax2.plot(t_plot, cv_snr_plot, marker='o', linestyle='-', color='purple', linewidth=2, label=r"$CV_{SNR} = \frac{\sigma(SNR_{inst})}{\mu(SNR_{inst})}$")
-    ax2.set_title(f"Coeficiente de Variación del SNR Instantáneo")
+    ax2.plot(t_plot, cv_snr_plot, marker='o', linestyle='-', color='purple', linewidth=2, label=r"$CV_{SNR} = \frac{\sigma(SNR_{inter})}{\mu(SNR_{inter})}$")
+    ax2.set_title(f"Coeficiente de Variación del SNR Interpulso Acumulado")
     ax2.set_xlabel("t(s)")
     ax2.set_ylabel("CV SNR")
     ax2.legend(loc='best', fontsize=10)
@@ -1212,6 +1223,7 @@ def procesar_wavs_promedio(
     fixed_umbral_abs=0.5,    # umbral fijo ABSOLUTO para comparar con el pulso promedio
     apply_envelope=True,     # calcula envolvente sobre la señal completa antes de recortar
     smooth_ms=50,             # suavizado por media móvil de la envolvente en ms (0 = sin suavizado)
+    tipo_envolvente="media_movil",
     # NUEVAS OPCIONES (ruido inicial)
     noise_seconds=2,         # primeros segundos (relativos al inicio de la señal recortada) a usar como ruido
     excluded_windows=None,   # Lista de ventanas a excluir
@@ -1365,7 +1377,7 @@ def procesar_wavs_promedio(
         signal_abs = np.abs(signal)
 
         # ---------- Envolvente calculada sobre la señal completa (antes de recortar) ----------
-        env_full = _compute_env_full(signal_abs, apply_envelope, smooth_ms, samplerate)
+        env_full = _compute_env_full(signal_abs, apply_envelope, smooth_ms, samplerate, tipo_envolvente)
 
         t = np.linspace(0, len(signal)/samplerate, len(signal), endpoint=False)
 
@@ -1398,7 +1410,7 @@ def procesar_wavs_promedio(
             continue
 
         # --- NUEVO: estimar ruido a partir de los primeros `noise_seconds` de la señal recortada ---
-        start_sample_noise, env_noise, sigma_est, umbral, noise_rms_from_noise_window = _estimate_noise_window(signal_recortada, samplerate, noise_seconds, smooth_ms, factor_umbral)
+        start_sample_noise, env_noise, sigma_est, umbral, noise_rms_from_noise_window = _estimate_noise_window(signal_recortada, samplerate, noise_seconds, smooth_ms, factor_umbral, tipo_envolvente)
         if start_sample_noise <= 0:
             start_sample_noise = 0
 
@@ -1490,6 +1502,9 @@ def procesar_wavs_promedio(
         stats_snr_inst = []
         stats_snr_inst_err = []
         stats_cv_snr = []
+        
+        stats_peak_vals = []
+        stats_raw_noise_vals = []
 
         # longitud (en muestras) de la ventana local de ruido (1/16 del periodo)
         noise_win_samples = max(3, int(round((periodo / 8.0) * samplerate)))
@@ -1538,16 +1553,24 @@ def procesar_wavs_promedio(
                 if len(valid_noise) < 3:
                     valid_noise = abs_noise # Fallback
 
-                curr_mean = np.mean(valid_noise)
-                curr_std = np.std(valid_noise, ddof=1) if len(valid_noise) > 1 else 0.0
-                curr_err = curr_std / np.sqrt(len(valid_noise)) if len(valid_noise) > 0 else 0.0
+                curr_mean_temp = np.mean(valid_noise)
+                
+                # --- NUEVO: Filtro de outliers del 300% ---
+                if initial_noise_mean > 0 and (curr_mean_temp / initial_noise_mean) > 3.0:
+                    curr_mean = np.nan
+                    curr_std = np.nan
+                    curr_err = np.nan
+                    noise_rms_per_pulse[valid_idx] = np.nan
+                else:
+                    curr_mean = curr_mean_temp
+                    curr_std = np.std(valid_noise, ddof=1) if len(valid_noise) > 1 else 0.0
+                    curr_err = curr_std / np.sqrt(len(valid_noise)) if len(valid_noise) > 0 else 0.0
+                    noise_rms_per_pulse[valid_idx] = rms(valid_noise)
                 
                 # Normalizado (porcentaje respecto al inicial)
-                stats_noise_mean.append((curr_mean / initial_noise_mean) * 100.0)
-                stats_noise_err.append((curr_err / initial_noise_mean) * 100.0)
+                stats_noise_mean.append((curr_mean / initial_noise_mean) * 100.0 if not np.isnan(curr_mean) else np.nan)
+                stats_noise_err.append((curr_err / initial_noise_mean) * 100.0 if not np.isnan(curr_err) else np.nan)
                 
-                # Mantenemos esto por si se usa en otro lado
-                noise_rms_per_pulse[valid_idx] = rms(valid_noise)
             else:
                 curr_mean = initial_noise_mean if initial_noise_mean > 0 else 1e-12
                 curr_err = initial_noise_std / np.sqrt(3) if initial_noise_std > 0 else 0.0
@@ -1564,22 +1587,36 @@ def procesar_wavs_promedio(
             curr_snr = peak_val / initial_noise_mean
             snr_per_pulse[valid_idx] = curr_snr
             
-            # --- NUEVO: SNR Instantáneo ---
-            curr_snr_inst = peak_val / curr_mean if curr_mean > 0 else 0.0
-            stats_snr_inst.append(curr_snr_inst)
-            
-            # Error de la amplitud en la ventana (error estándar de la media)
-            amp_err_ventana = np.std(np.abs(env_segment), ddof=1) / np.sqrt(len(env_segment)) if len(env_segment) > 1 else 0.0
-            
-            # Error propagado para SNR instantáneo: d(P/N) = (P/N) * sqrt((dP/P)^2 + (dN/N)^2)
-            if curr_mean > 0 and peak_val > 0:
-                curr_snr_inst_err = curr_snr_inst * np.sqrt((amp_err_ventana / peak_val)**2 + (curr_err / curr_mean)**2)
+            # --- NUEVO: SNR Interpulso Acumulado ---
+            if curr_mean > 0 and not np.isnan(curr_mean):
+                stats_peak_vals.append(peak_val)
+                stats_raw_noise_vals.append(curr_mean)
+                
+                avg_peak_accum = np.mean(stats_peak_vals)
+                avg_noise_accum = np.mean(stats_raw_noise_vals)
+                
+                curr_snr_inter_acum = avg_peak_accum / avg_noise_accum
+                
+                if len(stats_peak_vals) > 1:
+                    err_peak = np.std(stats_peak_vals, ddof=1) / np.sqrt(len(stats_peak_vals))
+                    err_noise = np.std(stats_raw_noise_vals, ddof=1) / np.sqrt(len(stats_raw_noise_vals))
+                else:
+                    err_peak = 0.0
+                    err_noise = 0.0
+                
+                if avg_peak_accum > 0 and avg_noise_accum > 0:
+                    curr_snr_inter_acum_err = curr_snr_inter_acum * np.sqrt((err_peak / avg_peak_accum)**2 + (err_noise / avg_noise_accum)**2)
+                else:
+                    curr_snr_inter_acum_err = 0.0
             else:
-                curr_snr_inst_err = 0.0
-            stats_snr_inst_err.append(curr_snr_inst_err)
+                curr_snr_inter_acum = np.nan
+                curr_snr_inter_acum_err = 0.0
+                
+            stats_snr_inst.append(curr_snr_inter_acum)
+            stats_snr_inst_err.append(curr_snr_inter_acum_err)
 
             # --- NUEVO: CV SNR ---
-            current_snrs_inst = stats_snr_inst[:valid_idx+1]
+            current_snrs_inst = [val for val in stats_snr_inst[:valid_idx+1] if not np.isnan(val)]
             if len(current_snrs_inst) > 1:
                 mu_snr_inst = np.mean(current_snrs_inst)
                 std_snr_inst = np.std(current_snrs_inst, ddof=1)
@@ -1605,10 +1642,13 @@ def procesar_wavs_promedio(
         valid_snr = snr_per_pulse[:valid_idx]
         valid_noise = noise_rms_per_pulse[:valid_idx]
         
-        if len(valid_noise) >= 4:
-            q = max(1, len(valid_noise) // 4) # Tomar el 25% inicial y final
-            noise_start = np.mean(valid_noise[:q])
-            noise_end = np.mean(valid_noise[-q:])
+        # Filtrar nans
+        valid_noise_clean = valid_noise[~np.isnan(valid_noise)]
+        
+        if len(valid_noise_clean) >= 4:
+            q = max(1, len(valid_noise_clean) // 4) # Tomar el 25% inicial y final
+            noise_start = np.mean(valid_noise_clean[:q])
+            noise_end = np.mean(valid_noise_clean[-q:])
             noise_drift_pct = ((noise_end / noise_start) - 1.0) * 100.0 if noise_start > 0 else 0.0
 
             snr_start = np.mean(valid_snr[:q])
@@ -1814,6 +1854,7 @@ class ProcessingOptionsDialog(tk.Toplevel):
         self.var_notch_filter = tk.BooleanVar(value=False) # Por defecto activado
         # --- NUEVO: Parámetro de suavizado de envolvente ---
         self.var_smooth_ms = tk.StringVar(value="50")
+        self.var_tipo_env = tk.StringVar(value="media_movil") # Puede ser "media_movil" o "rms"
         # --- NUEVO: Opción Evolución Temporal ---
         self.var_mostrar_evolucion = tk.BooleanVar(value=True)
         self.var_evol_t_start = tk.StringVar(value="10")
@@ -1842,7 +1883,11 @@ class ProcessingOptionsDialog(tk.Toplevel):
         # --- NUEVO: Campo para suavizado de envolvente ---
         smooth_frame = tk.Frame(individual_plots_frame)
         smooth_frame.pack(fill='x', pady=(5,0))
-        tk.Label(smooth_frame, text="Suavizado Envolvente (ms):").pack(side="left")
+        tk.Label(smooth_frame, text="Tipo Envolvente:").pack(side="left")
+        env_options = ["media_movil", "rms", "ninguna"]
+        tk.OptionMenu(smooth_frame, self.var_tipo_env, *env_options).pack(side="left", padx=(5,15))
+        
+        tk.Label(smooth_frame, text="Suavizado (ms):").pack(side="left")
         tk.Entry(smooth_frame, textvariable=self.var_smooth_ms, width=8).pack(side="left", padx=(5,0))
 
         # --- NUEVO: Opción para filtro pasa-altos ---
@@ -1990,6 +2035,7 @@ class ProcessingOptionsDialog(tk.Toplevel):
                     lowpass_cutoff_hz=lowpass_freq,
                     highpass_cutoff_hz=highpass_freq,
                     smooth_ms=smooth_val, # <-- NUEVO
+                    tipo_envolvente=self.var_tipo_env.get(),
                     mostrar_evolucion=False,
                     evol_t_start=evol_t_start,
                     evol_t_end=evol_t_end,
@@ -2081,6 +2127,7 @@ class ProcessingOptionsDialog(tk.Toplevel):
                     excluded_windows=final_excluded_windows, # Usar la lista final de exclusión
                     apply_notch_filter=apply_notch, # <-- Pasar estado del filtro
                     smooth_ms=smooth_val, # <-- NUEVO
+                    tipo_envolvente=self.var_tipo_env.get(),
                     mostrar_evolucion=self.var_mostrar_evolucion.get(),
                     evol_t_start=evol_t_start,
                     evol_t_end=evol_t_end,

@@ -33,7 +33,8 @@ from PySide6.QtCore import Qt
 
 # --- 1. CONFIGURACIÓN GENERAL ---
 
-BASE_DIR = "base_de_datos_electrodos"
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.join(_current_dir, "base_de_datos_electrodos")
 
 FACTORES_G = {
     'Canal 0': 495,
@@ -84,9 +85,13 @@ class PlotterConfigDialog(QDialog):
         if not os.path.exists(BASE_DIR):
             os.makedirs(BASE_DIR)
         
-        items = [d for d in os.listdir(BASE_DIR) if os.path.isdir(os.path.join(BASE_DIR, d))]
-        for item in items:
-            self.listbox.addItem(item)
+        for fecha in sorted(os.listdir(BASE_DIR)):
+            fecha_path = os.path.join(BASE_DIR, fecha)
+            if os.path.isdir(fecha_path):
+                for medicion in sorted(os.listdir(fecha_path)):
+                    medicion_path = os.path.join(fecha_path, medicion)
+                    if os.path.isdir(medicion_path):
+                        self.listbox.addItem(f"{fecha}/{medicion}")
             
         left_layout.addWidget(self.listbox)
         main_layout.addWidget(left_group, stretch=1)

@@ -26,7 +26,8 @@ class MeasurementEditorDialog(QDialog):
         self.resize(700, 450)
         self.setStyleSheet("background-color: #050505; color: #00ffcc; font-family: 'Courier New', monospace;")
 
-        self.BASE_DIR = "base_de_datos_electrodos"
+        _current_dir = os.path.dirname(os.path.abspath(__file__))
+        self.BASE_DIR = os.path.join(_current_dir, "base_de_datos_electrodos")
         self.selected_measurement = None
 
         # --- Layout Principal ---
@@ -97,9 +98,14 @@ class MeasurementEditorDialog(QDialog):
         self.listbox.clear()
         try:
             if os.path.isdir(self.BASE_DIR):
-                for item in sorted(os.listdir(self.BASE_DIR)):
-                    if os.path.isdir(os.path.join(self.BASE_DIR, item)):
-                        self.listbox.addItem(item)
+                for fecha in sorted(os.listdir(self.BASE_DIR)):
+                    fecha_path = os.path.join(self.BASE_DIR, fecha)
+                    if os.path.isdir(fecha_path):
+                        for medicion in sorted(os.listdir(fecha_path)):
+                            medicion_path = os.path.join(fecha_path, medicion)
+                            if os.path.isdir(medicion_path):
+                                # Guardamos el path relativo usando slash común
+                                self.listbox.addItem(f"{fecha}/{medicion}")
             else:
                 QMessageBox.critical(self, "Error", f"El directorio base '{self.BASE_DIR}' no existe.")
         except Exception as e:
@@ -113,9 +119,12 @@ class MeasurementEditorDialog(QDialog):
             return
 
         self.selected_measurement = selected_items[0].text()
-        self.lbl_current_name.setText(f"Nombre Actual: {self.selected_measurement}")
+        
+        # El nombre puro de la medición es la última parte
+        medicion_name = self.selected_measurement.split('/')[-1]
+        self.lbl_current_name.setText(f"Nombre Actual: {medicion_name}")
 
-        parts = self.selected_measurement.split('_')
+        parts = medicion_name.split('_')
         if len(parts) >= 3:
             self.entry_letra.setText(parts[0])
             self.entry_prueba.setText(parts[1])
@@ -123,10 +132,11 @@ class MeasurementEditorDialog(QDialog):
         else:
             measurement_path = os.path.join(self.BASE_DIR, self.selected_measurement)
             first_channel_path = None
-            for item in sorted(os.listdir(measurement_path)):
-                if item.startswith("canal_"):
-                    first_channel_path = os.path.join(measurement_path, item)
-                    break
+            if os.path.exists(measurement_path):
+                for item in sorted(os.listdir(measurement_path)):
+                    if item.startswith("canal_"):
+                        first_channel_path = os.path.join(measurement_path, item)
+                        break
             
             meta_loaded = False
             if first_channel_path and os.path.exists(os.path.join(first_channel_path, "metadata.json")):
@@ -135,7 +145,7 @@ class MeasurementEditorDialog(QDialog):
                     with open(meta_path, 'r', encoding='utf-8') as f:
                         meta = json.load(f)
                     self.entry_letra.setText(meta.get("letra", "A"))
-                    self.entry_prueba.setText(self.selected_measurement if not meta.get("is_formal") else meta.get("prueba", "Prueba1"))
+                    self.entry_prueba.setText(medicion_name if not meta.get("is_formal") else meta.get("prueba", "Prueba1"))
                     self.entry_sujeto.setText(meta.get("sujeto", "Sujeto1"))
                     meta_loaded = True
                 except:
@@ -143,7 +153,7 @@ class MeasurementEditorDialog(QDialog):
                     
             if not meta_loaded:
                 self.entry_letra.setText("A")
-                self.entry_prueba.setText(self.selected_measurement)
+                self.entry_prueba.setText(medicion_name)
                 self.entry_sujeto.setText("Sujeto1")
         
         self.set_editor_state(True)
@@ -162,7 +172,9 @@ class MeasurementEditorDialog(QDialog):
 
         new_folder_name = f"{new_letra}_{new_prueba}_{new_sujeto}"
         old_path = os.path.join(self.BASE_DIR, self.selected_measurement)
-        new_path = os.path.join(self.BASE_DIR, new_folder_name)
+        
+        fecha_name = self.selected_measurement.split('/')[0]
+        new_path = os.path.join(self.BASE_DIR, fecha_name, new_folder_name)
 
         if old_path == new_path:
             QMessageBox.information(self, "Información", "El nombre no ha cambiado. No se realizaron acciones.")
@@ -174,7 +186,7 @@ class MeasurementEditorDialog(QDialog):
 
         reply = QMessageBox.question(
             self, "Confirmar Cambios",
-            f"¿Estás seguro de que quieres renombrar:\n\n'{self.selected_measurement}'\n\na\n\n'{new_folder_name}'?\n\nEsta acción modificará la carpeta y sus archivos internos.",
+            f"¿Estás seguro de que quieres renombrar:\n\n'{self.selected_measurement}'\n\na\n\n'{fecha_name}/{new_folder_name}'?\n\nEsta acción modificará la carpeta y sus archivos internos.",
             QMessageBox.Yes | QMessageBox.No
         )
         if reply == QMessageBox.No:

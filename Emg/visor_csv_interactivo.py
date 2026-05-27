@@ -241,9 +241,10 @@ class CSVViewerApp:
         env_frame = tk.LabelFrame(right_panel, text="Envolvente", font=self.font_bold, bg="#f0f0f0", padx=10, pady=10)
         env_frame.pack(fill="x", pady=10)
 
-        self.var_envolvente = tk.BooleanVar(value=False)
-        self.chk_envolvente = tk.Checkbutton(env_frame, text="Media Móvil", variable=self.var_envolvente, command=self.on_filter_toggle, bg="#f0f0f0", font=self.font_label)
-        self.chk_envolvente.pack(anchor="w")
+        self.var_envolvente = tk.StringVar(value="ninguna")
+        self.cmb_envolvente = ttk.Combobox(env_frame, textvariable=self.var_envolvente, values=["ninguna", "media_movil", "rms"], state="readonly", width=12)
+        self.cmb_envolvente.pack(anchor="w")
+        self.cmb_envolvente.bind("<<ComboboxSelected>>", self.on_filter_toggle)
 
         env_options_frame = tk.Frame(env_frame, bg="#f0f0f0")
         env_options_frame.pack(fill="x", padx=(20, 0))
@@ -488,7 +489,7 @@ class CSVViewerApp:
         fs = 1 / (time_data[1] - time_data[0]) if len(time_data) > 1 else 2000 # Fs por defecto
         apply_notch = self.var_notch_filter.get()
         apply_bandpass = self.var_bandpass_filter.get()
-        apply_env = self.var_envolvente.get()
+        tipo_env = self.var_envolvente.get()
 
         y_min_plot = np.inf
         y_max_plot = -np.inf
@@ -524,23 +525,31 @@ class CSVViewerApp:
 
                 # Aplicar envolvente de media móvil si está habilitado
                 y_data_env = None
-                if apply_env:
+                if tipo_env != "ninguna":
                     try:
                         window_ms = float(self.spin_env_window.get())
                         if window_ms > 0:
-                            # Rectificar y aplicar envolvente de Hilbert
-                            if SCIPY_AVAILABLE:
-                                try:
-                                    y_data_env = np.abs(signal.hilbert(np.abs(y_data_processed)))
-                                except Exception:
+                            if tipo_env == "rms":
+                                win_len = int(max(1, round(window_ms * fs / 1000.0)))
+                                if win_len > 1:
+                                    window = np.ones(win_len, dtype=float) / float(win_len)
+                                    y_data_env = np.sqrt(np.convolve(y_data_processed**2, window, mode='same'))
+                                else:
                                     y_data_env = np.abs(y_data_processed)
                             else:
-                                y_data_env = np.abs(y_data_processed)
-                            
-                            win_len = int(max(1, round(window_ms * fs / 1000.0)))
-                            if win_len > 1:
-                                window = np.ones(win_len, dtype=float) / float(win_len)
-                                y_data_env = np.convolve(y_data_env, window, mode='same')
+                                # Rectificar y aplicar envolvente de Hilbert
+                                if SCIPY_AVAILABLE:
+                                    try:
+                                        y_data_env = np.abs(signal.hilbert(np.abs(y_data_processed)))
+                                    except Exception:
+                                        y_data_env = np.abs(y_data_processed)
+                                else:
+                                    y_data_env = np.abs(y_data_processed)
+                                
+                                win_len = int(max(1, round(window_ms * fs / 1000.0)))
+                                if win_len > 1:
+                                    window = np.ones(win_len, dtype=float) / float(win_len)
+                                    y_data_env = np.convolve(y_data_env, window, mode='same')
                     except (ValueError, TypeError) as e:
                         print(f"Error en valores de envolvente: {e}")
 
@@ -551,7 +560,7 @@ class CSVViewerApp:
                     y_min_plot = min(y_min_plot, np.min(y_data))
                     y_max_plot = max(y_max_plot, np.max(y_data))
                     
-                line, = self.ax.plot(x_data, y_data, label=col_name, lw=1.2, alpha=0.5 if apply_env else 1.0)
+                line, = self.ax.plot(x_data, y_data, label=col_name, lw=1.2, alpha=0.5 if tipo_env != "ninguna" else 1.0)
                 
                 if y_data_env is not None:
                     x_env, y_env = downsample_lttb_fast(time_data, y_data_env, MAX_POINTS_TO_PLOT)
@@ -787,7 +796,7 @@ class CSVViewerApp:
         fs = 1 / (time_data[1] - time_data[0]) if len(time_data) > 1 else 2000
         apply_notch = self.var_notch_filter.get()
         apply_bandpass = self.var_bandpass_filter.get()
-        apply_env = self.var_envolvente.get()
+        tipo_env = self.var_envolvente.get()
 
         for col_name in self.channel_cols:
             if self.channel_vars.get(col_name) and self.channel_vars[col_name].get():
@@ -813,27 +822,35 @@ class CSVViewerApp:
                     except Exception: pass
 
                 y_data_env = None
-                if apply_env:
+                if tipo_env != "ninguna":
                     try:
                         window_ms = float(self.spin_env_window.get())
                         if window_ms > 0:
-                            if SCIPY_AVAILABLE:
-                                try:
-                                    y_data_env = np.abs(signal.hilbert(np.abs(y_data_processed)))
-                                except Exception:
+                            if tipo_env == "rms":
+                                win_len = int(max(1, round(window_ms * fs / 1000.0)))
+                                if win_len > 1:
+                                    window = np.ones(win_len, dtype=float) / float(win_len)
+                                    y_data_env = np.sqrt(np.convolve(y_data_processed**2, window, mode='same'))
+                                else:
                                     y_data_env = np.abs(y_data_processed)
                             else:
-                                y_data_env = np.abs(y_data_processed)
-                            
-                            win_len = int(max(1, round(window_ms * fs / 1000.0)))
-                            if win_len > 1:
-                                window = np.ones(win_len, dtype=float) / float(win_len)
-                                y_data_env = np.convolve(y_data_env, window, mode='same')
+                                if SCIPY_AVAILABLE:
+                                    try:
+                                        y_data_env = np.abs(signal.hilbert(np.abs(y_data_processed)))
+                                    except Exception:
+                                        y_data_env = np.abs(y_data_processed)
+                                else:
+                                    y_data_env = np.abs(y_data_processed)
+                                
+                                win_len = int(max(1, round(window_ms * fs / 1000.0)))
+                                if win_len > 1:
+                                    window = np.ones(win_len, dtype=float) / float(win_len)
+                                    y_data_env = np.convolve(y_data_env, window, mode='same')
                     except Exception: pass
 
                 # Graficar solo el segmento visible de los datos ya filtrados
                 mask = (time_data >= current_xlim[0]) & (time_data <= current_xlim[1])
-                line, = export_ax.plot(time_data[mask], y_data_processed[mask], label=col_name, lw=1.2, alpha=0.5 if apply_env else 1.0)
+                line, = export_ax.plot(time_data[mask], y_data_processed[mask], label=col_name, lw=1.2, alpha=0.5 if tipo_env != "ninguna" else 1.0)
                 if y_data_env is not None:
                     export_ax.plot(time_data[mask], y_data_env[mask], label=f"{col_name} (Env)", lw=1.5, color=line.get_color())
 

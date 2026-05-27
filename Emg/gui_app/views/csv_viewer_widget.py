@@ -6,7 +6,7 @@ from scipy import signal
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QCheckBox, QGroupBox, QFileDialog, QScrollArea, QSplitter, 
-    QSpinBox, QDoubleSpinBox, QSlider
+    QSpinBox, QDoubleSpinBox, QSlider, QComboBox
 )
 from PySide6.QtCore import Qt, QThread, Signal
 import pyqtgraph as pg
@@ -217,9 +217,10 @@ class CsvViewerWidget(QWidget):
         grp_env = QGroupBox("Envolvente")
         grp_env.setStyleSheet("font-weight: bold; color: #aaa;")
         lyt_env = QVBoxLayout(grp_env)
-        self.chk_env = QCheckBox("Media Móvil")
-        self.chk_env.stateChanged.connect(self.update_plot)
-        lyt_env.addWidget(self.chk_env)
+        self.cmb_env = QComboBox()
+        self.cmb_env.addItems(["ninguna", "media_movil", "rms"])
+        self.cmb_env.currentTextChanged.connect(self.update_plot)
+        lyt_env.addWidget(self.cmb_env)
         row_env = QHBoxLayout()
         row_env.addWidget(QLabel("Ventana (ms):"))
         self.spin_env = QSpinBox()
@@ -310,7 +311,7 @@ class CsvViewerWidget(QWidget):
         notch = self.chk_notch.isChecked()
         lp = self.spin_lp.value()
         hp = self.spin_hp.value()
-        env = self.chk_env.isChecked()
+        tipo_env = self.cmb_env.currentText()
         env_window = int((self.spin_env.value() / 1000.0) * fs)
         if env_window < 1: env_window = 1
         
@@ -333,10 +334,15 @@ class CsvViewerWidget(QWidget):
                         y_data = signal.filtfilt(b, a, y_data)
                 
                 # Envolvente
-                if env:
-                    y_data = np.abs(y_data)
-                    kernel = np.ones(env_window) / env_window
-                    y_data = np.convolve(y_data, kernel, mode='same')
+                if tipo_env != "ninguna":
+                    if tipo_env == "rms":
+                        y_data_sq = y_data**2
+                        kernel = np.ones(env_window) / env_window
+                        y_data = np.sqrt(np.convolve(y_data_sq, kernel, mode='same'))
+                    else: # media_movil
+                        y_data = np.abs(y_data)
+                        kernel = np.ones(env_window) / env_window
+                        y_data = np.convolve(y_data, kernel, mode='same')
                     
                 # Downsampling
                 x_plot, y_plot = downsample_lttb_fast(self.time_data, y_data, MAX_POINTS_TO_PLOT)

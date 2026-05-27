@@ -7,7 +7,7 @@ matplotlib.use('TkAgg')
 sys.path.append(r"c:\Users\MSI\OneDrive\Documentos\DOCUMENTOS SANTIAGO\santiago-prado-repositorio\Emg")
 import analisis_por_track_integrado as api
 
-mediciones = ['2026-05-22/_E4_1_NONE _Sujeto2']
+mediciones = ['2026-05-20/_E2_1_TRENZADOMALLADOGND_Sujeto1', '2026-05-20/_E2_2_MALLADOGND_Sujeto1', '2026-05-20/_E2_3_MALLADOGND_Sujeto1', '2026-05-20/_E2_4_TRENZADOMALLADOGND_Sujeto1', '2026-05-20/_E3_1_TRENZADOMALLADOGND_Sujeto2', '2026-05-20/_E3_2_MALLADOGND_Sujeto2', '2026-05-20/_E3_3_MALLADOGND_Sujeto2', '2026-05-20/_E3_4_TRENZADOMALLADOGND_Sujeto2']
 base_dir = r"c:\Users\MSI\OneDrive\Documentos\DOCUMENTOS SANTIAGO\santiago-prado-repositorio\Emg\base_de_datos_electrodos"
 
 root = tk.Tk()
@@ -24,11 +24,12 @@ for canal_key, var in dialog.canales_seleccionados.items():
 dialog.var_mostrar_recortes.set(True)
 dialog.var_mostrar_senal_cruda.set(False)
 dialog.var_mostrar_espectrograma.set(False)
-dialog.var_notch_filter.set(False)
+dialog.var_notch_filter.set(True)
 dialog.var_mostrar_evolucion.set(True)
 dialog.var_evol_t_start.set("10.0")
 dialog.var_evol_t_end.set("1000.0")
 dialog.var_smooth_ms.set("50.0")
+dialog.var_tipo_env.set("media_movil")
 dialog.var_highpass_cutoff.set("20.0")
 dialog.var_lowpass_cutoff.set("500.0")
 
