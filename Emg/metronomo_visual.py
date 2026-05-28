@@ -25,7 +25,15 @@ class MetronomeApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Metrónomo Cyberpunk")
-        self.root.geometry("350x500") # Aumentar altura para el contador
+        
+        # Obtener resolución de pantalla para anclar a la derecha
+        screen_w = self.root.winfo_screenwidth()
+        window_w = 350
+        window_h = 400
+        x_pos = screen_w - window_w - 20 # 20px de margen derecho
+        y_pos = 50 # 50px de margen superior
+        self.root.geometry(f"{window_w}x{window_h}+{x_pos}+{y_pos}")
+        
         self.root.configure(bg="#050505")
         self.root.resizable(False, False)
         
@@ -37,11 +45,12 @@ class MetronomeApp:
         # --- Estado del metrónomo ---
         self.is_running = False
         self.is_counting = False # <-- NUEVO: Controla si se debe contar o no
+        self.is_muted = False # <-- NUEVO: Controla si el beep suena o no
         # --- MODIFICADO: Cargar BPM desde el archivo de configuración ---
         self.bpm = tk.IntVar(value=60)
         self.timer_id = None
         # --- NUEVO: Variable para el contador de pulsos ---
-        self.beat_count = tk.IntVar(value=0)
+        self.beat_count = tk.StringVar(value="0")
 
         # --- NUEVO: Hilo para escuchar comandos ---
         self.command_thread = threading.Thread(target=self._listen_for_commands, daemon=True)
@@ -66,8 +75,16 @@ class MetronomeApp:
         controls_frame.pack(fill="both", expand=True, padx=20)
 
         # --- NUEVO: Display del contador de pulsos ---
-        tk.Label(controls_frame, text="PULSO ACTUAL", font=title_font, fg="#00FF00", bg="#050505").pack()
-        self.counter_label = tk.Label(controls_frame, textvariable=self.beat_count, font=counter_font, fg=self.COLOR_BEAT, bg="#050505")
+        pulse_container = tk.Frame(self.root, bg="#050505")
+        pulse_container.pack(expand=True, fill="both")
+
+        # Título dinámico "INICIANDO" / "PULSO"
+        self.lbl_title_var = tk.StringVar(value="PULSO")
+        self.lbl_title = tk.Label(pulse_container, textvariable=self.lbl_title_var, font=title_font, fg="#00FFFF", bg="#050505")
+        self.lbl_title.pack(pady=(15, 5))
+
+        # Contador de Pulsos gigante
+        self.counter_label = tk.Label(pulse_container, textvariable=self.beat_count, font=counter_font, fg="#00FFFF", bg="#050505")
         self.counter_label.pack(pady=(5, 15))
 
         # Display de BPM
@@ -138,6 +155,8 @@ class MetronomeApp:
         self.pulse_frame.config(bg=self.COLOR_IDLE)
         self.btn_start.config(state="normal")
         self.btn_stop.config(state="disabled")
+        self.count_in_remaining = 0
+        self.beat_count.set("0")
         self.bpm_slider.config(state="normal")
 
     def _listen_for_commands(self):
@@ -151,12 +170,19 @@ class MetronomeApp:
             elif command == "STOP_APP":
                 print("[Metrónomo] Recibido comando STOP_APP.")
                 self.root.after(0, self.on_closing)
+            elif command == "MUTE":
+                print("[Metrónomo] Recibido comando MUTE.")
+                self.is_muted = True
+            elif command == "UNMUTE":
+                print("[Metrónomo] Recibido comando UNMUTE.")
+                self.is_muted = False
 
     def start_counting(self):
         """Activa el contador y lo resetea."""
         print("[Metrónomo] Comando recibido. Iniciando conteo.")
         self.is_counting = True
         self.reset_counter()
+        self.beat() # FORZAR EL BEEP INMEDIATAMENTE
 
     def save_config(self):
         """Guarda la configuración del metrónomo en un archivo JSON."""
@@ -172,7 +198,7 @@ class MetronomeApp:
             print(f"Error al guardar config del metrónomo: {e}")
     def reset_counter(self):
         """Reinicia el contador de pulsos a cero."""
-        self.beat_count.set(0)
+        self.beat_count.set("0")
 
     def on_closing(self):
         """Maneja el cierre de la ventana, guardando la configuración."""
@@ -185,11 +211,46 @@ class MetronomeApp:
 
         # Pulso visual y sonoro
         self.pulse_frame.config(bg=self.COLOR_BEAT)
-        if self.is_counting: # <-- SOLO cuenta si está habilitado
-            self.beat_count.set(self.beat_count.get() + 1) # Incrementar contador
-        if winsound:
+        count_in = getattr(self, 'count_in_remaining', 0)
+        
+        # Actualización de la GUI y del número de conteo
+        if count_in > 1:
+            # Fase preparatoria (Rojo, cuenta regresiva)
+            if hasattr(self, 'lbl_title_var'):
+                self.lbl_title_var.set("INICIANDO")
+                self.lbl_title.config(fg="#FF0000")
+            if hasattr(self, 'counter_label'):
+                self.counter_label.config(fg="#FF0000")
+            self.beat_count.set(str(count_in - 1))
+            self.count_in_remaining -= 1
+        else:
+            # Fase normal o pulso de arranque (GO)
+            if hasattr(self, 'lbl_title_var'):
+                self.lbl_title_var.set("PULSO")
+                self.lbl_title.config(fg="#00FFFF")
+            if hasattr(self, 'counter_label'):
+                self.counter_label.config(fg="#00FFFF")
+            
+            # Si count_in está activo, no incrementamos el beat normal
+            if self.count_in_remaining > 0:
+                self.beat_count.set(" ") # Muestra vacío en Count-In
+                self.count_in_remaining = 0
+            else:
+                try:
+                    current = int(self.beat_count.get())
+                except ValueError:
+                    current = 0
+                self.beat_count.set(str((current % 4) + 1))
+                    
+        # Sonidos de metrónomo (Graves para cuenta atrás, Agudo para GO, Normal el resto)
+        if winsound and not self.is_muted:
             try:
-                winsound.Beep(1000, 50) # Frecuencia de 1000 Hz, duración de 50 ms
+                if count_in > 1:
+                    threading.Thread(target=winsound.Beep, args=(800, 200), daemon=True).start()
+                elif count_in == 1:
+                    threading.Thread(target=winsound.Beep, args=(1200, 500), daemon=True).start()
+                else:
+                    threading.Thread(target=winsound.Beep, args=(1000, 50), daemon=True).start()
             except Exception as e:
                 print(f"Error al reproducir sonido con winsound: {e}")
 
@@ -203,14 +264,42 @@ class MetronomeApp:
 if __name__ == "__main__":
     # --- NUEVO: Lógica para autostart ---
     autostart = '--autostart' in sys.argv
+    start_muted = '--mute' in sys.argv
+    
+    target_word = ""
+    bpm_arg = None
+    count_in_arg = 0
+    for arg in sys.argv:
+        if arg.startswith("--word="):
+            target_word = arg.split("=")[1]
+        elif arg.startswith("--bpm="):
+            try:
+                bpm_arg = int(arg.split("=")[1])
+            except ValueError:
+                pass
+        elif arg.startswith("--count-in="):
+            try:
+                count_in_arg = int(arg.split("=")[1])
+            except ValueError:
+                pass
 
     root = tk.Tk()
     app = MetronomeApp(root)
+    app.count_in_remaining = count_in_arg
+    
+    if start_muted:
+        app.is_muted = True
+        print("Metrónomo iniciado en modo MUTE.")
+
+    if target_word:
+        pass # La palabra ahora se muestra en ventana_palabras.py independiente
+        
+    if bpm_arg is not None:
+        app.bpm.set(bpm_arg)
+        
     if autostart:
         print("Metrónomo iniciado con autostart.")
-        # --- MODIFICADO: Con autostart, solo empieza a sonar, no a contar ---
-        app.is_running = True
-        app.reset_counter()  # Asegura que el contador empieza en 0
-        app.beat()
+        app.is_counting = '--count' in sys.argv # Activa el conteo automáticamente si se pasa el flag
+        app.start()
 
     root.mainloop()

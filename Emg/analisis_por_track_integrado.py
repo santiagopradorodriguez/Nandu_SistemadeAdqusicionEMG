@@ -104,7 +104,11 @@ def _estimate_noise_window(signal_recortada, samplerate, noise_seconds, smooth_m
         start_sample_noise = min(len(signal_recortada)-1, int(round(0.01 * len(signal_recortada))))
 
     if start_sample_noise > 0:
-        noise_segment = signal_recortada[:start_sample_noise]
+        skip_samples = int(round(1.0 * samplerate))
+        if start_sample_noise <= skip_samples + int(0.1 * samplerate):
+            skip_samples = min(int(round(0.1 * samplerate)), start_sample_noise // 2)
+            
+        noise_segment = signal_recortada[skip_samples:start_sample_noise]
         if len(noise_segment) > 0:
             env_noise = _compute_env_full(np.abs(noise_segment), True, smooth_ms, samplerate, tipo_env)
         else:
@@ -1479,7 +1483,11 @@ def procesar_wavs_promedio(
         # ---------- Calculo SNR y Ruido Interpulso Normalizado ----------
         # Calcular ruido base (ahora usando la envolvente)
         if start_sample_noise > 0:
-            initial_noise_segment = env_recortada[:start_sample_noise]
+            skip_samples = int(round(1.0 * samplerate))
+            if start_sample_noise <= skip_samples + int(0.1 * samplerate):
+                skip_samples = min(int(round(0.1 * samplerate)), start_sample_noise // 2)
+                
+            initial_noise_segment = env_recortada[skip_samples:start_sample_noise]
             initial_noise_mean = np.mean(np.abs(initial_noise_segment))
             initial_noise_std = np.std(initial_noise_segment)
         else:

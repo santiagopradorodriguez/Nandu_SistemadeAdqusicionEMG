@@ -249,6 +249,40 @@ class ReaperStyleHub(QMainWindow):
         vbox_btn = QVBoxLayout()
         vbox_btn.addStretch()
         vbox_btn.addWidget(btn_daq)
+        
+        btn_autoforge = QPushButton("🔥 AUTOGRABADO")
+        btn_autoforge.setStyleSheet("""
+            QPushButton {
+                font-family: 'Consolas', 'Courier New', monospace;
+                font-size: 20px; 
+                font-weight: 900; 
+                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #110022, stop:1 #330044); 
+                color: #ff0055; 
+                padding: 30px 15px;
+                border-radius: 2px;
+                border: 2px solid #ff0055;
+                border-right: 6px solid #00ffff;
+                border-bottom: 6px solid #00ffff;
+                margin-top: 20px;
+            }
+            QPushButton:hover {
+                background-color: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #330044, stop:1 #660088);
+                color: #ffffff;
+                border: 2px solid #00ffff;
+                border-right: 6px solid #ff0055;
+                border-bottom: 6px solid #ff0055;
+                margin-top: 20px;
+            }
+            QPushButton:pressed {
+                background-color: #00ffff;
+                color: #000000;
+                border: 2px solid #000000;
+                margin-top: 20px;
+            }
+        """)
+        btn_autoforge.clicked.connect(lambda: self._launch_external("Nandu_AutoForge_DAQ.py"))
+        vbox_btn.addWidget(btn_autoforge)
+        
         vbox_btn.addStretch()
         
         lyt_daq.addLayout(vbox_btn, stretch=1)
@@ -757,14 +791,58 @@ dialog.procesar(interactivo={interactivo})
         """)
 
 def main():
+    from PySide6.QtWidgets import QSplashScreen
+    from PySide6.QtGui import QPixmap, QColor
+    from pathlib import Path
+    import time
+    
     app = QApplication(sys.argv)
+    
+    # 1. Buscar logo para el Splash Screen
+    logo_path = None
+    try:
+        root_dir = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        gui_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+        assets_dir = gui_dir / "assets"
+        pictures_dir = Path.home() / "Pictures"
+        
+        search_dirs = [assets_dir, gui_dir, root_dir, pictures_dir]
+        for search_dir in search_dirs:
+            if search_dir.exists():
+                for filename in os.listdir(search_dir):
+                    if filename.lower().startswith("logo") and filename.lower().endswith((".png", ".jpg", ".jpeg")):
+                        logo_path = str(search_dir / filename)
+                        break
+            if logo_path:
+                break
+    except Exception:
+        pass
+
+    splash = None
+    if logo_path and os.path.exists(logo_path):
+        pixmap = QPixmap(logo_path)
+        if pixmap.width() > 800:
+            pixmap = pixmap.scaledToWidth(800, Qt.SmoothTransformation)
+        splash = QSplashScreen(pixmap, Qt.WindowStaysOnTopHint)
+        splash.show()
+        splash.showMessage("Iniciando Ñandú LSD EMG Analytics...", Qt.AlignBottom | Qt.AlignCenter, QColor("white"))
+        app.processEvents()
+        time.sleep(1.0) # Delay para asegurar que el usuario vea el logo (estilo software pro)
     
     if qdarkstyle:
         app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api='pyside6'))
         
+    if splash:
+        splash.showMessage("Cargando módulos y base de datos...", Qt.AlignBottom | Qt.AlignCenter, QColor("white"))
+        app.processEvents()
+        
     window = ReaperStyleHub()
     # Modificar stylesheet base DESPUÉS del qdarkstyle
     window._setup_styles()
+    
+    if splash:
+        splash.finish(window)
+        
     window.show()
     sys.exit(app.exec())
 
