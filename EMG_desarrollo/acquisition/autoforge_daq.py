@@ -73,9 +73,12 @@ try:
     from nidaqmx.constants import AcquisitionType, TerminalConfiguration
     from nidaqmx.stream_readers import AnalogMultiChannelReader 
     NIDAQMX_DISPONIBLE = True
-except ImportError:
+except Exception as e:
+    import traceback
+    print("--- TRACEBACK DE NIDAQMX ---")
+    traceback.print_exc()
     NIDAQMX_DISPONIBLE = False
-    print("Advertencia: La librería 'nidaqmx' no está instalada. El programa solo funcionará en MODO_PRUEBA.")
+    print(f"Advertencia: La librería 'nidaqmx' falló al cargar: {e}")
 
 # =============================================================================
 # --- CONFIGURACIÓN PRINCIPAL ---
@@ -167,6 +170,7 @@ def microphone_thread(chunk_samples, sample_rate, num_canales, data_queue, stop_
     """
     print(f"Iniciando hilo de MICRÓFONO con SR={sample_rate} Hz...")
     try:
+        import sounddevice as sd
         def audio_callback(indata, frames, time_info, status):
             """
             Ejecuta la funcionalidad de audio_callback.
@@ -732,7 +736,8 @@ class AutoForgeDialog(QtWidgets.QDialog):
             Any: Resultado de la ejecución de la función.
         """
         import os
-        ruta_palabras = os.path.join(os.path.dirname(os.path.abspath(__file__)), "palabras.txt")
+        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        ruta_palabras = os.path.join(root_dir, "palabras.txt")
         if not os.path.exists(ruta_palabras):
             with open(ruta_palabras, 'w', encoding='utf-8') as f:
                 f.write("A\nE\nI\nO\nU\n")
@@ -1436,7 +1441,10 @@ class RealTimePlotter(QtWidgets.QWidget):
                 self._save_metronome_config() # Guardar el BPM actual antes de lanzar
                 try:
                     python_executable = sys.executable
-                    script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'metronomo_visual.py')
+                    if getattr(sys, 'frozen', False):
+                        script_path = 'acquisition/metronomo_visual.py'
+                    else:
+                        script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'metronomo_visual.py')
                     print("Lanzando metrónomo con --autostart...")
                     # --- MODIFICADO: Añadir stdin=subprocess.PIPE para poder enviarle comandos ---
                     self.metronome_process = subprocess.Popen(
@@ -1969,7 +1977,7 @@ class RealTimePlotter(QtWidgets.QWidget):
             Any: Resultado de la ejecución de la función.
         """
         dialog = SaveMeasurementDialog(self)
-        result = dialog.exec_() # Esto muestra el diálogo y espera
+        result = dialog.exec() # Esto muestra el diálogo y espera
 
         if result == QtWidgets.QDialog.Accepted:
             measurement_name = dialog.measurement_name
@@ -2567,7 +2575,8 @@ class RealTimePlotter(QtWidgets.QWidget):
                 self.chk_use_metronome.setChecked(old_state)
                 
             import os
-            ruta_palabras = os.path.join(os.path.dirname(os.path.abspath(__file__)), "palabras.txt")
+            root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            ruta_palabras = os.path.join(root_dir, "palabras.txt")
             if not os.path.exists(ruta_palabras):
                 QtWidgets.QMessageBox.warning(self, "Error", "Falta palabras.txt en la carpeta del script.")
                 return
@@ -2689,7 +2698,10 @@ class RealTimePlotter(QtWidgets.QWidget):
         # --- NUEVO: Lanzamos la ventana de palabra YA MISMO para que el usuario sepa qué palabra viene ---
         import subprocess, sys, os
         python_executable = sys.executable
-        word_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ventana_palabras.py')
+        if getattr(sys, 'frozen', False):
+            word_script_path = 'acquisition/ventana_palabras.py'
+        else:
+            word_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ventana_palabras.py')
         texto_ventana = f"SIGUIENTE:\n{palabra.upper()}"
         self.word_window_process = subprocess.Popen(
             [python_executable, word_script_path, f'--word={texto_ventana}']
@@ -2793,8 +2805,10 @@ class RealTimePlotter(QtWidgets.QWidget):
         # Actualizamos la ventana flotante para que avise "PREPARATE"
         import subprocess, sys, os
         python_executable = sys.executable
-        word_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ventana_palabras.py')
-        
+        if getattr(sys, 'frozen', False):
+            word_script_path = 'acquisition/ventana_palabras.py'
+        else:
+            word_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ventana_palabras.py')        
         if hasattr(self, 'word_window_process') and self.word_window_process:
             try: self.word_window_process.kill()
             except: pass
@@ -2860,7 +2874,10 @@ class RealTimePlotter(QtWidgets.QWidget):
         palabra = self.autoforge_words[self.autoforge_word_idx]
         import subprocess, sys, os
         python_executable = sys.executable
-        word_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ventana_palabras.py')
+        if getattr(sys, 'frozen', False):
+            word_script_path = 'acquisition/ventana_palabras.py'
+        else:
+            word_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ventana_palabras.py')
         
         # Matamos la ventana "Siguiente Palabra"
         if hasattr(self, 'word_window_process') and self.word_window_process:
@@ -3051,7 +3068,7 @@ if __name__ == '__main__':
     gui.show()
     
     # Inicia el bucle de la aplicación (bloqueante)
-    exit_code = app.exec_()
+    exit_code = app.exec()
     sys.exit(exit_code)
 
     # --- Esto se ejecuta DESPUÉS de que se cierra la GUI ---

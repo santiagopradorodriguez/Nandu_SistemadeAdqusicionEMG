@@ -37,7 +37,7 @@ from PySide6.QtWidgets import (
     QToolBar, QPushButton, QSizePolicy, QMessageBox
 )
 from PySide6.QtCore import Qt, QThreadPool, QSize
-from PySide6.QtGui import QFont, QColor, QTextCursor, QAction, QPixmap
+from PySide6.QtGui import QFont, QColor, QTextCursor, QAction, QPixmap, QIcon
 
 # Añadir carpeta base al path para imports relativos al proyecto
 root_project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -1077,6 +1077,24 @@ def main():
             pass
     
     app = QApplication(sys.argv)
+    
+    # --- FIJAR EL ICONO EN LA BARRA DE TAREAS EXPLÍCITAMENTE ---
+    import ctypes
+    myappid = 'nandu.lsd.emg.5'
+    try:
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+    except Exception:
+        pass
+    
+    # El ejecutable pone el icono en la raíz (sys._MEIPASS), no en gui_app/
+    if getattr(sys, 'frozen', False):
+        icon_path = os.path.join(sys._MEIPASS, 'icono.ico')
+    else:
+        icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'icono.ico')
+        
+    if os.path.exists(icon_path):
+        app.setWindowIcon(QIcon(icon_path))
+    # -----------------------------------------------------------
     
     # 1. Buscar logo para el Splash Screen
     logo_path = None

@@ -120,8 +120,6 @@ def acquisition_thread(device_channels, sample_rate, chunk_samples, num_canales,
             for canal in device_channels:
                 # --- CORRECCIÓN: Forzar rango de voltaje explícito para evitar auto-escalado de la DAQ ---
                 if terminal_config_val is not None:
-                    task.ai_channels.add_ai_voltage_chan(canal, terminal_config=terminal_config_val, min_val=-10.0, max_val=10.0)
-                else:
                     task.ai_channels.add_ai_voltage_chan(canal, terminal_config=TerminalConfiguration.RSE, min_val=-10.0, max_val=10.0)
             
             task.timing.cfg_samp_clk_timing(
@@ -1797,7 +1795,7 @@ class RealTimePlotter(QtWidgets.QWidget):
             Any: Resultado de la ejecución de la función.
         """
         dialog = SaveMeasurementDialog(self)
-        result = dialog.exec_() # Esto muestra el diálogo y espera
+        result = dialog.exec() # Esto muestra el diálogo y espera
 
         if result == QtWidgets.QDialog.Accepted:
             measurement_name = dialog.measurement_name
@@ -2328,7 +2326,7 @@ if __name__ == '__main__':
     gui.show()
     
     # Inicia el bucle de la aplicación (bloqueante)
-    exit_code = app.exec_()
+    exit_code = app.exec()
     sys.exit(exit_code)
 
     # --- Esto se ejecuta DESPUÉS de que se cierra la GUI ---

@@ -35,3 +35,5 @@ DEBES invocar estrictamente a la habilidad correspondiente usando su nombre si d
 
 10. **Diseño exclusivo de Deep Learning, creación de la clase Dataset (PyTorch), tensores de dimensiones [Batch, 3, 500], optimizadores y el Autoencoder 1D:**
     👉 DEBES invocar la habilidad: `@ml-architect`
+11. **Empaquetado de software, compilación a `.exe`, creación de instaladores, manejo de `PyInstaller`, errores de DLLs o dependencias ocultas (hidden imports):**
+    👉 DEBES invocar la habilidad: `@build-engineer`
