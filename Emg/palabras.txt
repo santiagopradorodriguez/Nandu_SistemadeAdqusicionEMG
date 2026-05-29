@@ -1,5 +1,7 @@
-PAPA
-TATA
-CACA
-MAMA
-NANA
+PA
+TA
+CA
+MA
+NA
+
+

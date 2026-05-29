@@ -1087,6 +1087,14 @@ class RealTimePlotter(QtWidgets.QWidget):
             # --- DETENER ADQUISICIÓN ---
             print("Deteniendo adquisición...")
             self.stop_event.set()
+            
+            # --- NUEVO: Abortar AutoForge o grabación activa ---
+            self.is_autoforge_running = False
+            if hasattr(self, 'autoforge_overlay'):
+                self.autoforge_overlay.hide()
+            if getattr(self, 'is_recording', False):
+                self.on_record_click()
+            
             # --- MEJORA: Detener el metrónomo solo si el proceso todavía existe ---
             if self.metronome_process and self.metronome_process.poll() is None:
                 try:
@@ -1624,6 +1632,11 @@ class RealTimePlotter(QtWidgets.QWidget):
             self.stats_noise_mean = [[] for _ in range(self.NUM_CANALES)]
             self.stats_noise_std = [[] for _ in range(self.NUM_CANALES)]
             
+            # --- NUEVO: Acumulador Global para el UI ---
+            self.global_snr_acumulado = [0.0] * self.NUM_CANALES
+            self.global_snr_count = [0] * self.NUM_CANALES
+            
+            
             if hasattr(self, 'noise_status_labels'):
                 for label in self.noise_status_labels:
                     label.setText("Ruido inter-pulso: Evaluando base...")
@@ -2048,80 +2061,86 @@ class RealTimePlotter(QtWidgets.QWidget):
 
                     self.label_rec_time.setText(time_str)
                     
-                    # --- NUEVO: Evaluador de Ruido Inter-pulso (Tester de relajación) ---
-                    # Para el evaluador es necesario usar el tiempo de señal (ya sin ruido base).
-                    if getattr(self, 'is_autoforge_running', False):
-                        signal_time = elapsed_time # En AutoForge, ya se reseteó el tiempo
-                    else:
-                        signal_time = elapsed_time - noise_dur # En Manual, calculamos el offset
+                # --- NUEVO: Evaluador de Ruido Inter-pulso (Tester de relajación) ---
+                # Para el evaluador es necesario usar el tiempo de señal (ya sin ruido base).
+                if getattr(self, 'is_autoforge_running', False):
+                    signal_time = elapsed_time # En AutoForge, ya se reseteó el tiempo
+                else:
+                    signal_time = elapsed_time - noise_dur # En Manual, calculamos el offset
+                    
+                if getattr(self, 'noise_calculated', False) and signal_time >= 0:
+                    period_s = 60.0 / max(1, self.spin_bpm.value())
+                    phase = signal_time % period_s
+                    
+                    # Al cruzar la mitad del ciclo (punto de máxima relajación teórica)
+                    if getattr(self, 'last_phase', 0) < period_s * 0.5 <= phase:
+                        window_s = period_s / 8.0 # Ventana de 1/8 del pulso
+                        samples_window = int(window_s * self.SAMPLE_RATE)
                         
-                    if getattr(self, 'noise_calculated', False) and signal_time >= 0:
-                        period_s = 60.0 / max(1, self.spin_bpm.value())
-                        phase = signal_time % period_s
-                        
-                        # Al cruzar la mitad del ciclo (punto de máxima relajación teórica)
-                        if getattr(self, 'last_phase', 0) < period_s * 0.5 <= phase:
-                            window_s = period_s / 8.0 # Ventana de 1/8 del pulso
-                            samples_window = int(window_s * self.SAMPLE_RATE)
-                            
-                            if samples_window > 0 and samples_window <= self.PLOT_SAMPLES:
-                                for i in range(self.NUM_CANALES):
-                                    noise_segment = self.plot_buffer_datos[i, -samples_window:]
-                                    curr_mean = np.mean(np.abs(noise_segment))
-                                    curr_std = np.std(noise_segment)
+                        if samples_window > 0 and samples_window <= self.PLOT_SAMPLES:
+                            for i in range(self.NUM_CANALES):
+                                noise_segment = self.plot_buffer_datos[i, -samples_window:]
+                                curr_mean = np.mean(np.abs(noise_segment))
+                                curr_std = np.std(noise_segment)
+                                
+                                init_std = getattr(self, 'initial_noise_std', [0]*self.NUM_CANALES)[i]
+                                init_mean = getattr(self, 'initial_noise_mean', [0]*self.NUM_CANALES)[i]
+                                
+                                # Calcular el radio de deterioro (manejar división por cero en señales perfectas simuladas)
+                                if init_std > 0.01:
+                                    ratio = curr_std / init_std
+                                elif init_mean > 0.01:
+                                    ratio = curr_mean / init_mean
+                                else:
+                                    ratio = 1.0 # Señal base sin ruido
+                                
+                                if hasattr(self, 'noise_status_labels'):
+                                    # Neón verde si se mantiene por debajo del 120% del original, si no, Rojo Cyberpunk
+                                    bg_color = "#000000"
+                                    fg_color = "#00FF00" if ratio <= 1.20 else "#FF0000" 
+                                    text = f"Inter-pulso: x̄={curr_mean:.1f}µV (Base={init_mean:.1f}µV) | {ratio*100:.0f}%"
+                                    self.noise_status_labels[i].setText(text)
+                                    self.noise_status_labels[i].setStyleSheet(f"color: {fg_color}; background-color: {bg_color}; border: 1px solid {fg_color}; border-radius: 3px; padding: 2px; font-weight: bold; font-size: 11px;")
+                                    print(f"[DEBUG UI] Actualizada etiqueta de ruido: {text}")
+                                
+                                # --- NUEVO: Actualizar líneas dinámicas en el gráfico ---
+                                if hasattr(self, 'dynamic_noise_lines_pos'):
+                                    line_color = 'g' if ratio <= 1.20 else 'r'
+                                    self.dynamic_noise_lines_pos[i].setPos(curr_mean)
+                                    self.dynamic_noise_lines_pos[i].setPen(pg.mkPen(line_color, width=2, style=QtCore.Qt.DotLine))
+                                    self.dynamic_noise_lines_pos[i].show()
                                     
-                                    init_std = getattr(self, 'initial_noise_std', [0]*self.NUM_CANALES)[i]
-                                    init_mean = getattr(self, 'initial_noise_mean', [0]*self.NUM_CANALES)[i]
+                                    self.dynamic_noise_lines_neg[i].setPos(-curr_mean)
+                                    self.dynamic_noise_lines_neg[i].setPen(pg.mkPen(line_color, width=2, style=QtCore.Qt.DotLine))
+                                    self.dynamic_noise_lines_neg[i].show()
+                                
+                                # --- NUEVO: Guardar métricas para el gráfico final ---
+                                samples_period = min(int(period_s * self.SAMPLE_RATE), self.PLOT_SAMPLES)
+                                full_period_segment = self.plot_buffer_datos[i, -samples_period:]
+                                peak_val = np.max(np.abs(full_period_segment))
+                                baseline_noise = self.initial_noise_mean[i] if self.initial_noise_mean[i] > 0 else 1e-12
+                                curr_snr = peak_val / baseline_noise
+                                
+                                self.stats_time[i].append(signal_time)
+                                
+                                # --- MODIFICADO: Calcular SNR Promedio Acumulado ---
+                                if len(self.stats_snr[i]) > 0:
+                                    n = len(self.stats_snr[i])
+                                    snr_acumulado = (self.stats_snr[i][-1] * n + curr_snr) / (n + 1)
+                                else:
+                                    snr_acumulado = curr_snr
                                     
-                                    # Calcular el radio de deterioro (manejar división por cero en señales perfectas simuladas)
-                                    if init_std > 0.01:
-                                        ratio = curr_std / init_std
-                                    elif init_mean > 0.01:
-                                        ratio = curr_mean / init_mean
-                                    else:
-                                        ratio = 1.0 # Señal base sin ruido
-                                    
-                                    if hasattr(self, 'noise_status_labels'):
-                                        # Neón verde si se mantiene por debajo del 120% del original, si no, Rojo Cyberpunk
-                                        bg_color = "#000000"
-                                        fg_color = "#00FF00" if ratio <= 1.20 else "#FF0000" 
-                                        text = f"Inter-pulso: x̄={curr_mean:.1f}µV (Base={init_mean:.1f}µV) | {ratio*100:.0f}%"
-                                        self.noise_status_labels[i].setText(text)
-                                        self.noise_status_labels[i].setStyleSheet(f"color: {fg_color}; background-color: {bg_color}; border: 1px solid {fg_color}; border-radius: 3px; padding: 2px; font-weight: bold; font-size: 11px;")
-                                    
-                                    # --- NUEVO: Actualizar líneas dinámicas en el gráfico ---
-                                    if hasattr(self, 'dynamic_noise_lines_pos'):
-                                        line_color = 'g' if ratio <= 1.20 else 'r'
-                                        self.dynamic_noise_lines_pos[i].setPos(curr_mean)
-                                        self.dynamic_noise_lines_pos[i].setPen(pg.mkPen(line_color, width=2, style=QtCore.Qt.DotLine))
-                                        self.dynamic_noise_lines_pos[i].show()
-                                        
-                                        self.dynamic_noise_lines_neg[i].setPos(-curr_mean)
-                                        self.dynamic_noise_lines_neg[i].setPen(pg.mkPen(line_color, width=2, style=QtCore.Qt.DotLine))
-                                        self.dynamic_noise_lines_neg[i].show()
-                                    
-                                    # --- NUEVO: Guardar métricas para el gráfico final ---
-                                    samples_period = int(period_s * self.SAMPLE_RATE)
-                                    if samples_period <= self.PLOT_SAMPLES:
-                                        full_period_segment = self.plot_buffer_datos[i, -samples_period:]
-                                        peak_val = np.max(np.abs(full_period_segment))
-                                        baseline_noise = self.initial_noise_mean[i] if self.initial_noise_mean[i] > 0 else 1e-12
-                                        curr_snr = peak_val / baseline_noise
-                                        
-                                        self.stats_time[i].append(signal_time)
-                                        
-                                        # --- MODIFICADO: Calcular SNR Promedio Acumulado ---
-                                        if len(self.stats_snr[i]) > 0:
-                                            n = len(self.stats_snr[i])
-                                            snr_acumulado = (self.stats_snr[i][-1] * n + curr_snr) / (n + 1)
-                                        else:
-                                            snr_acumulado = curr_snr
-                                            
-                                        self.stats_snr[i].append(snr_acumulado)
-                                        self.stats_noise_mean[i].append(curr_mean)
-                                        self.stats_noise_std[i].append(curr_std)
-                        
-                        self.last_phase = phase
+                                self.stats_snr[i].append(snr_acumulado)
+                                self.stats_noise_mean[i].append(curr_mean)
+                                self.stats_noise_std[i].append(curr_std)
+                                
+                                # --- NUEVO: Acumular para el UI global ---
+                                if hasattr(self, 'global_snr_acumulado'):
+                                    c = self.global_snr_count[i]
+                                    self.global_snr_acumulado[i] = (self.global_snr_acumulado[i] * c + curr_snr) / (c + 1)
+                                    self.global_snr_count[i] += 1
+                    
+                    self.last_phase = phase
             
         except queue.Empty:
             pass # Si no hay datos, no hace nada
@@ -2175,12 +2194,24 @@ class RealTimePlotter(QtWidgets.QWidget):
                     self.peak_scatters[i].setData([t_max], [v_visual])
                     if getattr(self, 'is_recording', False) and getattr(self, 'noise_calculated', False):
                         if self.noise_levels[i] > 0:
-                            snr = avg_peak_val / self.noise_levels[i]
-                            texto += f" | SNR(Avg): {snr:.1f}"
+                            snr_inst = avg_peak_val / self.noise_levels[i]
+                            if hasattr(self, 'global_snr_count') and self.global_snr_count[i] > 0:
+                                snr_mostrar = self.global_snr_acumulado[i]
+                                texto += f" | SNR(Acum): {snr_mostrar:.1f}"
+                            elif hasattr(self, 'stats_snr') and i < len(self.stats_snr):
+                                snr_mostrar = self.stats_snr[i][-1] if len(self.stats_snr[i]) > 0 else snr_inst
+                                texto += f" | SNR(Acum): {snr_mostrar:.1f}"
                 else:
                     self.peak_scatters[i].setData([], []) # Oculta el marcador si no supera el umbral
                     if getattr(self, 'is_recording', False) and getattr(self, 'noise_calculated', False):
-                        texto += f" | SNR: < Umbral"
+                        if hasattr(self, 'global_snr_count') and self.global_snr_count[i] > 0:
+                            snr_mostrar = self.global_snr_acumulado[i]
+                            texto += f" | SNR(Acum): {snr_mostrar:.1f}"
+                        elif hasattr(self, 'stats_snr') and i < len(self.stats_snr):
+                            snr_mostrar = self.stats_snr[i][-1] if len(self.stats_snr[i]) > 0 else 0.0
+                            texto += f" | SNR(Acum): {snr_mostrar:.1f}"
+                        else:
+                            texto += f" | SNR: < Umbral"
                         
                 self.measure_labels[i].setText(texto)
         except Exception as e:
@@ -2365,6 +2396,10 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.stats_noise_mean = [[] for _ in range(self.NUM_CANALES)]
         self.stats_noise_std = [[] for _ in range(self.NUM_CANALES)]
         
+        # UI Global
+        self.global_snr_acumulado = [0.0] * self.NUM_CANALES
+        self.global_snr_count = [0] * self.NUM_CANALES
+        
         import time
         self.recording_start_time = time.perf_counter() 
         self.is_recording = True
@@ -2376,6 +2411,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     def estado_mostrar_preparate(self):
         # 1. El ruido base acaba de terminar. PAUSAMOS LA GRABACIÓN.
         self.is_recording = False
+        self.autoforge_ruido_guardado = self.current_recording.copy()
         self.autoforge_estado_actual_str = "ESCUCHA EL METRÓNOMO..."
         
         tr_str = getattr(self, 'tiempo_restante_str', '00:00')
@@ -2399,6 +2435,17 @@ class RealTimePlotter(QtWidgets.QWidget):
                     self.noise_lines_neg[i].show()
                     self.noise_regions[i].setRegion([-self.noise_levels[i], self.noise_levels[i]])
                     self.noise_regions[i].show()
+                    
+                    if hasattr(self, 'noise_status_labels'):
+                        self.noise_status_labels[i].setText(f"Ruido Base: x̄={self.initial_noise_mean[i]:.1f}µV, s={self.initial_noise_std[i]:.1f}µV")
+                        self.noise_status_labels[i].setStyleSheet("color: #00FFFF; font-size: 11px; font-weight: bold; background-color: #111111; border: 1px solid #00FFFF;")
+            
+            # --- NUEVO: Auto-ajuste del umbral de SNR ---
+            if self.NUM_CANALES > 0:
+                ruido_maximo_std = max(getattr(self, 'initial_noise_std', [0]))
+                if ruido_maximo_std > 0:
+                    self.spin_peak_th.setValue(ruido_maximo_std * 5.0)
+                    
             self.noise_calculated = True
         
         # 2. Iniciamos el Count-In acústico (3 compases) antes de saltar a la palabra.
@@ -2458,6 +2505,14 @@ class RealTimePlotter(QtWidgets.QWidget):
         import time
         self.recording_start_time = time.perf_counter() # Reseteamos tiempo UI para empezar desde 0.0s en la palabra
         self.is_recording = True
+        
+        # --- NUEVO: Limpiamos los buffers de guardado y estadísticas para cada palabra ---
+        self.current_recording = getattr(self, 'autoforge_ruido_guardado', []).copy()
+        self.stats_time = [[] for _ in range(self.NUM_CANALES)]
+        self.stats_snr = [[] for _ in range(self.NUM_CANALES)]
+        self.stats_noise_mean = [[] for _ in range(self.NUM_CANALES)]
+        self.stats_noise_std = [[] for _ in range(self.NUM_CANALES)]
+        
         self.label_rec_time.setText("GRABANDO PALABRA...")
         
         palabra = self.autoforge_words[self.autoforge_word_idx]
