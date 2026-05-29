@@ -19,19 +19,6 @@ Desarrollado por la comunidad para el **Laboratorio de Sistemas Dinámicos**.
 
 ---
 
-## 📥 Descargas y Compatibilidad
-
-El software está compilado y listo para usar sin necesidad de instalar dependencias de Python.
-
-- **Windows 10/11**: ✅ Totalmente compatible y optimizado.
-- **Linux / macOS**: 🚧 *En desarrollo* (Actualmente requiere instalación manual desde código fuente).
-
-[![Descargar para Windows](https://img.shields.io/badge/Descargar_Nand%C3%BA_LSD_para_Windows-v5.0.0-0078D6?style=for-the-badge&logo=windows)](ENLACE_DE_DESCARGA_AQUI)
-
-> **Nota:** Reemplaza `ENLACE_DE_DESCARGA_AQUI` con el enlace real (Google Drive, MEGA, o GitHub Releases) una vez subas la carpeta `NanduLsd`.
-
----
-
 ## 🚀 Características del Sistema (v4.0 - PySide6 & AutoForge)
 
 El proyecto se gestiona desde el **Lanzador Principal** (`gui_app/main_app.py`) que integra estética Cyberpunk, aceleración de hardware y múltiples módulos independientes:
