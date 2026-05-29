@@ -1,3 +1,10 @@
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Inyecta parches en scripts durante la compilación a ejecutable.
+# ==============================================================================
+
 import os
 import re
 
@@ -32,8 +39,6 @@ def resource_path(relative_path):
         base_path = os.path.abspath(os.path.dirname(__file__))
         if os.path.basename(base_path) == "gui_app":
             base_path = os.path.dirname(base_path)
-        if os.path.basename(base_path) == "EMG_Ejecutable_Build":
-            base_path = os.path.dirname(base_path)
     return os.path.join(base_path, relative_path)
 
 def user_data_path(relative_path):
@@ -44,8 +49,6 @@ def user_data_path(relative_path):
         base_path = os.path.abspath(os.path.dirname(__file__))
         if os.path.basename(base_path) == "gui_app":
             base_path = os.path.dirname(base_path)
-        if os.path.basename(base_path) == "EMG_Ejecutable_Build":
-            base_path = os.path.dirname(base_path)
     return os.path.join(base_path, relative_path)
 
 def lanzar_script(script_name, args=[]):
@@ -55,16 +58,11 @@ def lanzar_script(script_name, args=[]):
         exe_path = os.path.join(os.path.dirname(sys.executable), exe_name)
         return [exe_path] + args
     else:
-        base_path = os.path.abspath(os.path.dirname(__file__))
-        if os.path.basename(base_path) == "gui_app":
-            base_path = os.path.dirname(base_path)
-        return [sys.executable, os.path.join(base_path, script_name)] + args
+        return [sys.executable, resource_path(script_name)] + args
 # ---------------------------------------------
 '''
 
-    def parchear_archivo(ruta_absoluta, reemplazos_texto, reemplazos_regex=None):
-        if reemplazos_regex is None:
-            reemplazos_regex = []
+    def parchear_archivo(ruta_absoluta, reemplazos_texto):
         with open(ruta_absoluta, 'r', encoding='utf-8') as f:
             contenido = f.read()
 
@@ -78,10 +76,6 @@ def lanzar_script(script_name, args=[]):
         # Aplicar reemplazos exactos
         for viejo, nuevo in reemplazos_texto:
             contenido = contenido.replace(viejo, nuevo)
-
-        # Aplicar reemplazos por expresiones regulares
-        for patron, nuevo in reemplazos_regex:
-            contenido = re.sub(patron, nuevo, contenido)
 
         with open(ruta_absoluta, 'w', encoding='utf-8') as f:
             f.write(contenido)
@@ -105,15 +99,13 @@ def lanzar_script(script_name, args=[]):
         ("python_executable = sys.executable", ""),
         ("script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'metronomo_visual.py')", ""),
         ("word_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ventana_palabras.py')", ""),
-    ]
-    reemplazos_regex_daq = [
-        (r"\[\s*python_executable,\s*script_path,\s*(.*?)\]", r"lanzar_script('metronomo_visual.py', [\1])"),
-        (r"\[\s*python_executable,\s*word_script_path,\s*(.*?)\]", r"lanzar_script('ventana_palabras.py', [\1])")
+        ("[python_executable, script_path, ", "lanzar_script('metronomo_visual.py', ["),
+        ("[python_executable, word_script_path, ", "lanzar_script('ventana_palabras.py', [")
     ]
     for archivo in ["CodigoUnificador_integrado.py", "Nandu_AutoForge_DAQ.py"]:
         ruta = os.path.join(build_dir, archivo)
         if os.path.exists(ruta):
-            parchear_archivo(ruta, reemplazos_daq, reemplazos_regex_daq)
+            parchear_archivo(ruta, reemplazos_daq)
 
     # --- 3. REEMPLAZOS PARA GUI_APP Y DOCKERS ---
     viejo_launch = '''    def _launch_external(self, script_name):
@@ -159,18 +151,12 @@ def lanzar_script(script_name, args=[]):
         parchear_archivo(ruta_main, reemplazos_main)
 
     # --- 4. REEMPLAZOS PARA EL LANZADOR Y VISORES AUXILIARES ---
-    reemplazos_bases = []
-    reemplazos_regex_bases = [
-        (r"self\.BASE_DIR\s*=\s*os\.path\.join\(.*?,?\s*[\"']base_de_datos_electrodos[\"']\)", r"self.BASE_DIR = user_data_path('base_de_datos_electrodos')"),
-        (r"self\.BASE_DIR\s*=\s*[\"']base_de_datos_electrodos[\"']", r"self.BASE_DIR = user_data_path('base_de_datos_electrodos')"),
-        (r"BASE_DIR\s*=\s*os\.path\.join\(.*?,?\s*[\"']base_de_datos_electrodos[\"']\)", r"BASE_DIR = user_data_path('base_de_datos_electrodos')"),
-        (r"BASE_DIR\s*=\s*[\"']base_de_datos_electrodos[\"']", r"BASE_DIR = user_data_path('base_de_datos_electrodos')"),
-        (r"base_dir\s*=\s*[\"']base_de_datos_electrodos[\"']", r"base_dir = user_data_path('base_de_datos_electrodos')"),
-        (r"self\.base_folder\s*=\s*[\"']base_de_datos_electrodos[\"']", r"self.base_folder = user_data_path('base_de_datos_electrodos')"),
-        (r"self\.fuente_dir\s*=\s*[\"']base_de_datos_electrodos[\"']", r"self.fuente_dir = user_data_path('base_de_datos_electrodos')"),
-        (r"comp_dir\s*=\s*[\"']analisis_comparativos[\"']", r"comp_dir = user_data_path('analisis_comparativos')"),
-        (r"destino_dir\s*=\s*[\"']base_de_datos_letras[\"']", r"destino_dir = user_data_path('base_de_datos_letras')"),
-        (r"self\.destino_dir\s*=\s*[\"']base_de_datos_letras[\"']", r"self.destino_dir = user_data_path('base_de_datos_letras')")
+    reemplazos_bases = [
+        ('self.BASE_DIR = "base_de_datos_electrodos"', 'self.BASE_DIR = user_data_path("base_de_datos_electrodos")'),
+        ('BASE_DIR = os.path.join(_current_dir, "base_de_datos_electrodos")', 'BASE_DIR = user_data_path("base_de_datos_electrodos")'),
+        ('base_dir = "base_de_datos_electrodos"', 'base_dir = user_data_path("base_de_datos_electrodos")'),
+        ('comp_dir = "analisis_comparativos"', 'comp_dir = user_data_path("analisis_comparativos")'),
+        ('destino_dir = "base_de_datos_letras"', 'destino_dir = user_data_path("base_de_datos_letras")')
     ]
     archivos_auxiliares = [
         "visor_csv_interactivo.py", "plotter_calibrado.py", "extractor_de_datos_procesados.py", 
@@ -181,7 +167,7 @@ def lanzar_script(script_name, args=[]):
     for archivo in archivos_auxiliares:
         ruta = os.path.join(build_dir, archivo)
         if os.path.exists(ruta):
-            parchear_archivo(ruta, reemplazos_bases, reemplazos_regex_bases)
+            parchear_archivo(ruta, reemplazos_bases)
 
     # Parche especial avanzado para Sistema_de_Adquisicion_Emg.py (El Lanzador)
     reemplazo_launcher = """def launch_script(script_path_rel):

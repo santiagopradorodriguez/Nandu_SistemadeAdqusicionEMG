@@ -25,7 +25,17 @@ Actualmente, el proyecto ha dado un gran salto hacia su **versión 4.0** (introd
 - **Comentarios en Código:** Agregar comentarios explicativos (Docstrings) dentro de las funciones críticas de la máquina de estados de AutoForge.
 - **Entorno Virtual:** Ayudar a mantener actualizada la lista de `requirements.txt` y crear una guía de instalación específica para usuarios de Linux/Mac que quieran correr el "Modo Simulador".
 
+### 💡 Lecciones de Desarrollo (Scoping en UI)
+A la hora de desarrollar o arreglar bugs en las interfaces de usuario (PySide6 / Tkinter), recuerda esta regla de oro:
+- **EVITA el uso de variables locales en `__init__` si van a ser leídas después.** Hemos tenido bugs fatales donde variables de color (como `bg_panel`) no eran accesibles fuera de `__init__`. **Siempre antepón `self.`** a cualquier configuración global de estilo o variable de estado de la ventana.
+
 ---
+
+## 📋 Lista de Tareas Pendientes (TODO)
+
+Actualmente, necesitamos colaboración urgente en las siguientes áreas:
+- [ ] **Sistemas de Logs:** Reparar y estandarizar todos los `logging.info()` a lo largo del código. Actualmente, la observabilidad es irregular, y necesitamos un estándar de archivo rotativo o formato único.
+- [ ] **Empaquetado EXE:** Depurar la compilación de PyInstaller para evitar pesos excesivos e inclusión de librerías innecesarias (ignorar carpetas de base de datos grandes en el `.spec`).
 
 ## 🛠️ Configuración del Entorno de Desarrollo
 

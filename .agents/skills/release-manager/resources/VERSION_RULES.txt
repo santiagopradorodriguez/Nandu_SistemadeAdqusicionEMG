@@ -1,0 +1,24 @@
+======================================================================
+REGLAS DE VERSIONADO Y CHANGELOG (NANDU LSD)
+======================================================================
+
+1. VERSIONADO SEMÁNTICO (SemVer):
+   El formato estricto es v[MAYOR].[MENOR].[PARCHE] (ej. v1.2.4)
+   - PARCHE (+0.0.1): Si solo se arreglaron bugs o errores pequeños.
+   - MENOR (+0.1.0): Si se agregaron nuevas funciones (ej. nuevo AutoForge) pero el software viejo sigue funcionando.
+   - MAYOR (+1.0.0): Cambios masivos que rompen la compatibilidad con versiones anteriores (ej. cambiar NI-DAQ por otra placa).
+
+2. FORMATO DEL CHANGELOG.md:
+   Cada vez que actualices la versión, DEBES agregar una entrada al principio del archivo `CHANGELOG.md` usando este formato Markdown exacto:
+
+   ## [vX.Y.Z] - YYYY-MM-DD
+   ### Agregado (Added)
+   - [Nuevas funciones o scripts]
+   ### Modificado (Changed)
+   - [Cambios en funciones existentes]
+   ### Solucionado (Fixed)
+   - [Bugs aplastados]
+
+3. ACTUALIZACIÓN GLOBAL:
+   Si el usuario te pide "lanzar una nueva versión", debes buscar y actualizar la variable `__version__ = "X.Y.Z"` en los archivos principales (ej. `main_app.py` o `setup.py`) para que coincida con el Changelog.
+======================================================================

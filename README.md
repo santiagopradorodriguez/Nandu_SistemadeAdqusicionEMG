@@ -51,32 +51,35 @@ AutoForge es la nueva máquina de estados central del proyecto, diseñada para c
 - **Auto-Guardado:** Guarda las grabaciones crudas, procesadas y metadatos con la nomenclatura perfecta para su posterior entrenamiento en Machine Learning.
 
 ---
-### 🛠️ Herramientas de Gestión y Utilidades
+### 🛠️ Herramientas y Módulos (Nueva Arquitectura v4.x)
+El proyecto ha sido refactorizado en una arquitectura modular dentro de la rama principal de desarrollo:
 
-*   **Extractor de Datos (`extractor_de_datos_procesados.py`)**:
-    *   Recopila los pulsos individuales de los archivos `analisis_results.json`.
-    *   Realiza una calibración de amplitud final basada en la resistencia del electrodo, calculando la "Amplitud Real".
-    *   Reorganiza los datos en una nueva base de datos (`base_de_datos_letras`) clasificada por tipo de gesto.
+#### 1. Módulo `acquisition/` (Adquisición de Hardware)
+*   **`manual_daq.py`**: Interfaz de captura libre con configuración manual de ganancia y hardware.
+*   **`autoforge_daq.py`**: Núcleo de autograbación por diccionario y evaluación SNR.
+*   **`metronomo_visual.py`**: Subproceso esclavo para la sincronización temporal.
 
-*   **Análisis Estadístico (`analisis_estadistico_pulsos.py`)**:
-    *   Lee el archivo consolidado `amplitudes_maximas.csv`.
-    *   Calcula y muestra estadísticas descriptivas y genera histogramas de la "Amplitud Real" para cada categoría de gesto.
+#### 2. Módulo `analysis/` (DSP y Procesamiento)
+*   **`feature_extractor.py`**: Recopila pulsos de las mediciones y realiza calibración cruzada de amplitudes (Ohms a Volts).
+*   **`analisis_estadistico_pulsos.py`**: Generación de histogramas y datos de "Amplitud Real".
+*   **`plotter_calibrado.py`**: Visor de datos crudos aplicando una calibración de ganancia fija y filtros matemáticos.
+*   **`correlaciondeseñales.py`**: Alineación temporal "Master-Slave" usando cross-correlation para compensar la coarticulación.
 
-*   **Editor de Mediciones (`editor_mediciones.py`)**:
-    *   GUI para renombrar y "formalizar" mediciones, asignando el formato `Letra_Prueba_Sujeto` requerido por el pipeline.
+#### 3. Módulo `utils/` (Manejo de Base de Datos)
+*   **`editor_mediciones.py`**: GUI para renombrar y curar mediciones post-captura.
+*   **`actualizar_metadata.py`**: Script de migración en lote para archivos JSON de sesiones antiguas.
 
-*   **Actualizador de Metadatos (`actualizar_metadata.py`)**:
-    *   Script para actualizar en lote los archivos `metadata.json` de mediciones antiguas, útil para añadir nuevos campos como `resistencia_ohm`.
+---
 
-*   **Ploteador Calibrado (`plotter_calibrado.py`)**:
-    *   Herramienta de visualización para inspeccionar los datos crudos de `grabacion.csv` aplicando una calibración de ganancia fija y filtros para generar gráficos limpios en microvolts (µV).
-    *   *(Nueva Opción)*: Ahora se puede elegir aplicar filtro pasabanda, notch en 50 hz y envolvente RMS de 75 milisegundos. También permite analizar muchas mediciones a la vez.
+## 🧠 Pipeline de Deep Learning (PyTorch)
+El proyecto incluye un pipeline estructurado enfocado en transformar señales crudas a tensores normalizados para el entrenamiento de arquitecturas de Deep Learning (como Autoencoders).
 
-### En Desarrollo:
-*   **Análisis Avanzado de Correlación (`correlaciondeseñales.py`)**:
-    *   Alinea temporalmente usando la correlación de los pulsos de diferentes canales musculares mediante una estrategia "Master-Slave", designando un canal como líder para la sincronización.
-    *   Calcula la forma de pulso promedio, y genera gráficos comparativos.
-    *   Guarda resultados detallados, incluyendo los segmentos de pulso alineados, en `analisis_results.json`.
+*   **`dl_data_pipeline.py`**: Script encargado de procesar en "Batch" las bases de datos de electrodos. 
+    1. **Filtros Base**: Aplica Pasa-banda y Notch.
+    2. **RMS**: Extrae la envolvente de la señal.
+    3. **Alineación**: Centra los fonemas mediante la técnica "Master-Slave".
+    4. **Tensorización**: Aplica _Resampling_ a 500 dimensiones constantes y normalización _Min-Max_ (0.0 a 1.0).
+    5. **Dataloader**: Genera archivos `.npy` y crea la clase `EMGDataset` compatible con `torch.utils.data.Dataset`.
 
 ---
 ## 💾 Arquitectura y Protocolo de Datos
@@ -208,6 +211,15 @@ El proyecto está en desarrollo activo. Consulta `ROADMAP.md` para más detalles
 - [ ] **Visualización Anatómica:** Permitir mostrar fotos (ej. `configuracion.jpg`) automáticamente en la interfaz para documentar la disposición física de los electrodos en el sujeto.
 - [ ] **Distribución y Empaquetado:** Crear un archivo ejecutable `.exe` independiente para facilitar la instalación en computadoras de laboratorio.
 - [ ] **Módulos de Deep Learning:** Empezar a crear scripts base usando **PyTorch** para el entrenamiento de redes neuronales a futuro con los datos extraídos.
+
+---
+
+## 🐛 Errores Conocidos y Soluciones Históricas
+
+Durante el desarrollo de la versión 4.0, nos enfrentamos a problemas de "scoping" en Python al migrar componentes de la UI. 
+- **El Problema:** Al instanciar colores (`bg_panel`) en métodos `__init__`, otras funciones internas de la clase perdían la referencia en tiempo de ejecución, provocando caídas completas del programa (`NameError`).
+- **La Solución:** Todo objeto visual que deba perdurar o ser accedido por funciones secundarias **debe ser instanciado usando `self.`** (ej. `self.bg_panel`). 
+- **Resiliencia de la Terminal:** Como medida adicional, todos los procesos que abran sub-ventanas analíticas (como Análisis Comparativo o Análisis Integrado) ahora se ejecutan en terminales persistentes mediante `subprocess.Popen` con un `try/except` general que pausa la terminal (`input()`) al detectar un traceback, impidiendo que el error sea invisible.
 
 ---
 

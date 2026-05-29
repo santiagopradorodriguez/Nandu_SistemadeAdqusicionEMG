@@ -1,3 +1,10 @@
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Inyecta parches en scripts durante la compilación a ejecutable.
+# ==============================================================================
+
 import os
 import re
 
@@ -51,9 +58,7 @@ def user_data_path(relative_path):
 def lanzar_script(script_name, args=[]):
     """ Genera el comando de subprocess compatible tanto en Python como en .exe """
     if getattr(sys, 'frozen', False):
-        exe_name = script_name.replace('.py', '.exe')
-        exe_path = os.path.join(os.path.dirname(sys.executable), exe_name)
-        return [exe_path] + args
+        return [sys.executable, script_name] + args
     else:
         base_path = os.path.abspath(os.path.dirname(__file__))
         if os.path.basename(base_path) == "gui_app":
@@ -110,7 +115,7 @@ def lanzar_script(script_name, args=[]):
         (r"\[\s*python_executable,\s*script_path,\s*(.*?)\]", r"lanzar_script('metronomo_visual.py', [\1])"),
         (r"\[\s*python_executable,\s*word_script_path,\s*(.*?)\]", r"lanzar_script('ventana_palabras.py', [\1])")
     ]
-    for archivo in ["CodigoUnificador_integrado.py", "Nandu_AutoForge_DAQ.py"]:
+    for archivo in ["acquisition/manual_daq.py", "acquisition/autoforge_daq.py"]:
         ruta = os.path.join(build_dir, archivo)
         if os.path.exists(ruta):
             parchear_archivo(ruta, reemplazos_daq, reemplazos_regex_daq)
@@ -173,10 +178,10 @@ def lanzar_script(script_name, args=[]):
         (r"self\.destino_dir\s*=\s*[\"']base_de_datos_letras[\"']", r"self.destino_dir = user_data_path('base_de_datos_letras')")
     ]
     archivos_auxiliares = [
-        "visor_csv_interactivo.py", "plotter_calibrado.py", "extractor_de_datos_procesados.py", 
-        "electrode_viewer_4.py", "editor_mediciones.py", "analisis_por_track_integrado.py", 
-        "analisis_por_track_integrado_experimental.py", "correlaciondeseñales.py", 
-        "actualizar_metadata.py", "migrar_mediciones_por_fecha.py"
+        "analysis/plotter_calibrado.py", "analysis/feature_extractor.py", 
+        "analysis/electrode_viewer_4.py", "utils/editor_mediciones.py", "analysis/analisis_por_track_integrado.py", 
+        "analysis/analisis_por_track_integrado_experimental.py", "analysis/correlaciondeseñales.py", 
+        "utils/actualizar_metadata.py", "utils/migrar_mediciones_por_fecha.py"
     ]
     for archivo in archivos_auxiliares:
         ruta = os.path.join(build_dir, archivo)
@@ -205,7 +210,7 @@ def launch_script_original(script_path_rel):"""
             ("def launch_script(script_path_rel):", reemplazo_launcher)
         ])
 
-    print("\n🚀 ¡Parches aplicados a TODA la suite de códigos! Entorno listo para la compilación (Fases 1.1 y 1.2 superadas).")
+    print("\n[OK] Parches aplicados a TODA la suite de codigos! Entorno listo para la compilacion (Fases 1.1 y 1.2 superadas).")
 
 if __name__ == "__main__":
     aplicar_parches()
