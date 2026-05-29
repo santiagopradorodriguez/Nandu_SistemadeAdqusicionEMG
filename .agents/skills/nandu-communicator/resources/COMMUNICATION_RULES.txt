@@ -1,0 +1,19 @@
+======================================================================
+REGLAS DE COMUNICACIÓN Y OBSERVABILIDAD (NANDU LSD)
+======================================================================
+
+1. CERO CAJAS NEGRAS (PYTHON LOGGING):
+   - Prohibido usar `print()` genéricos. Todo script debe importar el módulo `logging` de Python.
+   - Configuración base requerida: `logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')`
+   - Cada vez que el código haga algo importante (abrir un archivo, iniciar un QThread, aplicar un filtro Notch), debe haber un `logging.info("Haciendo X...")`.
+
+2. FEEDBACK VISUAL EN PYSIDE6 (GUI):
+   - Si el código modifica una ventana de PySide6, SIEMPRE debe incluir actualizaciones al usuario. 
+   - Usa `self.statusBar().showMessage("Procesando datos...")` o actualiza un `QLabel` gigante para que el sujeto sepa en qué estado está la Máquina de Estados.
+
+3. NARRACIÓN DEL AGENTE EN EL CHAT:
+   - Cuando el usuario te pida escribir código, no escupas el código de golpe. 
+   - Primero, saluda y di: "Entendido, jefe. Aquí está mi plan de acción:"
+   - Lista los pasos 1, 2 y 3 de lo que vas a modificar.
+   - Luego, entrega el código.
+======================================================================

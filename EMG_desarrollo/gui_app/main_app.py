@@ -34,7 +34,7 @@ matplotlib.use('TkAgg') # Forzar TkAgg para que las ventanas de curación de Mat
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QDockWidget, QTextEdit, QLabel, QTreeView, QTabWidget,
-    QToolBar, QPushButton, QSizePolicy
+    QToolBar, QPushButton, QSizePolicy, QMessageBox
 )
 from PySide6.QtCore import Qt, QThreadPool, QSize
 from PySide6.QtGui import QFont, QColor, QTextCursor, QAction, QPixmap
@@ -188,11 +188,21 @@ class ReaperStyleHub(QMainWindow):
         import subprocess
         import os
         
+        if getattr(sys, 'frozen', False):
+            try:
+                if sys.platform == "win32":
+                    subprocess.Popen([sys.executable, script_name], creationflags=subprocess.CREATE_NEW_CONSOLE)
+                else:
+                    subprocess.Popen([sys.executable, script_name])
+            except Exception as e:
+                QMessageBox.critical(self, "Error Crítico", f"Error al abrir {script_name}:\n{e}")
+            return
+
         root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         script_path = os.path.join(root_dir, script_name)
         
         if not os.path.exists(script_path):
-            QMessageBox.critical(self, "Error", f"No se encontró el script: {script_name}")
+            QMessageBox.critical(self, "Error", f"No se encontró el script: {script_name} en {script_path}")
             return
             
         try:
@@ -604,6 +614,14 @@ class ReaperStyleHub(QMainWindow):
         bridge_script = f"""
 import sys
 import os
+
+# --- INYECCIÓN DE SEGURIDAD PARA RESOLUCIÓN DE MÓDULOS (PyInstaller / Nativo) ---
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
+# -------------------------------------------------------------------------------
+
+from pathlib import Path
 import json
 from datetime import datetime
 import matplotlib

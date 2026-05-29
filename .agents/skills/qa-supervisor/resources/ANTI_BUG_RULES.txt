@@ -1,0 +1,20 @@
+======================================================================
+REGLAS DE ORO DE INTEGRIDAD (NANDU LSD) - LECTURA OBLIGATORIA PARA QA
+======================================================================
+
+1. REGLA DEL HILO PRINCIPAL (GUI FREEZE): 
+   - ESTRICTAMENTE PROHIBIDO usar `time.sleep()` o bucles `while True` pesados en el hilo principal de PySide6. 
+   - Cualquier operación de E/S (guardar CSV, leer DAQ, entrenar modelo) DEBE estar en un `QThread` o gestionada por `QTimer`.
+
+2. REGLA DEL HARDWARE (NI-DAQmx):
+   - Todo código que abra una tarea de `nidaqmx` DEBE tener un bloque `try...finally` asegurando que `task.close()` se ejecute SIEMPRE. Si la IA deja la tarea abierta, la placa USB se cuelga y hay que reiniciar físicamente.
+
+3. REGLA DE DESTRUCCIÓN DE CÓDIGO:
+   - Al modificar una clase existente, NO SE DEBEN borrar métodos funcionales a menos que se solicite explícitamente. Las IAs tienden a reemplazar funciones con `pass` por pereza. El QA debe detectar esto.
+
+4. REGLA DE DIMENSIONES (MACHINE LEARNING):
+   - Cualquier código que envíe datos al modelo PyTorch debe garantizar que la entrada no tenga NaNs (Not a Number) y coincida con el shape esperado [Batch, 3, 500]. Si falta un `.reshape()` o un `.unsqueeze()`, el QA debe marcarlo como error crítico.
+
+5. REGLA DE SILENCIAMIENTO DE ERRORES:
+   - Prohibido el uso de `except Exception: pass`. Todos los errores deben imprimirse o logearse.
+======================================================================

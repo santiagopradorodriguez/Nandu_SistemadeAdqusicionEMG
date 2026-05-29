@@ -49,7 +49,7 @@ additional_modules = [
     'utils.migrar_mediciones_por_fecha',
     'instrucciones_uso',
     'acquisition.ventana_palabras',
-    'gui_app.views.config_dialog'
+    'views.config_dialog'
 ]
 
 # Librerías que PyInstaller a veces no detecta automáticamente
@@ -57,7 +57,7 @@ hidden_imports = [
     'scipy.signal', 'scipy.special', 'scipy.io.wavfile',
     'matplotlib.backends.backend_tkagg', 'matplotlib.backends.backend_qt5agg',
     'nidaqmx', 'sounddevice', 'soundfile', 'pyqtgraph', 'pandas', 'PIL',
-    'PySide6', 'qdarkstyle', 'utils', 'gui_app', 'acquisition', 'analysis'
+    'PySide6', 'qdarkstyle', 'utils', 'acquisition', 'analysis', 'core', 'views'
 ] + additional_modules
 
 datas = [
@@ -66,7 +66,7 @@ datas = [
 
 a = Analysis(
     ['gui_app/main_app.py'],
-    pathex=['.'],
+    pathex=['.', 'gui_app'],
     binaries=[],
     datas=datas,
     hiddenimports=hidden_imports,
