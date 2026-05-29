@@ -3,6 +3,7 @@
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python)
 ![Estado](https://img.shields.io/badge/Estado-En_Desarrollo-yellow?style=for-the-badge)
 ![Licencia](https://img.shields.io/badge/Licencia-Open_Source-green?style=for-the-badge)
+[![Descargas](https://img.shields.io/badge/📥_Descargas_Windows-Click_Aquí-0078D6?style=for-the-badge)](./DESCARGAS.md)
 
 > **"HECHO PARA Y POR LA COMUNIDAD"**
 
