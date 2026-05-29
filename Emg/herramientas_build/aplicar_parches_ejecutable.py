@@ -2,7 +2,8 @@ import os
 import re
 
 def aplicar_parches():
-    base_dir = os.path.dirname(os.path.abspath(__file__))
+    # Al moverse a 'herramientas_build', el directorio raíz del proyecto es el padre
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     build_dir = os.path.join(base_dir, "EMG_Ejecutable_Build")
 
     if not os.path.exists(build_dir):
@@ -11,6 +12,13 @@ def aplicar_parches():
 
     # Este es el bloque de código que inyectaremos en la cabecera de los archivos
     inyeccion_base = '''
+# ==============================================================================
+# 🛑 ⚠️ ¡ATENCIÓN! ESTE ES UN ARCHIVO TEMPORAL DE BUILD ⚠️ 🛑
+# 
+# 🚫 NO EDITES ESTE ARCHIVO 🚫
+# Cualquier cambio que hagas aquí se PERDERÁ al volver a compilar.
+# Por favor, realiza tus cambios en los archivos de la carpeta principal.
+# ==============================================================================
 # --- INYECCIÓN AUTOMÁTICA PARA PYINSTALLER ---
 import sys
 import os

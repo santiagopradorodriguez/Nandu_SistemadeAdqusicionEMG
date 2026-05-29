@@ -1,7 +1,8 @@
 import os
 
 def generar_spec():
-    base_dir = os.path.dirname(os.path.abspath(__file__))
+    # Al moverse a 'herramientas_build', el directorio raíz del proyecto es el padre
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     build_dir = os.path.join(base_dir, "EMG_Ejecutable_Build")
     
     if not os.path.exists(build_dir):

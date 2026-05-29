@@ -752,7 +752,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.spin_bpm = SpinBox(value=60, int=True, bounds=(30, 200), step=1)
         self.spin_bpm.setFixedWidth(80) # Acortar el recuadro del BPM
         self.label_noise_duration = QtWidgets.QLabel("Noise (Inicio) (s):")
-        self.spin_noise_duration = SpinBox(value=10.0, dec=True, bounds=(0.5, 20.0), step=0.5)
+        self.spin_noise_duration = SpinBox(value=5.0, dec=True, bounds=(0.5, 20.0), step=0.5)
         self.spin_noise_duration.setFixedWidth(80)
 
         self.config_layout.addWidget(self.label_device, 0, 0)
@@ -1143,6 +1143,11 @@ class RealTimePlotter(QtWidgets.QWidget):
             
             # Leer nuevos parámetros de la GUI
             self.SAMPLE_RATE = int(self.cmb_sample_rate.currentText())
+            
+            # --- NUEVO: Si se usa el micrófono, forzar el sample rate correcto ANTES de crear el búfer visual ---
+            if getattr(self, 'chk_use_mic', None) and self.chk_use_mic.isChecked():
+                self.SAMPLE_RATE = 44100
+                
             self.PLOT_DURATION_S = self.spin_plot_duration.value()
             self.PLOT_SAMPLES = int(self.PLOT_DURATION_S * self.SAMPLE_RATE)
             
@@ -1205,7 +1210,6 @@ class RealTimePlotter(QtWidgets.QWidget):
             self.stop_event.clear()
 
             if self.chk_use_mic.isChecked():
-                self.SAMPLE_RATE = 44100
                 chunk_samples_dinamico = int(self.SAMPLE_RATE * 0.05)
                 self.acquisition_thread = threading.Thread(target=microphone_thread, args=(chunk_samples_dinamico, self.SAMPLE_RATE, self.NUM_CANALES, self.data_queue, self.stop_event), daemon=True)
             elif self.chk_modo_prueba.isChecked():
@@ -1592,7 +1596,7 @@ class RealTimePlotter(QtWidgets.QWidget):
             # MODO ROLL (Armado)
             self.plot.setMouseEnabled(x=False, y=True) # Solo zoom Y
             self.plot.getViewBox().disableAutoRange(pg.ViewBox.XAxis) # Desactiva auto-range en X
-            self.plot.getViewBox().enableAutoRange(axis=pg.ViewBox.YAxis) # Auto-escala Y continuamente
+            self.plot.getViewBox().disableAutoRange(pg.ViewBox.YAxis) # Desactiva auto-range en Y para el Peak-Hold
             self.plot.setXRange(-self.PLOT_DURATION_S, 0, padding=0)
             self.plot_widget.setBackground('k') # Color de fondo negro
         else:
@@ -1605,6 +1609,10 @@ class RealTimePlotter(QtWidgets.QWidget):
         if not self.is_recording:
             # --- EMPEZAR A GRABAR ---
             self.is_recording = True
+            
+            # --- NUEVO: Resetear el zoom en Y ---
+            self.plot.setYRange(-0.01, 0.01)
+            
             self.counting_started = False # Reiniciar la bandera de conteo
             self.current_recording.clear()
             self.cmb_terminal_config.setEnabled(False) # <-- NUEVO: Bloquear cambio en plena grabación
@@ -1987,6 +1995,15 @@ class RealTimePlotter(QtWidgets.QWidget):
             
             if self.chk_autoscroll.isChecked():
                 self.plot.setXRange(-self.PLOT_DURATION_S, 0, padding=0)
+                
+                # --- NUEVO: Peak-Hold Auto Scaling ---
+                if self.NUM_CANALES > 0 and self.plot_buffer_datos.size > 0:
+                    current_max = np.max(np.abs(self.plot_buffer_datos))
+                    view_range = self.plot.getViewBox().viewRange()[1]
+                    current_y_max = max(abs(view_range[0]), abs(view_range[1]))
+                    
+                    if current_max * 1.1 > current_y_max or current_y_max < 0.0001:
+                        self.plot.setYRange(-current_max * 1.2, current_max * 1.2, padding=0)
 
             self.check_for_trigger(processed_data, total_muestras_leidas)
             self.actualizar_mediciones(processed_data, self.plot_buffer_datos)
@@ -2403,6 +2420,9 @@ class RealTimePlotter(QtWidgets.QWidget):
         import time
         self.recording_start_time = time.perf_counter() 
         self.is_recording = True
+        
+        # --- NUEVO: Resetear escala Y para cada nueva palabra ---
+        self.plot.setYRange(-0.01, 0.01)
         
         # Programar la aparición de la ventana "Preparate" y el metrónomo CUANDO TERMINE EL RUIDO
         noise_dur = self.spin_noise_duration.value()

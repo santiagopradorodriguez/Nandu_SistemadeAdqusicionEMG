@@ -29,7 +29,7 @@ class MetronomeApp:
         # Obtener resolución de pantalla para anclar a la derecha
         screen_w = self.root.winfo_screenwidth()
         window_w = 350
-        window_h = 400
+        window_h = 500
         x_pos = screen_w - window_w - 20 # 20px de margen derecho
         y_pos = 50 # 50px de margen superior
         self.root.geometry(f"{window_w}x{window_h}+{x_pos}+{y_pos}")
@@ -70,10 +70,6 @@ class MetronomeApp:
         self.pulse_frame = tk.Frame(root, bg=self.COLOR_IDLE, height=100)
         self.pulse_frame.pack(fill="x", padx=20, pady=20)
 
-        # --- Controles ---
-        controls_frame = tk.Frame(root, bg="#050505")
-        controls_frame.pack(fill="both", expand=True, padx=20)
-
         # --- NUEVO: Display del contador de pulsos ---
         pulse_container = tk.Frame(self.root, bg="#050505")
         pulse_container.pack(expand=True, fill="both")
@@ -81,11 +77,15 @@ class MetronomeApp:
         # Título dinámico "INICIANDO" / "PULSO"
         self.lbl_title_var = tk.StringVar(value="PULSO")
         self.lbl_title = tk.Label(pulse_container, textvariable=self.lbl_title_var, font=title_font, fg="#00FFFF", bg="#050505")
-        self.lbl_title.pack(pady=(15, 5))
+        self.lbl_title.pack(pady=(5, 5))
 
         # Contador de Pulsos gigante
         self.counter_label = tk.Label(pulse_container, textvariable=self.beat_count, font=counter_font, fg="#00FFFF", bg="#050505")
-        self.counter_label.pack(pady=(5, 15))
+        self.counter_label.pack(pady=(0, 10))
+
+        # --- Controles ---
+        controls_frame = tk.Frame(root, bg="#050505")
+        controls_frame.pack(fill="both", expand=True, padx=20)
 
         # Display de BPM
         tk.Label(controls_frame, text="BPM", font=title_font, fg="#00FF00", bg="#050505").pack()
@@ -233,14 +233,14 @@ class MetronomeApp:
             
             # Si count_in está activo, no incrementamos el beat normal
             if self.count_in_remaining > 0:
-                self.beat_count.set(" ") # Muestra vacío en Count-In
+                self.beat_count.set("1") # Muestra '1' en el pulso de GO
                 self.count_in_remaining = 0
             else:
                 try:
                     current = int(self.beat_count.get())
                 except ValueError:
                     current = 0
-                self.beat_count.set(str((current % 4) + 1))
+                self.beat_count.set(str(current + 1))
                     
         # Sonidos de metrónomo (Graves para cuenta atrás, Agudo para GO, Normal el resto)
         if winsound and not self.is_muted:

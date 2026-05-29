@@ -2,7 +2,8 @@ import os
 import shutil
 
 def crear_entorno_seguro():
-    src_dir = os.path.dirname(os.path.abspath(__file__))
+    # Al moverse a 'herramientas_build', el directorio raíz del proyecto es el padre
+    src_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     dest_dir = os.path.join(src_dir, "EMG_Ejecutable_Build")
 
     if not os.path.exists(dest_dir):
@@ -11,8 +12,8 @@ def crear_entorno_seguro():
     else:
         print(f"⚠️ La carpeta ya existe: {dest_dir}")
 
-    # Ignoramos bases de datos pesadas y entornos virtuales
-    ignorar_carpetas = {'base_de_datos_electrodos', 'base_de_datos_letras', 'analisis_comparativos', 'venv', '__pycache__', '.git', 'EMG_Ejecutable_Build'}
+    # Ignoramos bases de datos, entornos y nuestra nueva carpeta de herramientas
+    ignorar_carpetas = {'base_de_datos_electrodos', 'base_de_datos_letras', 'analisis_comparativos', 'venv', '__pycache__', '.git', 'EMG_Ejecutable_Build', 'herramientas_build'}
 
     for item in os.listdir(src_dir):
         src_path = os.path.join(src_dir, item)
