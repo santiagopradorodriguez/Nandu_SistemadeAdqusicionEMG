@@ -8,7 +8,7 @@ El software ha sido completamente empaquetado para Windows, incluyendo todos los
 
 **Estado:** ✅ Totalmente compatible y optimizado.
 
-[![Descargar para Windows](https://img.shields.io/badge/Descargar_Nand%C3%BA_LSD_para_Windows-v5.0.0-0078D6?style=for-the-badge&logo=windows)](ENLACE_DE_DESCARGA_AQUI)
+[![Descargar para Windows](https://img.shields.io/badge/Descargar_Nand%C3%BA_LSD_para_Windows-v5.0.0-0078D6?style=for-the-badge&logo=windows)](https://drive.google.com/drive/folders/1FtNJlB-4T-xKyZ0bZIJhjtzk2ltDawLK)
 
 > **Instrucciones:** 
 > 1. Descarga el archivo comprimido desde el enlace.
