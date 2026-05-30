@@ -268,7 +268,7 @@ class MetronomeApp:
         interval_ms = int(60000 / self.bpm.get())
         self.timer_id = self.root.after(interval_ms, self.beat)
 
-if __name__ == "__main__":
+def main():
     # --- NUEVO: Lógica para autostart ---
     autostart = '--autostart' in sys.argv
     start_muted = '--mute' in sys.argv
@@ -310,3 +310,6 @@ if __name__ == "__main__":
         app.start()
 
     root.mainloop()
+
+if __name__ == "__main__":
+    main()

@@ -17,9 +17,26 @@ if getattr(sys, 'frozen', False) and len(sys.argv) > 1 and sys.argv[1].endswith(
     # Transformar 'acquisition/manual_daq.py' -> 'acquisition.manual_daq'
     module_name = script_name.replace('\\', '/').replace('.py', '').replace('/', '.')
     
-    import runpy
     try:
-        runpy.run_module(module_name, run_name="__main__")
+        # Importaciones explícitas para forzar a PyInstaller a empaquetarlas en el PYZ.
+        # Si se usa importlib dinámico, PyInstaller puede ignorarlas.
+        if module_name == 'acquisition.autoforge_daq':
+            import acquisition.autoforge_daq as module
+        elif module_name == 'acquisition.manual_daq':
+            import acquisition.manual_daq as module
+        elif module_name == 'acquisition.metronomo_visual':
+            import acquisition.metronomo_visual as module
+        elif module_name == 'acquisition.ventana_palabras':
+            import acquisition.ventana_palabras as module
+        else:
+            import importlib
+            module = importlib.import_module(module_name)
+            
+        if hasattr(module, 'main'):
+            module.main()
+        else:
+            print(f"Error: {module_name} no tiene una función main().")
+            input("Presione Enter para salir...")
     except Exception as e:
         print(f"Error al ejecutar {module_name}: {e}")
         import traceback

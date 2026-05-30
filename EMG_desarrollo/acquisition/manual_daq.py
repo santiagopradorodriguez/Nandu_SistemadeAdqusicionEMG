@@ -2290,7 +2290,7 @@ class RealTimePlotter(QtWidgets.QWidget):
 # =============================================================================
 # PROGRAMA PRINCIPAL
 # =============================================================================
-if __name__ == '__main__':
+def main():
     # Inicia la GUI
     app = QtWidgets.QApplication(sys.argv)
     app.setStyleSheet("""
@@ -2329,8 +2329,8 @@ if __name__ == '__main__':
     exit_code = app.exec()
     sys.exit(exit_code)
 
-    # --- Esto se ejecuta DESPUÉS de que se cierra la GUI ---
-    # La gestión de hilos ahora se hace en los métodos de la clase GUI
+if __name__ == '__main__':
+    main()
     # hilo.join() ya no es necesario aquí, se maneja en on_start_acq_click y closeEvent
     
     print("Programa finalizado.")
