@@ -2051,6 +2051,18 @@ class RealTimePlotter(QtWidgets.QWidget):
             
             if self.chk_autoscroll.isChecked():
                 self.plot.setXRange(-self.PLOT_DURATION_S, 0, padding=0)
+                
+                # --- NUEVO: Peak-Hold Auto Scaling con decay ---
+                if self.NUM_CANALES > 0 and self.plot_buffer_datos.size > 0:
+                    current_max = np.max(np.abs(self.plot_buffer_datos))
+                    view_range = self.plot.getViewBox().viewRange()[1]
+                    current_y_max = max(abs(view_range[0]), abs(view_range[1]))
+                    
+                    if current_max * 1.1 > current_y_max or current_y_max < 0.0001:
+                        self.plot.setYRange(-current_max * 1.2, current_max * 1.2, padding=0)
+                    else:
+                        new_y_max = max(current_max * 1.2, current_y_max * 0.98)
+                        self.plot.setYRange(-new_y_max, new_y_max, padding=0)
 
             self.check_for_trigger(processed_data, total_muestras_leidas)
             self.actualizar_mediciones(processed_data, self.plot_buffer_datos)

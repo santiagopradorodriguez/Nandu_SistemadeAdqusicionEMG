@@ -2276,7 +2276,11 @@ class RealTimePlotter(QtWidgets.QWidget):
                     
                     if current_max * 1.1 > current_y_max or current_y_max < 0.0001:
                         self.plot.setYRange(-current_max * 1.2, current_max * 1.2, padding=0)
-
+                    else:
+                        # Auto-escala dinámica con decaimiento suave (Peak-Hold con decay)
+                        # para que cuando el pico pase, la gráfica vuelva a su zoom original gradualmente.
+                        new_y_max = max(current_max * 1.2, current_y_max * 0.98)
+                        self.plot.setYRange(-new_y_max, new_y_max, padding=0)
             self.check_for_trigger(processed_data, total_muestras_leidas)
             self.actualizar_mediciones(processed_data, self.plot_buffer_datos)
             self.actualizar_espectrograma(processed_data)
