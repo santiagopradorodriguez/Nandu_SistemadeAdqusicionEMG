@@ -1,20 +1,14 @@
-# ==============================================================================
-# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
-# Autores: Lucas Braunstein y Santiago Prado
-# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
-# Descripción: Script temporal/de soporte para procesamiento de datos.
-# ==============================================================================
 
 import sys
 import os
 import tkinter as tk
 import matplotlib
 matplotlib.use('TkAgg')
-sys.path.append(r"c:\Users\MSI\OneDrive\Documentos\DOCUMENTOS SANTIAGO\santiago-prado-repositorio\EMG_desarrollo")
+sys.path.append(r"C:\Users\MSI\OneDrive\Documentos\DOCUMENTOS SANTIAGO\santiago-prado-repositorio\EMG_desarrollo")
 import analysis.analisis_por_track_integrado as api
 
-mediciones = ['2026-05-22/_E4_1_NONE _Sujeto2']
-base_dir = r"c:\Users\MSI\OneDrive\Documentos\DOCUMENTOS SANTIAGO\santiago-prado-repositorio\EMG_desarrollo\base_de_datos_electrodos"
+mediciones = ['2026-05-31/CA_Prueba1_Sujeto1', '2026-05-31/MA_Prueba1_Sujeto1', '2026-05-31/NA_Prueba1_Sujeto1', '2026-05-31/PA_Prueba1_Sujeto1', '2026-05-31/TA_Prueba1_Sujeto1']
+base_dir = r"C:\Users\MSI\OneDrive\Documentos\DOCUMENTOS SANTIAGO\santiago-prado-repositorio\EMG_desarrollo\base_de_datos_electrodos"
 
 try:
     root = tk.Tk()
@@ -40,13 +34,13 @@ try:
     dialog.var_highpass_cutoff.set("20.0")
     dialog.var_lowpass_cutoff.set("500.0")
 
-    excl_list = []
+    excl_list = [1]
     excl_str = ",".join(map(str, excl_list)) if excl_list else ""
     dialog.var_excluded_windows.set(excl_str)
 
     print("\n> Orquestador Tkinter Aislado Inicializado. Ejecutando Rutina original de ProcessingOptionsDialog...")
     # Ejecutar su propia rutina que ya maneja pop-ups, metadatos y curación
-    dialog.procesar(interactivo=True)
+    dialog.procesar(interactivo=False)
 
 except Exception as e:
     import traceback

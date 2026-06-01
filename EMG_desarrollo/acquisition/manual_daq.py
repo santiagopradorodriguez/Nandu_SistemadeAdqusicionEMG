@@ -68,7 +68,7 @@ pg.setConfigOptions(antialias=False) # Optimización
 # Intenta importar nidaqmx
 try:
     import nidaqmx
-    from nidaqmx.constants import TerminalConfiguration
+    from nidaqmx.constants import TerminalConfiguration, AcquisitionType
     from nidaqmx.stream_readers import AnalogMultiChannelReader 
     NIDAQMX_DISPONIBLE = True
 except ImportError:
