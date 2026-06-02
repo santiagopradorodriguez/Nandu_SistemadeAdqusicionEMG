@@ -742,12 +742,31 @@ class AutoForgeDialog(QtWidgets.QDialog):
             with open(ruta_palabras, 'w', encoding='utf-8') as f:
                 f.write("A\nE\nI\nO\nU\n")
         
-        import platform
-        import subprocess
-        if platform.system() == 'Windows':
-            subprocess.Popen(['notepad.exe', ruta_palabras])
-        else:
-            subprocess.Popen(['xdg-open', ruta_palabras])
+        # Crear un QDialog nativo en lugar de abrir Notepad
+        dialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle("Editor de Palabras (AutoForge)")
+        dialog.resize(300, 400)
+        dialog_layout = QtWidgets.QVBoxLayout(dialog)
+        
+        lbl = QtWidgets.QLabel("Escribe una palabra por línea:")
+        dialog_layout.addWidget(lbl)
+        
+        text_edit = QtWidgets.QTextEdit()
+        with open(ruta_palabras, 'r', encoding='utf-8') as f:
+            text_edit.setPlainText(f.read())
+        dialog_layout.addWidget(text_edit)
+        
+        btn_box = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Save | QtWidgets.QDialogButtonBox.Cancel)
+        btn_box.accepted.connect(dialog.accept)
+        btn_box.rejected.connect(dialog.reject)
+        dialog_layout.addWidget(btn_box)
+        
+        if dialog.exec() == QtWidgets.QDialog.Accepted:
+            with open(ruta_palabras, 'w', encoding='utf-8') as f:
+                # Asegurar que termina en nueva línea
+                texto_guardar = text_edit.toPlainText().strip() + "\n"
+                f.write(texto_guardar)
+            QtWidgets.QMessageBox.information(self, "Guardado", "Lista de palabras guardada con éxito.")
 
 class RealTimePlotter(QtWidgets.QWidget):
     """
@@ -973,7 +992,9 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.spin_bpm = SpinBox(value=60, int=True, bounds=(30, 200), step=1)
         self.spin_bpm.setFixedWidth(80) # Acortar el recuadro del BPM
         self.label_noise_duration = QtWidgets.QLabel("Noise (Inicio) (s):")
-        self.spin_noise_duration = SpinBox(value=5.0, dec=True, bounds=(0.5, 20.0), step=0.5)
+        adq_conf = self.config_mgr.get("adquisicion") or {}
+        default_noise = adq_conf.get("ruido_segundos", 3.0)
+        self.spin_noise_duration = SpinBox(value=default_noise, dec=True, bounds=(0.5, 20.0), step=0.5)
         self.spin_noise_duration.setFixedWidth(80)
 
         self.config_layout.addWidget(self.label_device, 0, 0)
@@ -2277,9 +2298,8 @@ class RealTimePlotter(QtWidgets.QWidget):
                     if current_max * 1.1 > current_y_max or current_y_max < 0.0001:
                         self.plot.setYRange(-current_max * 1.2, current_max * 1.2, padding=0)
                     else:
-                        # Auto-escala dinámica con decaimiento suave (Peak-Hold con decay)
-                        # para que cuando el pico pase, la gráfica vuelva a su zoom original gradualmente.
-                        new_y_max = max(current_max * 1.2, current_y_max * 0.98)
+                        # Auto-escala dinámica con decaimiento rápido
+                        new_y_max = max(current_max * 1.2, current_y_max * 0.94)
                         self.plot.setYRange(-new_y_max, new_y_max, padding=0)
             self.check_for_trigger(processed_data, total_muestras_leidas)
             self.actualizar_mediciones(processed_data, self.plot_buffer_datos)

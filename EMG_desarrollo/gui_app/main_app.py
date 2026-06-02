@@ -255,6 +255,10 @@ class ReaperStyleHub(QMainWindow):
             action = QAction(name, self)
             if script == "_internal_config":
                 action.triggered.connect(self._open_config_dialog)
+            elif script == "analysis/plotter_calibrado.py":
+                action.triggered.connect(self._run_plotter_calibrado)
+            elif script == "analysis/correlaciondeseñales.py":
+                action.triggered.connect(self._run_correlacion_nativo)
             else:
                 action.triggered.connect(lambda checked=False, s=script: self._launch_external(s))
             toolbar.addAction(action)
@@ -464,6 +468,11 @@ class ReaperStyleHub(QMainWindow):
         self.csv_viewer = CsvViewerWidget()
         self.tabs_viz.addTab(self.csv_viewer, "📈 Explorador de Señales (CSV)")
         
+        # Sub-pestaña: Visor de Gráficos Calibrados
+        from views.calibrated_viewer_widget import CalibratedViewerWidget
+        self.calibrated_viewer = CalibratedViewerWidget()
+        self.tabs_viz.addTab(self.calibrated_viewer, "🖼️ Historial Gráficos Musculares")
+        
         # Sub-pestaña: Electrode Viewer (Nativo PySide6)
         from views.electrode_viewer_widget import ElectrodeViewerWidget
         self.electrode_viewer = ElectrodeViewerWidget()
@@ -499,7 +508,10 @@ class ReaperStyleHub(QMainWindow):
         self.addDockWidget(Qt.LeftDockWidgetArea, self.dock_explorer)
 
     def _on_medicion_selected_for_csv(self, path):
-        """Carga la medición seleccionada en el visor de CSV."""
+        """Carga la medición seleccionada en el visor de CSV y en el visor Calibrado."""
+        if hasattr(self, 'calibrated_viewer'):
+            self.calibrated_viewer.load_calibrated_plot(path)
+            
         if hasattr(self, 'csv_viewer') and hasattr(self.csv_viewer, 'load_csv'):
             csv_path = None
             try:
@@ -597,6 +609,64 @@ class ReaperStyleHub(QMainWindow):
             lbl = QLabel("Selecciona mediciones en el Gestor para ver los canales...")
             lbl.setStyleSheet("color: #FFA500;")
             tab_proc.lyt_canales_procesar.addWidget(lbl)
+
+    def _run_plotter_calibrado(self, *args):
+        """Ejecuta el plotter calibrado con la medición seleccionada"""
+        selected_paths = self.explorer_widget.get_selected_paths()
+        if not selected_paths:
+            print("❌ Selecciona al menos una medición en el Gestor de Sesiones.")
+            return
+            
+        import sys
+        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if root_dir not in sys.path:
+            sys.path.append(root_dir)
+            
+        from analysis.plotter_calibrado import PlotterConfigDialog, plotear_medicion_secuencial
+        
+        # Le pasamos la lista de carpetas para que se visualicen en el dialog
+        mediciones_nombres = [os.path.relpath(p, self.explorer_widget.root_path) for p in selected_paths]
+        
+        dialog = PlotterConfigDialog()
+        # Pre-poblar el listbox con las seleccionadas para mantener compatibilidad
+        dialog.listbox.clear()
+        for nom in mediciones_nombres:
+            dialog.listbox.addItem(nom)
+            
+        if dialog.exec():
+            config = dialog.resultado
+            limits_cache = {}
+            for path in selected_paths:
+                print(f"🖼️ Generando gráfico calibrado para: {path}")
+                # En plotter_calibrado, se usa on_close para capturar límites, pero aquí pasamos directo.
+                # Pasamos mostrar_plot=True para que el usuario vea la ventana emergente 
+                # y pueda interactuar/cerrarla antes de pasar a la siguiente (capturando los límites de zoom).
+                plotear_medicion_secuencial(path, config, limits_cache, mostrar_plot=True)
+                
+            # Cambiamos automáticamente al Visor de Calibrados para que vea los resultados
+            self.tabs.setCurrentWidget(self.tab_view)
+            self.tabs_viz.setCurrentWidget(self.calibrated_viewer)
+            # Cargamos la primera medición seleccionada
+            self.calibrated_viewer.load_calibrated_plot(selected_paths[0])
+            self.img_viewer.setText(f"✅ ¡Gráficos musculares generados con éxito para {len(selected_paths)} mediciones!\nVe a la pestaña 3. VISUALIZACIÓN.")
+
+    def _run_correlacion_nativo(self, *args):
+        """Ejecuta el script de correlación con la medición seleccionada"""
+        selected_paths = self.explorer_widget.get_selected_paths()
+        if not selected_paths:
+            print("❌ Selecciona al menos una medición en el Gestor de Sesiones.")
+            return
+            
+        import sys
+        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if root_dir not in sys.path:
+            sys.path.append(root_dir)
+            
+        from analysis.correlaciondeseñales import main as run_correlacion
+        
+        print(f"🔗 Abriendo configuración de Correlación para {len(selected_paths)} mediciones...")
+        run_correlacion(mediciones_dirs=selected_paths)
+        print("✅ Correlación Finalizada.")
 
     def run_analisis_comparativo_nativo(self):
         """

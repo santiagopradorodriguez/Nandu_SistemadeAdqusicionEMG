@@ -2061,7 +2061,7 @@ class RealTimePlotter(QtWidgets.QWidget):
                     if current_max * 1.1 > current_y_max or current_y_max < 0.0001:
                         self.plot.setYRange(-current_max * 1.2, current_max * 1.2, padding=0)
                     else:
-                        new_y_max = max(current_max * 1.2, current_y_max * 0.98)
+                        new_y_max = max(current_max * 1.2, current_y_max * 0.94)
                         self.plot.setYRange(-new_y_max, new_y_max, padding=0)
 
             self.check_for_trigger(processed_data, total_muestras_leidas)

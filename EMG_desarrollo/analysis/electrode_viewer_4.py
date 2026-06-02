@@ -583,6 +583,9 @@ class App:
         tk.Label(top_frame, text=f"Medición: {measurement.name}", font=("Arial", 12, "bold")).pack(side="left")
         tk.Label(top_frame, text=f" | {md_text}", font=("Arial", 11)).pack(side="left", padx=10)
 
+        # Variable para persistir la selección del gráfico
+        self.current_sub_plot = None
+
         # --- Botón para ver análisis adicionales ---
         def open_additional_analysis():
             found_any = False
@@ -602,6 +605,7 @@ class App:
         notebook.pack(fill="both", expand=True, padx=10, pady=(0, 10))
 
         def show_on_main(ax, canvas, image_path, title):
+            self.current_sub_plot = title # Persistir el estado
             ax.clear()
             if image_path and os.path.isfile(image_path):
                 try:
@@ -715,6 +719,10 @@ class App:
         # Botones para seleccionar qué gráfico ver
         for plot_name, plot_path in channel.plots.items():
             tk.Button(left, text=plot_name, command=lambda p=plot_path, t=plot_name: show_on_main_func(main_ax, main_canvas, p, t)).pack(fill="x", pady=2)
+
+        # Auto-seleccionar el mismo gráfico que estábamos viendo en el canal anterior
+        if hasattr(self, 'current_sub_plot') and self.current_sub_plot and self.current_sub_plot in channel.plots:
+            show_on_main_func(main_ax, main_canvas, channel.plots[self.current_sub_plot], self.current_sub_plot)
 
         # --- NUEVO: Mostrar metadata del canal ---
         meta_frame = tk.LabelFrame(left, text="Metadata", padx=5, pady=5)

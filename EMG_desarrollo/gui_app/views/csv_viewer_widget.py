@@ -149,6 +149,7 @@ class CsvViewerWidget(QWidget):
         self.plot_widget.showGrid(x=True, y=True, alpha=0.3)
         self.plot_widget.addLegend()
         self.plot_widget.sigXRangeChanged.connect(self._on_plot_xrange_changed)
+        self.plot_widget.sigYRangeChanged.connect(self._on_plot_yrange_changed)
         splitter.addWidget(self.plot_widget)
         
         # Panel Derecho
@@ -251,17 +252,24 @@ class CsvViewerWidget(QWidget):
         lyt_env = QVBoxLayout(grp_env)
         self.cmb_env = QComboBox()
         self.cmb_env.addItems(["ninguna", "media_movil", "rms"])
-        self.cmb_env.currentTextChanged.connect(self.update_plot)
+        self.cmb_env.currentTextChanged.connect(self._on_config_changed)
         lyt_env.addWidget(self.cmb_env)
         row_env = QHBoxLayout()
         row_env.addWidget(QLabel("Ventana (ms):"))
         self.spin_env = QSpinBox()
         self.spin_env.setRange(1, 5000)
         self.spin_env.setValue(50)
-        self.spin_env.editingFinished.connect(self.update_plot)
+        self.spin_env.editingFinished.connect(self._on_config_changed)
         row_env.addWidget(self.spin_env)
         lyt_env.addLayout(row_env)
         self.slayout.addWidget(grp_env)
+        
+        self.chk_notch.stateChanged.connect(self._on_config_changed)
+        self.chk_bandpass.stateChanged.connect(self._on_config_changed)
+        self.spin_lp.editingFinished.connect(self._on_config_changed)
+        self.spin_hp.editingFinished.connect(self._on_config_changed)
+
+        self._load_config_state()
         
         # Extras
         grp_opts = QGroupBox("Extras")
@@ -294,7 +302,10 @@ class CsvViewerWidget(QWidget):
     def _on_csv_loaded(self, df, canales, time_col, max_y):
         self.df = df
         self.time_data = self.df[time_col].values
-        self.global_max_y = max_y
+        self.current_file_max_y = max_y
+        
+        if not hasattr(self, '_sliders_initialized'):
+            self.global_max_y = max_y
         
         fs = 1.0
         if len(self.time_data) > 1:
@@ -306,12 +317,22 @@ class CsvViewerWidget(QWidget):
         t_max = self.time_data[-1]
         self._updating_sliders = True
         self.slider_time.setRange(0, int(t_max * 100))
-        self.slider_time.setValue(0)
-        self.spin_zoom_x.setValue(min(5.0, t_max))
-        self.slider_y.setValue(50)
-        self.slider_zoom_y.setValue(100)
+        
+        if not hasattr(self, '_sliders_initialized'):
+            self.slider_time.setValue(0)
+            self.spin_zoom_x.setValue(min(5.0, t_max))
+            self.slider_y.setValue(50)
+            self.slider_zoom_y.setValue(100)
+            self._sliders_initialized = True
+            
         self._updating_sliders = False
         
+        # Guardar el estado de los canales deseleccionados antes de borrarlos
+        canales_desactivados = set()
+        for c, chk in self.channel_checkboxes.items():
+            if not chk.isChecked():
+                canales_desactivados.add(c)
+
         # Limpiar canales previos
         for chk in self.channel_checkboxes.values():
             self.lyt_channels.removeWidget(chk)
@@ -333,7 +354,13 @@ class CsvViewerWidget(QWidget):
             color_canal = self.channel_colors[ch_num] if ch_num < len(self.channel_colors) else '#ffffff'
             
             chk = QCheckBox(f"{canal} - {nombre_musc}")
-            chk.setChecked(True)
+            
+            # Respetar la memoria: si estaba desactivado en la medición anterior, dejarlo desactivado
+            if canal in canales_desactivados:
+                chk.setChecked(False)
+            else:
+                chk.setChecked(True)
+                
             chk.setStyleSheet(f"color: {color_canal}; font-weight: bold;")
             chk.stateChanged.connect(self.update_plot)
             self.lyt_channels.addWidget(chk)
@@ -403,11 +430,17 @@ class CsvViewerWidget(QWidget):
 
     def _autoscale(self):
         if self.df is None: return
+        # Al apretar Ajuste Automático, redefinimos el máximo global al archivo actual
+        if hasattr(self, 'current_file_max_y'):
+            self.global_max_y = self.current_file_max_y
+            
         self._updating_sliders = True
         self.slider_zoom_y.setValue(100)
         self.slider_y.setValue(50)
         self._updating_sliders = False
-        self.plot_widget.autoRange()
+        
+        # En vez de autoRange() que rompe la sincronización, aplicamos manualmente
+        self._apply_view_ranges()
 
     def _apply_view_ranges(self):
         if self.df is None or self._updating_sliders: return
@@ -433,12 +466,31 @@ class CsvViewerWidget(QWidget):
         self._apply_view_ranges()
 
     def _on_plot_xrange_changed(self, _, range_tuple):
-        """Sincronizar slider cuando el usuario arrastra el gráfico con el mouse"""
+        """Sincronizar slider cuando el usuario arrastra el gráfico con el mouse en el eje X"""
         if self._updating_sliders or self.df is None: return
         self._updating_sliders = True
         self.slider_time.setValue(int(range_tuple[0] * 100))
         duracion = range_tuple[1] - range_tuple[0]
         self.spin_zoom_x.setValue(max(0.1, duracion))
+        self._updating_sliders = False
+
+    def _on_plot_yrange_changed(self, _, range_tuple):
+        """Sincronizar slider cuando el usuario arrastra el gráfico con el mouse en el eje Y"""
+        if self._updating_sliders or self.df is None: return
+        self._updating_sliders = True
+        
+        y_min_limit = -self.global_max_y * 1.5
+        y_max_limit = self.global_max_y * 1.5
+        
+        y_center = (range_tuple[1] + range_tuple[0]) / 2.0
+        y_span = range_tuple[1] - range_tuple[0]
+        
+        y_center_pct = (y_center - y_min_limit) / (y_max_limit - y_min_limit)
+        amp_pct = y_span / (self.global_max_y * 2.5)
+        
+        self.slider_y.setValue(int(np.clip(y_center_pct * 100, 0, 100)))
+        self.slider_zoom_y.setValue(int(np.clip(amp_pct * 100, 1, 100)))
+        
         self._updating_sliders = False
 
     def export_png(self):
@@ -447,3 +499,23 @@ class CsvViewerWidget(QWidget):
             exporter = pg.exporters.ImageExporter(self.plot_widget.scene())
             exporter.export(filepath)
             self.lbl_status.setText(f"Exportado a: {filepath}")
+
+    def _on_config_changed(self):
+        config_mgr.set("csv_viewer", "notch", self.chk_notch.isChecked())
+        config_mgr.set("csv_viewer", "bandpass", self.chk_bandpass.isChecked())
+        config_mgr.set("csv_viewer", "lp", self.spin_lp.value())
+        config_mgr.set("csv_viewer", "hp", self.spin_hp.value())
+        config_mgr.set("csv_viewer", "env", self.cmb_env.currentText())
+        config_mgr.set("csv_viewer", "env_ms", self.spin_env.value())
+        self.update_plot()
+
+    def _load_config_state(self):
+        saved = config_mgr.get("csv_viewer") or {}
+        self.chk_notch.setChecked(saved.get("notch", False))
+        self.chk_bandpass.setChecked(saved.get("bandpass", True))
+        self.spin_lp.setValue(saved.get("lp", 500.0))
+        self.spin_hp.setValue(saved.get("hp", 20.0))
+        env_text = saved.get("env", "ninguna")
+        idx = self.cmb_env.findText(env_text)
+        if idx >= 0: self.cmb_env.setCurrentIndex(idx)
+        self.spin_env.setValue(saved.get("env_ms", 50))

@@ -1,7 +1,4 @@
-PA
-TA
-CA
-MA
-NA
-
-
+prueba
+cosa
+casa
+roja

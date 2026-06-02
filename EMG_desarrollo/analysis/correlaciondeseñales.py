@@ -10,13 +10,14 @@ import os
 import json
 import numpy as np
 import soundfile as sf
+import matplotlib
+matplotlib.use('QtAgg')
 import matplotlib.pyplot as plt
 from scipy.signal import spectrogram, hilbert, butter, filtfilt, iirnotch, correlate, correlation_lags
 from scipy import interpolate
 import csv
 import pandas as pd
 import math
-import matplotlib.pyplot as plt
 import re
 from datetime import datetime
 import argparse
@@ -24,6 +25,17 @@ import subprocess
 
 # --- Imports para GUI ---
 import sys
+
+# --- Import para ConfigManager ---
+root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if root_dir not in sys.path:
+    sys.path.append(root_dir)
+try:
+    from utils.config_manager import ConfigManager
+    config_mgr = ConfigManager()
+except Exception:
+    config_mgr = None
+
 from PySide6.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
     QLabel, QLineEdit, QPushButton, QCheckBox, QComboBox,
@@ -86,68 +98,88 @@ def select_directories():
             
     return master_dir, slave_dirs
 
-def main():
+def main(mediciones_dirs=None, medicion_dir=None, master_dir=None, slave_dirs=None):
     app = QApplication.instance()
     if not app:
         app = QApplication(sys.argv)
         
-    master_dir, slave_dirs = select_directories()
-    if not master_dir: return
-    
-    dialog = ProcessingOptionsDialog()
+    if medicion_dir and not mediciones_dirs:
+        mediciones_dirs = [medicion_dir]
+        
+    if not mediciones_dirs and not master_dir:
+        return
+        
+    dialog = ProcessingOptionsDialog(medicion_dir=mediciones_dirs[0] if mediciones_dirs else None, master_dir=master_dir, slave_dirs=slave_dirs)
     if dialog.exec() == QDialog.Accepted:
         opts = dialog.result
         if not opts: return
+        
+        master_name = opts.pop("selected_master_name", None)
+        slaves_names = opts.pop("selected_slaves_names", [])
     else:
         return
 
-    # --- 1. PROCESAR MASTER ---
-    print(f"\n======================================")
-    print(f" PROCESANDO LÍDER: {os.path.basename(master_dir)}")
-    print(f"======================================")
-    
-    resultados_master = procesar_wavs_promedio(
-        carpeta=master_dir,
-        output_root=master_dir,
-        **opts
-    )
-    
-    if not resultados_master:
-        print("El procesamiento Líder falló o no devolvió resultados.")
-        return
+    for m_dir in (mediciones_dirs or [None]):
+        if m_dir:
+            current_master_dir = os.path.join(m_dir, master_name) if master_name else master_dir
+            current_slave_dirs = [os.path.join(m_dir, s) for s in slaves_names] if slaves_names else slave_dirs
+            print(f"\n======================================")
+            print(f" PROCESANDO MEDICIÓN: {os.path.basename(m_dir)}")
+            print(f"======================================")
+        else:
+            current_master_dir = master_dir
+            current_slave_dirs = slave_dirs
 
-    # Extraer los shifts e índices válidos del Líder
-    master_shifts = {}
-    master_valid_indices = {}
-    for filename, data in resultados_master.items():
-        master_shifts[filename] = data['shifts']
-        master_valid_indices[filename] = data.get('valid_indices')
-
-    # --- 2. PROCESAR SLAVES (usando los shifts e índices del master) ---
-    resultados_canales = {'canal_0': resultados_master}
-    
-    for i, s_dir in enumerate(slave_dirs):
-        ch_name = f'canal_{i+1}'
-        print(f"\n======================================")
-        print(f" PROCESANDO SLAVE {i+1}: {os.path.basename(s_dir)}")
-        print(f"======================================")
+        # --- 1. PROCESAR MASTER ---
+        print(f"\n--- PROCESANDO LÍDER: {os.path.basename(current_master_dir)} ---")
         
-        res_slave = procesar_wavs_promedio(
-            carpeta=s_dir,
-            output_root=s_dir,
-            dict_shifts_externos=master_shifts,
-            indices_validos_externos=master_valid_indices,
+        if not os.path.exists(current_master_dir):
+            print(f"El directorio Líder no existe: {current_master_dir}. Saltando medición.")
+            continue
+            
+        resultados_master = procesar_wavs_promedio(
+            carpeta=current_master_dir,
+            output_root=current_master_dir,
             **opts
         )
-        resultados_canales[ch_name] = res_slave
         
-    # --- 3. OVERLAY FINAL ---
-    if slave_dirs:
-        print("\nGenerando Overlay de músculos sincronizados...")
-        # Obtenemos la carpeta padre de Master para guardar el overlay general
-        parent_meas_dir = os.path.dirname(master_dir)
-        meas_name = os.path.basename(parent_meas_dir)
-        _plot_muscle_overlay(meas_name, resultados_canales, parent_meas_dir)
+        if not resultados_master:
+            print("El procesamiento Líder falló o no devolvió resultados.")
+            continue
+
+        master_shifts = {}
+        master_valid_indices = {}
+        for filename, data in resultados_master.items():
+            master_shifts[filename] = data['shifts']
+            master_valid_indices[filename] = data.get('valid_indices')
+
+        # --- 2. PROCESAR SLAVES ---
+        resultados_canales = {os.path.basename(current_master_dir): resultados_master}
+        
+        for s_dir in current_slave_dirs:
+            if not os.path.exists(s_dir):
+                print(f"\n--- ADVERTENCIA: Directorio SLAVE no encontrado: {s_dir}. Omitiendo... ---")
+                continue
+                
+            ch_name = os.path.basename(s_dir)
+            print(f"\n--- PROCESANDO SLAVE: {ch_name} ---")
+            
+            res_slave = procesar_wavs_promedio(
+                carpeta=s_dir,
+                output_root=s_dir,
+                dict_shifts_externos=master_shifts,
+                indices_validos_externos=master_valid_indices,
+                **opts
+            )
+            resultados_canales[ch_name] = res_slave
+            
+        # --- 3. OVERLAY FINAL ---
+        if current_slave_dirs:
+            print("\nGenerando Overlay de músculos sincronizados...")
+            parent_meas_dir = os.path.dirname(current_master_dir)
+            meas_name = os.path.basename(parent_meas_dir)
+            master_basename = os.path.basename(current_master_dir)
+            _plot_muscle_overlay(meas_name, resultados_canales, parent_meas_dir, master_basename)
 
 if __name__ == "__main__":
     main()
@@ -219,7 +251,16 @@ def _read_wav_mono(filepath):
         signal = signal[:, 0]
     return np.asarray(signal, dtype=float), sr
 
-def _compute_env_full(signal_abs, apply_envelope, smooth_ms, samplerate):
+def _compute_env_full(signal_abs, apply_envelope, smooth_ms, samplerate, tipo_env="media_movil"):
+    if tipo_env == "rms" and smooth_ms is not None and smooth_ms > 0:
+        win_len = int(max(1, round(smooth_ms * samplerate / 1000.0)))
+        if win_len > 1:
+            sig_sq = signal_abs ** 2
+            window = np.ones(win_len, dtype=float) / float(win_len)
+            return np.sqrt(np.convolve(sig_sq, window, mode='same'))
+        else:
+            return signal_abs.copy()
+
     if apply_envelope:
         try:
             env_full = np.abs(hilbert(signal_abs))
@@ -236,7 +277,7 @@ def _compute_env_full(signal_abs, apply_envelope, smooth_ms, samplerate):
     return env_full
 
 # ---------------------- Estimación de Ruido -------------------
-def _estimate_noise_window(signal_recortada, samplerate, noise_seconds, smooth_ms, factor_umbral):
+def _estimate_noise_window(signal_recortada, samplerate, noise_seconds, smooth_ms, factor_umbral, tipo_env="media_movil"):
     start_sample_noise = int(round(noise_seconds * samplerate))
     if start_sample_noise <= 0:
         start_sample_noise = 0
@@ -244,14 +285,17 @@ def _estimate_noise_window(signal_recortada, samplerate, noise_seconds, smooth_m
         start_sample_noise = min(len(signal_recortada)-1, int(round(0.01 * len(signal_recortada))))
 
     if start_sample_noise > 0:
-        noise_segment = signal_recortada[:start_sample_noise]
-        env_noise = np.abs(hilbert(np.abs(noise_segment))) if len(noise_segment) > 0 else np.array([])
-        if smooth_ms is not None and smooth_ms > 0 and len(env_noise) > 1:
-            win_len_n = int(max(1, round(smooth_ms * samplerate / 1000.0)))
-            if win_len_n > 1:
-                window_n = np.ones(win_len_n, dtype=float) / float(win_len_n)
-                env_noise = np.convolve(env_noise, window_n, mode='same')
+        # IGUAL A analisis_por_track: saltar 1 segundo inicial para evitar artefactos de inicio
+        skip_samples = int(round(1.0 * samplerate))
+        if start_sample_noise <= skip_samples + int(0.1 * samplerate):
+            skip_samples = min(int(round(0.1 * samplerate)), start_sample_noise // 2)
 
+        noise_segment = signal_recortada[skip_samples:start_sample_noise]
+        if len(noise_segment) > 0:
+            env_noise = _compute_env_full(np.abs(noise_segment), True, smooth_ms, samplerate, tipo_env)
+        else:
+            env_noise = np.array([])
+        
         if len(env_noise) >= 5:
             mad = np.median(np.abs(env_noise - np.median(env_noise)))
             sigma_est = mad * 1.4826
@@ -260,74 +304,122 @@ def _estimate_noise_window(signal_recortada, samplerate, noise_seconds, smooth_m
 
         umbral = np.mean(env_noise) if len(env_noise) > 0 else 0.0
         noise_rms_from_noise_window = rms(env_noise) if len(env_noise) > 0 else 0.0
-
         print(f"[Ruido Inicial] {noise_seconds}s, Umbral={umbral:.5e}")
         return start_sample_noise, env_noise, sigma_est, umbral, noise_rms_from_noise_window
     else:
         print(f"[Ruido] No se definió ventana de ruido.")
         return start_sample_noise, np.array([]), None, None, None
 
-# ---------------------- CORTE: BEAT EN EL CENTRO ---------------------
+
+# ---------------------- DETECCION DE PICOS CENTRADA EN BEAT ---------------------
 def _cortar_centrado_en_beat(env_recortada,
-                             start_sample_noise, 
-                             muestras_pulso,     # Periodo completo
+                             start_sample_noise,
+                             muestras_pulso,
+                             pre_samples,
+                             post_samples,
+                             peak_search_threshold,
                              n_pulsos_manual=None,
                              excluded_windows=None,
-                             forced_indices=None):
-    if len(env_recortada) == 0: return [], [], []
+                             forced_maxima=None,
+                             min_peak_distance_factor=0.5):
+    """
+    Detecta el pico máximo en cada ventana periódica del metrónomo.
 
+    Geometría (igual a _detect_maxima_and_extract de analisis_por_track_integrado):
+      - Ventana i: [start_sample_noise + i*T,  start_sample_noise + (i+1)*T]
+      - El pulso del metrónomo suena en la mitad de esa ventana
+      - Pico = argmax(envolvente) dentro de la ventana completa
+      - Si pico < peak_search_threshold → ventana descartada (ruido)
+      - Segmento extraído: [peak - pre_samples, peak + post_samples]
+    """
+    if len(env_recortada) == 0: return [], [], []
     if n_pulsos_manual is None or n_pulsos_manual <= 0:
-        print(f"--- ERROR: Se requiere conteo de pulsos. ---")
+        print("--- ERROR: Se requiere conteo de pulsos. ---")
         return [], [], []
 
+    n_pulsos = int(n_pulsos_manual)
+
+    maxima_detectados = [None] * n_pulsos
+    segmentos_full = [None] * n_pulsos
+
+    excluded_set = set(excluded_windows) if excluded_windows else set()
+    
+    min_dist_samples = max(1, int(round(min_peak_distance_factor * float(muestras_pulso))))
+    last_valid_i = -1
+
+    for i in range(n_pulsos):
+        window_number = i + 1
+        if window_number in excluded_set:
+            print(f"    -> Omitiendo ventana #{window_number} (excluida).")
+            continue
+
+        if forced_maxima is None:
+            # ── MASTER: Búsqueda de picos igual a analisis_por_track_integrado ──
+            cut_start = start_sample_noise + i * muestras_pulso
+            cut_end   = cut_start + muestras_pulso
+            if cut_end > len(env_recortada):
+                cut_end = len(env_recortada)
+            if cut_start >= len(env_recortada):
+                break
+
+            local_seg = env_recortada[cut_start:cut_end]
+            if local_seg.size == 0:
+                continue
+
+            rel_max    = int(np.argmax(local_seg))
+            max_sample = cut_start + rel_max
+            max_value  = env_recortada[max_sample]
+
+            if max_value < peak_search_threshold:
+                print(f"    -> Ventana #{window_number}: pico {max_value:.4e} < umbral {peak_search_threshold:.4e}. Omitida.")
+                continue
+
+            seg_start = max_sample - pre_samples
+            seg_end   = max_sample + post_samples
+            if seg_start < 0 or seg_end > len(env_recortada):
+                continue
+                
+            # Distancia mínima con el pico anterior
+            if last_valid_i != -1:
+                prev_idx = maxima_detectados[last_valid_i]
+                prev_val = env_recortada[prev_idx]
+                if abs(max_sample - prev_idx) < min_dist_samples:
+                    # Si están muy cerca, conservar el mayor
+                    if max_value > prev_val:
+                        maxima_detectados[last_valid_i] = None
+                        segmentos_full[last_valid_i] = None
+                    else:
+                        continue # descartar actual
+
+            maxima_detectados[i] = int(max_sample)
+            segmentos_full[i] = env_recortada[seg_start:seg_end].copy()
+            last_valid_i = i
+
+        else:
+            # ── SLAVE: hereda los picos exactos del Master ──
+            if i >= len(forced_maxima):
+                break
+            max_sample = forced_maxima[i]
+            if max_sample is None:
+                continue
+
+            seg_start = max_sample - pre_samples
+            seg_end   = max_sample + post_samples
+            if seg_start < 0 or seg_end > len(env_recortada):
+                continue
+
+            maxima_detectados[i] = int(max_sample)
+            segmentos_full[i] = env_recortada[seg_start:seg_end].copy()
+
+    # Extraer solo las válidas para el return
     centros_metronomo = []
     segmentos = []
-    valid_indices = [] 
-    
-    excluded_set = set(excluded_windows) if excluded_windows else set()
-    iterable_indices = forced_indices if forced_indices is not None else range(int(n_pulsos_manual))
+    for i in range(n_pulsos):
+        if maxima_detectados[i] is not None:
+            centros_metronomo.append(maxima_detectados[i])
+            segmentos.append(segmentos_full[i])
 
-    half_period = int(muestras_pulso / 2)
-
-    for i in iterable_indices:
-        if forced_indices is None:
-            window_number = i + 1
-            if window_number in excluded_set:
-                print(f"    -> Omitiendo ventana #{window_number} (excluida).")
-                continue
-
-        beat_loc = start_sample_noise + i * muestras_pulso
-        seg_start = beat_loc - half_period
-        seg_end = beat_loc + half_period
-
-        if seg_start < 0: 
-            if seg_end < 0: continue
-            seg_start = 0 
-        
-        if seg_end > len(env_recortada):
-            if forced_indices is not None:
-                pad_width = seg_end - len(env_recortada)
-                if pad_width > 0:
-                    temp_seg = env_recortada[seg_start:]
-                    segmento = np.pad(temp_seg, (0, pad_width), 'constant')
-                else:
-                    segmento = env_recortada[seg_start:seg_end].copy()
-            else:
-                seg_end = len(env_recortada)
-                segmento = env_recortada[seg_start:seg_end].copy()
-                if segmento.size < half_period: continue
-        else:
-            segmento = env_recortada[seg_start:seg_end].copy()
-
-        if forced_indices is None:
-            if segmento.size < half_period: 
-                continue
-
-        centros_metronomo.append(int(beat_loc))
-        segmentos.append(segmento)
-        valid_indices.append(i)
-
-    return centros_metronomo, segmentos, valid_indices
+    return centros_metronomo, segmentos, maxima_detectados
 
 # ---------------------- Resample & pulse statistics -----------------------
 def _resample_segments(segmentos, resample_len):
@@ -433,9 +525,6 @@ def _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds,
                    excluded_windows=None, show_plot=False, signal_original_unfiltered=None):
     
     plt.figure(figsize=(12, 4))
-    if signal_original_unfiltered is not None:
-        plt.plot(t_recortada, np.abs(signal_original_unfiltered), color="red", linewidth=1.0, alpha=0.4, label="Módulo Original")
-    plt.plot(t_recortada, np.abs(signal_recortada), color="black", linewidth=1.2, alpha=0.7, label="Módulo Procesada")
     
     noise_t0 = t_recortada[0]
     noise_t1 = noise_t0 + noise_seconds
@@ -443,38 +532,38 @@ def _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds,
 
     plt.plot(t_recortada, env_recortada, color="Blue", linewidth=1.5, linestyle='-', alpha=0.9, label="Envolvente")
 
-    offset_start = t_recortada[0] + float(start_sample_noise)/samplerate
+    offset_start = t_recortada[0] + float(start_sample_noise) / samplerate
     duracion_analizable_grafico = len(env_recortada) - start_sample_noise
     n_pulsos = math.ceil(duracion_analizable_grafico / muestras_pulso)
-    
-    half_period_sec = periodo / 2.0
-    
-    for i in range(n_pulsos + 2):
-        beat_t = offset_start + i * periodo
-        cut_line_t = beat_t - half_period_sec
-        if cut_line_t >= t_recortada[0] and cut_line_t <= t_recortada[-1]:
-            plt.axvline(x=cut_line_t, color="Black", linestyle="--", alpha=0.6)
 
     excluded_set_plot = set(excluded_windows) if excluded_windows else set()
     spans = []
 
     for i in range(n_pulsos):
-        beat_t = offset_start + i * periodo
-        start_t = beat_t - half_period_sec
-        end_t = beat_t + half_period_sec
-        
+        # Ventana EMPIEZA en offset_start + i*T, dura un periodo completo
+        # (igual que la extracción: cut_start = start_sample_noise + i*muestras_pulso)
+        win_start_t = offset_start + i * periodo
+        win_end_t   = win_start_t + periodo
+        beat_t      = win_start_t + periodo / 2.0  # beat en el centro visual
+
         window_number = i + 1
         color = "red" if window_number in excluded_set_plot else "orange"
         alpha = 0.2 if window_number in excluded_set_plot else 0.05
-        
-        if end_t > t_recortada[0]:
-             span = plt.axvspan(start_t, end_t, color=color, alpha=alpha)
-             spans.append((window_number, start_t, end_t, span))
+
+        if win_end_t > t_recortada[0] and win_start_t < t_recortada[-1]:
+            # Línea divisora entre ventanas
+            plt.axvline(x=win_start_t, color="black", linestyle="--", alpha=0.5, linewidth=0.8)
+            # Sombreado de la ventana
+            span = plt.axvspan(win_start_t, win_end_t, color=color, alpha=alpha)
+            spans.append((window_number, win_start_t, win_end_t, span))
+            # Marca del beat (centro de la ventana)
+            plt.axvline(x=beat_t, color="purple", linestyle=":", alpha=0.4, linewidth=0.8)
 
     if len(centros_metronomo) > 0:
         t_centers = [t_recortada[idx] for idx in centros_metronomo if idx < len(t_recortada)]
-        v_env = [env_recortada[idx] for idx in centros_metronomo if idx < len(env_recortada)]
-        plt.scatter(t_centers, v_env, color='green', s=50, zorder=5, label='Beat (Centro)')
+        v_env     = [env_recortada[idx] for idx in centros_metronomo if idx < len(env_recortada)]
+        plt.scatter(t_centers, v_env, color='green', s=60, zorder=5, label='Pico detectado')
+
     
     fig = plt.gcf()
     ax = plt.gca()
@@ -513,45 +602,85 @@ def _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds,
                     break
         
         cid = fig.canvas.mpl_connect('button_press_event', onclick)
-        plt.show(block=True)
+        plt.show(block=False)
+        # Fuerza a pausar el script hasta que cierres el gráfico (compatible con PySide6)
+        while plt.fignum_exists(fig.number):
+            plt.pause(0.1)
+    
     plt.close(fig)
         
     return sorted(list(excluded_set_plot))
 
 # ---------------------- NUEVA FUNCIÓN: Overlay de Músculos ---------------------
-def _plot_muscle_overlay(measure_name, channels_dict, out_dir):
+def _plot_muscle_overlay(measure_name, channels_dict, out_dir, master_name=None):
     all_files = set()
     for c_data in channels_dict.values():
         all_files.update(c_data.keys())
         
+    canales_config = config_mgr.get("canales") if config_mgr else {}
+    fallback_colors = {'canal_0': 'blue', 'canal_1': 'orange', 'canal_2': 'green', 'canal_3': 'red'}
+
     for fname in all_files:
         plt.figure(figsize=(10, 6))
-        
-        colors = {'canal_0': 'blue', 'canal_1': 'orange', 'canal_2': 'green'}
-        labels = {'canal_0': 'Músculo 1', 'canal_1': 'Músculo 2', 'canal_2': 'Músculo 3'}
         
         found_any = False
         sorted_chans = sorted(channels_dict.keys())
         
+        # 1. Encontrar el desplazamiento de tiempo (time_shift) del Master
+        time_shift = 0.0
+        if master_name and master_name in channels_dict and fname in channels_dict[master_name]:
+            master_t = channels_dict[master_name][fname]['pulse_time']
+            master_y = channels_dict[master_name][fname]['mean_pulse']
+            
+            # Ignorar el 10% de los bordes para evitar detectar artefactos de filtrado como el pico
+            margin = int(0.1 * len(master_y))
+            if margin > 0 and len(master_y) > 2 * margin:
+                center_y = master_y[margin:-margin]
+                peak_idx = int(np.argmax(center_y)) + margin
+            else:
+                peak_idx = int(np.argmax(master_y))
+                
+            time_shift = master_t[peak_idx]
+        
+        # 2. Graficar todos los canales con el tiempo corregido y offset restado
+        max_y_overlay = 0
         for ch in sorted_chans:
             if fname in channels_dict[ch]:
                 data = channels_dict[ch][fname]
-                t = data['pulse_time']
-                y = data['mean_pulse']
+                t = np.array(data['pulse_time']) - time_shift
+                y = np.array(data['mean_pulse'])
                 
-                lbl = labels.get(ch, ch)
-                col = colors.get(ch, None)
+                # Offset: para asegurar que inicie desde el 0 en el eje Y
+                # aplicando el equivalente a un pasa altos ideal sobre la línea base
+                y = y - np.min(y)
+                if np.max(y) > max_y_overlay:
+                    max_y_overlay = np.max(y)
+                
+                ch_idx_str = ch.replace('canal_', '')
+                conf_key = f"Canal {ch_idx_str}"
+                ch_conf = canales_config.get(conf_key, {})
+                
+                lbl = ch_conf.get("musculo", f"Canal {ch_idx_str}")
+                col = ch_conf.get("color_hex", fallback_colors.get(ch, 'gray'))
+                
+                if ch == 'canal_3':
+                    lbl = ch_conf.get("musculo", "Micrófono")
+                    col = 'red'
                 
                 plt.plot(t, y, label=lbl, color=col, linewidth=2, alpha=0.8)
                 found_any = True
                 
         if found_any:
-            plt.title(f"Patrón Muscular Centrado - {measure_name} - {fname}")
-            plt.xlabel("Tiempo [s]")
-            plt.ylabel("Amplitud [V]")
-            plt.axvline(x=0, color='black', linestyle='--', alpha=0.5, label="Pico Músculo 1")
+            plt.title(f"Patrón Muscular Sincronizado - {measure_name} - {fname}")
+            plt.xlabel("Tiempo respecto al pico del Músculo Líder [s]")
+            plt.ylabel("Amplitud [µV]")
+            
+            # Dibujar línea exactamente en 0 (donde ahora vive el pico del Master)
+            plt.axvline(x=0, color='black', linestyle='--', alpha=0.5, label="Pico del Músculo Líder")
+            
             plt.legend(loc='upper right')
             plt.grid(True, alpha=0.5)
+            plt.ylim(bottom=0, top=max_y_overlay * 1.2 if max_y_overlay > 0 else 1.0)
             
             name_clean = os.path.splitext(fname)[0]
             path = os.path.join(out_dir, f"patron_muscular_{name_clean}.png")
@@ -680,7 +809,7 @@ def procesar_wavs_promedio(
     apply_notch_filter=False,
     # --- ARGUMENTOS NUEVOS PARA ALINEACIÓN FORZADA ---
     dict_shifts_externos=None, # Diccionario { 'archivo.wav': [shift1, shift2...] }
-    indices_validos_externos=None # Lista [0, 1, 3...] con los índices que el Master aceptó
+    indices_validos_externos=None # Pasó a ser forced_maxima
 ):
     rng = np.random.RandomState(seed)
     archivos = [f for f in os.listdir(carpeta) if f.lower().endswith(".wav")]
@@ -702,6 +831,7 @@ def procesar_wavs_promedio(
         
         # Calibración
         calibration_factor = 1.0
+        ganancia = 495.0
         try:
             parent_dir = os.path.dirname(carpeta)
             csv_files = [f for f in os.listdir(parent_dir) if f.lower().endswith('.csv')]
@@ -712,12 +842,22 @@ def procesar_wavs_promedio(
                 channel_col_name = f"Canal {channel_idx}"
                 if channel_col_name in df_csv.columns:
                     calibration_factor = np.max(np.abs(df_csv[channel_col_name].values))
-                    print(f"[Calibración] Factor: {calibration_factor:.4f}")
+                    
+            import json
+            meta_path = os.path.join(carpeta, "metadata.json")
+            if os.path.exists(meta_path):
+                with open(meta_path, 'r') as f_meta:
+                    md_ch = json.load(f_meta)
+                    if 'resistencia_ohm' in md_ch:
+                        res_ohm = float(md_ch['resistencia_ohm'])
+                        ganancia = 1.0 + (49400.0 / res_ohm)
         except Exception:
-            calibration_factor = 1.0
+            pass
 
         signal_normalized, samplerate = _read_wav_mono(filepath)
-        signal = signal_normalized * calibration_factor 
+        raw_signal = signal_normalized * calibration_factor 
+        signal = (raw_signal / ganancia) * 1e6
+        print(f"[Calibración] Factor: {calibration_factor:.4f}, Ganancia: {ganancia:.1f} -> Convertido a µV")
         
         # Offset
         ns_samples = int(noise_seconds * samplerate)
@@ -744,7 +884,7 @@ def procesar_wavs_promedio(
         # Filtro Notch
         if apply_notch_filter:
             try:
-                b, a = iirnotch(50.0, 30.0, samplerate)
+                b, a = iirnotch(50.0, 30.0, fs=samplerate)
                 signal = filtfilt(b, a, signal)
             except Exception: pass
 
@@ -787,100 +927,121 @@ def procesar_wavs_promedio(
         )
         if start_sample_noise <= 0: start_sample_noise = 0
         
-        # --- Obtener indices válidos para el corte (Slave usa los del Master) ---
-        idx_forzados = None
+        # --- Obtener maximos forzados (Slave usa los del Master) ---
+        maximos_forzados = None
         if indices_validos_externos is not None and filename in indices_validos_externos:
-            idx_forzados = indices_validos_externos[filename]
+            maximos_forzados = indices_validos_externos[filename]
 
-        # Extracción CENTRADA EN BEAT (La ventana es de -T/2 a +T/2)
-        centros_metronomo, segmentos, valid_indices_local = _cortar_centrado_en_beat(
-            np.abs(env_recortada), start_sample_noise, muestras_pulso, 
-            n_pulsos_manual=n_pulsos_manual, excluded_windows=excluded_windows,
-            forced_indices=idx_forzados
-        )
-
-        if len(segmentos) == 0:
-            print(f"{filename}: no se extrajeron segmentos. Omitido.")
-            continue
-
-        segmentos_rs, target_len = _resample_segments(segmentos, resample_len)
+        interactive_excluded = list(excluded_windows) if excluded_windows else []
         
-        # --- LÓGICA MASTER / SLAVE (SHIFTS) ---
-        shifts_to_save = []
+        # IGUAL a analisis_por_track_integrado: ventana ASIMETRICA 40% pre / 60% post
+        pre_samples  = int(round(0.4 * periodo * samplerate))
+        post_samples = int(round(0.6 * periodo * samplerate))
         
-        # Caso SLAVE: Tenemos shifts externos
-        if dict_shifts_externos is not None and filename in dict_shifts_externos:
-            print(f"[Alineación] MODO SLAVE: Aplicando alineación forzada...")
-            forced_shifts = dict_shifts_externos[filename]
-            segmentos_rs = _aplicar_alineacion_forzada(segmentos_rs, forced_shifts)
-            shifts_to_save = forced_shifts 
+        # --- LOOP INTERACTIVO ---
+        while True:
+            # Umbral de pico: la MEDIA del ruido inicial (igual a referencia)
+            peak_threshold = float(umbral) if (umbral is not None and umbral > 0) else 0.0
+            print(f"[Análisis] Usando umbral de búsqueda de picos dinámico: {peak_threshold:.4f}")
             
-        # Caso MASTER: Calculamos la mejor alineación con SUAVIZADO
-        else:
-            if len(segmentos_rs) > 1:
-                print(f"[Alineación] MODO MASTER: Calculando mejor alineación por SILUETA...")
-                segmentos_rs, shifts_calculated = _alinear_por_lider_calculo(segmentos_rs, samplerate)
-                shifts_to_save = shifts_calculated
+            centros_metronomo, segmentos, valid_indices_local = _cortar_centrado_en_beat(
+                np.abs(env_recortada), start_sample_noise, muestras_pulso,
+                pre_samples, post_samples,
+                peak_search_threshold=peak_threshold,
+                n_pulsos_manual=n_pulsos_manual, excluded_windows=interactive_excluded,
+                forced_maxima=maximos_forzados
+            )
+
+            if len(segmentos) == 0:
+                print(f"{filename}: no se extrajeron segmentos. Omitido.")
+                break
+
+            segmentos_rs, target_len = _resample_segments(segmentos, resample_len)
+            
+            # --- LÓGICA MASTER / SLAVE (SHIFTS) ---
+            shifts_to_save = []
+            
+            # Caso SLAVE: Tenemos shifts externos
+            if dict_shifts_externos is not None and filename in dict_shifts_externos:
+                if not show_interactive_plot: print(f"[Alineación] MODO SLAVE: Aplicando alineación forzada...")
+                forced_shifts = dict_shifts_externos[filename]
+                segmentos_rs = _aplicar_alineacion_forzada(segmentos_rs, forced_shifts)
+                shifts_to_save = forced_shifts 
+                
+            # Caso MASTER: Calculamos la mejor alineación con SUAVIZADO
             else:
-                shifts_to_save = [0] * len(segmentos_rs)
+                if len(segmentos_rs) > 1:
+                    if not show_interactive_plot: print(f"[Alineación] MODO MASTER: Calculando mejor alineación por SILUETA...")
+                    segmentos_rs, shifts_calculated = _alinear_por_lider_calculo(segmentos_rs, samplerate)
+                    shifts_to_save = shifts_calculated
+                else:
+                    shifts_to_save = [0] * len(segmentos_rs)
 
-        segmentos_norm, pulso_promedio, pulso_sigma, pulso_err, Np = _compute_pulse_stats(segmentos_rs)
+            segmentos_norm, pulso_promedio, pulso_sigma, pulso_err, Np = _compute_pulse_stats(segmentos_rs)
 
-        if (sigma_est is None) or (umbral is None):
-            sigma_est, umbral = _fallback_umbral(segmentos_norm, pulso_promedio, factor_umbral)
+            if (sigma_est is None) or (umbral is None):
+                sigma_est, umbral = _fallback_umbral(segmentos_norm, pulso_promedio, factor_umbral)
 
-        max_amp = np.max(pulso_promedio)
-        snr_manual = max_amp / umbral if (umbral is not None and umbral > 0) else np.inf
+            max_amp = np.max(pulso_promedio)
+            snr_manual = max_amp / umbral if (umbral is not None and umbral > 0) else np.inf
 
-        half_T_sec = periodo / 2.0
-        t_pulso = np.linspace(-half_T_sec, half_T_sec, target_len, endpoint=False)
+            pre_w_sec  = 0.4 * periodo  # igual que analisis_por_track
+            post_w_sec = 0.6 * periodo
+            t_pulso = np.linspace(-pre_w_sec, post_w_sec, target_len, endpoint=False)
 
-        color_prom = tuple(rng.rand(3).tolist()) if colores_aleatorios else colorgrafico
-        idx_peak = int(np.argmax(pulso_promedio))
-        amp_uncertainty = pulso_err[idx_peak] if idx_peak < len(pulso_err) else 0.0
-        snr_uncertainty = amp_uncertainty / umbral if (umbral is not None and umbral > 0) else np.nan
-        
-        out_dir = output_root
-        out_prom = os.path.join(out_dir, "avg_lider.png")
-        out_spec = os.path.join(out_dir, "spec_lider.png")
-        out_rec = os.path.join(out_dir, "pulses_centrados.png")
+            color_prom = tuple(rng.rand(3).tolist()) if colores_aleatorios else colorgrafico
+            idx_peak = int(np.argmax(pulso_promedio))
+            amp_uncertainty = pulso_err[idx_peak] if idx_peak < len(pulso_err) else 0.0
+            snr_uncertainty = amp_uncertainty / umbral if (umbral is not None and umbral > 0) else np.nan
+            
+            out_dir = output_root
+            out_prom = os.path.join(out_dir, "avg_lider.png")
+            out_spec = os.path.join(out_dir, "spec_lider.png")
+            out_rec = os.path.join(out_dir, "pulses_centrados.png")
 
-        _plot_pulse_full(
-            t_pulso, segmentos_norm, pulso_promedio, pulso_err, color_prom,
-            filename=final_plot_title, out_prom=out_prom,
-            plot_mode=plot_mode, individual_alpha=individual_alpha,
-            mostrar_individuales=mostrar_individuales, show_plot=show_average_plot,
-            snr_manual=snr_manual, snr_uncertainty=snr_uncertainty, 
-            umbral=umbral, mostrar_umbral=mostrar_umbral
-        )
+            _plot_pulse_full(
+                t_pulso, segmentos_norm, pulso_promedio, pulso_err, color_prom,
+                filename=final_plot_title, out_prom=out_prom,
+                plot_mode=plot_mode, individual_alpha=individual_alpha,
+                mostrar_individuales=mostrar_individuales, show_plot=show_average_plot,
+                snr_manual=snr_manual, snr_uncertainty=snr_uncertainty, 
+                umbral=umbral, mostrar_umbral=mostrar_umbral
+            )
 
-        if mostrar_espectrograma:
-            _plot_espectrograma(pulso_promedio, samplerate, final_plot_title, out_spec)
+            if mostrar_espectrograma:
+                _plot_espectrograma(pulso_promedio, samplerate, final_plot_title, out_spec)
 
-        interactive_excluded = excluded_windows
-        if mostrar_recortes:
-            interactive_excluded = _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds,
-                           start_sample_noise, samplerate, centros_metronomo, periodo, muestras_pulso, out_rec, final_plot_title, 
-                           excluded_windows=excluded_windows, show_plot=show_interactive_plot,
-                           signal_original_unfiltered=signal_unfiltered[mask])
+            new_excluded = interactive_excluded
+            is_master = (indices_validos_externos is None)
+            if mostrar_recortes and is_master:
+                new_excluded = _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds,
+                               start_sample_noise, samplerate, centros_metronomo, periodo, muestras_pulso, out_rec, final_plot_title, 
+                               excluded_windows=interactive_excluded, show_plot=show_interactive_plot,
+                               signal_original_unfiltered=signal_unfiltered[mask])
 
-        promedios_globales.append(pulso_promedio)
-        tiempos_globales.append(t_pulso)
-        nombres_globales.append(filename)
+                if show_interactive_plot and set(new_excluded) != set(interactive_excluded):
+                    interactive_excluded = list(new_excluded)
+                    print("Recalculando con nuevas exclusiones...")
+                    continue
 
-        resultados[filename] = {
-            'mean_pulse': pulso_promedio,
-            'pulse_time': t_pulso,
-            'amp_uncertainty': amp_uncertainty,
-            'segmentos_rs': segmentos_rs,
-            'periodo': periodo,
-            'umbral': umbral,
-            'shifts': shifts_to_save,
-            'valid_indices': valid_indices_local, # IMPORTANTE: Pasar indices al GUI
-            'interactive_excluded_windows': interactive_excluded
-        }
+            promedios_globales.append(pulso_promedio)
+            tiempos_globales.append(t_pulso)
+            nombres_globales.append(filename)
 
-        export_results_for_file(out_dir, filename, resultados[filename])
+            resultados[filename] = {
+                'mean_pulse': pulso_promedio,
+                'pulse_time': t_pulso,
+                'amp_uncertainty': amp_uncertainty,
+                'segmentos_rs': segmentos_rs,
+                'periodo': periodo,
+                'umbral': umbral,
+                'shifts': shifts_to_save,
+                'valid_indices': valid_indices_local, # IMPORTANTE: Pasar indices al GUI
+                'interactive_excluded_windows': interactive_excluded
+            }
+
+            export_results_for_file(out_dir, filename, resultados[filename])
+            break # Sale del loop interactivo si no hubo cambios
 
         plt.close('all') # --- Limpieza forzada ---
 
@@ -891,44 +1052,77 @@ def procesar_wavs_promedio(
 
 # ---------------------- GUI Classes (PySide6) ----------------------
 class ProcessingOptionsDialog(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, medicion_dir=None, master_dir=None, slave_dirs=None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Ñandú LSD - Configuración de Análisis")
-        self.resize(500, 600)
+        self.resize(600, 700)
         self.setStyleSheet("background-color: #050505; color: #00ffcc; font-family: 'Courier New', monospace;")
         
         self.result = None
+        self.medicion_dir = medicion_dir
+        self.slave_checkboxes = []
         
         main_layout = QVBoxLayout(self)
         
+        # Selección de Canales
+        if self.medicion_dir:
+            chan_group = QGroupBox("Selección de Canales")
+            chan_group.setStyleSheet("QGroupBox { border: 1px solid #00ffcc; border-radius: 5px; margin-top: 10px; }")
+            chan_layout = QVBoxLayout(chan_group)
+            
+            self.subdirs = [os.path.join(medicion_dir, d) for d in os.listdir(medicion_dir) if os.path.isdir(os.path.join(medicion_dir, d)) and d.startswith('canal_')]
+            self.subdirs.sort()
+            nombres_canales = [os.path.basename(d) for d in self.subdirs]
+            
+            master_layout = QHBoxLayout()
+            master_layout.addWidget(QLabel("Músculo Líder (Master):"))
+            self.cmb_master = QComboBox()
+            self.cmb_master.addItems(nombres_canales)
+            
+            # Buscar "canal_0" y ponerlo como predeterminado
+            idx_ch0 = self.cmb_master.findText("canal_0")
+            if idx_ch0 >= 0:
+                self.cmb_master.setCurrentIndex(idx_ch0)
+                
+            self.cmb_master.setStyleSheet("background-color: #111; color: #fff;")
+            master_layout.addWidget(self.cmb_master)
+            chan_layout.addLayout(master_layout)
+            
+            chan_layout.addWidget(QLabel("Músculos Esclavos (Slaves):"))
+            for ch in nombres_canales:
+                chk = QCheckBox(ch)
+                chk.setChecked(True)
+                self.slave_checkboxes.append((ch, chk))
+                chan_layout.addWidget(chk)
+                
+            main_layout.addWidget(chan_group)
+            
+        # Parámetros...
         form_group = QGroupBox("Parámetros")
         form_group.setStyleSheet("QGroupBox { border: 1px solid #00ffcc; border-radius: 5px; margin-top: 10px; } QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 3px 0 3px; }")
         
         self.form_layout = QFormLayout(form_group)
         self.entries = {}
         
-        self._add_entry("BPM (Metrónomo):", "50", "bpm")
         self._add_entry("Frec. Mínima (Hz):", "0", "frecuenciaminima")
         self._add_entry("Frec. Máxima (Hz):", "1000", "frecuenciamaxima")
-        self._add_entry("Tiempo Inicial (s):", "0", "tiempoinicial")
-        self._add_entry("Tiempo Final (s):", "25", "tiempofinal")
         self._add_entry("Longitud Resample (pts):", "", "resample_len", hint="Opcional. Ej: 1000")
         
-        self._add_entry("Ventana Ruido (s):", "2.0", "noise_seconds", hint="Ej: 2.0")
-        self._add_entry("Factor Umbral (x sigma):", "6.0", "factor_umbral", hint="Ej: 6.0")
+        # Agregamos la entrada para excluir ventanas (excluir la primera por defecto)
+        self._add_entry("Ventanas a Excluir:", "1", "excluded_windows", hint="Ej: 1, 3, 5")
 
         self.chk_apply_envelope = QCheckBox("Aplicar Envolvente (Hilbert)")
         self.chk_apply_envelope.setChecked(True)
         self.form_layout.addRow(self.chk_apply_envelope)
         
-        self._add_entry("Suavizado Env (ms):", "50", "smooth_ms", hint="0 para desactivar")
+        self._add_entry("Suavizado Env (ms):", "250", "smooth_ms", hint="0 para desactivar")
         
         self.chk_apply_notch = QCheckBox("Aplicar Filtro Notch (50Hz)")
-        self.chk_apply_notch.setChecked(False)
+        self.chk_apply_notch.setChecked(True)
         self.form_layout.addRow(self.chk_apply_notch)
         
-        self._add_entry("Filtro Low-pass (Hz):", "", "lowpass_cutoff_hz", hint="Vacío para no usar")
-        self._add_entry("Filtro High-pass (Hz):", "", "highpass_cutoff_hz", hint="Vacío para no usar")
+        self._add_entry("Filtro Low-pass (Hz):", "500", "lowpass_cutoff_hz", hint="Vacío para no usar")
+        self._add_entry("Filtro High-pass (Hz):", "20", "highpass_cutoff_hz", hint="Vacío para no usar")
 
         # Visualizaciones
         self.chk_indiv = QCheckBox("Mostrar Recortes Individuales en Promedio")
@@ -984,17 +1178,43 @@ class ProcessingOptionsDialog(QDialog):
 
     def on_ok(self):
         try:
+            bpm_val = 50.0
+            n_pulsos_val = 10
+            noise_val = 2.0
+            
+            if hasattr(self, 'medicion_dir') and self.medicion_dir:
+                import json
+                meta_path = os.path.join(self.medicion_dir, "metadata.json")
+                if not os.path.exists(meta_path):
+                    meta_path = os.path.join(self.medicion_dir, "canal_0", "metadata.json")
+                if os.path.exists(meta_path):
+                    try:
+                        with open(meta_path, 'r') as f:
+                            meta = json.load(f)
+                            # CORRECTO: usar 'noise_seconds' igual que analisis_por_track_integrado
+                            if 'bpm' in meta: bpm_val = float(meta['bpm'])
+                            if 'pulse_count' in meta: n_pulsos_val = int(meta['pulse_count'])
+                            if 'noise_seconds' in meta: noise_val = float(meta['noise_seconds'])
+                            elif 'ruido_inicial_segundos' in meta: noise_val = float(meta['ruido_inicial_segundos'])
+                            print(f"[Auto-Config] BPM={bpm_val}, Pulsos={n_pulsos_val}, Ruido={noise_val}s")
+                    except Exception as e:
+                        print(f"No se pudo leer metadata para Auto-Config: {e}")
+
             self.result = {
-                "bpm": float(self.entries["bpm"].text()),
+                "bpm": bpm_val,
+                "n_pulsos_manual": n_pulsos_val,
+                "noise_seconds": noise_val,
+                "tiempoinicial": 0.0,
+                "tiempofinal": 99999.0,
+                "factor_umbral": 6.0,
+                
                 "frecuenciaminima": float(self.entries["frecuenciaminima"].text()),
                 "frecuenciamaxima": float(self.entries["frecuenciamaxima"].text()),
-                "tiempoinicial": float(self.entries["tiempoinicial"].text()),
-                "tiempofinal": float(self.entries["tiempofinal"].text()),
                 
                 "resample_len": int(self.entries["resample_len"].text()) if self.entries["resample_len"].text() else None,
-                "noise_seconds": float(self.entries["noise_seconds"].text()),
-                "factor_umbral": float(self.entries["factor_umbral"].text()),
                 "smooth_ms": float(self.entries["smooth_ms"].text()),
+                
+                "excluded_windows": [int(x.strip()) for x in self.entries["excluded_windows"].text().split(',') if x.strip().isdigit()] if self.entries["excluded_windows"].text() else [],
                 
                 "lowpass_cutoff_hz": float(self.entries["lowpass_cutoff_hz"].text()) if self.entries["lowpass_cutoff_hz"].text() else None,
                 "highpass_cutoff_hz": float(self.entries["highpass_cutoff_hz"].text()) if self.entries["highpass_cutoff_hz"].text() else None,
@@ -1004,11 +1224,22 @@ class ProcessingOptionsDialog(QDialog):
                 
                 "mostrar_individuales": self.chk_indiv.isChecked(),
                 "mostrar_recortes": self.chk_recortes.isChecked(),
+                "show_interactive_plot": self.chk_recortes.isChecked(),
                 "mostrar_espectrograma": self.chk_spec.isChecked(),
                 "mostrar_tabla": self.chk_table.isChecked(),
                 "colores_aleatorios": self.chk_rand_color.isChecked(),
                 "colorgrafico": self.entries["color_fijo"].text(),
             }
+            
+            if hasattr(self, 'medicion_dir') and self.medicion_dir:
+                master_name = self.cmb_master.currentText()
+                self.result["selected_master_name"] = master_name
+                slaves = []
+                for name, chk in self.slave_checkboxes:
+                    if chk.isChecked() and name != master_name:
+                        slaves.append(name)
+                self.result["selected_slaves_names"] = slaves
+                
             self.accept()
         except ValueError as e:
             QMessageBox.critical(self, "Error de Validación", f"Por favor verifica los valores numéricos.\n{e}")

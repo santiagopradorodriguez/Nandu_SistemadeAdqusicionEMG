@@ -4,11 +4,11 @@ import os
 import tkinter as tk
 import matplotlib
 matplotlib.use('TkAgg')
-sys.path.append(r"C:\Users\MSI\OneDrive\Documentos\DOCUMENTOS SANTIAGO\santiago-prado-repositorio\EMG_desarrollo")
+sys.path.append(r"c:\Users\MSI\OneDrive\Documentos\DOCUMENTOS SANTIAGO\santiago-prado-repositorio\EMG_desarrollo")
 import analysis.analisis_por_track_integrado as api
 
-mediciones = ['2026-05-31/CA_Prueba1_Sujeto1', '2026-05-31/MA_Prueba1_Sujeto1', '2026-05-31/NA_Prueba1_Sujeto1', '2026-05-31/PA_Prueba1_Sujeto1', '2026-05-31/TA_Prueba1_Sujeto1']
-base_dir = r"C:\Users\MSI\OneDrive\Documentos\DOCUMENTOS SANTIAGO\santiago-prado-repositorio\EMG_desarrollo\base_de_datos_electrodos"
+mediciones = ['2026-06-01/A_Prueba1_Sujeto1', '2026-06-01/E_Prueba1_Sujeto1', '2026-06-01/I_Prueba1_Sujeto1', '2026-06-01/O_Prueba1_Sujeto1', '2026-06-01/U_Prueba1_Sujeto1']
+base_dir = r"c:\Users\MSI\OneDrive\Documentos\DOCUMENTOS SANTIAGO\santiago-prado-repositorio\EMG_desarrollo\base_de_datos_electrodos"
 
 try:
     root = tk.Tk()
@@ -17,7 +17,7 @@ try:
     dialog.populate_channels(base_dir, mediciones)
 
     # Trasplantar la selección de canales de PySide6 a Tkinter
-    canales_elegidos = ['canal_0']
+    canales_elegidos = ['canal_0', 'canal_1', 'canal_2', 'canal_3', 'canal_4']
     for canal_key, var in dialog.canales_seleccionados.items():
         var.set(canal_key in canales_elegidos)
 

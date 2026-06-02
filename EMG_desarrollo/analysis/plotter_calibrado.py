@@ -26,7 +26,9 @@ import json
 import sys
 from scipy import signal
 
-# --- Mantenemos Matplotlib para los gráficos, pero sin backend forzado a TkAgg ---
+# --- Mantenemos Matplotlib para los gráficos, forzando backend a QtAgg ---
+import matplotlib
+matplotlib.use('QtAgg')
 import matplotlib.pyplot as plt
 
 # Imports de PySide6
@@ -41,9 +43,11 @@ from PySide6.QtCore import Qt
 # --- 1. CONFIGURACIÓN GENERAL ---
 
 _current_dir = os.path.dirname(os.path.abspath(__file__))
-BASE_DIR = os.path.join(_current_dir, "base_de_datos_electrodos")
-
 root_dir = os.path.dirname(_current_dir)
+
+# --- CORRECCIÓN: Apuntar a la base de datos en la raíz del proyecto, no en la carpeta analysis ---
+BASE_DIR = os.path.join(root_dir, "base_de_datos_electrodos")
+
 if root_dir not in sys.path:
     sys.path.append(root_dir)
 
@@ -191,6 +195,26 @@ class PlotterConfigDialog(QDialog):
         right_layout.addWidget(self.btn_run)
         
         main_layout.addWidget(right_group, stretch=1)
+        
+        # Cargar config guardada
+        self.cargar_config()
+
+    def cargar_config(self):
+        saved = config_mgr.get("plotter_config") or {}
+        self.chk_notch.setChecked(saved.get("notch", True))
+        self.chk_bandpass.setChecked(saved.get("bandpass", True))
+        
+        tipo_env = saved.get("tipo_env", "ninguna")
+        if tipo_env == "hilbert": self.rb_hilbert.setChecked(True)
+        elif tipo_env == "rms": self.rb_rms.setChecked(True)
+        else: self.rb_ninguna.setChecked(True)
+        
+        self.chk_fft.setChecked(saved.get("graficar_fft", False))
+        
+        if "start_time" in saved and saved["start_time"] is not None:
+            self.entry_inicio.setText(str(saved["start_time"]))
+        if "end_time" in saved and saved["end_time"] is not None:
+            self.entry_fin.setText(str(saved["end_time"]))
 
     def confirmar(self):
         """
@@ -225,6 +249,15 @@ class PlotterConfigDialog(QDialog):
             "end_time": end,
             "graficar_fft": self.chk_fft.isChecked()
         }
+        
+        # Guardar la config para la proxima vez
+        config_mgr.set("plotter_config", "notch", self.chk_notch.isChecked())
+        config_mgr.set("plotter_config", "bandpass", self.chk_bandpass.isChecked())
+        config_mgr.set("plotter_config", "tipo_env", tipo_env)
+        config_mgr.set("plotter_config", "start_time", start)
+        config_mgr.set("plotter_config", "end_time", end)
+        config_mgr.set("plotter_config", "graficar_fft", self.chk_fft.isChecked())
+        
         self.accept()
 
 # --- 3. FUNCIONES DE PROCESAMIENTO ---
@@ -247,10 +280,13 @@ def calcular_rms(senal, fs, window_ms):
     rms = s.pow(2).rolling(window=window_samples, center=True).mean().apply(np.sqrt)
     return rms.fillna(0).values
 
-def plotear_medicion_secuencial(nombre_medicion, config):
+def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, mostrar_plot=True):
     """
     Procesa, GUARDA en la carpeta origen y muestra la gráfica.
     """
+    if limits_cache is None:
+        limits_cache = {}
+
     print(f"\n>>> Procesando: {nombre_medicion}...")
     
     aplicar_notch = config["notch"]
@@ -310,6 +346,13 @@ def plotear_medicion_secuencial(nombre_medicion, config):
     ncols = 2 if graficar_fft else 1
     ancho_fig = 24 if graficar_fft else 16
     
+    # Estética global desde la config
+    is_dark = config_mgr.get("estetica_global", "tema_oscuro")
+    if is_dark:
+        plt.style.use('dark_background')
+    else:
+        plt.style.use('default')
+
     fig, axs = plt.subplots(num_canales, ncols, figsize=(ancho_fig, 5 * num_canales), squeeze=False)
     
     # Compartir ejes X por columna para mantener sincronización y ocultar labels internos
@@ -322,14 +365,6 @@ def plotear_medicion_secuencial(nombre_medicion, config):
             plt.setp(axs[i, 0].get_xticklabels(), visible=False)
             if graficar_fft:
                 plt.setp(axs[i, 1].get_xticklabels(), visible=False)
-    
-    # Estética global desde la config
-    is_dark = config_mgr.get("estetica_global", "tema_oscuro")
-    if is_dark:
-        plt.style.use('dark_background')
-        #fig.patch.set_facecolor('#050505')
-    else:
-        plt.style.use('default')
     
     canales_config = config_mgr.get("canales")
 
@@ -402,9 +437,6 @@ def plotear_medicion_secuencial(nombre_medicion, config):
             ax.plot(df[col_tiempo], env, color=color_hex, lw=1.2)
 
         elif tipo_envolvente == 'rms':
-            # Se usa un color claro/oscuro para la raw según el tema
-            color_raw = "gray" if is_dark else "lightgray"
-            ax.plot(df[col_tiempo], sig, color=color_raw, alpha=0.5, lw=1, label='Señal Cruda')
             env_rms = calcular_rms(sig, fs, RMS_WINDOW_MS)
             etiqueta_env = " | Env. RMS"
 
@@ -417,10 +449,8 @@ def plotear_medicion_secuencial(nombre_medicion, config):
                         noise_level = np.nanmean(env_rms[:noise_end_idx])
                         if not np.isnan(noise_level):
                             env_rms = np.maximum(0, env_rms - noise_level)
-                            etiqueta_env += " (ruido restado)"
 
             ax.plot(df[col_tiempo], env_rms, color=color_hex, lw=1.5, label='RMS')
-            ax.legend(loc='upper right', fontsize=20)
             max_rms = np.nanmax(env_rms)
             if max_rms > 0: ax.set_ylim(-5, max_rms * 2)
         else:
@@ -467,20 +497,61 @@ def plotear_medicion_secuencial(nombre_medicion, config):
         axs[-1, 1].set_xlabel("Frecuencia (Hz)", fontsize=27)
     plt.tight_layout(rect=[0, 0.03, 1, 0.92])
 
+    # Aplicar límites guardados si existen
+    if "xlim" in limits_cache:
+        axs[0, 0].set_xlim(limits_cache["xlim"])
+    for i in range(num_canales):
+        if f"ylim_{i}" in limits_cache:
+            axs[i, 0].set_ylim(limits_cache[f"ylim_{i}"])
+
     # --- GUARDADO AUTOMÁTICO (SOLICITUD DE USUARIO) ---
-    # Formato: plot_calibrado_{nombre_medicion}.png
+    # Formato: plot_calibrado_{nombre_medicion_limpio}.png
     # Ubicación: Dentro de la misma carpeta de la medición
-    nombre_archivo = f"plot_calibrado_{nombre_medicion}.png"
+    
+    # Asegurar que sacamos un nombre relativo limpio incluso si pasaron una ruta absoluta
+    try:
+        rel_path = os.path.relpath(path_medicion, BASE_DIR)
+    except ValueError:
+        # Fallback si por alguna razón no está en BASE_DIR
+        padre = os.path.basename(os.path.dirname(path_medicion))
+        hijo = os.path.basename(path_medicion)
+        rel_path = f"{padre}_{hijo}"
+        
+    nombre_limpio = rel_path.replace("/", "_").replace("\\", "_")
+    nombre_archivo = f"plot_calibrado_{nombre_limpio}.png"
     ruta_guardado = os.path.join(path_medicion, nombre_archivo)
     
     plt.savefig(ruta_guardado, dpi=100)
-    print(f"✅ Guardado en: {ruta_guardado}")
+    print(f"✅ Guardado en medición: {ruta_guardado}")
+    
+    # NUEVO: Guardar copia en el historial de comparativas
+    carpeta_comparativas = os.path.join(root_dir, "analisis_comparativos")
+    if not os.path.exists(carpeta_comparativas):
+        os.makedirs(carpeta_comparativas)
+        
+    ruta_comparativa = os.path.join(carpeta_comparativas, nombre_archivo)
+    plt.savefig(ruta_comparativa, dpi=100)
+    print(f"✅ Copia guardada en historial: {ruta_comparativa}")
     
     # --- VISUALIZACIÓN BLOQUEANTE ---
-    print(f"👁️ Visualizando {nombre_medicion}. Cierra la ventana del gráfico para continuar...")
-    plt.show()      
-    plt.close('all') 
-    print(f"⏭️ Pasando a la siguiente...\n")
+    if mostrar_plot:
+        # Interceptar el evento de cierre para asegurar que leemos los límites correctos antes de que Matplotlib destruya los ejes
+        def on_close(event):
+            try:
+                limits_cache["xlim"] = axs[0, 0].get_xlim()
+                for i in range(num_canales):
+                    limits_cache[f"ylim_{i}"] = axs[i, 0].get_ylim()
+            except:
+                pass
+                
+        fig.canvas.mpl_connect('close_event', on_close)
+
+        print(f"👁️ Visualizando {nombre_medicion}. Cierra la ventana del gráfico para continuar...")
+        plt.show(block=True)      
+        plt.close('all') 
+        print(f"⏭️ Pasando a la siguiente...\n")
+    else:
+        plt.close(fig)
 
 def flujo_principal():
     """
@@ -504,9 +575,10 @@ def flujo_principal():
         total = len(mediciones)
         print(f"--- Iniciando secuencia de {total} mediciones ---")
         
+        limits_cache = {}
         for i, nombre_medicion in enumerate(mediciones):
             print(f"[{i+1}/{total}] Cargando datos...")
-            plotear_medicion_secuencial(nombre_medicion, config)
+            plotear_medicion_secuencial(nombre_medicion, config, limits_cache)
 
         print("--- Todas las mediciones procesadas ---")
 
