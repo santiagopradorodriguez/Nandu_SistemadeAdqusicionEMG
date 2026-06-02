@@ -185,6 +185,10 @@ class PlotterConfigDialog(QDialog):
         extra_layout = QVBoxLayout(extra_group)
         self.chk_fft = QCheckBox("Añadir Espectro de Frecuencias (FFT)")
         extra_layout.addWidget(self.chk_fft)
+        
+        self.chk_dark_mode = QCheckBox("Tema Oscuro (Fondo Negro)")
+        self.chk_dark_mode.setChecked(True)
+        extra_layout.addWidget(self.chk_dark_mode)
         right_layout.addWidget(extra_group)
         
         right_layout.addStretch()
@@ -210,6 +214,7 @@ class PlotterConfigDialog(QDialog):
         else: self.rb_ninguna.setChecked(True)
         
         self.chk_fft.setChecked(saved.get("graficar_fft", False))
+        self.chk_dark_mode.setChecked(saved.get("tema_oscuro", True))
         
         if "start_time" in saved and saved["start_time"] is not None:
             self.entry_inicio.setText(str(saved["start_time"]))
@@ -247,7 +252,8 @@ class PlotterConfigDialog(QDialog):
             "tipo_env": tipo_env,
             "start_time": start,
             "end_time": end,
-            "graficar_fft": self.chk_fft.isChecked()
+            "graficar_fft": self.chk_fft.isChecked(),
+            "tema_oscuro": self.chk_dark_mode.isChecked()
         }
         
         # Guardar la config para la proxima vez
@@ -257,6 +263,7 @@ class PlotterConfigDialog(QDialog):
         config_mgr.set("plotter_config", "start_time", start)
         config_mgr.set("plotter_config", "end_time", end)
         config_mgr.set("plotter_config", "graficar_fft", self.chk_fft.isChecked())
+        config_mgr.set("plotter_config", "tema_oscuro", self.chk_dark_mode.isChecked())
         
         self.accept()
 
@@ -346,8 +353,8 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
     ncols = 2 if graficar_fft else 1
     ancho_fig = 24 if graficar_fft else 16
     
-    # Estética global desde la config
-    is_dark = config_mgr.get("estetica_global", "tema_oscuro")
+    # Estética global / local
+    is_dark = config.get("tema_oscuro", True)
     if is_dark:
         plt.style.use('dark_background')
     else:

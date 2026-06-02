@@ -92,6 +92,8 @@ class ImageLabel(QLabel):
         super().__init__(text, parent)
         self.setAlignment(Qt.AlignCenter)
         self._pixmap = None
+        self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+        self.setMinimumSize(100, 100)
 
     def setPixmap(self, pixmap):
         """
@@ -127,7 +129,33 @@ class ImageLabel(QLabel):
             Any: Resultado de la ejecución de la función.
         """
         if self._pixmap is not None and not self._pixmap.isNull():
-            super().setPixmap(self._pixmap.scaled(self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            if self.width() > 0 and self.height() > 0:
+                super().setPixmap(self._pixmap.scaled(self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+
+class PatronMuscularViewerWidget(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.img_label = ImageLabel("[Visor de Patrón Muscular]\nAún no hay medición seleccionada")
+        self.img_label.setStyleSheet("background-color: #0c0c0c; border: 1px solid #333; color: #555;")
+        layout.addWidget(self.img_label)
+
+    def load_patron(self, path):
+        import os
+        import glob
+        from PySide6.QtGui import QPixmap
+        search_pattern = os.path.join(path, "patron_muscular_*.png")
+        files = glob.glob(search_pattern)
+        if files:
+            pix = QPixmap(files[0])
+            self.img_label.clear()
+            self.img_label.setPixmap(pix)
+        else:
+            self.img_label.clear()
+            self.img_label._pixmap = None
+            self.img_label.setText("[No se encontró gráfico de Patrón Muscular en esta medición]")
+            self.img_label.update()
 
 class ReaperStyleHub(QMainWindow):
     """
@@ -479,6 +507,10 @@ class ReaperStyleHub(QMainWindow):
         self.electrode_viewer.btn_refresh.clicked.connect(self._sync_electrode_viewer)
         self.tabs_viz.addTab(self.electrode_viewer, "🧠 Visor de Electrodos (Grilla)")
         
+        # Sub-pestaña: Visor de Patrón Muscular
+        self.patron_viewer = PatronMuscularViewerWidget()
+        self.tabs_viz.addTab(self.patron_viewer, "🧬 Historial Patrón Muscular")
+        
         lyt_view.addWidget(self.tabs_viz)
         self.tabs.addTab(self.tab_view, "3. VISUALIZACIÓN")
         
@@ -511,6 +543,9 @@ class ReaperStyleHub(QMainWindow):
         """Carga la medición seleccionada en el visor de CSV y en el visor Calibrado."""
         if hasattr(self, 'calibrated_viewer'):
             self.calibrated_viewer.load_calibrated_plot(path)
+            
+        if hasattr(self, 'patron_viewer'):
+            self.patron_viewer.load_patron(path)
             
         if hasattr(self, 'csv_viewer') and hasattr(self.csv_viewer, 'load_csv'):
             csv_path = None

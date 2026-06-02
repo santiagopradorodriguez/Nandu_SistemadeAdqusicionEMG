@@ -116,6 +116,12 @@ def main(mediciones_dirs=None, medicion_dir=None, master_dir=None, slave_dirs=No
         
         master_name = opts.pop("selected_master_name", None)
         slaves_names = opts.pop("selected_slaves_names", [])
+        
+        is_dark = opts.pop("tema_oscuro", True)
+        if is_dark:
+            plt.style.use('dark_background')
+        else:
+            plt.style.use('default')
     else:
         return
 
@@ -649,12 +655,14 @@ def _plot_muscle_overlay(measure_name, channels_dict, out_dir, master_name=None)
                 data = channels_dict[ch][fname]
                 t = np.array(data['pulse_time']) - time_shift
                 y = np.array(data['mean_pulse'])
+                err = np.array(data.get('pulse_err', np.zeros_like(y)))
                 
                 # Offset: para asegurar que inicie desde el 0 en el eje Y
                 # aplicando el equivalente a un pasa altos ideal sobre la línea base
-                y = y - np.min(y)
-                if np.max(y) > max_y_overlay:
-                    max_y_overlay = np.max(y)
+                y_min = np.min(y)
+                y = y - y_min
+                if np.max(y + err) > max_y_overlay:
+                    max_y_overlay = np.max(y + err)
                 
                 ch_idx_str = ch.replace('canal_', '')
                 conf_key = f"Canal {ch_idx_str}"
@@ -668,15 +676,16 @@ def _plot_muscle_overlay(measure_name, channels_dict, out_dir, master_name=None)
                     col = 'red'
                 
                 plt.plot(t, y, label=lbl, color=col, linewidth=2, alpha=0.8)
+                plt.fill_between(t, y - err, y + err, color=col, alpha=0.2)
                 found_any = True
                 
         if found_any:
             plt.title(f"Patrón Muscular Sincronizado - {measure_name} - {fname}")
-            plt.xlabel("Tiempo respecto al pico del Músculo Líder [s]")
+            plt.xlabel("Tiempo respecto al pico de la señal de micrófono [s]")
             plt.ylabel("Amplitud [µV]")
             
-            # Dibujar línea exactamente en 0 (donde ahora vive el pico del Master)
-            plt.axvline(x=0, color='black', linestyle='--', alpha=0.5, label="Pico del Músculo Líder")
+            # Dibujar línea exactamente en 0
+            plt.axvline(x=0, color='gray', linestyle='--', alpha=0.8, label="Pico señal de micrófono")
             
             plt.legend(loc='upper right')
             plt.grid(True, alpha=0.5)
@@ -692,7 +701,7 @@ def _plot_muscle_overlay(measure_name, channels_dict, out_dir, master_name=None)
 def export_results_for_file(out_dir, filename, resultados_entry):
     os.makedirs(out_dir, exist_ok=True)
     export = {}
-    keys = ['mean_pulse', 'pulse_time', 'amp_uncertainty',
+    keys = ['mean_pulse', 'pulse_time', 'pulse_err', 'amp_uncertainty',
             'umbral', 'segmentos_rs', 'shifts', 'valid_indices']
     for k in keys:
         export[k] = resultados_entry.get(k, None)
@@ -1031,6 +1040,7 @@ def procesar_wavs_promedio(
             resultados[filename] = {
                 'mean_pulse': pulso_promedio,
                 'pulse_time': t_pulso,
+                'pulse_err': pulso_err,
                 'amp_uncertainty': amp_uncertainty,
                 'segmentos_rs': segmentos_rs,
                 'periodo': periodo,
@@ -1120,6 +1130,10 @@ class ProcessingOptionsDialog(QDialog):
         self.chk_apply_notch = QCheckBox("Aplicar Filtro Notch (50Hz)")
         self.chk_apply_notch.setChecked(True)
         self.form_layout.addRow(self.chk_apply_notch)
+        
+        self.chk_dark_mode = QCheckBox("Gráficos en Tema Oscuro (Fondo Negro)")
+        self.chk_dark_mode.setChecked(True)
+        self.form_layout.addRow(self.chk_dark_mode)
         
         self._add_entry("Filtro Low-pass (Hz):", "500", "lowpass_cutoff_hz", hint="Vacío para no usar")
         self._add_entry("Filtro High-pass (Hz):", "20", "highpass_cutoff_hz", hint="Vacío para no usar")
@@ -1229,6 +1243,7 @@ class ProcessingOptionsDialog(QDialog):
                 "mostrar_tabla": self.chk_table.isChecked(),
                 "colores_aleatorios": self.chk_rand_color.isChecked(),
                 "colorgrafico": self.entries["color_fijo"].text(),
+                "tema_oscuro": self.chk_dark_mode.isChecked(),
             }
             
             if hasattr(self, 'medicion_dir') and self.medicion_dir:

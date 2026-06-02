@@ -1268,11 +1268,17 @@ class RealTimePlotter(QtWidgets.QWidget):
 
         # --- Curvas del Plot ---
         self.curvas = []
-        # --- NUEVO: Cargar colores desde ConfigManager ---
         self.colores_curvas = []
-        for i in range(8):
-            color_hex = self.config_mgr.config.get("canales", {}).get(f"Canal {i}", {}).get("color_hex", "#ffffff")
-            self.colores_curvas.append(color_hex)
+        self.nombres_musculos = []
+        canales_conf = self.config_mgr.get("canales") or {}
+        for i in range(16):
+            key = f"Canal {i}"
+            if key in canales_conf:
+                self.colores_curvas.append(canales_conf[key].get("color_hex", "#ffffff"))
+                self.nombres_musculos.append(canales_conf[key].get("musculo", f"Canal {i}"))
+            else:
+                self.colores_curvas.append("#0074D9")
+                self.nombres_musculos.append(f"Canal {i}")
 
     # --- NUEVO: Cambio de modo de conexión en tiempo real ---
     def on_terminal_mode_changed(self):
@@ -1588,7 +1594,8 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.measure_layout.addWidget(title_label)
         for i in range(self.NUM_CANALES):
             color = self.colores_curvas[i % len(self.colores_curvas)]
-            self.curvas.append(self.plot.plot(pen=color, name=f'Canal {i}'))
+            musculo = self.nombres_musculos[i % len(self.nombres_musculos)]
+            self.curvas.append(self.plot.plot(pen=color, name=musculo))
             
             # --- NUEVO: Línea de piso de ruido ---
             line_ruido = pg.InfiniteLine(angle=0, pen=pg.mkPen('r', width=4, style=QtCore.Qt.DashLine))
@@ -1631,7 +1638,7 @@ class RealTimePlotter(QtWidgets.QWidget):
             frame_layout = QtWidgets.QVBoxLayout(measurement_frame)
             frame_layout.setContentsMargins(5, 5, 5, 5) # Padding interno
             
-            label = QtWidgets.QLabel(f"<b>Ch {i}:</b> -- µVp-p, -- µVrms")
+            label = QtWidgets.QLabel(f"<b>{musculo}:</b> -- µVp-p, -- µVrms")
             label.setStyleSheet(f"color: {pg.mkColor(color).name()}; font-size: 14px; font-weight: bold; background-color: transparent; border: none;")
             frame_layout.addWidget(label)
             
@@ -2482,7 +2489,8 @@ class RealTimePlotter(QtWidgets.QWidget):
 
             # Actualiza los labels y el marcador gráfico
             for i in range(self.NUM_CANALES):
-                texto = f"<b>Ch {i}:</b> {vp_p[i]:.1f} µVp-p, {rms[i]:.1f} µVrms"
+                musculo = self.nombres_musculos[i % len(self.nombres_musculos)]
+                texto = f"<b>{musculo}:</b> {vp_p[i]:.1f} µVp-p, {rms[i]:.1f} µVrms"
                 
                 # Aislar la ventana de búsqueda para este canal
                 window_data = plot_buffer_datos[i, search_start_idx:]
@@ -2602,8 +2610,8 @@ class RealTimePlotter(QtWidgets.QWidget):
             root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             ruta_palabras = os.path.join(root_dir, "palabras.txt")
             if not os.path.exists(ruta_palabras):
-                QtWidgets.QMessageBox.warning(self, "Error", "Falta palabras.txt en la carpeta del script.")
-                return
+                with open(ruta_palabras, 'w', encoding='utf-8') as f:
+                    f.write("A\nE\nI\nO\nU\n")
                 
             with open(ruta_palabras, 'r', encoding='utf-8') as f:
                 self.autoforge_words = [line.strip() for line in f if line.strip()]
@@ -2616,6 +2624,14 @@ class RealTimePlotter(QtWidgets.QWidget):
             dialog.spin_reps.setValue(5)
             dialog.spin_bpm.setValue(40)
             if dialog.exec() == QtWidgets.QDialog.Accepted:
+                # --- NUEVO: Recargar palabras por si fueron editadas en la ventana ---
+                with open(ruta_palabras, 'r', encoding='utf-8') as f:
+                    self.autoforge_words = [line.strip() for line in f if line.strip()]
+                    
+                if not self.autoforge_words:
+                    QtWidgets.QMessageBox.warning(self, "Error", "palabras.txt quedó vacío después de editar.")
+                    return
+
                 self.autoforge_prueba = dialog.edit_prueba.text().strip()
                 self.autoforge_sujeto = dialog.edit_sujeto.text().strip()
                 self.autoforge_target_reps = dialog.spin_reps.value()
