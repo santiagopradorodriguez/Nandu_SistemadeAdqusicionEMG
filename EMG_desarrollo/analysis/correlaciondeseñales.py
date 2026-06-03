@@ -25,6 +25,8 @@ import subprocess
 
 # --- Imports para GUI ---
 import sys
+import tkinter as tk
+
 
 # --- Import para ConfigManager ---
 root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -110,6 +112,7 @@ def main(mediciones_dirs=None, medicion_dir=None, master_dir=None, slave_dirs=No
         return
         
     dialog = ProcessingOptionsDialog(medicion_dir=mediciones_dirs[0] if mediciones_dirs else None, master_dir=master_dir, slave_dirs=slave_dirs)
+    dialog.mediciones_dirs_full = mediciones_dirs
     if dialog.exec() == QDialog.Accepted:
         opts = dialog.result
         if not opts: return
@@ -1166,12 +1169,45 @@ class ProcessingOptionsDialog(QDialog):
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
         
-        self.btn_run = QPushButton("Ejecutar")
+        self.btn_corr = QPushButton("Calcular Correlación Cruzada")
+        self.btn_corr.setStyleSheet("QPushButton { background-color: #8a2be2; color: #fff; font-weight: bold; padding: 10px 20px; border-radius: 3px; }")
+        self.btn_corr.clicked.connect(self.abrir_correlacion)
+        btn_layout.addWidget(self.btn_corr)
+        
+        self.btn_run = QPushButton("Procesar")
         self.btn_run.setStyleSheet("QPushButton { background-color: #00ffcc; color: #000; font-weight: bold; padding: 10px 20px; border-radius: 3px; }")
         self.btn_run.clicked.connect(self.on_ok)
         btn_layout.addWidget(self.btn_run)
         
         main_layout.addLayout(btn_layout)
+
+    def abrir_correlacion(self):
+        meds = getattr(self, 'mediciones_dirs_full', None)
+        if meds and len(meds) == 2:
+            try:
+                ch1 = set(x for x in os.listdir(meds[0]) if x.startswith("canal_"))
+                ch2 = set(x for x in os.listdir(meds[1]) if x.startswith("canal_"))
+                common = sorted(list(ch1 & ch2))
+            except: common = []
+            if len(common) > 0:
+                dialog = CorrelacionOptionsDialog(meds, common, is_single=False, parent=self)
+                dialog.exec()
+                return
+            else:
+                QMessageBox.warning(self, "Aviso", "No hay canales comunes entre las 2 mediciones.")
+                return
+
+        if not self.medicion_dir:
+            QMessageBox.warning(self, "Aviso", "No hay medición seleccionada para correlacionar.")
+            return
+            
+        canales = [os.path.basename(d) for d in self.subdirs] if hasattr(self, 'subdirs') else []
+        if len(canales) < 2:
+            QMessageBox.warning(self, "Aviso", "Se necesitan al menos 2 canales (músculos) para correlacionar.")
+            return
+            
+        dialog = CorrelacionOptionsDialog(self.medicion_dir, canales, is_single=True, parent=self)
+        dialog.exec()
 
     def _add_entry(self, label_text, default_val, key, hint=None):
         widget = QWidget()
@@ -1329,6 +1365,77 @@ class ComparativeOptionsDialog(QDialog):
         _comparative_plots(proms, times, names, glob_res, out, 
                            show_overlay=self.var_ov.get(), show_amplitude=self.var_amp.get())
 
+class CorrelacionOptionsDialog(QDialog):
+    def __init__(self, paths_mediciones, canales_disponibles, is_single, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Ñandú LSD - Configurar Correlación")
+        self.resize(400, 300)
+        self.paths = paths_mediciones
+        self.is_single = is_single
+        self.canales_originales = canales_disponibles
+        
+        nombres_mostrar = []
+        canales_config = config_mgr.get("canales") if config_mgr else {}
+        for c in canales_disponibles:
+            idx = c.replace('canal_', '')
+            lbl = canales_config.get(f"Canal {idx}", {}).get("musculo", c)
+            nombres_mostrar.append(f"{lbl} ({c})")
+        
+        layout = QVBoxLayout(self)
+        
+        if self.is_single:
+            layout.addWidget(QLabel("Selecciona los 2 músculos a correlacionar:"))
+            self.cmb1 = QComboBox()
+            self.cmb1.addItems(nombres_mostrar)
+            self.cmb2 = QComboBox()
+            self.cmb2.addItems(nombres_mostrar)
+            if len(nombres_mostrar) > 1:
+                self.cmb2.setCurrentIndex(1)
+            layout.addWidget(self.cmb1)
+            layout.addWidget(self.cmb2)
+        else:
+            layout.addWidget(QLabel("Selecciona el músculo común a correlacionar\nentre las dos mediciones:"))
+            self.cmb_common = QComboBox()
+            self.cmb_common.addItems(nombres_mostrar)
+            layout.addWidget(self.cmb_common)
+            
+        self.chk_ventana = QCheckBox("Ventana por Ventana (Promedio de correlaciones)")
+        self.chk_ventana.setChecked(True)
+        self.chk_ventana.setToolTip("En vez de correlacionar los promedios globales, correlaciona cada pulso individualmente y promedia los coeficientes de correlación.")
+        layout.addWidget(self.chk_ventana)
+            
+        btn = QPushButton("CALCULAR CORRELACIÓN")
+        btn.clicked.connect(self.ejecutar)
+        layout.addWidget(btn)
+        
+    def ejecutar(self):
+        ventana_por_ventana = self.chk_ventana.isChecked()
+        if self.is_single:
+            ch1_real = self.canales_originales[self.cmb1.currentIndex()]
+            ch2_real = self.canales_originales[self.cmb2.currentIndex()]
+            p1 = os.path.join(self.paths, ch1_real, "analisis_results.json")
+            p2 = os.path.join(self.paths, ch2_real, "analisis_results.json")
+            out = self.paths
+            lbl1 = self.cmb1.currentText().split(" (")[0]
+            lbl2 = self.cmb2.currentText().split(" (")[0]
+        else:
+            ch_real = self.canales_originales[self.cmb_common.currentIndex()]
+            p1 = os.path.join(self.paths[0], ch_real, "analisis_results.json")
+            p2 = os.path.join(self.paths[1], ch_real, "analisis_results.json")
+            out = os.path.dirname(self.paths[0])
+            lbl1 = f"{os.path.basename(self.paths[0])}_{ch_real}"
+            lbl2 = f"{os.path.basename(self.paths[1])}_{ch_real}"
+            
+        if not os.path.exists(p1) or not os.path.exists(p2):
+            QMessageBox.critical(self, "Error", "Faltan archivos analisis_results.json.\nPrimero debes Procesar ambas señales (botón Procesar).")
+            return
+            
+        res = calcular_correlacion_cruzada(p1, p2, out, ventana_por_ventana=ventana_por_ventana, nombre1=lbl1, nombre2=lbl2)
+        if res:
+            max_c, lag = res
+            QMessageBox.information(self, "Éxito", f"Correlación completada con éxito.\nCoeficiente Máximo: {max_c:.3f}\nLag: {lag}")
+        self.accept()
+
 class AnalysisGUI:
     def __init__(self, root):
         self.root = root
@@ -1348,6 +1455,7 @@ class AnalysisGUI:
         btn_fr.pack(fill="x")
         tk.Button(btn_fr, text="Procesar", command=self.open_proc).pack(side="left", expand=True, fill="x")
         tk.Button(btn_fr, text="Comparar", command=self.open_comp).pack(side="left", expand=True, fill="x")
+        tk.Button(btn_fr, text="Correlacionar", command=self.open_corr).pack(side="left", expand=True, fill="x")
         
         self.load()
 
@@ -1370,7 +1478,157 @@ class AnalysisGUI:
             d = ComparativeOptionsDialog(self.root)
             d.populate_common_channels(self.BASE_DIR, sel)
 
+    def open_corr(self):
+        sel = [self.lst.get(i) for i in self.lst.curselection()]
+        import tkinter.messagebox as messagebox
+        
+        if not sel or len(sel) > 2:
+            messagebox.showinfo("Atención", "Selecciona 1 medición (para correlacionar músculos distintos de la misma sesión) o 2 mediciones (para correlacionar el mismo músculo a través del tiempo).")
+            return
+            
+        app = QApplication.instance()
+        if not app: app = QApplication(sys.argv)
+            
+        if len(sel) == 1:
+            path = os.path.join(self.BASE_DIR, sel[0])
+            try:
+                ch = sorted(set(x for x in os.listdir(path) if x.startswith("canal_")))
+            except: ch = []
+            if len(ch) >= 2:
+                d = CorrelacionOptionsDialog(path, ch, is_single=True)
+                d.exec()
+            else:
+                messagebox.showerror("Error", "La medición no tiene al menos 2 canales procesados.")
+        elif len(sel) == 2:
+            p1 = os.path.join(self.BASE_DIR, sel[0])
+            p2 = os.path.join(self.BASE_DIR, sel[1])
+            try:
+                ch1 = set(x for x in os.listdir(p1) if x.startswith("canal_"))
+                ch2 = set(x for x in os.listdir(p2) if x.startswith("canal_"))
+                common = sorted(list(ch1 & ch2))
+            except: common = []
+            if common:
+                d = CorrelacionOptionsDialog([p1, p2], common, is_single=False)
+                d.exec()
+            else:
+                messagebox.showerror("Error", "No hay canales en común entre las mediciones seleccionadas.")
+
 if __name__ == "__main__":
     root = tk.Tk()
     app = AnalysisGUI(root)
     root.mainloop()
+
+# ---------------------- NUEVO ANÁLISIS: Correlación Cruzada --------------------
+def calcular_correlacion_cruzada(path1, path2, path_guardado, ventana_por_ventana=False, nombre1=None, nombre2=None):
+    """
+    Calcula la correlación cruzada normalizada (Coeficiente de Correlación de Pearson).
+    Puede hacerse de dos formas:
+    1. Global: R_norm = (E[x] * E[y]) / (norm(E[x]) * norm(E[y])) - Cruza los pulsos promedio.
+    2. Ventana por Ventana: E[ R_norm_i ] - Cruza pulso 'i' con pulso 'i' y promedia los coeficientes resultantes.
+    """
+    import os, json
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from scipy.signal import correlate, correlation_lags
+    
+    try:
+        with open(path1, 'r') as f1: d1 = json.load(f1)
+        with open(path2, 'r') as f2: d2 = json.load(f2)
+            
+        def get_data(d):
+            if 'mean_pulse' in d: return d
+            for k, v in d.items():
+                if isinstance(v, dict) and 'mean_pulse' in v: return v
+            return None
+            
+        data1 = get_data(d1)
+        data2 = get_data(d2)
+        
+        if data1 is None or data2 is None:
+            print("No se encontraron las métricas procesadas en los archivos.")
+            return None
+            
+        if nombre1 is None: nombre1 = os.path.basename(os.path.dirname(path1))
+        if nombre2 is None: nombre2 = os.path.basename(os.path.dirname(path2))
+
+        if not ventana_por_ventana:
+            sig1 = data1['mean_pulse']
+            sig2 = data2['mean_pulse']
+            min_len = min(len(sig1), len(sig2))
+            x = np.array(sig1[:min_len], dtype=float)
+            y = np.array(sig2[:min_len], dtype=float)
+            
+            norm1 = np.sqrt(np.sum(x**2))
+            norm2 = np.sqrt(np.sum(y**2))
+            
+            if norm1 == 0 or norm2 == 0:
+                print("Una señal es nula.")
+                return None
+                
+            corr = correlate(x, y, mode='full')
+            lags = correlation_lags(len(x), len(y), mode='full')
+            corr_norm = corr / (norm1 * norm2)
+        else:
+            seg1 = data1.get('segmentos_rs', [])
+            seg2 = data2.get('segmentos_rs', [])
+            
+            if len(seg1) == 0 or len(seg2) == 0:
+                print("No hay segmentos procesados para correlacionar ventana por ventana.")
+                return None
+                
+            min_pulsos = min(len(seg1), len(seg2))
+            all_corrs = []
+            lags = None
+            
+            for i in range(min_pulsos):
+                x = np.array(seg1[i], dtype=float)
+                y = np.array(seg2[i], dtype=float)
+                min_len = min(len(x), len(y))
+                x = x[:min_len]
+                y = y[:min_len]
+                
+                norm1 = np.sqrt(np.sum(x**2))
+                norm2 = np.sqrt(np.sum(y**2))
+                if norm1 == 0 or norm2 == 0: continue
+                
+                corr = correlate(x, y, mode='full')
+                if lags is None:
+                    lags = correlation_lags(len(x), len(y), mode='full')
+                corr_norm_i = corr / (norm1 * norm2)
+                all_corrs.append(corr_norm_i)
+                
+            if not all_corrs:
+                return None
+            
+            corr_norm = np.mean(all_corrs, axis=0)
+
+        max_corr = np.max(corr_norm)
+        best_lag = lags[np.argmax(corr_norm)]
+        
+        plt.figure(figsize=(10, 6))
+        plt.plot(lags, corr_norm, color='black', linewidth=2, label='Correlación Normalizada')
+        plt.axvline(best_lag, color='red', linestyle='--', label=f'Máximo: {max_corr:.3f} (Lag: {best_lag})')
+        
+        titulo_calc = "Ventana por Ventana (Promedio)" if ventana_por_ventana else "Pulso Promedio (Global)"
+        plt.title(f"Correlación Cruzada [{titulo_calc}]:\n{nombre1} vs {nombre2}", fontweight='bold')
+        plt.xlabel('Desplazamiento Temporal (Lags) [Muestras]')
+        plt.ylabel('Coeficiente de Pearson [Adimensional]')
+        plt.grid(True, alpha=0.3)
+        plt.legend(loc='upper right')
+        
+        os.makedirs(path_guardado, exist_ok=True)
+        tipo_str = "ventanas" if ventana_por_ventana else "promedio"
+        out_file = os.path.join(path_guardado, f"correlacion_{tipo_str}_{nombre1}_vs_{nombre2}.png")
+        plt.savefig(out_file, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        print(f"\n[+] Correlación ({titulo_calc}) exitosa:")
+        print(f"    Comparando: '{nombre1}' con '{nombre2}'")
+        print(f"    Coeficiente Máximo de Pearson: {max_corr:.4f}")
+        print(f"    Desfase óptimo: {best_lag} muestras")
+        
+        return max_corr, best_lag
+        
+    except Exception as e:
+        print(f"Error procesando la correlación cruzada: {e}")
+        return None
