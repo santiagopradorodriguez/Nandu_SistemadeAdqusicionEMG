@@ -1,5 +1,6 @@
 import os
 import sys
+import re
 import pandas as pd
 import numpy as np
 import json
@@ -8,7 +9,7 @@ from scipy import signal
 from PySide6.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout, 
     QListWidget, QLabel, QPushButton, QMessageBox, 
-    QAbstractItemView, QLineEdit
+    QAbstractItemView, QLineEdit, QComboBox
 )
 
 plt.rcParams.update({
@@ -158,6 +159,7 @@ class SelectorDialog(QDialog):
         self.setStyleSheet("background-color: #050505; color: #00ffcc; font-family: 'Courier New', monospace;")
         self.seleccionadas = []
         self.prefijo_graficos = "comparativa"
+        self.modo_filtro = "Ambos"
         
         layout = QVBoxLayout(self)
         
@@ -168,6 +170,15 @@ class SelectorDialog(QDialog):
         self.txt_prefijo.setStyleSheet("background-color: #111; color: #fff; border: 1px solid #333;")
         h_layout.addWidget(self.txt_prefijo)
         layout.addLayout(h_layout)
+        
+        # Opciones de Filtro
+        h_layout2 = QHBoxLayout()
+        h_layout2.addWidget(QLabel("Modo de Visualización (Notch):"))
+        self.combo_filtro = QComboBox()
+        self.combo_filtro.addItems(["Ambos", "Solo Con Notch", "Solo Sin Notch"])
+        self.combo_filtro.setStyleSheet("background-color: #111; color: #fff; border: 1px solid #333;")
+        h_layout2.addWidget(self.combo_filtro)
+        layout.addLayout(h_layout2)
         
         lbl = QLabel("Seleccione las carpetas a comparar (use Ctrl/Shift para selección múltiple):")
         layout.addWidget(lbl)
@@ -202,6 +213,7 @@ class SelectorDialog(QDialog):
         if pref:
             self.prefijo_graficos = pref
             
+        self.modo_filtro = self.combo_filtro.currentText()
         self.seleccionadas = [os.path.join(self.base_dir_abs, item.text()) for item in items]
         self.accept()
 
@@ -229,11 +241,14 @@ def main():
         print("\n[!] No se obtuvieron resultados válidos.")
         return
         
-    # Ordenar resultados de menor a mayor ruido inicial (Con Notch)
-    resultados.sort(key=lambda x: x['ruido_inicial_notch'])
+    # Ordenar resultados cronológicamente (extrayendo números del nombre de la carpeta)
+    def extract_numbers(s):
+        return [int(text) if text.isdigit() else text.lower() for text in re.split(r'([0-9]+)', s)]
+        
+    resultados.sort(key=lambda x: extract_numbers(os.path.basename(os.path.dirname(x['nombre_csv']))))
     
     print("\n" + "="*80)
-    print("RESULTADOS ORDENADOS DE MENOR A MAYOR RUIDO (CON NOTCH)")
+    print("RESULTADOS ORDENADOS CRONOLÓGICAMENTE")
     print("="*80)
     for i, r in enumerate(resultados):
         print(f"[{i+1}] Archivo: {r['nombre_csv']}")
@@ -257,37 +272,63 @@ def main():
     e_int_nn = [r['err_inter_no_notch'] for r in resultados]
     
     x = np.arange(len(nombres))
-    width = 0.35
+    
+    modo_filtro = dialog.modo_filtro
+    sufijo_archivo = ""
+    texto_titulo = ""
+    if modo_filtro == "Solo Con Notch":
+        sufijo_archivo = "_con_notch"
+        texto_titulo = "\n(Solo Con Filtro Notch)"
+    elif modo_filtro == "Solo Sin Notch":
+        sufijo_archivo = "_sin_notch"
+        texto_titulo = "\n(Solo Sin Filtro Notch)"
+    else:
+        sufijo_archivo = "_ambos"
+        texto_titulo = "\n(Con y Sin Filtro Notch)"
     
     # 1. Gráfico de Ruido Inicial
     fig1, ax1 = plt.subplots(figsize=(14, 8))
-    rects1_a = ax1.bar(x - width/2, r_ini_n, width, yerr=e_ini_n, capsize=5, label='Con Notch (50Hz)', color='#1f77b4', ecolor='black')
-    rects1_b = ax1.bar(x + width/2, r_ini_nn, width, yerr=e_ini_nn, capsize=5, label='Sin Notch', color='#ff7f0e', ecolor='black')
+    if modo_filtro in ["Ambos", "Solo Con Notch"]:
+        w_bar = 0.35 if modo_filtro == "Ambos" else 0.6
+        pos_x = x - w_bar/2 if modo_filtro == "Ambos" else x
+        ax1.bar(pos_x, r_ini_n, w_bar, yerr=e_ini_n, capsize=5, label='Con Notch (50Hz)', color='#1f77b4', ecolor='black')
+        
+    if modo_filtro in ["Ambos", "Solo Sin Notch"]:
+        w_bar = 0.35 if modo_filtro == "Ambos" else 0.6
+        pos_x = x + w_bar/2 if modo_filtro == "Ambos" else x
+        ax1.bar(pos_x, r_ini_nn, w_bar, yerr=e_ini_nn, capsize=5, label='Sin Notch', color='#ff7f0e', ecolor='black')
     
     ax1.set_ylabel('Ruido Inicial Promedio (µV)', fontsize=14)
-    ax1.set_title('Comparativa de Ruido Inicial por Medición\n(Ordenado de Menor a Mayor)', fontsize=16, fontweight='bold')
+    ax1.set_title('Comparativa de Ruido Inicial por Medición\n(Orden Cronológico)' + texto_titulo, fontsize=16, fontweight='bold')
     ax1.set_xticks(x)
     ax1.set_xticklabels(nombres, rotation=45, ha='right', fontsize=9)
     ax1.legend(fontsize=12)
     ax1.grid(True, alpha=0.3, axis='y', linestyle='--')
     fig1.tight_layout()
-    fig1.savefig(f'{prefijo}_ruido_inicial.png', dpi=150)
+    fig1.savefig(f'{prefijo}_ruido_inicial{sufijo_archivo}.png', dpi=150)
     
     # 2. Gráfico de Ruido Inter-pulso
     fig2, ax2 = plt.subplots(figsize=(14, 8))
-    rects2_a = ax2.bar(x - width/2, r_int_n, width, yerr=e_int_n, capsize=5, label='Con Notch (50Hz)', color='#2ca02c', ecolor='black')
-    rects2_b = ax2.bar(x + width/2, r_int_nn, width, yerr=e_int_nn, capsize=5, label='Sin Notch', color='#d62728', ecolor='black')
+    if modo_filtro in ["Ambos", "Solo Con Notch"]:
+        w_bar = 0.35 if modo_filtro == "Ambos" else 0.6
+        pos_x = x - w_bar/2 if modo_filtro == "Ambos" else x
+        ax2.bar(pos_x, r_int_n, w_bar, yerr=e_int_n, capsize=5, label='Con Notch (50Hz)', color='#2ca02c', ecolor='black')
+        
+    if modo_filtro in ["Ambos", "Solo Sin Notch"]:
+        w_bar = 0.35 if modo_filtro == "Ambos" else 0.6
+        pos_x = x + w_bar/2 if modo_filtro == "Ambos" else x
+        ax2.bar(pos_x, r_int_nn, w_bar, yerr=e_int_nn, capsize=5, label='Sin Notch', color='#d62728', ecolor='black')
     
     ax2.set_ylabel('Ruido Inter-pulso RMS/Std (µV)', fontsize=14)
-    ax2.set_title('Comparativa de Ruido Inter-pulso por Medición\n(Ordenado de Menor a Mayor)', fontsize=16, fontweight='bold')
+    ax2.set_title('Comparativa de Ruido Inter-pulso por Medición\n(Orden Cronológico)' + texto_titulo, fontsize=16, fontweight='bold')
     ax2.set_xticks(x)
     ax2.set_xticklabels(nombres, rotation=45, ha='right', fontsize=9)
     ax2.legend(fontsize=12)
     ax2.grid(True, alpha=0.3, axis='y', linestyle='--')
     fig2.tight_layout()
-    fig2.savefig(f'{prefijo}_ruido_interpulso.png', dpi=150)
+    fig2.savefig(f'{prefijo}_ruido_interpulso{sufijo_archivo}.png', dpi=150)
     
-    print(f"\n[+] Gráficos guardados en el directorio actual como '{prefijo}_ruido_inicial.png' y '{prefijo}_ruido_interpulso.png'")
+    print(f"\n[+] Gráficos guardados en el directorio actual como '{prefijo}_ruido_inicial{sufijo_archivo}.png' y '{prefijo}_ruido_interpulso{sufijo_archivo}.png'")
     plt.show()
 
 if __name__ == "__main__":
