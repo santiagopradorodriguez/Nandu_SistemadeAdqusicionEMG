@@ -1,0 +1,21 @@
+======================================================================
+REGLAS ESTRICTAS DE EMPAQUETADO A .EXE (NANDU LSD)
+======================================================================
+
+1. HERRAMIENTA PRINCIPAL:
+   - Usar siempre `PyInstaller`.
+   - NUNCA usar la bandera `--onefile` (un solo archivo) para este proyecto. Las librerías como PyTorch y PySide6 son masivas. Si se usa `--onefile`, el .exe tardará minutos en descomprimirse en la carpeta temporal cada vez que el usuario lo abra.
+   - Usar SIEMPRE la bandera `--onedir` (una carpeta) para que el software abra instantáneamente.
+
+2. GESTIÓN DE LIBRERÍAS PESADAS (DLLs e Imports):
+   - PySide6: Asegurar que los plugins de Qt se copien correctamente.
+   - PyTorch (`torch`): Añadirlo a `hiddenimports`. Excluir módulos innecesarios de PyTorch si es posible para reducir peso.
+   - SciPy/NumPy: Suelen requerir `hiddenimports` para módulos como `scipy.signal` o `scipy.fft`.
+   - NI-DAQmx: El driver base NO se puede empaquetar (el usuario debe tener NI MAX instalado en su PC). El paquete solo debe compilar el wrapper de Python.
+
+3. ARCHIVOS DE DATOS (Assets):
+   - Si el proyecto usa imágenes, íconos, o los archivos `palabras.txt`, DEBEN incluirse explícitamente usando la opción `--add-data` en el comando o configurando el bloque `datas=[]` en el archivo `.spec`.
+
+4. GESTIÓN DE ERRORES DE COMPILACIÓN:
+   - Si la terminal arroja "RecursionError" al compilar, el agente debe modificar el archivo `.spec` para aumentar el límite de recursión de Python (`sys.setrecursionlimit(5000)`).
+======================================================================

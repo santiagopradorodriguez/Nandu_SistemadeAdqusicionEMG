@@ -1,0 +1,76 @@
+Created At: 2026-05-29T20:32:31Z
+Completed At: 2026-05-29T20:32:31Z
+File Path: `file:///c:/Users/MSI/OneDrive/Documentos/DOCUMENTOS%20SANTIAGO/santiago-prado-repositorio/EMG_desarrollo/acquisition/autoforge_daq.py`
+Total Lines: 2835
+Total Bytes: 146673
+Showing lines 2400 to 2500
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+2400:                 except:
+2401:                     pass
+2402:                 
+2403:                 self.autoforge_word_idx = 0
+2404:                 self.is_autoforge_running = True
+2405:                 
+2406:                 self._iniciar_timer_global()
+2407:                 self.estado_iniciar_palabra()
+2408:         except Exception as e:
+2409:             print(f"Error iniciando Autograbado: {e}")
+2410:             import traceback
+2411:             traceback.print_exc()
+2412: 
+2413:     def _iniciar_timer_global(self):
+2414:         bpm = self.spin_bpm.value()
+2415:         if bpm <= 0: bpm = 60
+2416:         tiempo_por_palabra = 3.0 + self.spin_noise_duration.value() + (3 * (60.0/bpm)) + (self.autoforge_target_reps * (60.0/bpm)) + 10.0
+2417:         self.tiempo_restante_global = int(len(self.autoforge_words) * tiempo_por_palabra)
+2418:         
+2419:         # Guardar el estado base de la UI
+2420:         self.autoforge_estado_actual_str = "Iniciando..."
+2421:         
+2422:         self.session_timer = QtCore.QTimer()
+2423:         self.session_timer.timeout.connect(self._tick_session_timer)
+2424:         self.session_timer.start(1000)
+2425: 
+2426:     def _tick_session_timer(self):
+2427:         if getattr(self, 'tiempo_restante_global', 0) > 0:
+2428:             self.tiempo_restante_global -= 1
+2429:             mins = int(self.tiempo_restante_global // 60)
+2430:             secs = int(self.tiempo_restante_global % 60)
+2431:             self.tiempo_resta
+<truncated 2220 bytes>
+
+2467:         self.autoforge_overlay.setText("HAZ SILENCIO\nPREPARANDO ENTORNO...")
+2468:         self.autoforge_overlay.show()
+2469:         
+2470:         # --- NUEVO: Lanzamos la ventana de palabra YA MISMO para que el usuario sepa qué palabra viene ---
+2471:         import subprocess, sys, os
+2472:         python_executable = sys.executable
+2473:         word_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ventana_palabras.py')
+2474:         texto_ventana = f"SIGUIENTE:\n{palabra.upper()}"
+2475:         self.word_window_process = subprocess.Popen(
+2476:             [python_executable, word_script_path, f'--word={texto_ventana}']
+2477:         )
+2478:         
+2479:         # 3 Segundos de silencio ANTES de siquiera empezar a capturar el ruido
+2480:         QtCore.QTimer.singleShot(3000, self.estado_grabar_ruido)
+2481: 
+2482:     def estado_grabar_ruido(self):
+2483:         self.autoforge_overlay.setText("") 
+2484:         self.autoforge_overlay.hide()
+2485:         self.label_rec_time.setVisible(True) 
+2486:         
+2487:         self.current_recording = []
+2488:         
+2489:         # Reiniciar arreglos de ruido
+2490:         self.noise_data_accumulated = [[] for _ in range(self.NUM_CANALES)]
+2491:         self.noise_levels = [0.0] * self.NUM_CANALES
+2492:         self.noise_calculated = False
+2493:         self.noise_initialized = False
+2494:         self.initial_noise_mean = [0.0] * self.NUM_CANALES
+2495:         self.initial_noise_std = [0.0] * self.NUM_CANALES
+2496:         self.stats_time = [[] for _ in range(self.NUM_CANALES)]
+2497:         self.stats_snr = [[] for _ in range(self.NUM_CANALES)]
+2498:         self.stats_noise_mean = [[] for _ in range(self.NUM_CANALES)]
+2499:         self.stats_noise_std = [[] for _ in range(self.NUM_CANALES)]
+2500:         
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

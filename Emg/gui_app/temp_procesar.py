@@ -7,7 +7,7 @@ matplotlib.use('TkAgg')
 sys.path.append(r"c:\Users\MSI\OneDrive\Documentos\DOCUMENTOS SANTIAGO\santiago-prado-repositorio\Emg")
 import analisis_por_track_integrado as api
 
-mediciones = ['2026-05-20/_E2_1_TRENZADOMALLADOGND_Sujeto1', '2026-05-20/_E2_2_MALLADOGND_Sujeto1', '2026-05-20/_E2_3_MALLADOGND_Sujeto1', '2026-05-20/_E2_4_TRENZADOMALLADOGND_Sujeto1', '2026-05-20/_E3_1_TRENZADOMALLADOGND_Sujeto2', '2026-05-20/_E3_2_MALLADOGND_Sujeto2', '2026-05-20/_E3_3_MALLADOGND_Sujeto2', '2026-05-20/_E3_4_TRENZADOMALLADOGND_Sujeto2']
+mediciones = ['2026-05-28/PA_Prueba1_Sujeto1']
 base_dir = r"c:\Users\MSI\OneDrive\Documentos\DOCUMENTOS SANTIAGO\santiago-prado-repositorio\Emg\base_de_datos_electrodos"
 
 root = tk.Tk()
@@ -33,7 +33,7 @@ dialog.var_tipo_env.set("media_movil")
 dialog.var_highpass_cutoff.set("20.0")
 dialog.var_lowpass_cutoff.set("500.0")
 
-excl_list = []
+excl_list = [1]
 excl_str = ",".join(map(str, excl_list)) if excl_list else ""
 dialog.var_excluded_windows.set(excl_str)
 

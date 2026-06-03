@@ -2,6 +2,10 @@ Emg/base_de_datos_electrodos/
 Emg/base_de_datos_letras/
 Emg/analisis_comparativos/
 *.wav
+Emg/base_de_datos_electrodos/
+Emg/base_de_datos_letras/
+Emg/analisis_comparativos/
+*.wav
 *.csv
 *.png
 *.json
@@ -9,3 +13,8 @@ nandu/
 
 *.rar
 *.zip
+EMG_desarrollo/base_de_datos_electrodos/
+EMG_desarrollo/base_de_datos_letras/
+EMG_desarrollo/analisis_comparativos/
+EMG_desarrollo/__pycache__/
+EMG_desarrollo/EMG_Ejecutable_Build/

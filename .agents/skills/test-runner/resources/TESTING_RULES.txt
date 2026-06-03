@@ -1,0 +1,18 @@
+======================================================================
+PROTOCOLOS DE EJECUCIÓN Y TESTING (NANDU LSD)
+======================================================================
+
+1. MODO SIMULADOR OBLIGATORIO:
+   - Al ejecutar pruebas, NUNCA asumas que la placa NI-DAQ está conectada a menos que el usuario lo indique. 
+   - Usa siempre el "Modo Prueba" (Micrófono o generador de señales mock) para evitar el error `DaqError` o `Task.start() failed`.
+
+2. VERIFICACIÓN DE ARTEFACTOS (I/O):
+   - Si un código tiene la tarea de guardar datos, no basta con que el código corra sin errores. DEBES listar el directorio de salida y verificar que los archivos (ej. `.csv`, `.npy`, `metadata.json`) realmente se crearon y tienen peso mayor a 0 bytes.
+
+3. ANÁLISIS DE LOGS Y TRACEBACKS:
+   - Si al ejecutar un script (ej. `python script.py`) se produce un Traceback, tu tarea es leer el `stderr`, identificar la línea exacta que falló, y cruzarla con los hilos (`QThread` o Main Thread).
+   - Presta atención a las advertencias silenciosas (Warnings) de PyTorch o NumPy (ej. "Creating a tensor from a list of numpy.ndarrays is extremely slow").
+
+4. PRUEBAS DE ESTRÉS BÁSICAS:
+   - Si se prueba un bucle de adquisición (como AutoForge), simula al menos 2 iteraciones rápidas para asegurar que la máquina de estados resetea bien las variables y limpia la memoria.
+======================================================================

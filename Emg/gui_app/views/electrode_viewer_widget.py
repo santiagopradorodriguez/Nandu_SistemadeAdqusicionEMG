@@ -252,6 +252,21 @@ class ElectrodeViewerWidget(QWidget):
         path = item.data(Qt.UserRole)
         name = item.text()
         self.lbl_detail_title.setText(f"Medición: {name}")
+        
+        # 0. Guardar estado actual de las pestañas
+        current_main_tab_text = None
+        current_sub_tab_text = getattr(self, '_last_sub_tab_text', None)
+        
+        idx_main = self.tabs_channels.currentIndex()
+        if idx_main >= 0:
+            current_main_tab_text = self.tabs_channels.tabText(idx_main)
+            widget_main = self.tabs_channels.widget(idx_main)
+            if isinstance(widget_main, QTabWidget):
+                idx_sub = widget_main.currentIndex()
+                if idx_sub >= 0:
+                    current_sub_tab_text = widget_main.tabText(idx_sub)
+                    self._last_sub_tab_text = current_sub_tab_text
+
         self.tabs_channels.clear()
         
         # 1. Pestaña Señales Musculares (General)
@@ -337,4 +352,18 @@ class ElectrodeViewerWidget(QWidget):
                     scroll_img.setWidget(container)
                     canal_tab.addTab(scroll_img, tab_name)
                     
+            # Forzar sub-pestaña si se había guardado el estado
+            if current_sub_tab_text:
+                for j in range(canal_tab.count()):
+                    if canal_tab.tabText(j) == current_sub_tab_text:
+                        canal_tab.setCurrentIndex(j)
+                        break
+                        
             self.tabs_channels.addTab(canal_tab, canal.upper())
+            
+        # Restaurar la pestaña principal
+        if current_main_tab_text:
+            for i in range(self.tabs_channels.count()):
+                if self.tabs_channels.tabText(i) == current_main_tab_text:
+                    self.tabs_channels.setCurrentIndex(i)
+                    break

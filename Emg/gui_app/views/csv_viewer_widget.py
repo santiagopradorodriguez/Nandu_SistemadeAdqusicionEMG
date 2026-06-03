@@ -304,6 +304,10 @@ class CsvViewerWidget(QWidget):
         if self.df is None: return
         self.plot_widget.clear()
         
+        # Limpiar la leyenda para evitar que se acumulen nombres viejos (canales "fantasma")
+        if getattr(self.plot_widget.plotItem, 'legend', None) is not None:
+            self.plot_widget.plotItem.legend.clear()
+        
         fs = 1.0
         if len(self.time_data) > 1:
             fs = 1.0 / (self.time_data[1] - self.time_data[0])
@@ -315,8 +319,7 @@ class CsvViewerWidget(QWidget):
         env_window = int((self.spin_env.value() / 1000.0) * fs)
         if env_window < 1: env_window = 1
         
-        idx_color = 0
-        for canal, chk in self.channel_checkboxes.items():
+        for idx_canal, (canal, chk) in enumerate(self.channel_checkboxes.items()):
             if chk.isChecked():
                 y_data = self.canales_originales[canal].copy()
                 
@@ -347,9 +350,8 @@ class CsvViewerWidget(QWidget):
                 # Downsampling
                 x_plot, y_plot = downsample_lttb_fast(self.time_data, y_data, MAX_POINTS_TO_PLOT)
                 
-                color = self.channel_colors[idx_color % len(self.channel_colors)]
+                color = self.channel_colors[idx_canal % len(self.channel_colors)]
                 self.plot_widget.plot(x_plot, y_plot, name=canal, pen=pg.mkPen(color, width=1.5))
-                idx_color += 1
 
     def _autoscale(self):
         if self.df is None: return
