@@ -20,7 +20,7 @@ Desarrollado por la comunidad para el **Laboratorio de Sistemas Dinámicos**.
 
 ---
 
-## 🚀 Características del Sistema (v4.0 - PySide6 & AutoForge)
+## 🚀 Características del Sistema (Beta 5.0 - PySide6 & AutoForge)
 
 El proyecto se gestiona desde el **Lanzador Principal** (`gui_app/main_app.py`) que integra estética Cyberpunk, aceleración de hardware y múltiples módulos independientes:
 
@@ -53,7 +53,7 @@ AutoForge es la nueva máquina de estados central del proyecto, diseñada para c
 - **Auto-Guardado:** Guarda las grabaciones crudas, procesadas y metadatos con la nomenclatura perfecta para su posterior entrenamiento en Machine Learning.
 
 ---
-### 🛠️ Herramientas y Módulos (Nueva Arquitectura v4.x PySide6)
+### 🛠️ Herramientas y Módulos (Nueva Arquitectura Beta 5.0 PySide6)
 El proyecto ha sido completamente refactorizado en una arquitectura modular usando **PySide6** para interfaces gráficas modernas y fluidas:
 
 #### 1. Módulo `acquisition/` (Adquisición de Hardware)
@@ -206,7 +206,7 @@ python gui_app/main_app.py
 
 ---
 
-## 🗺️ Roadmap y Tareas Pendientes (v4.0+)
+## 🗺️ Roadmap y Tareas Pendientes (Beta 5.0+)
 
 El proyecto está en desarrollo activo. Consulta `ROADMAP.md` para más detalles o `CONTRIBUTING.md` si quieres ayudar con:
 
@@ -219,7 +219,7 @@ El proyecto está en desarrollo activo. Consulta `ROADMAP.md` para más detalles
 
 ## 🐛 Errores Conocidos y Soluciones Históricas
 
-Durante el desarrollo de la versión 4.0, nos enfrentamos a problemas de "scoping" en Python al migrar componentes de la UI. 
+Durante el desarrollo de la versión Beta 5.0, nos enfrentamos a problemas de "scoping" en Python al migrar componentes de la UI. 
 - **El Problema:** Al instanciar colores (`bg_panel`) en métodos `__init__`, otras funciones internas de la clase perdían la referencia en tiempo de ejecución, provocando caídas completas del programa (`NameError`).
 - **La Solución:** Todo objeto visual que deba perdurar o ser accedido por funciones secundarias **debe ser instanciado usando `self.`** (ej. `self.bg_panel`). 
 - **Resiliencia de la Terminal:** Como medida adicional, todos los procesos que abran sub-ventanas analíticas (como Análisis Comparativo o Análisis Integrado) ahora se ejecutan en terminales persistentes mediante `subprocess.Popen` con un `try/except` general que pausa la terminal (`input()`) al detectar un traceback, impidiendo que el error sea invisible.
