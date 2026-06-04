@@ -705,14 +705,12 @@ def _plot_muscle_overlay(measure_name, channels_dict, out_dir, master_name=None)
         master_max_amp = 1.0
         if master_name and master_name in channels_dict and fname in channels_dict[master_name]:
             master_y_raw = np.array(channels_dict[master_name][fname]['mean_pulse'])
-            baseline = np.mean(master_y_raw[:max(1, len(master_y_raw) // 8)])
-            master_max_amp = np.max(master_y_raw - baseline)
+            master_max_amp = np.max(master_y_raw) - np.min(master_y_raw)
             
         for ch in sorted_chans:
             if ch != master_name and fname in channels_dict[ch]:
                 y_slave = np.array(channels_dict[ch][fname]['mean_pulse'])
-                baseline = np.mean(y_slave[:max(1, len(y_slave) // 8)])
-                m_amp = np.max(y_slave - baseline)
+                m_amp = np.max(y_slave) - np.min(y_slave)
                 if m_amp > max_slave_amp:
                     max_slave_amp = m_amp
                     
