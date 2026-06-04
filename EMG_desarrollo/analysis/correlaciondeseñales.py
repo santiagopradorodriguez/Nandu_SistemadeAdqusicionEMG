@@ -39,9 +39,11 @@ except Exception:
 from PySide6.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
     QLabel, QLineEdit, QPushButton, QCheckBox, QComboBox,
-    QMessageBox, QFileDialog, QGroupBox, QSpinBox, QDoubleSpinBox, QWidget
+    QMessageBox, QFileDialog, QGroupBox, QSpinBox, QDoubleSpinBox, QWidget,
+    QTextEdit
 )
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont, QTextCursor
 
 # --- Versión del script de análisis ---
 __version__ = "7.1 (Con Espectrograma del Promedio)"
@@ -98,6 +100,45 @@ def select_directories():
             
     return master_dir, slave_dirs
 
+class StdoutRedirector:
+    def __init__(self, text_widget):
+        self.text_widget = text_widget
+        self.original_stdout = sys.stdout
+
+    def write(self, string):
+        self.original_stdout.write(string)
+        self.text_widget.moveCursor(QTextCursor.End)
+        self.text_widget.insertPlainText(string)
+        self.text_widget.moveCursor(QTextCursor.End)
+        QApplication.processEvents()
+
+    def flush(self):
+        self.original_stdout.flush()
+
+class ConsoleWindow(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Procesando Datos...")
+        self.resize(700, 400)
+        
+        layout = QVBoxLayout(self)
+        self.text_edit = QTextEdit()
+        self.text_edit.setReadOnly(True)
+        self.text_edit.setStyleSheet("background-color: #000; color: #00ff00; border: 1px solid #333;")
+        
+        font = QFont("Consolas", 10)
+        self.text_edit.setFont(font)
+        
+        layout.addWidget(self.text_edit)
+        
+        # Redirigir stdout
+        self.redirector = StdoutRedirector(self.text_edit)
+        sys.stdout = self.redirector
+
+    def closeEvent(self, event):
+        sys.stdout = self.redirector.original_stdout
+        super().closeEvent(event)
+
 def main(mediciones_dirs=None, medicion_dir=None, master_dir=None, slave_dirs=None):
     app = QApplication.instance()
     if not app:
@@ -124,6 +165,12 @@ def main(mediciones_dirs=None, medicion_dir=None, master_dir=None, slave_dirs=No
             plt.style.use('default')
     else:
         return
+
+    console_win = None
+    if not opts.get("show_interactive_plot", False):
+        console_win = ConsoleWindow()
+        console_win.show()
+        QApplication.processEvents()
 
     for m_dir in (mediciones_dirs or [None]):
         if m_dir:
@@ -186,6 +233,11 @@ def main(mediciones_dirs=None, medicion_dir=None, master_dir=None, slave_dirs=No
             meas_name = os.path.basename(parent_meas_dir)
             master_basename = os.path.basename(current_master_dir)
             _plot_muscle_overlay(meas_name, resultados_canales, parent_meas_dir, master_basename)
+
+    if console_win:
+        print("\n\n✅ --- PROCESAMIENTO FINALIZADO --- ✅")
+        print("Puede cerrar esta ventana para volver al menú principal.")
+        console_win.exec()
 
 if __name__ == "__main__":
     main()
@@ -677,11 +729,10 @@ def _plot_muscle_overlay(measure_name, channels_dict, out_dir, master_name=None)
                 y = np.array(data['mean_pulse'])
                 err = np.array(data.get('pulse_err', np.zeros_like(y)))
                 
-                # Offset: promedio del primer OCTAVO del patrón promedio
-                # para que el nivel de reposo de cada músculo esté centrado en el cero
-                n_eighth = max(1, len(y) // 8)
-                baseline = np.mean(y[:n_eighth])
-                y = y - baseline
+                # Offset: para asegurar que inicie desde el 0 en el eje Y
+                # aplicando el equivalente a un pasa altos ideal sobre la línea base
+                y_min = np.min(y)
+                y = y - y_min
                 
                 # Normalizar la señal líder a la escala de los esclavos
                 if ch == master_name and scale_factor != 1.0:
