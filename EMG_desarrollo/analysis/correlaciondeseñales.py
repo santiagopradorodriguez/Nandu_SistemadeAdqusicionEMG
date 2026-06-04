@@ -771,9 +771,14 @@ def _plot_muscle_overlay(measure_name, channels_dict, out_dir, master_name=None,
                 found_any = True
                 
         if found_any:
-            plt.title(f"Patrón Muscular Sincronizado - {measure_name} - {fname}")
+            if normalize_all:
+                plt.title(f"Patrón Muscular Sincronizado (Normalizado) - {measure_name} - {fname}")
+                plt.ylabel("Amplitud Normalizada [0-1]")
+            else:
+                plt.title(f"Patrón Muscular Sincronizado - {measure_name} - {fname}")
+                plt.ylabel("Amplitud [µV]")
+            
             plt.xlabel("Tiempo respecto al pico de la señal de micrófono [s]")
-            plt.ylabel("Amplitud [µV]")
             
             # Dibujar línea exactamente en 0
             plt.axvline(x=0, color='gray', linestyle='--', alpha=0.8, label="Pico señal de micrófono")
