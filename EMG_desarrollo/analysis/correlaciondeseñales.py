@@ -321,8 +321,13 @@ def _compute_env_full(signal_abs, apply_envelope, smooth_ms, samplerate, tipo_en
 
     if apply_envelope:
         try:
-            env_full = np.abs(hilbert(signal_abs))
-        except Exception:
+            from scipy.fft import next_fast_len
+            from scipy.signal import hilbert
+            N = len(signal_abs)
+            fast_len = next_fast_len(N)
+            env_full = np.abs(hilbert(signal_abs, N=fast_len)[:N])
+        except Exception as e:
+            print(f"Error en hilbert: {e}")
             env_full = signal_abs.copy()
     else:
         env_full = signal_abs.copy()
