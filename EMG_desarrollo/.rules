@@ -1,0 +1,7 @@
+# Reglas Globales para Agentes de IA
+
+Cada vez que un Agente trabaje en este proyecto, DEBE cumplir OBLIGATORIAMENTE con lo siguiente:
+
+1. **Anunciar Identidad:** Cada vez que se hace un cambio o se interactúa con el usuario, obligatoriamente se debe decir qué agente lo hizo (ej: "Soy el Agente Frontend-Expert", "Soy el Agente Backend-Optimizer").
+2. **Mostrar Estado:** Se debe mostrar explícitamente qué agente está trabajando actualmente en la tarea y qué está haciendo.
+3. **Delegación de Tareas:** Siempre debe trabajar el agente asignado a la tarea (Sub-agentes especializados como `frontend-expert`, `dsp-auditor`, `qa-supervisor`, etc.) MÁS que el agente coordinador general (`Antigravity`). Antigravity debe limitarse a coordinar y delegar cuando sea apropiado, o asumir temporalmente un rol declarándolo explícitamente si la tarea es minúscula.

@@ -878,6 +878,9 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.actualizar_plot)
         self.timer.start(30) # Actualiza la GUI cada 30 ms
+        
+        # --- NUEVO: Maximizar ventana por defecto ---
+        self.showMaximized()
 
     def _load_protocol_config(self):
         """
@@ -1151,7 +1154,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         # --- NUEVO: Overlay AutoForge Flotante ---
         self.autoforge_overlay = QtWidgets.QLabel(self.plot_widget)
         self.autoforge_overlay.setAlignment(QtCore.Qt.AlignCenter)
-        self.autoforge_overlay.setStyleSheet("background-color: rgba(0, 0, 0, 150); color: #00FFFF; font-size: 75px; font-weight: bold;")
+        self.autoforge_overlay.setStyleSheet("background-color: rgba(10, 5, 20, 180); color: #FF0055; font-family: 'Courier New', monospace; font-size: 75px; font-weight: 900; text-shadow: 2px 2px 5px #00FFFF; padding: 20px; border: 4px solid #00FFFF;")
         self.autoforge_overlay.hide()
         
         # Hacemos que cambie de tamaño junto con plot_widget
@@ -1168,6 +1171,9 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.spectrogram_view.ui.histogram.hide()
         self.spectrogram_view.ui.roiBtn.hide()
         self.spectrogram_view.ui.menuBtn.hide()
+        
+        # --- NUEVO: Margen derecho para evitar cortes en pantalla completa ---
+        self.plot_widget.ci.layout.setContentsMargins(10, 10, 30, 10)
 
         self.plot.addLegend()
         self.plot.showGrid(x=True, y=True)
@@ -1222,8 +1228,29 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.splitter.addWidget(self.spectrogram_view)
         self.splitter.setSizes([600, 200]) # Tamaños iniciales
 
+        # --- NUEVO: QStackedWidget para ocultar Configuración durante grabación ---
+        self.config_stack = QtWidgets.QStackedWidget()
+        self.config_stack.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+        self.config_stack.addWidget(self.config_groupbox)
+        
+        self.empty_recording_widget = QtWidgets.QWidget()
+        self.empty_recording_widget.setStyleSheet("background-color: #050505;")
+        
+        self.lbl_recording_space = QtWidgets.QLabel("VENTANAS EXTERNAS ACTIVAS")
+        self.lbl_recording_space.setAlignment(QtCore.Qt.AlignCenter)
+        self.lbl_recording_space.setMinimumSize(0, 0)
+        self.lbl_recording_space.setWordWrap(True)
+        self.lbl_recording_space.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Expanding)
+        self.lbl_recording_space.setStyleSheet("background-color: #050510; color: #00FF00; font-family: 'Courier New', monospace; font-size: 65px; font-weight: 900; border: 2px dashed #FF0055; padding: 15px;")
+        
+        empty_layout = QtWidgets.QVBoxLayout(self.empty_recording_widget)
+        empty_layout.addWidget(self.lbl_recording_space)
+        self.empty_recording_widget.setLayout(empty_layout)
+        
+        self.config_stack.addWidget(self.empty_recording_widget)
+
         # --- Añadir layouts a la ventana ---
-        self.main_layout.addWidget(self.config_groupbox)
+        self.main_layout.addWidget(self.config_stack) # Reemplaza a config_groupbox
         self.main_layout.addWidget(self.filter_groupbox)
         self.main_layout.addLayout(self.button_layout)
         self.main_layout.addLayout(self.trigger_layout)
@@ -1394,6 +1421,14 @@ class RealTimePlotter(QtWidgets.QWidget):
                     print("Advertencia: El metrónomo no se cerró a tiempo. Forzando cierre...")
                     self.metronome_process.kill()
                 self.metronome_process = None
+
+            if hasattr(self, 'word_window_process') and self.word_window_process:
+                try:
+                    self.word_window_process.kill()
+                    self.word_window_process.wait(timeout=1)
+                except:
+                    pass
+                self.word_window_process = None
 
             self._on_modo_prueba_toggled(self.chk_modo_prueba.isChecked()) # Restaurar estado de habilitación
             if self.acquisition_thread:
@@ -1942,6 +1977,8 @@ class RealTimePlotter(QtWidgets.QWidget):
                     label.setText("Ruido inter-pulso: Evaluando base...")
                     label.setStyleSheet("color: gray; font-size: 11px; background-color: transparent;")
             
+            self.config_stack.setCurrentIndex(1) # Ocultar configuración
+            
             # --- NUEVO: Re-lanzar el metrónomo con count-in (mismo beep que autograbado) al inicio de grabar ruido ---
             if self.chk_use_metronome.isChecked():
                 if self.metronome_process:
@@ -1958,8 +1995,13 @@ class RealTimePlotter(QtWidgets.QWidget):
                     bpm = self.spin_bpm.value()
                     if bpm <= 0: bpm = 60
                     print(f"Lanzando metrónomo para grabación con count-in (BPM={bpm}) al inicio de la fase de ruido...")
+                    
+                    pos = self.config_stack.mapToGlobal(QtCore.QPoint(0, 0))
+                    metro_x = pos.x()
+                    metro_y = pos.y()
+                    
                     self.metronome_process = subprocess.Popen(
-                        [python_executable, script_path, '--autostart', '--count', f'--bpm={bpm}', '--count-in=4'],
+                        [python_executable, script_path, '--autostart', '--count', f'--bpm={bpm}', '--count-in=4', f'--x={metro_x}', f'--y={metro_y}'],
                         stdin=subprocess.PIPE,
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL,
@@ -1968,6 +2010,7 @@ class RealTimePlotter(QtWidgets.QWidget):
                 except Exception as e:
                     print(f"Error al lanzar el metrónomo con count-in: {e}")
             
+            self.btn_record.setText("Detener Grabación")
             self.btn_record.setStyleSheet(self.BTN_REC_STOP_STYLE)
             self.recording_start_time = time.perf_counter()
             self.label_rec_time.setText("Grabando: 00:00.0")
@@ -1978,6 +2021,7 @@ class RealTimePlotter(QtWidgets.QWidget):
             self.btn_record.setText("Empezar a Grabar")
             self.btn_record.setStyleSheet(self.BTN_REC_START_STYLE)
             self.label_rec_time.setVisible(False)
+            self.config_stack.setCurrentIndex(0) # Restaurar configuración
             self.cmb_terminal_config.setEnabled(not self.chk_modo_prueba.isChecked()) # <-- NUEVO: Desbloquear
             self.recording_start_time = None
             
@@ -2611,6 +2655,9 @@ class RealTimePlotter(QtWidgets.QWidget):
         Returns:
             Any: Resultado de la ejecución de la función.
         """
+        if obj == getattr(self, 'plot_widget', None) and event.type() == QtCore.QEvent.Type.Resize:
+            if hasattr(self, 'autoforge_overlay'):
+                self.autoforge_overlay.resize(event.size())
         return super().eventFilter(obj, event)
 
     def iniciar_autoforge(self):
@@ -2621,6 +2668,19 @@ class RealTimePlotter(QtWidgets.QWidget):
             Any: Resultado de la ejecución de la función.
         """
         try:
+            if getattr(self, 'is_autoforge_running', False):
+                self.is_autoforge_running = False
+                self.btn_autoforge.setText("🔥 Autograbado")
+                self.btn_autoforge.setStyleSheet("background-color: #ff0055; color: white; font-weight: bold; font-family: 'Courier New'; font-size: 14px; padding: 8px; border: 2px solid #ff0055; border-radius: 4px;")
+                self.autoforge_overlay.hide()
+                self.config_stack.setCurrentIndex(0)
+                if hasattr(self, 'session_timer'): self.session_timer.stop()
+                if hasattr(self, 'metronome_process') and self.metronome_process:
+                    try: self.metronome_process.kill()
+                    except: pass
+                    self.metronome_process = None
+                return
+                
             # --- NUEVO: Apagar metrónomo general si estaba corriendo para que no choquen ---
             if hasattr(self, 'metronome_process') and self.metronome_process:
                 try:
@@ -2630,11 +2690,15 @@ class RealTimePlotter(QtWidgets.QWidget):
                 self.chk_use_metronome.setChecked(False) # Reflejar en UI
 
             if not self.is_acquiring:
-                # Disparar automáticamente la adquisición pero sin metrónomo doble
-                old_state = self.chk_use_metronome.isChecked()
-                self.chk_use_metronome.setChecked(False)
-                self.on_start_acq_click()
-                self.chk_use_metronome.setChecked(old_state)
+                QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
+                try:
+                    # Disparar automáticamente la adquisición pero sin metrónomo doble
+                    old_state = self.chk_use_metronome.isChecked()
+                    self.chk_use_metronome.setChecked(False)
+                    self.on_start_acq_click()
+                    self.chk_use_metronome.setChecked(old_state)
+                finally:
+                    QtWidgets.QApplication.restoreOverrideCursor()
                 
             import os
             root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -2676,6 +2740,10 @@ class RealTimePlotter(QtWidgets.QWidget):
                 
                 self.autoforge_word_idx = 0
                 self.is_autoforge_running = True
+                self.btn_autoforge.setText("⏹ Detener Grabación")
+                self.btn_autoforge.setStyleSheet("background-color: #555555; color: white; font-weight: bold; font-family: 'Courier New'; font-size: 14px; padding: 8px; border: 2px solid #ffffff; border-radius: 4px;")
+                
+                self.showMaximized() # Auto-maximizar al iniciar AutoForge
                 
                 self._iniciar_timer_global()
                 self.estado_iniciar_palabra()
@@ -2686,6 +2754,19 @@ class RealTimePlotter(QtWidgets.QWidget):
             
     def iniciar_autoforge_continuo(self):
         try:
+            if getattr(self, 'is_autoforge_running', False):
+                self.is_autoforge_running = False
+                self.btn_autoforge_continuo.setText("🔥 Secuencia Continua")
+                self.btn_autoforge_continuo.setStyleSheet("background-color: #aa00ff; color: white; font-weight: bold; font-family: 'Courier New'; font-size: 14px; padding: 8px; border: 2px solid #aa00ff; border-radius: 4px;")
+                self.autoforge_overlay.hide()
+                self.config_stack.setCurrentIndex(0)
+                if hasattr(self, 'session_timer'): self.session_timer.stop()
+                if hasattr(self, 'metronome_process') and self.metronome_process:
+                    try: self.metronome_process.kill()
+                    except: pass
+                    self.metronome_process = None
+                return
+                
             if hasattr(self, 'metronome_process') and self.metronome_process:
                 try: self.metronome_process.kill()
                 except: pass
@@ -2693,10 +2774,14 @@ class RealTimePlotter(QtWidgets.QWidget):
                 self.chk_use_metronome.setChecked(False)
 
             if not self.is_acquiring:
-                old_state = self.chk_use_metronome.isChecked()
-                self.chk_use_metronome.setChecked(False)
-                self.on_start_acq_click()
-                self.chk_use_metronome.setChecked(old_state)
+                QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
+                try:
+                    old_state = self.chk_use_metronome.isChecked()
+                    self.chk_use_metronome.setChecked(False)
+                    self.on_start_acq_click()
+                    self.chk_use_metronome.setChecked(old_state)
+                finally:
+                    QtWidgets.QApplication.restoreOverrideCursor()
                 
             import os
             root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -2740,6 +2825,11 @@ class RealTimePlotter(QtWidgets.QWidget):
                 self.is_autoforge_continuo = True
                 self.last_continuo_beat = -1
                 
+                self.btn_autoforge_continuo.setText("⏹ Detener Grabación")
+                self.btn_autoforge_continuo.setStyleSheet("background-color: #555555; color: white; font-weight: bold; font-family: 'Courier New'; font-size: 14px; padding: 8px; border: 2px solid #ffffff; border-radius: 4px;")
+                
+                self.showMaximized() # Auto-maximizar al iniciar AutoForge
+                
                 self._iniciar_timer_global_continuo()
                 self.estado_iniciar_secuencia_continua()
         except Exception as e:
@@ -2763,6 +2853,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     def estado_iniciar_secuencia_continua(self):
         self.is_recording = False
         self.label_rec_time.setVisible(True)
+        self.config_stack.setCurrentIndex(1) # Ocultar configuración
         
         total_pulsos = len(self.autoforge_words) * self.autoforge_target_reps
         self.autoforge_estado_actual_str = f"Secuencia: {total_pulsos} pulsos"
@@ -2771,7 +2862,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;⏱️ Resta: {tr_str}&nbsp;</span>"
         self.label_rec_time.setText(f"{self.autoforge_estado_actual_str}{cuadro_azul}")
         
-        self.autoforge_overlay.setText("HAZ SILENCIO\nPREPARANDO ENTORNO...")
+        self.autoforge_overlay.setText("<div align='center'>HAZ SILENCIO<br>PREPARANDO ENTORNO...</div>")
         self.autoforge_overlay.show()
         
         import subprocess, sys, os
@@ -2781,13 +2872,8 @@ class RealTimePlotter(QtWidgets.QWidget):
         else:
             word_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ventana_palabras.py')
         texto_ventana = "PREPARANDO..."
-        self.word_window_process = subprocess.Popen(
-            [python_executable, word_script_path, f'--word={texto_ventana}'],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            text=True
-        )
+        self.lbl_recording_space.setText(texto_ventana)
+        self.word_window_process = None # Mantener variable para no romper nada
         
         QtCore.QTimer.singleShot(3000, self.estado_grabar_ruido_continuo)
 
@@ -2795,6 +2881,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.autoforge_overlay.setText("") 
         self.autoforge_overlay.hide()
         self.label_rec_time.setVisible(True) 
+        self.lbl_recording_space.setText("<span style='color: yellow;'>GRABANDO RUIDO...</span>")
         
         self.current_recording = []
         
@@ -2872,8 +2959,12 @@ class RealTimePlotter(QtWidgets.QWidget):
             script_path = 'metronomo_visual.py'
         else:
             script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'metronomo_visual.py')
+        pos = self.config_stack.mapToGlobal(QtCore.QPoint(0, 0))
+        metro_x = pos.x()
+        metro_y = pos.y()
+        
         self.metronome_process = subprocess.Popen(
-            [python_executable, script_path, '--autostart', '--count', f'--bpm={bpm}', '--count-in=4'],
+            [python_executable, script_path, '--autostart', '--count', f'--bpm={bpm}', '--count-in=4', f'--x={metro_x}', f'--y={metro_y}'],
             stdin=subprocess.PIPE,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -2930,7 +3021,7 @@ class RealTimePlotter(QtWidgets.QWidget):
             self.word_window_process = None
             
         self.autoforge_estado_actual_str = "GUARDANDO SECUENCIA"
-        self.autoforge_overlay.setText("SECUENCIA COMPLETADA\nGUARDANDO DATOS...")
+        self.autoforge_overlay.setText("<div align='center'>SECUENCIA COMPLETADA<br>GUARDANDO DATOS...</div>")
         self.autoforge_overlay.show()
         
         import threading
@@ -2988,11 +3079,12 @@ class RealTimePlotter(QtWidgets.QWidget):
         QtCore.QTimer.singleShot(5000, self.estado_finalizar_secuencia_continua)
 
     def estado_finalizar_secuencia_continua(self):
-        self.autoforge_overlay.setText("¡SECUENCIA COMPLETADA!")
+        self.autoforge_overlay.setText("<div align='center'>¡SECUENCIA COMPLETADA!</div>")
         QtCore.QTimer.singleShot(2000, self.autoforge_overlay.hide)
         self.is_acquiring = False
         self.is_autoforge_running = False
         self.is_autoforge_continuo = False
+        self.config_stack.setCurrentIndex(0) # Restaurar configuración
         if hasattr(self, 'session_timer'):
             self.session_timer.stop()
 
@@ -3054,17 +3146,19 @@ class RealTimePlotter(QtWidgets.QWidget):
             Any: Resultado de la ejecución de la función.
         """
         if self.autoforge_word_idx >= len(self.autoforge_words):
-            self.autoforge_overlay.setText("¡AUTOGRABADO COMPLETADO!")
+            self.autoforge_overlay.setText("<div align='center'>¡AUTOGRABADO COMPLETADO!</div>")
             self.autoforge_overlay.show()
             QtCore.QTimer.singleShot(2000, self.autoforge_overlay.hide)
             self.current_recording = []
             self.is_acquiring = False
             self.is_autoforge_running = False
+            self.config_stack.setCurrentIndex(0) # Restaurar configuración
             return
             
         palabra = self.autoforge_words[self.autoforge_word_idx]
         self.is_recording = False
         self.label_rec_time.setVisible(True) # --- NUEVO: Habilitado para no dar sensación de "congelamiento"
+        self.config_stack.setCurrentIndex(1) # Ocultar configuración
         
         palabra_num = self.autoforge_word_idx + 1
         total_palabras = len(self.autoforge_words)
@@ -3074,20 +3168,12 @@ class RealTimePlotter(QtWidgets.QWidget):
         cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;⏱️ Resta: {tr_str}&nbsp;</span>"
         self.label_rec_time.setText(f"{self.autoforge_estado_actual_str}{cuadro_azul}")
         
-        self.autoforge_overlay.setText("HAZ SILENCIO\nPREPARANDO ENTORNO...")
+        self.autoforge_overlay.setText("<div align='center'>HAZ SILENCIO<br>PREPARANDO ENTORNO...</div>")
         self.autoforge_overlay.show()
         
-        # --- NUEVO: Lanzamos la ventana de palabra YA MISMO para que el usuario sepa qué palabra viene ---
-        import subprocess, sys, os
-        python_executable = sys.executable
-        if getattr(sys, 'frozen', False):
-            word_script_path = 'ventana_palabras.py'
-        else:
-            word_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ventana_palabras.py')
         texto_ventana = f"SIGUIENTE:\n{palabra.upper()}"
-        self.word_window_process = subprocess.Popen(
-            [python_executable, word_script_path, f'--word={texto_ventana}']
-        )
+        self.lbl_recording_space.setText(texto_ventana)
+        self.word_window_process = None
         
         # 3 Segundos de silencio ANTES de siquiera empezar a capturar el ruido
         QtCore.QTimer.singleShot(3000, self.estado_grabar_ruido)
@@ -3102,6 +3188,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.autoforge_overlay.setText("") 
         self.autoforge_overlay.hide()
         self.label_rec_time.setVisible(True) 
+        self.lbl_recording_space.setText("<span style='color: yellow;'>GRABANDO RUIDO...</span>")
         
         self.current_recording = []
         
@@ -3185,28 +3272,22 @@ class RealTimePlotter(QtWidgets.QWidget):
         
         palabra = self.autoforge_words[self.autoforge_word_idx]
         # Actualizamos la ventana flotante para que avise "PREPARATE"
-        import subprocess, sys, os
-        python_executable = sys.executable
-        if getattr(sys, 'frozen', False):
-            word_script_path = 'ventana_palabras.py'
-        else:
-            word_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ventana_palabras.py')        
-        if hasattr(self, 'word_window_process') and self.word_window_process:
-            try: self.word_window_process.kill()
-            except: pass
-            
-        texto_ventana = f"{palabra.upper()}\\nPREPÁRATE"
-        self.word_window_process = subprocess.Popen(
-            [python_executable, word_script_path, f'--word={texto_ventana}'],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
-        )
+        texto_ventana = f"SIGUIENTE:\n{palabra.upper()}"
+        self.lbl_recording_space.setText(texto_ventana)
+        self.word_window_process = None
         
         # Lanzar el metrónomo AHORA MISMO con un Count-in de tipo carreras (3 graves, 1 agudo)
         script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'metronomo_visual.py')
+        
+        pos = self.config_stack.mapToGlobal(QtCore.QPoint(0, 0))
+        metro_x = pos.x()
+        metro_y = pos.y()
+        
+        import sys
+        python_executable = sys.executable
+        
         self.metronome_process = subprocess.Popen(
-            [python_executable, script_path, '--autostart', '--count', f'--bpm={bpm}', '--count-in=4'],
+            [python_executable, script_path, '--autostart', '--count', f'--bpm={bpm}', '--count-in=4', f'--x={metro_x}', f'--y={metro_y}'],
             stdin=subprocess.PIPE,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -3254,26 +3335,11 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.label_rec_time.setText("GRABANDO PALABRA...")
         
         palabra = self.autoforge_words[self.autoforge_word_idx]
-        import subprocess, sys, os
-        python_executable = sys.executable
-        if getattr(sys, 'frozen', False):
-            word_script_path = 'acquisition/ventana_palabras.py'
-        else:
-            word_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ventana_palabras.py')
         
-        # Matamos la ventana "Siguiente Palabra"
-        if hasattr(self, 'word_window_process') and self.word_window_process:
-            try: self.word_window_process.kill()
-            except: pass
-            
         # Lanzamos la ventana limpia con solo la palabra para la grabación
         # El metrónomo YA ESTÁ corriendo, aquí justo emitirá el pitido Agudo (GO).
-        self.word_window_process = subprocess.Popen(
-            [python_executable, word_script_path, f'--word={palabra}'],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
-        )
+        self.lbl_recording_space.setText(palabra.upper())
+        self.word_window_process = None
         
         # Iniciar la cuenta del guardado de los datos de la palabra
         bpm = self.spin_bpm.value()
@@ -3303,8 +3369,9 @@ class RealTimePlotter(QtWidgets.QWidget):
             
         # 10 segundos de descanso en pantalla
         self.autoforge_estado_actual_str = "DESCANSO 10s (GUARDANDO)"
-        self.autoforge_overlay.setText("DESCANSO 10s\nGUARDANDO DATOS...")
+        self.autoforge_overlay.setText("<div align='center'>DESCANSO 10s<br>GUARDANDO DATOS...</div>")
         self.autoforge_overlay.show()
+        self.lbl_recording_space.setText("<div align='center' style='color:#777777; font-size:40px;'>DESCANSO</div>")
         
         import threading
         def guardar_async():
@@ -3380,6 +3447,20 @@ class RealTimePlotter(QtWidgets.QWidget):
         """
         self.autoforge_word_idx += 1
         self.estado_iniciar_palabra()
+
+    def _update_floating_windows_pos(self):
+        pass
+
+    def resizeEvent(self, event):
+        """Maneja la redimensión de la ventana para ajustar las ventanas flotantes."""
+        super().resizeEvent(event)
+        QtCore.QTimer.singleShot(300, self._update_floating_windows_pos)
+
+    def changeEvent(self, event):
+        """Maneja eventos de cambio de estado (como pantalla completa)."""
+        super().changeEvent(event)
+        if event.type() == QtCore.QEvent.WindowStateChange:
+            QtCore.QTimer.singleShot(300, self._update_floating_windows_pos)
 
     def closeEvent(self, event):
         # Se llama cuando el usuario cierra la ventana

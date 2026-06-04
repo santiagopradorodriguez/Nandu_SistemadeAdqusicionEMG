@@ -29,16 +29,16 @@ except ImportError:
     winsound = None # winsound solo está disponible en Windows
 
 class MetronomeApp:
-    def __init__(self, root):
+    def __init__(self, root, start_x=None, start_y=None, start_w=None, start_h=None):
         self.root = root
         self.root.title("Ñandú LSD - Metrónomo Cyberpunk")
         
         # Obtener resolución de pantalla para anclar a la derecha
         screen_w = self.root.winfo_screenwidth()
-        window_w = 350
-        window_h = 500
-        x_pos = screen_w - window_w - 20 # 20px de margen derecho
-        y_pos = 50 # 50px de margen superior
+        window_w = start_w if start_w is not None else 230
+        window_h = start_h if start_h is not None else 380
+        x_pos = start_x if start_x is not None else screen_w - window_w - 20 # 20px de margen derecho
+        y_pos = start_y if start_y is not None else 50 # 50px de margen superior
         self.root.geometry(f"{window_w}x{window_h}+{x_pos}+{y_pos}")
         
         self.root.configure(bg="#050505")
@@ -70,14 +70,14 @@ class MetronomeApp:
         self.COLOR_IDLE = "#111111"  # Negro profundo cuando está en reposo
 
         # --- Fuentes ---
-        title_font = font.Font(family="Helvetica", size=14, weight="bold")
-        value_font = font.Font(family="Helvetica", size=36, weight="bold")
-        button_font = font.Font(family="Helvetica", size=12)
+        title_font = font.Font(family="Helvetica", size=11, weight="bold")
+        value_font = font.Font(family="Helvetica", size=24, weight="bold")
+        button_font = font.Font(family="Helvetica", size=9)
         # --- NUEVO: Fuente para el contador ---
-        counter_font = font.Font(family="Helvetica", size=48, weight="bold")
+        counter_font = font.Font(family="Helvetica", size=32, weight="bold")
 
         # --- Elemento visual para el pulso ---
-        self.pulse_frame = tk.Frame(root, bg=self.COLOR_IDLE, height=100)
+        self.pulse_frame = tk.Frame(root, bg=self.COLOR_IDLE, height=60)
         self.pulse_frame.pack(fill="x", padx=20, pady=20)
 
         # --- NUEVO: Display del contador de pulsos ---
@@ -110,7 +110,7 @@ class MetronomeApp:
             orient="horizontal",
             variable=self.bpm,
             showvalue=0,
-            length=300,
+            length=200,
             bg="#050505",
             fg="#00FF00",
             highlightthickness=0,
@@ -314,6 +314,11 @@ def main():
     target_word = ""
     bpm_arg = None
     count_in_arg = 0
+    x_arg = None
+    y_arg = None
+    w_arg = None
+    h_arg = None
+    
     for arg in sys.argv:
         if arg.startswith("--word="):
             target_word = arg.split("=")[1]
@@ -327,9 +332,21 @@ def main():
                 count_in_arg = int(arg.split("=")[1])
             except ValueError:
                 pass
+        elif arg.startswith("--x="):
+            try: x_arg = int(arg.split("=")[1])
+            except ValueError: pass
+        elif arg.startswith("--y="):
+            try: y_arg = int(arg.split("=")[1])
+            except ValueError: pass
+        elif arg.startswith("--width="):
+            try: w_arg = int(arg.split("=")[1])
+            except ValueError: pass
+        elif arg.startswith("--height="):
+            try: h_arg = int(arg.split("=")[1])
+            except ValueError: pass
 
     root = tk.Tk()
-    app = MetronomeApp(root)
+    app = MetronomeApp(root, start_x=x_arg, start_y=y_arg, start_w=w_arg, start_h=h_arg)
     app.count_in_remaining = count_in_arg
     
     if start_muted:

@@ -37,6 +37,7 @@ A la hora de desarrollar o arreglar bugs en las interfaces de usuario (PySide6 /
 Actualmente, necesitamos colaboración urgente en las siguientes áreas:
 - [ ] **Sistemas de Logs:** Reparar y estandarizar todos los `logging.info()` a lo largo del código. Actualmente, la observabilidad es irregular, y necesitamos un estándar de archivo rotativo o formato único.
 - [ ] **Empaquetado EXE:** Depurar la compilación de PyInstaller para evitar pesos excesivos e inclusión de librerías innecesarias (ignorar carpetas de base de datos grandes en el `.spec`).
+- [ ] **Integración Nativa del Metrónomo:** Incrustar el metrónomo visual (actualmente en un proceso Tkinter independiente usando `metronomo_visual.py`) de forma nativa dentro de la interfaz PySide6 de AutoForge. Esta mejora arquitectónica busca eliminar el proceso externo para mejorar drásticamente la sincronización del DAQ.
 
 ## 🛠️ Configuración del Entorno de Desarrollo
 
