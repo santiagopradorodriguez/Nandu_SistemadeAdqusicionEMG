@@ -769,6 +769,14 @@ def _plot_muscle_overlay(measure_name, channels_dict, out_dir, master_name=None)
             plt.grid(True, alpha=0.5)
             plt.ylim(bottom=0, top=max_y_overlay * 1.2 if max_y_overlay > 0 else 1.0)
             
+            # Forzar simetría en el eje X (Tiempo) respecto al cero
+            try:
+                current_xlims = plt.gca().get_xlim()
+                max_x = max(abs(current_xlims[0]), abs(current_xlims[1]))
+                plt.xlim(-max_x, max_x)
+            except:
+                pass
+            
             name_clean = os.path.splitext(fname)[0]
             path = os.path.join(out_dir, f"patron_muscular_{name_clean}.png")
             plt.savefig(path, dpi=300, bbox_inches='tight')
