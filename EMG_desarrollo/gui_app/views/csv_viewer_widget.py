@@ -262,6 +262,11 @@ class CsvViewerWidget(QWidget):
         self.spin_env.editingFinished.connect(self._on_config_changed)
         row_env.addWidget(self.spin_env)
         lyt_env.addLayout(row_env)
+        
+        self.chk_env_offset = QCheckBox("Eliminar Offset Base")
+        self.chk_env_offset.stateChanged.connect(self._on_config_changed)
+        lyt_env.addWidget(self.chk_env_offset)
+        
         self.slayout.addWidget(grp_env)
         
         self.chk_notch.stateChanged.connect(self._on_config_changed)
@@ -452,6 +457,9 @@ class CsvViewerWidget(QWidget):
                         y_data = np.abs(y_data)
                         kernel = np.ones(env_window) / env_window
                         y_data = np.convolve(y_data, kernel, mode='same')
+                        
+                    if self.chk_env_offset.isChecked():
+                        y_data = y_data - np.min(y_data)
                     
                 # Offset Manual
                 offset_val = self.channel_offsets.get(canal, 0)
@@ -548,6 +556,7 @@ class CsvViewerWidget(QWidget):
         config_mgr.set("csv_viewer", "hp", self.spin_hp.value())
         config_mgr.set("csv_viewer", "env", self.cmb_env.currentText())
         config_mgr.set("csv_viewer", "env_ms", self.spin_env.value())
+        config_mgr.set("csv_viewer", "env_offset", self.chk_env_offset.isChecked())
         self.update_plot()
 
     def _load_config_state(self):
@@ -560,3 +569,4 @@ class CsvViewerWidget(QWidget):
         idx = self.cmb_env.findText(env_text)
         if idx >= 0: self.cmb_env.setCurrentIndex(idx)
         self.spin_env.setValue(saved.get("env_ms", 50))
+        self.chk_env_offset.setChecked(saved.get("env_offset", False))
