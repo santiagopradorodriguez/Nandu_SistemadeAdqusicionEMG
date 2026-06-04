@@ -1,16 +1,16 @@
-﻿# ==============================================================================
-# Proyecto: NANDU LSD - Sistema de Adquisici├│n EMG y Deep Learning
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
 # Autores: Lucas Braunstein y Santiago Prado
-# Instituci├│n: Laboratorio de Sistemas Din├ímicos (LSD) - FCEyN, UBA
-# Descripci├│n: Metr├│nomo visual y sonoro para guiar las pruebas de adquisici├│n.
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Metrónomo visual y sonoro para guiar las pruebas de adquisición.
 # ==============================================================================
 
 # -*- coding: utf-8 -*-
 """
-# Esta es la ├║ltima versi├│n funcional conocida.
-Metr├│nomo Visual y Sonoro v1.0
+# Esta es la última versión funcional conocida.
+Metrónomo Visual y Sonoro v1.0
 
-Una herramienta simple que proporciona una se├▒al visual (parpadeo) y auditiva (beep)
+Una herramienta simple que proporciona una señal visual (parpadeo) y auditiva (beep)
 a un ritmo configurable en BPM (Beats Per Minute).
 
 Se puede lanzar desde el panel de control principal.
@@ -22,18 +22,18 @@ import json
 import os
 from tkinter import font
 
-# --- NUEVO: Import para sonido de metr├│nomo ---
+# --- NUEVO: Import para sonido de metrónomo ---
 try:
     import winsound
 except ImportError:
-    winsound = None # winsound solo est├í disponible en Windows
+    winsound = None # winsound solo está disponible en Windows
 
 class MetronomeApp:
     def __init__(self, root, start_x=None, start_y=None, start_w=None, start_h=None):
         self.root = root
-        self.root.title("├æand├║ LSD - Metr├│nomo Cyberpunk")
+        self.root.title("Ñandú LSD - Metrónomo Cyberpunk")
         
-        # Obtener resoluci├│n de pantalla para anclar a la derecha
+        # Obtener resolución de pantalla para anclar a la derecha
         screen_w = self.root.winfo_screenwidth()
         window_w = start_w if start_w is not None else 230
         window_h = start_h if start_h is not None else 380
@@ -44,16 +44,16 @@ class MetronomeApp:
         self.root.configure(bg="#050505")
         self.root.resizable(False, False)
         
-        # --- NUEVO: Mantener la ventana del metr├│nomo siempre al frente ---
+        # --- NUEVO: Mantener la ventana del metrónomo siempre al frente ---
         self.root.attributes("-topmost", True)
 
         # Asegura que save_config se llama al cerrar la ventana
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
-        # --- Estado del metr├│nomo ---
+        # --- Estado del metrónomo ---
         self.is_running = False
         self.is_counting = False # <-- NUEVO: Controla si se debe contar o no
         self.is_muted = False # <-- NUEVO: Controla si el beep suena o no
-        # --- MODIFICADO: Cargar BPM desde el archivo de configuraci├│n ---
+        # --- MODIFICADO: Cargar BPM desde el archivo de configuración ---
         self.bpm = tk.IntVar(value=60)
         self.subdivisions = tk.IntVar(value=4) # <-- NUEVO: Para sub-pulsos
         self.timer_id = None
@@ -63,11 +63,11 @@ class MetronomeApp:
         # --- NUEVO: Hilo para escuchar comandos ---
         self.command_thread = threading.Thread(target=self._listen_for_commands, daemon=True)
         self.command_thread.start()
-        # --- NUEVO: ├ìndice para el ciclo de sub-pulsos ---
+        # --- NUEVO: Índice para el ciclo de sub-pulsos ---
         self.beat_cycle_index = 0
         # --- Colores para el pulso visual ---
-        self.COLOR_BEAT = "#00FFFF"  # Cian Ne├│n para el pulso
-        self.COLOR_IDLE = "#111111"  # Negro profundo cuando est├í en reposo
+        self.COLOR_BEAT = "#00FFFF"  # Cian Neón para el pulso
+        self.COLOR_IDLE = "#111111"  # Negro profundo cuando está en reposo
 
         # --- Fuentes ---
         title_font = font.Font(family="Helvetica", size=11, weight="bold")
@@ -84,7 +84,7 @@ class MetronomeApp:
         pulse_container = tk.Frame(self.root, bg="#050505")
         pulse_container.pack(expand=True, fill="both")
 
-        # T├¡tulo din├ímico "INICIANDO" / "PULSO"
+        # Título dinámico "INICIANDO" / "PULSO"
         self.lbl_title_var = tk.StringVar(value="PULSO")
         self.lbl_title = tk.Label(pulse_container, textvariable=self.lbl_title_var, font=title_font, fg="#00FFFF", bg="#050505")
         self.lbl_title.pack(pady=(5, 5))
@@ -143,24 +143,24 @@ class MetronomeApp:
         self.btn_stop = tk.Button(button_container, text="DETENER", command=self.stop, font=button_font, width=10, bg="#550000", fg="white", state="disabled")
         self.btn_stop.pack(side="left", padx=10)
         
-        # --- NUEVO: Bot├│n de Reset ---
+        # --- NUEVO: Botón de Reset ---
         self.btn_reset = tk.Button(button_container, text="RESET", command=self.reset_counter, font=button_font, width=8, bg="#333333", fg="white")
         self.btn_reset.pack(side="left", padx=10)
 
-        # --- NUEVO: Cargar la ├║ltima configuraci├│n guardada ---
+        # --- NUEVO: Cargar la última configuración guardada ---
         self.load_config()
 
     def load_config(self):
-        """Carga la ├║ltima configuraci├│n guardada desde metronome_config.json."""
+        """Carga la última configuración guardada desde metronome_config.json."""
         if os.path.exists('metronome_config.json'):
             try:
                 with open('metronome_config.json', 'r') as f:
                     config = json.load(f)
                     self.bpm.set(config.get('last_bpm', 60))
                     self.subdivisions.set(config.get('subdivisions', 4))
-                    print(f"Configuraci├│n de metr├│nomo cargada: BPM={self.bpm.get()}")
+                    print(f"Configuración de metrónomo cargada: BPM={self.bpm.get()}")
             except Exception as e:
-                print(f"Error al cargar config del metr├│nomo, usando valores por defecto. Error: {e}")
+                print(f"Error al cargar config del metrónomo, usando valores por defecto. Error: {e}")
 
     def start(self):
         if self.is_running:
@@ -194,28 +194,28 @@ class MetronomeApp:
         for line in sys.stdin:
             command = line.strip()
             if command == "START_COUNTING":
-                print("[Metr├│nomo] Recibido comando START_COUNTING.")
+                print("[Metrónomo] Recibido comando START_COUNTING.")
                 # Usamos after para asegurar que la GUI se actualice desde el hilo principal
                 self.root.after(0, self.start_counting)
             elif command == "STOP_APP":
-                print("[Metr├│nomo] Recibido comando STOP_APP.")
+                print("[Metrónomo] Recibido comando STOP_APP.")
                 self.root.after(0, self.on_closing)
             elif command == "MUTE":
-                print("[Metr├│nomo] Recibido comando MUTE.")
+                print("[Metrónomo] Recibido comando MUTE.")
                 self.is_muted = True
             elif command == "UNMUTE":
-                print("[Metr├│nomo] Recibido comando UNMUTE.")
+                print("[Metrónomo] Recibido comando UNMUTE.")
                 self.is_muted = False
 
     def start_counting(self):
         """Activa el contador y lo resetea."""
-        print("[Metr├│nomo] Comando recibido. Iniciando conteo.")
+        print("[Metrónomo] Comando recibido. Iniciando conteo.")
         self.is_counting = True
         self.reset_counter()
         self.beat() # FORZAR EL BEEP INMEDIATAMENTE
 
     def save_config(self):
-        """Guarda la configuraci├│n del metr├│nomo en un archivo JSON."""
+        """Guarda la configuración del metrónomo en un archivo JSON."""
         config = {
             "last_bpm": self.bpm.get(),
             "last_beat_count": self.beat_count.get(),
@@ -224,31 +224,31 @@ class MetronomeApp:
         try:
             with open('metronome_config.json', 'w') as f:
                 json.dump(config, f, indent=4)
-                print(f"Configuraci├│n de metr├│nomo guardada: {config} (beat_count={self.beat_count.get()})")
+                print(f"Configuración de metrónomo guardada: {config} (beat_count={self.beat_count.get()})")
         except Exception as e:
-            print(f"Error al guardar config del metr├│nomo: {e}")
+            print(f"Error al guardar config del metrónomo: {e}")
     def reset_counter(self):
         """Reinicia el contador de pulsos a cero."""
         self.beat_count.set("0")
 
     def on_closing(self):
-        """Maneja el cierre de la ventana, guardando la configuraci├│n."""
+        """Maneja el cierre de la ventana, guardando la configuración."""
         self.save_config()
         self.root.destroy()
 
     def beat(self):
         if not self.is_running:
-            return # Si no est├í corriendo, no hace nada (ni cuenta ni suena)
+            return # Si no está corriendo, no hace nada (ni cuenta ni suena)
 
         num_subdivs = self.subdivisions.get()
         is_main_beat = (self.beat_cycle_index == 0)
 
         if is_main_beat:
-            # --- L├ôGICA DEL PULSO PRINCIPAL (EL "1") ---
+            # --- LÓGICA DEL PULSO PRINCIPAL (EL "1") ---
             self.pulse_frame.config(bg=self.COLOR_BEAT)
             count_in = getattr(self, 'count_in_remaining', 0)
             
-            # Actualizaci├│n de la GUI y del n├║mero de conteo
+            # Actualización de la GUI y del número de conteo
             if count_in > 1:
                 # Fase preparatoria (Rojo, cuenta regresiva)
                 if hasattr(self, 'lbl_title_var'):
@@ -276,7 +276,7 @@ class MetronomeApp:
                         current = 0
                     self.beat_count.set(str(current + 1))
                         
-            # Sonidos de metr├│nomo (Graves para cuenta atr├ís, Agudo para GO, Normal el resto)
+            # Sonidos de metrónomo (Graves para cuenta atrás, Agudo para GO, Normal el resto)
             if winsound and not self.is_muted:
                 try:
                     if count_in > 1:
@@ -291,8 +291,8 @@ class MetronomeApp:
             self.root.after(50, lambda: self.pulse_frame.config(bg=self.COLOR_IDLE))
 
         elif getattr(self, 'count_in_remaining', 0) == 0:
-            # --- L├ôGICA DEL SUB-PULSO (EL "2, 3, 4...") ---
-            self.pulse_frame.config(bg="#00AAAA") # Cian m├ís oscuro
+            # --- LÓGICA DEL SUB-PULSO (EL "2, 3, 4...") ---
+            self.pulse_frame.config(bg="#00AAAA") # Cian más oscuro
             self.root.after(50, lambda: self.pulse_frame.config(bg=self.COLOR_IDLE))
             if winsound and not self.is_muted:
                 try:
@@ -300,14 +300,14 @@ class MetronomeApp:
                 except Exception as e:
                     print(f"Error al reproducir sonido de sub-beat: {e}")
 
-        # --- L├ôGICA DE TEMPORIZACI├ôN (COM├ÜN A AMBOS) ---
+        # --- LÓGICA DE TEMPORIZACIÓN (COMÚN A AMBOS) ---
         self.beat_cycle_index = (self.beat_cycle_index + 1) % num_subdivs
         interval_ms = int(60000 / self.bpm.get())
         sub_interval_ms = interval_ms // num_subdivs if num_subdivs > 1 else interval_ms
         self.timer_id = self.root.after(sub_interval_ms, self.beat)
 
 def main():
-    # --- NUEVO: L├│gica para autostart ---
+    # --- NUEVO: Lógica para autostart ---
     autostart = '--autostart' in sys.argv
     start_muted = '--mute' in sys.argv
     
@@ -351,7 +351,7 @@ def main():
     
     if start_muted:
         app.is_muted = True
-        print("Metr├│nomo iniciado en modo MUTE.")
+        print("Metrónomo iniciado en modo MUTE.")
 
     if target_word:
         pass # La palabra ahora se muestra en ventana_palabras.py independiente
@@ -360,8 +360,8 @@ def main():
         app.bpm.set(bpm_arg)
         
     if autostart:
-        print("Metr├│nomo iniciado con autostart.")
-        app.is_counting = '--count' in sys.argv # Activa el conteo autom├íticamente si se pasa el flag
+        print("Metrónomo iniciado con autostart.")
+        app.is_counting = '--count' in sys.argv # Activa el conteo automáticamente si se pasa el flag
         app.start()
 
     root.mainloop()

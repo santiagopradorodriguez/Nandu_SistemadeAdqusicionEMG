@@ -1,24 +1,24 @@
-﻿# ==============================================================================
-# Proyecto: NANDU LSD - Sistema de Adquisici├│n EMG y Deep Learning
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
 # Autores: Lucas Braunstein y Santiago Prado
-# Instituci├│n: Laboratorio de Sistemas Din├ímicos (LSD) - FCEyN, UBA
-# Descripci├│n: Adquisici├│n de datos automatizada y comunicaci├│n con hardware EMG.
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Adquisición de datos automatizada y comunicación con hardware EMG.
 # ==============================================================================
 
 # -*- coding: utf-8 -*-
 """
 # =============================================================================
-# --- ESTA ES LA ├ÜLTIMA VERSI├ôN FUNCIONAL CONOCIDA (v4.3) ---
-- La aplicaci├│n ya no inicia la adquisici├│n autom├íticamente.
-- La aplicaci├│n ya no inicia la adquisici├│n autom├íticamente.
-- Se debe configurar el dispositivo y los canales, y luego presionar "Iniciar Adquisici├│n".
-- La interfaz (gr├íficos, mediciones) se adapta din├ímicamente al n├║mero de canales seleccionados.
-- El hilo de adquisici├│n se crea y destruye con los botones de Iniciar/Detener.
-- Mantiene todas las funcionalidades anteriores (grabaci├│n, exportaci├│n, trigger, etc.).
-- NUEVO: Se puede configurar el Sample Rate y la Duraci├│n del Ploteo desde la GUI.
+# --- ESTA ES LA ÚLTIMA VERSIÓN FUNCIONAL CONOCIDA (v4.3) ---
+- La aplicación ya no inicia la adquisición automáticamente.
+- La aplicación ya no inicia la adquisición automáticamente.
+- Se debe configurar el dispositivo y los canales, y luego presionar "Iniciar Adquisición".
+- La interfaz (gráficos, mediciones) se adapta dinámicamente al número de canales seleccionados.
+- El hilo de adquisición se crea y destruye con los botones de Iniciar/Detener.
+- Mantiene todas las funcionalidades anteriores (grabación, exportación, trigger, etc.).
+- NUEVO: Se puede configurar el Sample Rate y la Duración del Ploteo desde la GUI.
 """
 
-# --- Versi├│n del script ---
+# --- Versión del script ---
 __version__ = "5.0.0"
 
 import numpy as np
@@ -44,7 +44,7 @@ except ImportError:
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtWidgets, QtCore, QtGui 
 
-# NUEVO: Import para SpinBox y L├¡nea
+# NUEVO: Import para SpinBox y Línea
 from pyqtgraph import SpinBox, InfiniteLine
 
 # NUEVO: Import para el espectrograma
@@ -53,13 +53,13 @@ try:
     SCIPY_DISPONIBLE = True
 except ImportError:
     SCIPY_DISPONIBLE = False
-    print("Advertencia: La librer├¡a 'scipy' no est├í instalada. El espectrograma no funcionar├í.")
+    print("Advertencia: La librería 'scipy' no está instalada. El espectrograma no funcionará.")
 
-# NUEVO: Import para generar el gr├ífico
-# matplotlib.pyplot se importa de forma diferida en las funciones para que la GUI cargue m├ís r├ípido.
+# NUEVO: Import para generar el gráfico
+# matplotlib.pyplot se importa de forma diferida en las funciones para que la GUI cargue más rápido.
 
-# Configuraci├│n de PyQtGraph para M├üXIMO rendimiento
-pg.setConfigOptions(antialias=False) # Optimizaci├│n
+# Configuración de PyQtGraph para MÁXIMO rendimiento
+pg.setConfigOptions(antialias=False) # Optimización
 
 # Intenta importar nidaqmx
 try:
@@ -78,10 +78,10 @@ except Exception as e:
     print("--- TRACEBACK DE NIDAQMX ---")
     traceback.print_exc()
     NIDAQMX_DISPONIBLE = False
-    print(f"Advertencia: La librer├¡a 'nidaqmx' fall├│ al cargar: {e}")
+    print(f"Advertencia: La librería 'nidaqmx' falló al cargar: {e}")
 
 # =============================================================================
-# --- CONFIGURACI├ôN PRINCIPAL ---
+# --- CONFIGURACIÓN PRINCIPAL ---
 # =============================================================================
 # CANALES_DAQ = [f"{DEVICE_NAME}/ai0", f"{DEVICE_NAME}/ai1", f"{DEVICE_NAME}/ai2"]
 # NUM_CANALES = len(CANALES_DAQ)
@@ -90,10 +90,10 @@ except Exception as e:
 # SAMPLE_RATE = 6000
 # PLOT_DURATION_S = 30
 
-# CHUNK_SAMPLES ahora se calcula din├ímicamente al iniciar la adquisici├│n
-# CHUNK_DURATION_S y PLOT_SAMPLES se calculan din├ímicamente
+# CHUNK_SAMPLES ahora se calcula dinámicamente al iniciar la adquisición
+# CHUNK_DURATION_S y PLOT_SAMPLES se calculan dinámicamente
 # =============================================================================
-# BLOQUE 1: HILO DE ADQUISICI├ôN (Sin cambios)
+# BLOQUE 1: HILO DE ADQUISICIÓN (Sin cambios)
 # =============================================================================
 def acquisition_thread(device_channels, sample_rate, chunk_samples, num_canales, data_queue, stop_event, terminal_config_val=None):
     """
@@ -109,13 +109,13 @@ def acquisition_thread(device_channels, sample_rate, chunk_samples, num_canales,
         terminal_config_val (Any): Argumento posicional terminal_config_val.
 
     Returns:
-        Any: Resultado de la ejecuci├│n de la funci├│n.
+        Any: Resultado de la ejecución de la función.
     """
-    print(f"Iniciando hilo de adquisici├│n con SR={sample_rate} Hz...")
+    print(f"Iniciando hilo de adquisición con SR={sample_rate} Hz...")
     try:
         with nidaqmx.Task() as task:
             for canal in device_channels:
-                # --- CORRECCI├ôN: Forzar rango de voltaje expl├¡cito para evitar auto-escalado de la DAQ ---
+                # --- CORRECCIÓN: Forzar rango de voltaje explícito para evitar auto-escalado de la DAQ ---
                 if terminal_config_val is not None:
                     task.ai_channels.add_ai_voltage_chan(canal, terminal_config=terminal_config_val, min_val=-10.0, max_val=10.0)
                 else:
@@ -124,12 +124,12 @@ def acquisition_thread(device_channels, sample_rate, chunk_samples, num_canales,
             task.timing.cfg_samp_clk_timing(
                 rate=sample_rate,
                 sample_mode=AcquisitionType.CONTINUOUS,
-                # --- MEJORA: Aumentar el tama├▒o del b├║fer de la DAQ ---
-                # Un b├║fer peque├▒o (como chunk_samples * 2) puede causar un desbordamiento (overflow)
-                # a altas frecuencias de muestreo si el hilo de Python no lo vac├¡a a tiempo.
-                # Al establecer un b├║fer grande (ej: 1 segundo de datos), le damos al sistema
-                # mucho m├ís margen, evitando la p├®rdida de muestras y asegurando una adquisici├│n continua.
-                # Esto soluciona el problema de que las se├▒ales reales se vean "triangulares" o mal definidas.
+                # --- MEJORA: Aumentar el tamaño del búfer de la DAQ ---
+                # Un búfer pequeño (como chunk_samples * 2) puede causar un desbordamiento (overflow)
+                # a altas frecuencias de muestreo si el hilo de Python no lo vacía a tiempo.
+                # Al establecer un búfer grande (ej: 1 segundo de datos), le damos al sistema
+                # mucho más margen, evitando la pérdida de muestras y asegurando una adquisición continua.
+                # Esto soluciona el problema de que las señales reales se vean "triangulares" o mal definidas.
                 samps_per_chan=sample_rate 
             )
             
@@ -149,7 +149,7 @@ def acquisition_thread(device_channels, sample_rate, chunk_samples, num_canales,
     except nidaqmx.errors.DaqError as e:
         print(f"\n--- ERROR FATAL EN HILO DAQ --- \n{e}")
     finally:
-        print("Cerrando hilo de adquisici├│n.")
+        print("Cerrando hilo de adquisición.")
         if not stop_event.is_set():
             stop_event.set()
 
@@ -166,9 +166,9 @@ def microphone_thread(chunk_samples, sample_rate, num_canales, data_queue, stop_
         stop_event (Any): Argumento posicional stop_event.
 
     Returns:
-        Any: Resultado de la ejecuci├│n de la funci├│n.
+        Any: Resultado de la ejecución de la función.
     """
-    print(f"Iniciando hilo de MICR├ôFONO con SR={sample_rate} Hz...")
+    print(f"Iniciando hilo de MICRÓFONO con SR={sample_rate} Hz...")
     try:
         import sounddevice as sd
         def audio_callback(indata, frames, time_info, status):
@@ -182,7 +182,7 @@ def microphone_thread(chunk_samples, sample_rate, num_canales, data_queue, stop_
                 status (Any): Argumento posicional status.
 
             Returns:
-                Any: Resultado de la ejecuci├│n de la funci├│n.
+                Any: Resultado de la ejecución de la función.
             """
             if not stop_event.is_set():
                 import numpy as np
@@ -197,9 +197,9 @@ def microphone_thread(chunk_samples, sample_rate, num_canales, data_queue, stop_
                 import time
                 time.sleep(0.1)
     except Exception as e:
-        print(f"\n--- ERROR EN HILO MICR├ôFONO --- \n{e}")
+        print(f"\n--- ERROR EN HILO MICRÓFONO --- \n{e}")
     finally:
-        print("Cerrando hilo de micr├│fono.")
+        print("Cerrando hilo de micrófono.")
 
 def simulador_thread(chunk_samples, sample_rate, num_canales, data_queue, stop_event, test_freq=50, tipo_prueba="Senoidal"):
     """
@@ -215,9 +215,9 @@ def simulador_thread(chunk_samples, sample_rate, num_canales, data_queue, stop_e
         tipo_prueba (Any): Argumento posicional tipo_prueba.
 
     Returns:
-        Any: Resultado de la ejecuci├│n de la funci├│n.
+        Any: Resultado de la ejecución de la función.
     """
-    print(f"Iniciando hilo de simulaci├│n con SR={sample_rate} Hz, Tipo={tipo_prueba}...")
+    print(f"Iniciando hilo de simulación con SR={sample_rate} Hz, Tipo={tipo_prueba}...")
     
     datos_archivo = None
     total_samples_archivo = 0
@@ -227,7 +227,7 @@ def simulador_thread(chunk_samples, sample_rate, num_canales, data_queue, stop_e
             import pandas as pd
             import os
             script_dir = os.path.dirname(os.path.abspath(__file__))
-            # --- MODIFICADO: Usar se├▒al trenzada de prueba ---
+            # --- MODIFICADO: Usar señal trenzada de prueba ---
             test_dir = os.path.join(script_dir, "base_de_datos_electrodos", "2026-05-18", "_E0_1_TRENZADOMALLADOGND_Sujeto1")
             csv_path = os.path.join(test_dir, "grabacion.csv")
             
@@ -247,13 +247,13 @@ def simulador_thread(chunk_samples, sample_rate, num_canales, data_queue, stop_e
                 else:
                     print("El CSV no tiene columnas de 'Canal'. Usando Senoidal.")
             else:
-                print(f"Archivo no encontrado en {csv_path}. Aseg├║rate de crearlo. Usando Senoidal.")
+                print(f"Archivo no encontrado en {csv_path}. Asegúrate de crearlo. Usando Senoidal.")
         except Exception as e:
             print(f"Error al cargar el archivo de prueba: {e}. Usando Senoidal.")
 
-    # --- MEJORA: Usar el tiempo real para una simulaci├│n m├ís fluida ---
-    # En lugar de un tiempo_acumulado propenso a errores por la imprecisi├│n de time.sleep(),
-    # usamos el tiempo real del sistema para generar la se├▒al.
+    # --- MEJORA: Usar el tiempo real para una simulación más fluida ---
+    # En lugar de un tiempo_acumulado propenso a errores por la imprecisión de time.sleep(),
+    # usamos el tiempo real del sistema para generar la señal.
     start_time = time.perf_counter()
     samples_generados = 0
 
@@ -279,10 +279,10 @@ def simulador_thread(chunk_samples, sample_rate, num_canales, data_queue, stop_e
         sleep_duration = next_time - time.perf_counter()
         if sleep_duration > 0:
             time.sleep(sleep_duration)
-    print("Cerrando hilo de simulaci├│n.")
+    print("Cerrando hilo de simulación.")
 
 # =============================================================================
-# FUNCI├ôN EXTRA: GENERADOR DE SE├æALES (Sin cambios)
+# FUNCIÓN EXTRA: GENERADOR DE SEÑALES (Sin cambios)
 # =============================================================================
 def generar_senales_prueba(tiempo_actual, samples_por_canal, sample_rate, num_canales, test_freq=50):
     """
@@ -296,7 +296,7 @@ def generar_senales_prueba(tiempo_actual, samples_por_canal, sample_rate, num_ca
         test_freq (Any): Argumento posicional test_freq.
 
     Returns:
-        Any: Resultado de la ejecuci├│n de la funci├│n.
+        Any: Resultado de la ejecución de la función.
     """
     t = np.linspace(
         tiempo_actual, 
@@ -308,13 +308,13 @@ def generar_senales_prueba(tiempo_actual, samples_por_canal, sample_rate, num_ca
     senal1 = 1.0 * np.sin(2 * np.pi * test_freq * t) 
     
     senales = [senal1]
-    # Generar se├▒ales de prueba distintas para los siguientes canales
+    # Generar señales de prueba distintas para los siguientes canales
     if num_canales > 1:
         # Canal 1: Frecuencia fija diferente
         senal2 = 0.8 * np.sin(2 * np.pi * 120.0 * t)
         senales.append(senal2)
     if num_canales > 2:
-        # Canal 2: Se├▒al compuesta
+        # Canal 2: Señal compuesta
         senal3 = 0.6 * np.sin(2 * np.pi * 50.0 * t) + 0.4 * np.sin(2 * np.pi * 250.0 * t)
         senales.append(senal3)
     # Canales restantes con frecuencias aleatorias
@@ -341,7 +341,7 @@ def guardar_grabacion_wav(datos_completos, sample_rate, output_dir, num_canales,
         base_name (Any): Argumento posicional base_name.
 
     Returns:
-        Any: Resultado de la ejecuci├│n de la funci├│n.
+        Any: Resultado de la ejecución de la función.
     """
     if not datos_completos:
         print("No hay datos para guardar.")
@@ -350,7 +350,7 @@ def guardar_grabacion_wav(datos_completos, sample_rate, output_dir, num_canales,
     try:
         grabacion = np.concatenate(datos_completos, axis=1)
     except ValueError:
-        print("Error: No se grabaron datos. El buffer est├í vac├¡o.")
+        print("Error: No se grabaron datos. El buffer está vacío.")
         return False
     
     exito_total = True
@@ -358,7 +358,7 @@ def guardar_grabacion_wav(datos_completos, sample_rate, output_dir, num_canales,
         datos_canal = grabacion[i]
         max_val = np.max(np.abs(datos_canal))
         if max_val == 0:
-            print(f"Canal {i} sin se├▒al, no se puede guardar.")
+            print(f"Canal {i} sin señal, no se puede guardar.")
             continue
         
         normalizado = datos_canal / max_val
@@ -371,9 +371,9 @@ def guardar_grabacion_wav(datos_completos, sample_rate, output_dir, num_canales,
         
         try:
             write_wav(nombre_archivo_canal, sample_rate, datos_int16)
-            print(f"   Ô£à Canal {i} guardado como: {nombre_archivo_canal}")
+            print(f"   ✅ Canal {i} guardado como: {nombre_archivo_canal}")
         except Exception as e:
-            print(f"   ÔØî Error al guardar el .wav del canal {i}: {e}")
+            print(f"   ❌ Error al guardar el .wav del canal {i}: {e}")
             exito_total = False
     return exito_total
 
@@ -392,7 +392,7 @@ def guardar_grabacion_csv(datos_completos, sample_rate, output_dir, num_canales,
         base_name (Any): Argumento posicional base_name.
 
     Returns:
-        Any: Resultado de la ejecuci├│n de la funci├│n.
+        Any: Resultado de la ejecución de la función.
     """
     if not datos_completos:
         return False
@@ -427,14 +427,14 @@ def guardar_grabacion_csv(datos_completos, sample_rate, output_dir, num_canales,
             header=headers, 
             comments="" # Evita el '#' en el header
         )
-        print(f"   Ô£à CSV guardado exitosamente.")
+        print(f"   ✅ CSV guardado exitosamente.")
         return True
     except Exception as e:
-        print(f"   ÔØî Error al guardar el CSV: {e}")
+        print(f"   ❌ Error al guardar el CSV: {e}")
         return False
 
 # =============================================================================
-# BLOQUE 3.3: GENERADOR DE GR├üFICO (Sin cambios)
+# BLOQUE 3.3: GENERADOR DE GRÁFICO (Sin cambios)
 # =============================================================================
 def generar_grafico_grabacion(datos_completos, sample_rate, output_dir, num_canales, canales_daq, base_name="photo"):
     """
@@ -449,16 +449,16 @@ def generar_grafico_grabacion(datos_completos, sample_rate, output_dir, num_cana
         base_name (Any): Argumento posicional base_name.
 
     Returns:
-        Any: Resultado de la ejecuci├│n de la funci├│n.
+        Any: Resultado de la ejecución de la función.
     """
     if not datos_completos:
         return False
 
-    print("Generando gr├ífico de la grabaci├│n completa...")
+    print("Generando gráfico de la grabación completa...")
     try:
         import matplotlib.pyplot as plt
     except ImportError:
-        print("Error: matplotlib no est├í instalado.")
+        print("Error: matplotlib no está instalado.")
         return False
         
     try:
@@ -466,7 +466,7 @@ def generar_grafico_grabacion(datos_completos, sample_rate, output_dir, num_cana
     except ValueError:
         return False
     
-    # Calibrar a microvoltios para el gr├ífico
+    # Calibrar a microvoltios para el gráfico
     grabacion = (grabacion / 495.0) * 1000000.0
     
     # Crear vector de tiempo
@@ -485,12 +485,12 @@ def generar_grafico_grabacion(datos_completos, sample_rate, output_dir, num_cana
     if num_canales == 1:
         axs = [axs]
         
-    fig.suptitle(f"Grabaci├│n Completa - {base_name}", fontsize=16)
+    fig.suptitle(f"Grabación Completa - {base_name}", fontsize=16)
 
     # Graficar cada canal
     for i in range(num_canales):
         axs[i].plot(tiempo, grabacion[i])
-        axs[i].set_ylabel("Amplitud (┬ÁV)")
+        axs[i].set_ylabel("Amplitud (µV)")
         axs[i].set_title(f"Canal {i} ({canales_daq[i]})")
         axs[i].grid(True)
         
@@ -501,18 +501,18 @@ def generar_grafico_grabacion(datos_completos, sample_rate, output_dir, num_cana
 
     # Guardar
     try:
-        plt.tight_layout(rect=[0, 0.03, 1, 0.96]) # Ajuste para el supert├¡tulo
+        plt.tight_layout(rect=[0, 0.03, 1, 0.96]) # Ajuste para el supertítulo
         plt.savefig(nombre_archivo_grafico, dpi=200) # dpi=200 es un buen balance
-        print(f"   Ô£à Gr├ífico guardado como: {nombre_archivo_grafico}")
+        print(f"   ✅ Gráfico guardado como: {nombre_archivo_grafico}")
         return True
     except Exception as e:
-        print(f"   ÔØî Error al guardar el gr├ífico: {e}")
+        print(f"   ❌ Error al guardar el gráfico: {e}")
         return False
     finally:
         plt.close(fig) # Liberar memoria
 
 # =============================================================================
-# BLOQUE 3.4: GENERADOR DE GR├üFICOS ESTAD├ìSTICOS
+# BLOQUE 3.4: GENERADOR DE GRÁFICOS ESTADÍSTICOS
 # =============================================================================
 def generar_grafico_estadisticas(stats_time, stats_snr, stats_noise_mean, stats_noise_std, output_dir, num_canales, canales_daq, base_name="estadisticas_evolucion"):
     # Verificar si hay datos que graficar
@@ -530,33 +530,33 @@ def generar_grafico_estadisticas(stats_time, stats_snr, stats_noise_mean, stats_
         base_name (Any): Argumento posicional base_name.
 
     Returns:
-        Any: Resultado de la ejecuci├│n de la funci├│n.
+        Any: Resultado de la ejecución de la función.
     """
     hay_datos = any(len(t) > 0 for t in stats_time)
     if not hay_datos:
-        print("No hay datos estad├¡sticos para graficar.")
+        print("No hay datos estadísticos para graficar.")
         return False
 
-    print("Generando gr├ífico de evoluci├│n temporal de estad├¡sticas...")
+    print("Generando gráfico de evolución temporal de estadísticas...")
     try:
         import matplotlib.pyplot as plt
     except ImportError:
-        print("Error: matplotlib no est├í instalado.")
+        print("Error: matplotlib no está instalado.")
         return False
         
     fig, axs = plt.subplots(num_canales, 2, figsize=(15, 4 * num_canales), squeeze=False)
-    fig.suptitle(f"Evoluci├│n Temporal: SNR y Ruido Inter-pulso", fontsize=16)
+    fig.suptitle(f"Evolución Temporal: SNR y Ruido Inter-pulso", fontsize=16)
 
     for i in range(num_canales):
         t = stats_time[i]
         if not t:
             continue
         
-        # --- NUEVO: Filtrar los primeros 20 segundos para el gr├ífico ---
+        # --- NUEVO: Filtrar los primeros 20 segundos para el gráfico ---
         t_arr = np.array(t)
         mask = t_arr >= 20.0
         
-        # Si la grabaci├│n dur├│ menos de 20 segundos, graficamos todo
+        # Si la grabación duró menos de 20 segundos, graficamos todo
         if not np.any(mask):
             mask = np.ones_like(t_arr, dtype=bool)
             
@@ -567,17 +567,17 @@ def generar_grafico_estadisticas(stats_time, stats_snr, stats_noise_mean, stats_
 
         # Subplot Izquierdo: SNR
         axs[i, 0].plot(t_plot, snr_plot, marker='o', linestyle='-', color='b', linewidth=2)
-        axs[i, 0].set_title(f"Canal {i} ({canales_daq[i]}) - Evoluci├│n SNR Promedio")
-        axs[i, 0].set_xlabel("Tiempo de Se├▒al (s)")
+        axs[i, 0].set_title(f"Canal {i} ({canales_daq[i]}) - Evolución SNR Promedio")
+        axs[i, 0].set_xlabel("Tiempo de Señal (s)")
         axs[i, 0].set_ylabel("SNR Promedio Acumulado")
         axs[i, 0].grid(True, alpha=0.5)
 
-        # Subplot Derecho: Ruido (x╠ä y ¤â)
-        axs[i, 1].plot(t_plot, noise_mean_plot, marker='o', linestyle='-', color='r', label='Promedio (x╠ä)', linewidth=2)
-        axs[i, 1].plot(t_plot, noise_std_plot, marker='x', linestyle='--', color='orange', label='Desviaci├│n (¤â)', linewidth=2)
-        axs[i, 1].set_title(f"Canal {i} ({canales_daq[i]}) - Evoluci├│n Ruido Inter-pulso")
-        axs[i, 1].set_xlabel("Tiempo de Se├▒al (s)")
-        axs[i, 1].set_ylabel("Amplitud (┬ÁV)")
+        # Subplot Derecho: Ruido (x̄ y σ)
+        axs[i, 1].plot(t_plot, noise_mean_plot, marker='o', linestyle='-', color='r', label='Promedio (x̄)', linewidth=2)
+        axs[i, 1].plot(t_plot, noise_std_plot, marker='x', linestyle='--', color='orange', label='Desviación (σ)', linewidth=2)
+        axs[i, 1].set_title(f"Canal {i} ({canales_daq[i]}) - Evolución Ruido Inter-pulso")
+        axs[i, 1].set_xlabel("Tiempo de Señal (s)")
+        axs[i, 1].set_ylabel("Amplitud (µV)")
         axs[i, 1].legend()
         axs[i, 1].grid(True, alpha=0.5)
 
@@ -585,18 +585,18 @@ def generar_grafico_estadisticas(stats_time, stats_snr, stats_noise_mean, stats_
     plt.tight_layout(rect=[0, 0.03, 1, 0.96])
     plt.savefig(nombre_archivo, dpi=200)
     plt.close(fig)
-    print(f"   Ô£à Gr├ífico de estad├¡sticas guardado como: {nombre_archivo}")
+    print(f"   ✅ Gráfico de estadísticas guardado como: {nombre_archivo}")
     return True
 
 # =============================================================================
-# BLOQUE 4: INTERFAZ GR├üFICA (GUI) (MODIFICADO v3.12)
+# BLOQUE 4: INTERFAZ GRÁFICA (GUI) (MODIFICADO v3.12)
 # =============================================================================
 
 class SaveMeasurementDialog(QtWidgets.QDialog):
     """
-    Un di├ílogo personalizado para guardar mediciones con dos formatos:
-    1. Medici├│n de Prueba (nombre aleatorio).
-    2. Medici├│n Formal (formato estructurado: Letra_Prueba_Sujeto).
+    Un diálogo personalizado para guardar mediciones con dos formatos:
+    1. Medición de Prueba (nombre aleatorio).
+    2. Medición Formal (formato estructurado: Letra_Prueba_Sujeto).
     """
     def __init__(self, parent=None):
         """
@@ -606,10 +606,10 @@ class SaveMeasurementDialog(QtWidgets.QDialog):
             parent (Any): Argumento posicional parent.
 
         Returns:
-            Any: Resultado de la ejecuci├│n de la funci├│n.
+            Any: Resultado de la ejecución de la función.
         """
         super().__init__(parent)
-        self.setWindowTitle("├æand├║ LSD - Guardar Medici├│n")
+        self.setWindowTitle("Ñandú LSD - Guardar Medición")
         self.setMinimumWidth(350)
         self.layout = QtWidgets.QVBoxLayout(self)
         self.measurement_name = ""
@@ -622,10 +622,10 @@ class SaveMeasurementDialog(QtWidgets.QDialog):
         self.comentario = ""
 
         # Grupo de Radio Buttons para seleccionar el tipo
-        self.radio_group = QtWidgets.QGroupBox("Tipo de Medici├│n")
+        self.radio_group = QtWidgets.QGroupBox("Tipo de Medición")
         self.radio_layout = QtWidgets.QVBoxLayout()
-        self.radio_random = QtWidgets.QRadioButton("Medici├│n de Prueba (ej: prueba_...)")
-        self.radio_formal = QtWidgets.QRadioButton("Medici├│n Formal (ej: A_Prueba1_Sujeto1)")
+        self.radio_random = QtWidgets.QRadioButton("Medición de Prueba (ej: prueba_...)")
+        self.radio_formal = QtWidgets.QRadioButton("Medición Formal (ej: A_Prueba1_Sujeto1)")
         self.radio_random.setChecked(True)
         self.radio_layout.addWidget(self.radio_random)
         self.radio_layout.addWidget(self.radio_formal)
@@ -641,7 +641,7 @@ class SaveMeasurementDialog(QtWidgets.QDialog):
         self.formal_layout.addRow("Letra:", self.edit_letra)
         self.formal_layout.addRow("Prueba:", self.edit_prueba)
         self.formal_layout.addRow("Sujeto:", self.edit_sujeto)
-        # --- NUEVO: A├▒adir campo de comentario al layout formal ---
+        # --- NUEVO: Añadir campo de comentario al layout formal ---
         self.edit_comentario = QtWidgets.QLineEdit()
         self.formal_layout.addRow("Comentario:", self.edit_comentario)
         self.formal_group.setLayout(self.formal_layout)
@@ -651,7 +651,7 @@ class SaveMeasurementDialog(QtWidgets.QDialog):
         self.button_box = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
         self.layout.addWidget(self.button_box)
 
-        # Conexiones de se├▒ales
+        # Conexiones de señales
         self.button_box.accepted.connect(self.on_accept)
         self.button_box.rejected.connect(self.reject)
         self.radio_formal.toggled.connect(self.update_ui_state)
@@ -659,7 +659,7 @@ class SaveMeasurementDialog(QtWidgets.QDialog):
         self.update_ui_state() # Estado inicial
 
     def update_ui_state(self):
-        """Habilita o deshabilita los campos del formato formal seg├║n la selecci├│n."""
+        """Habilita o deshabilita los campos del formato formal según la selección."""
         is_formal = self.radio_formal.isChecked()
         self.formal_group.setEnabled(is_formal)
 
@@ -696,10 +696,10 @@ class AutoForgeDialog(QtWidgets.QDialog):
             parent (Any): Argumento posicional parent.
 
         Returns:
-            Any: Resultado de la ejecuci├│n de la funci├│n.
+            Any: Resultado de la ejecución de la función.
         """
         super().__init__(parent)
-        self.setWindowTitle("├æand├║ LSD - Configuraci├│n de Autograbado")
+        self.setWindowTitle("Ñandú LSD - Configuración de Autograbado")
         self.setMinimumWidth(300)
         
         self.layout = QtWidgets.QFormLayout(self)
@@ -716,9 +716,9 @@ class AutoForgeDialog(QtWidgets.QDialog):
         self.layout.addRow("Prueba:", self.edit_prueba)
         self.layout.addRow("Sujeto:", self.edit_sujeto)
         self.layout.addRow("Repeticiones:", self.spin_reps)
-        self.layout.addRow("BPM Metr├│nomo:", self.spin_bpm)
+        self.layout.addRow("BPM Metrónomo:", self.spin_bpm)
         
-        self.btn_edit_words = QtWidgets.QPushButton("Ô£Å´©Å Editar Palabras")
+        self.btn_edit_words = QtWidgets.QPushButton("✏️ Editar Palabras")
         self.btn_edit_words.setStyleSheet("background-color: #333333; color: white; font-weight: bold; font-family: 'Courier New'; font-size: 14px; padding: 5px; border: 2px solid #555555; border-radius: 4px;")
         self.btn_edit_words.clicked.connect(self.abrir_editor_palabras)
         self.layout.addRow("", self.btn_edit_words)
@@ -733,7 +733,7 @@ class AutoForgeDialog(QtWidgets.QDialog):
         Ejecuta la funcionalidad de abrir_editor_palabras.
 
         Returns:
-            Any: Resultado de la ejecuci├│n de la funci├│n.
+            Any: Resultado de la ejecución de la función.
         """
         import os
         root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -748,7 +748,7 @@ class AutoForgeDialog(QtWidgets.QDialog):
         dialog.resize(300, 400)
         dialog_layout = QtWidgets.QVBoxLayout(dialog)
         
-        lbl = QtWidgets.QLabel("Escribe una palabra por l├¡nea:")
+        lbl = QtWidgets.QLabel("Escribe una palabra por línea:")
         dialog_layout.addWidget(lbl)
         
         text_edit = QtWidgets.QTextEdit()
@@ -763,10 +763,10 @@ class AutoForgeDialog(QtWidgets.QDialog):
         
         if dialog.exec() == QtWidgets.QDialog.Accepted:
             with open(ruta_palabras, 'w', encoding='utf-8') as f:
-                # Asegurar que termina en nueva l├¡nea
+                # Asegurar que termina en nueva línea
                 texto_guardar = text_edit.toPlainText().strip() + "\n"
                 f.write(texto_guardar)
-            QtWidgets.QMessageBox.information(self, "Guardado", "Lista de palabras guardada con ├®xito.")
+            QtWidgets.QMessageBox.information(self, "Guardado", "Lista de palabras guardada con éxito.")
 
 class RealTimePlotter(QtWidgets.QWidget):
     """
@@ -779,7 +779,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         Ejecuta la funcionalidad de __init__.
 
         Returns:
-            Any: Resultado de la ejecuci├│n de la funci├│n.
+            Any: Resultado de la ejecución de la función.
         """
         super().__init__()
 
@@ -791,10 +791,10 @@ class RealTimePlotter(QtWidgets.QWidget):
 
         # --- Estado interno ---
         self.is_recording = False
-        self.counting_started = False # NUEVO: Bandera para controlar el inicio del conteo del metr├│nomo
+        self.counting_started = False # NUEVO: Bandera para controlar el inicio del conteo del metrónomo
         self.current_recording = []
         self.recording_start_time = None
-        self.metronome_process = None # Para guardar la referencia al proceso del metr├│nomo
+        self.metronome_process = None # Para guardar la referencia al proceso del metrónomo
         self.acquisition_thread = None
         # --- REFACTOR: Encapsular cola y evento ---
         self.data_queue = queue.Queue()
@@ -805,7 +805,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         from utils.config_manager import ConfigManager
         self.config_mgr = ConfigManager()
         
-        # --- Propiedades que se definen al iniciar adquisici├│n ---
+        # --- Propiedades que se definen al iniciar adquisición ---
         self.NUM_CANALES = 0
         self.CANALES_DAQ = []
         self.SAMPLE_RATE = 0
@@ -814,7 +814,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.CHUNK_DURATION_S = 0
         
         # --- Buffers de ploteo ---
-        # Se inicializar├ín al empezar la adquisici├│n
+        # Se inicializarán al empezar la adquisición
         self.plot_buffer_datos = None
         self.plot_vector_tiempo = None
         # self.plot_vector_tiempo = np.linspace(-PLOT_DURATION_S, 0, PLOT_SAMPLES)
@@ -829,16 +829,16 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.dynamic_noise_lines_neg = []
         self.noise_calculated = False
 
-        # --- NUEVO: Buffers y configuraci├│n del espectrograma ---
+        # --- NUEVO: Buffers y configuración del espectrograma ---
         self.spectrogram_buffer = None
-        self.SPECTROGRAM_HISTORY_LEN = 200 # N├║mero de FFTs en el historial del espectrograma
+        self.SPECTROGRAM_HISTORY_LEN = 200 # Número de FFTs en el historial del espectrograma
         self.SPECTROGRAM_FFT_LEN = 256     # Puntos para la FFT (mejor si es potencia de 2)
         self.spectrogram_channel_index = 0
         
 
         # --- Estado del Trigger ---
         self.trigger_last_values = None
-        self.is_trigger_line_moving = False # Para evitar bucles de se├▒ales
+        self.is_trigger_line_moving = False # Para evitar bucles de señales
 
         # --- NUEVO: Estado del Filtro ---
         self.filter_sos = None # Coeficientes del filtro
@@ -857,10 +857,10 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.FILTER_ORDER = 4  # Orden del filtro Butterworth
 
         # --- Configurar la ventana principal ---
-        self.setWindowTitle(f"├æand├║ LSD - Visor y Grabador de Se├▒ales Emg v{__version__}")
+        self.setWindowTitle(f"Ñandú LSD - Visor y Grabador de Señales Emg v{__version__}")
         self.resize(1200, 800)
         
-        # --- REFACTOR: Dividir la configuraci├│n de la UI en m├®todos ---
+        # --- REFACTOR: Dividir la configuración de la UI en métodos ---
         self._setup_ui_layouts()
         self._setup_ui_config_panel()
         self._setup_ui_filter_panel()
@@ -870,7 +870,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         self._connect_signals()
         self._load_protocol_config()
         
-        # --- Configuraci├│n inicial ---
+        # --- Configuración inicial ---
         self.on_autoscroll_toggle() 
         self.set_controls_enabled(False) # Deshabilitar controles al inicio
         
@@ -887,7 +887,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         Ejecuta la funcionalidad de _load_protocol_config.
 
         Returns:
-            Any: Resultado de la ejecuci├│n de la funci├│n.
+            Any: Resultado de la ejecución de la función.
         """
         bpm = 60
         pulse_count = 30
@@ -909,13 +909,13 @@ class RealTimePlotter(QtWidgets.QWidget):
         Ejecuta la funcionalidad de _setup_ui_layouts.
 
         Returns:
-            Any: Resultado de la ejecuci├│n de la funci├│n.
+            Any: Resultado de la ejecución de la función.
         """
         self.main_layout = QtWidgets.QVBoxLayout()
         self.setLayout(self.main_layout)
         
         self.config_layout = QtWidgets.QGridLayout()
-        self.config_groupbox = QtWidgets.QGroupBox("Configuraci├│n de Adquisici├│n")
+        self.config_groupbox = QtWidgets.QGroupBox("Configuración de Adquisición")
         self.config_groupbox.setLayout(self.config_layout)
         
         self.filter_layout = QtWidgets.QHBoxLayout()
@@ -933,15 +933,15 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.spectrogram_groupbox.setLayout(self.spectrogram_layout)
 
     def _setup_ui_config_panel(self):
-        """Configura el panel superior de adquisici├│n."""
+        """Configura el panel superior de adquisición."""
         self.label_device = QtWidgets.QLabel("Dispositivo:")
         self.cmb_device = QtWidgets.QComboBox()
         self.cmb_device.addItems(["Dev1", "Dev2", "Dev3"])
 
         # --- NUEVO: Checkbox para Modo Prueba ---
         
-        self.chk_use_mic = QtWidgets.QCheckBox("Usar Micr├│fono (Prueba en Casa)")
-        self.chk_use_mic.setToolTip("Usa el micr├│fono de la PC en lugar de la DAQ.")
+        self.chk_use_mic = QtWidgets.QCheckBox("Usar Micrófono (Prueba en Casa)")
+        self.chk_use_mic.setToolTip("Usa el micrófono de la PC en lugar de la DAQ.")
 
         self.chk_modo_prueba = QtWidgets.QCheckBox("Modo Prueba")
         self.chk_modo_prueba.setToolTip("Usa datos simulados en lugar de la tarjeta NI-DAQ.")
@@ -951,10 +951,10 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.cmb_fuente_prueba.setEnabled(False)
         self.cmb_fuente_prueba.setToolTip("Elige si simular con onda senoidal o cargar 'grabacion.csv' de la carpeta 'senal_de_prueba'")
 
-        # --- NUEVO: Checkbox para el Metr├│nomo ---
-        self.chk_use_metronome = QtWidgets.QCheckBox("Usar Metr├│nomo")
+        # --- NUEVO: Checkbox para el Metrónomo ---
+        self.chk_use_metronome = QtWidgets.QCheckBox("Usar Metrónomo")
         self.chk_use_metronome.setChecked(True) # Siempre activo por defecto
-        self.chk_use_metronome.setToolTip("Abre y controla el metr├│nomo visual durante la adquisici├│n.")
+        self.chk_use_metronome.setToolTip("Abre y controla el metrónomo visual durante la adquisición.")
 
         # --- NUEVO: Control de Frecuencia de Prueba ---
         self.label_test_freq = QtWidgets.QLabel("Frec. Prueba (Hz):")
@@ -966,7 +966,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.cmb_sample_rate.addItems(["2000", "6000", "10000", "20000", "44100", "50000"])
         self.cmb_sample_rate.setCurrentText("2000")
 
-        self.label_plot_duration = QtWidgets.QLabel("Duraci├│n Plot (s):")
+        self.label_plot_duration = QtWidgets.QLabel("Duración Plot (s):")
         self.spin_plot_duration = SpinBox(value=10, step=1, bounds=(1, 60), int=True)
         self.spin_plot_duration.setFixedWidth(80)
 
@@ -987,7 +987,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         if not any_checked and self.channel_checkboxes:
             self.channel_checkboxes[0].setChecked(True)
 
-        self.btn_start_acq = QtWidgets.QPushButton("Iniciar Adquisici├│n")
+        self.btn_start_acq = QtWidgets.QPushButton("Iniciar Adquisición")
         self.btn_start_acq.setStyleSheet(self.BTN_START_STYLE)
 
         # --- NUEVO: Controles de Protocolo ---
@@ -1020,13 +1020,13 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.config_layout.addLayout(self.channel_layout, 2, 1, 1, 4) # row, col, rowspan, colspan
         
         # --- NUEVO: Control de Modo Terminal ---
-        self.label_terminal_config = QtWidgets.QLabel("ÔÜí CONEXI├ôN DAQ (Voltaje):")
+        self.label_terminal_config = QtWidgets.QLabel("⚡ CONEXIÓN DAQ (Voltaje):")
         self.label_terminal_config.setStyleSheet("color: #FFFF00; font-weight: bold; font-size: 13px;")
         self.cmb_terminal_config = QtWidgets.QComboBox()
         self.cmb_terminal_config.setStyleSheet("background-color: #000000; color: #FFFF00; border: 2px solid #FFFF00; font-size: 14px; font-weight: bold; padding: 4px;")
         self.cmb_terminal_config.addItems(["RSE", "DIFF", "NRSE", "DEFAULT"])
         self.cmb_terminal_config.setCurrentText("RSE")
-        self.cmb_terminal_config.setToolTip("Modo de conexi├│n a tierra. Usa 'DIFF' si tienes mucho ruido de 50 Hz.")
+        self.cmb_terminal_config.setToolTip("Modo de conexión a tierra. Usa 'DIFF' si tienes mucho ruido de 50 Hz.")
         self.config_layout.addWidget(self.label_terminal_config, 3, 0)
         self.config_layout.addWidget(self.cmb_terminal_config, 3, 1)
 
@@ -1036,7 +1036,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         """Configura el panel de filtro."""
         self.chk_notch_enable = QtWidgets.QCheckBox("Filtro Notch 50 Hz")
         self.chk_notch_enable.setChecked(True) # Filtro Notch por predeterminado
-        self.chk_notch_enable.setToolTip("Aplica un filtro para eliminar el ruido de la red el├®ctrica (50 Hz).")
+        self.chk_notch_enable.setToolTip("Aplica un filtro para eliminar el ruido de la red eléctrica (50 Hz).")
 
         self.chk_filter_enable = QtWidgets.QCheckBox("Habilitar Filtro")
         self.chk_filter_enable.setChecked(True) # Filtro Pasa-Banda habilitado por defecto
@@ -1062,13 +1062,13 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.filter_layout.addStretch(1)
 
     def _setup_ui_controls(self):
-        """Configura los controles de grabaci├│n, trigger y mediciones."""
+        """Configura los controles de grabación, trigger y mediciones."""
         
-        self.btn_autoforge = QtWidgets.QPushButton("­ƒöÑ Autograbado")
+        self.btn_autoforge = QtWidgets.QPushButton("🔥 Autograbado")
         self.btn_autoforge.setStyleSheet("background-color: #ff0055; color: white; font-weight: bold; font-family: 'Courier New'; font-size: 14px; padding: 8px; border: 2px solid #ff0055; border-radius: 4px;")
         self.btn_autoforge.clicked.connect(self.iniciar_autoforge)
 
-        self.btn_autoforge_continuo = QtWidgets.QPushButton("­ƒöÑ Secuencia Continua")
+        self.btn_autoforge_continuo = QtWidgets.QPushButton("🔥 Secuencia Continua")
         self.btn_autoforge_continuo.setStyleSheet("background-color: #aa00ff; color: white; font-weight: bold; font-family: 'Courier New'; font-size: 14px; padding: 8px; border: 2px solid #aa00ff; border-radius: 4px;")
         self.btn_autoforge_continuo.clicked.connect(self.iniciar_autoforge_continuo)
 
@@ -1096,18 +1096,18 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.chk_trigger = QtWidgets.QCheckBox("Habilitar Trigger")
         self.label_trig_chan = QtWidgets.QLabel("Canal:")
         self.cmb_trig_chan = QtWidgets.QComboBox()
-        # Se poblar├í al iniciar la adquisici├│n
+        # Se poblará al iniciar la adquisición
         
-        self.label_trig_level = QtWidgets.QLabel("Nivel (┬ÁV):")
+        self.label_trig_level = QtWidgets.QLabel("Nivel (µV):")
         self.spin_trig_level = SpinBox(value=1000.0, step=100.0, dec=True, minStep=1.0, bounds=(-20000.0, 20000.0))
         self.spin_trig_level.setFixedWidth(80)
         
         self.label_trig_edge = QtWidgets.QLabel("Flanco:")
         self.cmb_trig_edge = QtWidgets.QComboBox()
-        self.cmb_trig_edge.addItems(["Subida Ôåù", "Bajada Ôåÿ"])
+        self.cmb_trig_edge.addItems(["Subida ↗", "Bajada ↘"])
         
         # --- NUEVO: Umbral para SNR ---
-        self.label_peak_th = QtWidgets.QLabel("Umbral Picos SNR (┬ÁV):")
+        self.label_peak_th = QtWidgets.QLabel("Umbral Picos SNR (µV):")
         self.spin_peak_th = SpinBox(value=200.0, step=50.0, bounds=(0.0, 20000.0), dec=True)
         self.spin_peak_th.setFixedWidth(80)
 
@@ -1157,14 +1157,14 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.autoforge_overlay.setStyleSheet("background-color: rgba(10, 5, 20, 180); color: #FF0055; font-family: 'Courier New', monospace; font-size: 75px; font-weight: 900; text-shadow: 2px 2px 5px #00FFFF; padding: 20px; border: 4px solid #00FFFF;")
         self.autoforge_overlay.hide()
         
-        # Hacemos que cambie de tama├▒o junto con plot_widget
+        # Hacemos que cambie de tamaño junto con plot_widget
         self.plot_widget.installEventFilter(self)
 
         self.plot_widget.setBackground('k') # Fondo Negro
         
-        self.plot = self.plot_widget.addPlot(title="Canales de Adquisici├│n")
+        self.plot = self.plot_widget.addPlot(title="Canales de Adquisición")
         self.plot.setLabel('bottom', 'Tiempo (s)')
-        self.plot.setLabel('left', 'Amplitud (┬ÁV)')
+        self.plot.setLabel('left', 'Amplitud (µV)')
 
         # Widget para el espectrograma (ImageView)
         self.spectrogram_view = pg.ImageView()
@@ -1183,22 +1183,22 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.plot.setDownsampling(auto=True, mode='peak')
         self.plot.autoBtn.setVisible(True)
 
-        # --- L├¡mites de Zoom/Pan (v3.11) ---
+        # --- Límites de Zoom/Pan (v3.11) ---
         self.plot.getViewBox().setLimits(
             xMin=-self.spin_plot_duration.value(), # Usa el valor inicial del spinbox
-            minXRange=1e-6 # 1 microsegundo de zoom m├íximo
+            minXRange=1e-6 # 1 microsegundo de zoom máximo
         )
 
-        # --- L├¡nea de Trigger ---
+        # --- Línea de Trigger ---
         self.trigger_line = InfiniteLine(pos=1000.0, angle=0, movable=True, pen=pg.mkPen('r', width=2, style=QtCore.Qt.DashLine))
         self.plot.addItem(self.trigger_line)
         # --- NUEVO: Etiqueta de texto para el valor del trigger ---
         self.trigger_label = pg.TextItem(anchor=(0, 1), color=(255, 255, 0), fill=(0, 0, 0, 150))
-        self.trigger_label.setZValue(100) # Asegurar que est├® por encima de las curvas
+        self.trigger_label.setZValue(100) # Asegurar que esté por encima de las curvas
         self.trigger_label.hide() # Oculto por defecto
         self.plot.addItem(self.trigger_label)
         
-        # --- NUEVO: L├¡neas de Umbral SNR ---
+        # --- NUEVO: Líneas de Umbral SNR ---
         self.peak_th_line_pos = InfiniteLine(pos=200.0, angle=0, movable=True, pen=pg.mkPen('c', width=1.5, style=QtCore.Qt.DashLine))
         self.peak_th_line_neg = InfiniteLine(pos=-200.0, angle=0, movable=True, pen=pg.mkPen('c', width=1.5, style=QtCore.Qt.DashLine))
         self.plot.addItem(self.peak_th_line_pos)
@@ -1207,7 +1207,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         # --- NUEVO: Texto de Cuenta Regresiva ---
         self.countdown_text = pg.TextItem(text="", color=(0, 255, 255), anchor=(0.5, 0.5))
         font = QtGui.QFont()
-        font.setPixelSize(80) # Un poco m├ís peque├▒o para evitar clipping OpenGL
+        font.setPixelSize(80) # Un poco más pequeño para evitar clipping OpenGL
         font.setBold(True)
         self.countdown_text.setFont(font)
         self.countdown_text.setZValue(10000) # Traer al frente
@@ -1216,19 +1216,19 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     def _setup_ui_final_layout(self):
         
-        # --- NUEVO: Divisor para los gr├íficos ---
+        # --- NUEVO: Divisor para los gráficos ---
         """
         Ejecuta la funcionalidad de _setup_ui_final_layout.
 
         Returns:
-            Any: Resultado de la ejecuci├│n de la funci├│n.
+            Any: Resultado de la ejecución de la función.
         """
         self.splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
         self.splitter.addWidget(self.plot_widget)
         self.splitter.addWidget(self.spectrogram_view)
-        self.splitter.setSizes([600, 200]) # Tama├▒os iniciales
+        self.splitter.setSizes([600, 200]) # Tamaños iniciales
 
-        # --- NUEVO: QStackedWidget para ocultar Configuraci├│n durante grabaci├│n ---
+        # --- NUEVO: QStackedWidget para ocultar Configuración durante grabación ---
         self.config_stack = QtWidgets.QStackedWidget()
         self.config_stack.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
         self.config_stack.addWidget(self.config_groupbox)
@@ -1249,24 +1249,24 @@ class RealTimePlotter(QtWidgets.QWidget):
         
         self.config_stack.addWidget(self.empty_recording_widget)
 
-        # --- A├▒adir layouts a la ventana ---
+        # --- Añadir layouts a la ventana ---
         self.main_layout.addWidget(self.config_stack) # Reemplaza a config_groupbox
         self.main_layout.addWidget(self.filter_groupbox)
         self.main_layout.addLayout(self.button_layout)
         self.main_layout.addLayout(self.trigger_layout)
         self.main_layout.addWidget(self.measure_widget)
-        self.main_layout.addWidget(self.spectrogram_groupbox) # A├▒adir controles del espectrograma
+        self.main_layout.addWidget(self.spectrogram_groupbox) # Añadir controles del espectrograma
         
-        self.main_layout.addWidget(self.splitter) # A├▒adir el divisor con los gr├íficos
+        self.main_layout.addWidget(self.splitter) # Añadir el divisor con los gráficos
 
     def _connect_signals(self):
         
-        # --- Conectar Se├▒ales (Botones) ---
+        # --- Conectar Señales (Botones) ---
         """
         Ejecuta la funcionalidad de _connect_signals.
 
         Returns:
-            Any: Resultado de la ejecuci├│n de la funci├│n.
+            Any: Resultado de la ejecución de la función.
         """
         self.btn_start_acq.clicked.connect(self.on_start_acq_click)
         self.btn_record.clicked.connect(self.on_record_click)
@@ -1275,11 +1275,11 @@ class RealTimePlotter(QtWidgets.QWidget):
         # --- Conectar Widgets del Trigger ---
         self.chk_trigger.clicked.connect(self.on_trigger_enable_toggle)
         self.trigger_line.sigPositionChanged.connect(self.on_trigger_line_moved)
-        # --- CORREGIDO: Conectar aqu├¡ la se├▒al para ocultar la etiqueta ---
+        # --- CORREGIDO: Conectar aquí la señal para ocultar la etiqueta ---
         self.trigger_line.sigPositionChangeFinished.connect(lambda: self.trigger_label.hide())
         self.spin_trig_level.valueChanged.connect(self.on_trigger_level_changed)
         
-        # --- NUEVO: Conectar Se├▒ales de Umbral SNR ---
+        # --- NUEVO: Conectar Señales de Umbral SNR ---
         self.peak_th_line_pos.sigPositionChanged.connect(self.on_peak_th_line_pos_moved)
         self.peak_th_line_neg.sigPositionChanged.connect(self.on_peak_th_line_neg_moved)
         self.spin_peak_th.valueChanged.connect(self.on_peak_th_changed)
@@ -1312,13 +1312,13 @@ class RealTimePlotter(QtWidgets.QWidget):
                 self.colores_curvas.append("#0074D9")
                 self.nombres_musculos.append(f"Canal {i}")
 
-    # --- NUEVO: Cambio de modo de conexi├│n en tiempo real ---
+    # --- NUEVO: Cambio de modo de conexión en tiempo real ---
     def on_terminal_mode_changed(self):
         """
         Ejecuta la funcionalidad de on_terminal_mode_changed.
 
         Returns:
-            Any: Resultado de la ejecuci├│n de la funci├│n.
+            Any: Resultado de la ejecución de la función.
         """
         if self.is_acquiring and not self.chk_modo_prueba.isChecked() and NIDAQMX_DISPONIBLE:
             print(f"Cambiando modo terminal a {self.cmb_terminal_config.currentText()} en tiempo real...")
@@ -1341,7 +1341,7 @@ class RealTimePlotter(QtWidgets.QWidget):
             }
             terminal_config_val = terminal_modes.get(terminal_config_str, TerminalConfiguration.DEFAULT)
             
-            # 4. Reiniciar el hilo inmediatamente con la nueva configuraci├│n
+            # 4. Reiniciar el hilo inmediatamente con la nueva configuración
             self.stop_event.clear()
             chunk_samples_dinamico = int(self.SAMPLE_RATE * 0.05)
             self.acquisition_thread = threading.Thread(
@@ -1389,14 +1389,14 @@ class RealTimePlotter(QtWidgets.QWidget):
         Ejecuta la funcionalidad de on_start_acq_click.
 
         Returns:
-            Any: Resultado de la ejecuci├│n de la funci├│n.
+            Any: Resultado de la ejecución de la función.
         """
         if self.is_acquiring:
-            # --- DETENER ADQUISICI├ôN ---
-            print("Deteniendo adquisici├│n...")
+            # --- DETENER ADQUISICIÓN ---
+            print("Deteniendo adquisición...")
             self.stop_event.set()
             
-            # --- NUEVO: Abortar AutoForge o grabaci├│n activa ---
+            # --- NUEVO: Abortar AutoForge o grabación activa ---
             self.is_autoforge_running = False
             self.is_autoforge_continuo = False
             if hasattr(self, 'autoforge_overlay'):
@@ -1404,21 +1404,21 @@ class RealTimePlotter(QtWidgets.QWidget):
             if getattr(self, 'is_recording', False):
                 self.on_record_click()
             
-            # --- MEJORA: Detener el metr├│nomo solo si el proceso todav├¡a existe ---
+            # --- MEJORA: Detener el metrónomo solo si el proceso todavía existe ---
             if self.metronome_process and self.metronome_process.poll() is None:
                 try:
-                    print("Enviando comando STOP_APP al metr├│nomo...")
+                    print("Enviando comando STOP_APP al metrónomo...")
                     self.metronome_process.stdin.write("STOP_APP\n")
                     self.metronome_process.stdin.flush()
                 except (OSError, ValueError) as e:
-                    # Captura errores si la tuber├¡a (pipe) ya est├í cerrada.
-                    print(f"Advertencia: No se pudo comunicar con el proceso del metr├│nomo (puede que ya estuviera cerrado). Error: {e}")
+                    # Captura errores si la tubería (pipe) ya está cerrada.
+                    print(f"Advertencia: No se pudo comunicar con el proceso del metrónomo (puede que ya estuviera cerrado). Error: {e}")
             
             if self.metronome_process:
                 try:
                     self.metronome_process.wait(timeout=2) # Esperar a que se cierre solo
                 except subprocess.TimeoutExpired:
-                    print("Advertencia: El metr├│nomo no se cerr├│ a tiempo. Forzando cierre...")
+                    print("Advertencia: El metrónomo no se cerró a tiempo. Forzando cierre...")
                     self.metronome_process.kill()
                 self.metronome_process = None
 
@@ -1430,13 +1430,13 @@ class RealTimePlotter(QtWidgets.QWidget):
                     pass
                 self.word_window_process = None
 
-            self._on_modo_prueba_toggled(self.chk_modo_prueba.isChecked()) # Restaurar estado de habilitaci├│n
+            self._on_modo_prueba_toggled(self.chk_modo_prueba.isChecked()) # Restaurar estado de habilitación
             if self.acquisition_thread:
                 self.acquisition_thread.join(timeout=2.0)
             self.acquisition_thread = None
             self.is_acquiring = False
             
-            self.btn_start_acq.setText("Iniciar Adquisici├│n")
+            self.btn_start_acq.setText("Iniciar Adquisición")
             self.btn_start_acq.setStyleSheet(self.BTN_START_STYLE)
             self.cmb_device.setEnabled(True)
             self.cmb_terminal_config.setEnabled(True)
@@ -1455,20 +1455,20 @@ class RealTimePlotter(QtWidgets.QWidget):
             self.plot.setMouseEnabled(x=True, y=True)
 
         else:
-            # --- INICIAR ADQUISICI├ôN ---
+            # --- INICIAR ADQUISICIÓN ---
             device = self.cmb_device.currentText()
             
-            # Leer nuevos par├ímetros de la GUI
+            # Leer nuevos parámetros de la GUI
             self.SAMPLE_RATE = int(self.cmb_sample_rate.currentText())
             
-            # --- NUEVO: Si se usa el micr├│fono, forzar el sample rate correcto ANTES de crear el b├║fer visual ---
+            # --- NUEVO: Si se usa el micrófono, forzar el sample rate correcto ANTES de crear el búfer visual ---
             if getattr(self, 'chk_use_mic', None) and self.chk_use_mic.isChecked():
                 self.SAMPLE_RATE = 44100
                 
             self.PLOT_DURATION_S = self.spin_plot_duration.value()
             self.PLOT_SAMPLES = int(self.PLOT_DURATION_S * self.SAMPLE_RATE)
             
-            # --- MEJORA: Calcular el b├║fer din├ímicamente ---
+            # --- MEJORA: Calcular el búfer dinámicamente ---
             # Un chunk de 50ms garantiza actualizaciones de pantalla fluidas (20 FPS)
             chunk_samples_dinamico = int(self.SAMPLE_RATE * 0.05)
             self.CHUNK_DURATION_S = chunk_samples_dinamico / self.SAMPLE_RATE
@@ -1497,14 +1497,14 @@ class RealTimePlotter(QtWidgets.QWidget):
             print(f"Iniciando con SR={self.SAMPLE_RATE}, Plot={self.PLOT_DURATION_S}s, Canales={self.CANALES_DAQ}, Terminal={terminal_config_str}")
 
             # --- NUEVO: Vaciar la cola de datos antes de empezar ---
-            # Esto previene que datos de una adquisici├│n anterior (con diferente N de canales)
-            # se procesen en la nueva adquisici├│n, causando un ValueError.
+            # Esto previene que datos de una adquisición anterior (con diferente N de canales)
+            # se procesen en la nueva adquisición, causando un ValueError.
             while not self.data_queue.empty(): self.data_queue.get_nowait()
 
             # Limpiar y re-crear elementos de la GUI
             self.setup_gui_for_channels()
 
-            # --- NUEVO: Lanzar el metr├│nomo si est├í seleccionado ---
+            # --- NUEVO: Lanzar el metrónomo si está seleccionado ---
             if self.chk_use_metronome.isChecked():
                 self._save_metronome_config() # Guardar el BPM actual antes de lanzar
                 try:
@@ -1513,8 +1513,8 @@ class RealTimePlotter(QtWidgets.QWidget):
                         script_path = 'acquisition/metronomo_visual.py'
                     else:
                         script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'metronomo_visual.py')
-                    print("Lanzando metr├│nomo con --autostart...")
-                    # --- MODIFICADO: A├▒adir stdin=subprocess.PIPE para poder enviarle comandos ---
+                    print("Lanzando metrónomo con --autostart...")
+                    # --- MODIFICADO: Añadir stdin=subprocess.PIPE para poder enviarle comandos ---
                     self.metronome_process = subprocess.Popen(
                         [python_executable, script_path, '--autostart', '--count'],
                         stdin=subprocess.PIPE,
@@ -1523,7 +1523,7 @@ class RealTimePlotter(QtWidgets.QWidget):
                         text=True # Para enviar texto en lugar de bytes
                     )
                 except Exception as e:
-                    print(f"Error al lanzar el metr├│nomo: {e}")
+                    print(f"Error al lanzar el metrónomo: {e}")
                     self.metronome_process = None
 
             # Iniciar hilo
@@ -1549,12 +1549,12 @@ class RealTimePlotter(QtWidgets.QWidget):
             # --- NUEVO: Preparar el auto-ajuste de barras al iniciar ---
             self.needs_auto_threshold = True
             self.acq_start_time = time.perf_counter()
-            self._raw_print_done = False # Para imprimir el voltaje RAW de depuraci├│n
+            self._raw_print_done = False # Para imprimir el voltaje RAW de depuración
             
-            # --- CORRECCI├ôN: Inicializar filtros ahora que is_acquiring es True ---
+            # --- CORRECCIÓN: Inicializar filtros ahora que is_acquiring es True ---
             self.on_filter_settings_changed()
             
-            self.btn_start_acq.setText("Detener Adquisici├│n")
+            self.btn_start_acq.setText("Detener Adquisición")
             self.btn_start_acq.setStyleSheet(self.BTN_STOP_STYLE)
             self.cmb_device.setEnabled(False)
             # self.cmb_terminal_config.setEnabled(False) # <-- ELIMINADO para poder cambiar en vivo
@@ -1566,13 +1566,13 @@ class RealTimePlotter(QtWidgets.QWidget):
             for chk in self.channel_checkboxes: chk.setEnabled(False)
             
             self.set_controls_enabled(True)
-            self.on_autoscroll_toggle() # Restaura el estado del mouse seg├║n el Auto-scroll
+            self.on_autoscroll_toggle() # Restaura el estado del mouse según el Auto-scroll
 
     def _save_metronome_config(self):
-        """Guarda el valor actual de BPM en el archivo de configuraci├│n del metr├│nomo."""
+        """Guarda el valor actual de BPM en el archivo de configuración del metrónomo."""
         try:
             current_bpm = self.spin_bpm.value()
-            # Leemos la configuraci├│n existente para no perder el `last_beat_count`.
+            # Leemos la configuración existente para no perder el `last_beat_count`.
             config_data = {}
             if os.path.exists('metronome_config.json'):
                 with open('metronome_config.json', 'r', encoding='utf-8') as f:
@@ -1583,10 +1583,10 @@ class RealTimePlotter(QtWidgets.QWidget):
                 json.dump(config_data, f, indent=4)
             print(f"Actualizado BPM en metronome_config.json a: {current_bpm}")
         except Exception as e:
-            print(f"Advertencia: No se pudo guardar el BPM para el metr├│nomo. Error: {e}")
+            print(f"Advertencia: No se pudo guardar el BPM para el metrónomo. Error: {e}")
 
     def setup_gui_for_channels(self):
-        """Limpia y re-crea los elementos de la GUI que dependen del n├║mero de canales."""
+        """Limpia y re-crea los elementos de la GUI que dependen del número de canales."""
         # Limpiar curvas, labels de medida y combo de trigger
         for curva in self.curvas: self.plot.removeItem(curva)
         for line in getattr(self, 'noise_lines', []): self.plot.removeItem(line)
@@ -1615,11 +1615,11 @@ class RealTimePlotter(QtWidgets.QWidget):
             self.plot.scene().removeItem(self.plot.legend)
             self.plot.legend = None
             
-        self.plot.getViewBox().setLimits(xMin=-self.PLOT_DURATION_S) # Actualizar l├¡mite de zoom
+        self.plot.getViewBox().setLimits(xMin=-self.PLOT_DURATION_S) # Actualizar límite de zoom
         self.plot.addLegend()
         
         # Re-crear elementos
-        # Limpiar el layout de mediciones antes de a├▒adir nuevos elementos
+        # Limpiar el layout de mediciones antes de añadir nuevos elementos
         while self.measure_layout.count():
             item = self.measure_layout.takeAt(0)
             if item.widget():
@@ -1638,7 +1638,7 @@ class RealTimePlotter(QtWidgets.QWidget):
             musculo = self.nombres_musculos[i % len(self.nombres_musculos)]
             self.curvas.append(self.plot.plot(pen=color, name=musculo))
             
-            # --- NUEVO: L├¡nea de piso de ruido ---
+            # --- NUEVO: Línea de piso de ruido ---
             line_ruido = pg.InfiniteLine(angle=0, pen=pg.mkPen('r', width=4, style=QtCore.Qt.DashLine))
             line_ruido.hide()
             self.plot.addItem(line_ruido)
@@ -1656,12 +1656,12 @@ class RealTimePlotter(QtWidgets.QWidget):
             self.plot.addItem(region_ruido)
             self.noise_regions.append(region_ruido)
             
-            # --- NUEVO: Marcador visual para el pico m├íximo (SNR) ---
+            # --- NUEVO: Marcador visual para el pico máximo (SNR) ---
             scatter = pg.ScatterPlotItem(size=12, pen=pg.mkPen('w', width=1.5), brush=pg.mkBrush(color))
             self.plot.addItem(scatter)
             self.peak_scatters.append(scatter)
             
-            # --- NUEVO: L├¡neas din├ímicas de ruido inter-pulso ---
+            # --- NUEVO: Líneas dinámicas de ruido inter-pulso ---
             dyn_line_p = pg.InfiniteLine(angle=0, pen=pg.mkPen('g', width=2, style=QtCore.Qt.DotLine))
             dyn_line_p.hide()
             self.plot.addItem(dyn_line_p)
@@ -1672,19 +1672,19 @@ class RealTimePlotter(QtWidgets.QWidget):
             self.plot.addItem(dyn_line_n)
             self.dynamic_noise_lines_neg.append(dyn_line_n)
 
-            # --- NUEVO: Crear un QFrame para cada medici├│n ---
+            # --- NUEVO: Crear un QFrame para cada medición ---
             measurement_frame = QtWidgets.QFrame()
             measurement_frame.setStyleSheet("background-color: #050505; border: 2px solid #00FFFF; border-radius: 5px;")
             
             frame_layout = QtWidgets.QVBoxLayout(measurement_frame)
             frame_layout.setContentsMargins(5, 5, 5, 5) # Padding interno
             
-            label = QtWidgets.QLabel(f"<b>{musculo}:</b> -- ┬ÁVp-p, -- ┬ÁVrms")
+            label = QtWidgets.QLabel(f"<b>{musculo}:</b> -- µVp-p, -- µVrms")
             label.setStyleSheet(f"color: {pg.mkColor(color).name()}; font-size: 14px; font-weight: bold; background-color: transparent; border: none;")
             frame_layout.addWidget(label)
             
             # --- NUEVO: Etiqueta para el tester de ruido ---
-            label_ruido = QtWidgets.QLabel("Ruido inter-pulso: Esperando grabaci├│n...")
+            label_ruido = QtWidgets.QLabel("Ruido inter-pulso: Esperando grabación...")
             label_ruido.setStyleSheet("color: gray; font-size: 11px; background-color: transparent;")
             frame_layout.addWidget(label_ruido)
             self.noise_status_labels.append(label_ruido)
@@ -1695,7 +1695,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.cmb_trig_chan.addItems([f"{i}" for i in range(self.NUM_CANALES)])
         self.cmb_spectrogram_chan.addItems([f"{i}" for i in range(self.NUM_CANALES)])
         
-        # Inicializar buffers con el tama├▒o correcto
+        # Inicializar buffers con el tamaño correcto
         self.plot_buffer_datos = np.zeros((self.NUM_CANALES, self.PLOT_SAMPLES))
         self.plot_vector_tiempo = np.linspace(-self.PLOT_DURATION_S, 0, self.PLOT_SAMPLES)
         self.trigger_last_values = np.zeros(self.NUM_CANALES)
@@ -1707,10 +1707,10 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.spectrogram_buffer = np.zeros((self.SPECTROGRAM_HISTORY_LEN, self.CURRENT_FFT_LEN // 2 + 1))
         self.on_spectrogram_enable_toggle() # Para mostrar/ocultar la vista
 
-        # --- CORRECCI├ôN v3: Configurar la transformaci├│n del espectrograma una sola vez ---
+        # --- CORRECCIÓN v3: Configurar la transformación del espectrograma una sola vez ---
         # En lugar de pasar 'scale' en cada llamada a setImage, lo que puede ser propenso a errores,
-        # configuramos la transformaci├│n directamente en el ViewBox del ImageView.
-        # Esto es m├ís eficiente y robusto.
+        # configuramos la transformación directamente en el ViewBox del ImageView.
+        # Esto es más eficiente y robusto.
         view = self.spectrogram_view.getView()
         
         # Eje Y (Frecuencia): Va de 0 a Frecuencia de Nyquist.
@@ -1722,7 +1722,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         time_per_column = (self.CURRENT_FFT_LEN - (self.CURRENT_FFT_LEN // 2)) / self.SAMPLE_RATE
         time_scale = time_per_column
 
-        view.setAspectLocked(False) # Desbloquear la relaci├│n de aspecto para escalar ejes independientemente
+        view.setAspectLocked(False) # Desbloquear la relación de aspecto para escalar ejes independientemente
         view.setRange(xRange=(0, self.SPECTROGRAM_HISTORY_LEN * time_scale), yRange=(0, nyquist), padding=0)
 
 
@@ -1739,7 +1739,7 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     def on_spectrogram_channel_change(self, index):
         """Cambia el canal que se usa para el espectrograma y limpia el buffer."""
-        # --- CORRECCI├ôN: Asegurarse de que el buffer existe antes de limpiarlo ---
+        # --- CORRECCIÓN: Asegurarse de que el buffer existe antes de limpiarlo ---
         if self.spectrogram_buffer is None:
             return
         self.spectrogram_channel_index = index
@@ -1747,17 +1747,17 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     # --- NUEVO: FUNCIONES DEL FILTRO ---
     def on_filter_settings_changed(self):
-        """Se llama al cambiar cualquier ajuste del filtro. Redise├▒a el filtro y resetea su estado."""
+        """Se llama al cambiar cualquier ajuste del filtro. Rediseña el filtro y resetea su estado."""
         is_filter_enabled = self.chk_filter_enable.isChecked()
         self.spin_low_cut.setEnabled(is_filter_enabled)
         self.spin_high_cut.setEnabled(is_filter_enabled)
 
-        # --- L├│gica para el filtro Pasa-Banda ---
+        # --- Lógica para el filtro Pasa-Banda ---
         if is_filter_enabled and self.is_acquiring and SCIPY_DISPONIBLE:
             low_cut = self.spin_low_cut.value()
             high_cut = self.spin_high_cut.value()
 
-            # Validaci├│n simple de frecuencias
+            # Validación simple de frecuencias
             if low_cut >= high_cut:
                 print(f"Advertencia de filtro: Frec. Baja ({low_cut} Hz) debe ser menor que Frec. Alta ({high_cut} Hz).")
                 self.filter_sos = None
@@ -1776,22 +1776,22 @@ class RealTimePlotter(QtWidgets.QWidget):
                 # El estado inicial para un canal tiene forma (n_sections, 2).
                 # Para N canales, la forma correcta del array de estados es (n_sections, 2, N_CANALES).
                 zi_single_channel = signal.sosfilt_zi(self.filter_sos)
-                # Replicamos el estado para cada canal en la dimensi├│n correcta.
+                # Replicamos el estado para cada canal en la dimensión correcta.
                 self.filter_zi = np.stack([zi_single_channel] * self.NUM_CANALES, axis=-1)
         else:
             # --- Deshabilitar filtro pasa-banda ---
             self.filter_sos = None
             self.filter_zi = None
 
-        # --- NUEVO: L├│gica para el filtro Notch ---
+        # --- NUEVO: Lógica para el filtro Notch ---
         is_notch_enabled = self.chk_notch_enable.isChecked()
         if is_notch_enabled and self.is_acquiring and SCIPY_DISPONIBLE:
-            # Dise├▒ar filtro Notch para 50 Hz
+            # Diseñar filtro Notch para 50 Hz
             f0 = 50.0  # Frecuencia a remover
             Q = 2.0    # Factor de calidad
             
-            # --- CORRECCI├ôN DE COMPATIBILIDAD ---
-            # La versi├│n de SciPy del usuario no soporta `output='sos'`.
+            # --- CORRECCIÓN DE COMPATIBILIDAD ---
+            # La versión de SciPy del usuario no soporta `output='sos'`.
             # Se genera el filtro en formato (b, a) y se convierte a SOS.
             b, a = signal.iirnotch(f0, Q, fs=self.SAMPLE_RATE)
             self.notch_sos = signal.tf2sos(b, a)
@@ -1807,7 +1807,7 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     # --- FUNCIONES v3.7 (Trigger) ---
     def on_trigger_enable_toggle(self):
-        """Habilita o deshabilita la l├│gica del trigger y la UI."""
+        """Habilita o deshabilita la lógica del trigger y la UI."""
         enabled = self.chk_trigger.isChecked()
         self.trigger_line.setVisible(enabled)
         self.cmb_trig_chan.setEnabled(enabled)
@@ -1815,10 +1815,10 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.cmb_trig_edge.setEnabled(enabled)
 
     def on_trigger_line_moved(self, line):
-        """Se llama cuando el usuario arrastra la l├¡nea roja."""
+        """Se llama cuando el usuario arrastra la línea roja."""
         # --- NUEVO: Mostrar y actualizar la etiqueta de valor ---
         y_pos = line.value()
-        self.trigger_label.setText(f"Nivel: {y_pos:.1f} ┬ÁV")
+        self.trigger_label.setText(f"Nivel: {y_pos:.1f} µV")
         # Colocar la etiqueta cerca del cursor, en el borde derecho del plot
         x_range = self.plot.getViewBox().viewRange()[0]
         self.trigger_label.setPos(x_range[1] * 0.95, y_pos) # 95% a la derecha
@@ -1834,7 +1834,7 @@ class RealTimePlotter(QtWidgets.QWidget):
             self.trigger_line.setPos(value)
             
     def on_peak_th_line_pos_moved(self, line):
-        """Se llama al arrastrar la l├¡nea de umbral superior (celeste)."""
+        """Se llama al arrastrar la línea de umbral superior (celeste)."""
         val = max(0.001, line.value())
         self.spin_peak_th.blockSignals(True)
         self.spin_peak_th.setValue(val)
@@ -1844,7 +1844,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.peak_th_line_neg.blockSignals(False)
 
     def on_peak_th_line_neg_moved(self, line):
-        """Se llama al arrastrar la l├¡nea de umbral inferior (celeste)."""
+        """Se llama al arrastrar la línea de umbral inferior (celeste)."""
         val = max(0.001, -line.value())
         self.spin_peak_th.blockSignals(True)
         self.spin_peak_th.setValue(val)
@@ -1863,7 +1863,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.peak_th_line_neg.blockSignals(False)
 
     def check_for_trigger(self, new_data, num_new_samples):
-        """Escanea el ├║ltimo chunk de datos en busca de un evento de trigger."""
+        """Escanea el último chunk de datos en busca de un evento de trigger."""
         
         if not self.is_acquiring or self.NUM_CANALES == 0:
             return
@@ -1894,14 +1894,14 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.trigger_last_values = self.plot_buffer_datos[:, -1]
 
     def trigger_fired(self):
-        """┬íSe detect├│ un trigger! Congela y centra el gr├ífico."""
-        print(f"┬íTRIGGER DETECTADO! (t=0)")
+        """¡Se detectó un trigger! Congela y centra el gráfico."""
+        print(f"¡TRIGGER DETECTADO! (t=0)")
         
-        # 1. Congela el gr├ífico
+        # 1. Congela el gráfico
         self.chk_autoscroll.setChecked(False)
         self.on_autoscroll_toggle()
         
-        # 2. Centra el gr├ífico en una ventana de 2 segundos ANTES del trigger
+        # 2. Centra el gráfico en una ventana de 2 segundos ANTES del trigger
         self.plot.setXRange(-2.0, 0.0, padding=0)
         
         # 3. Feedback visual
@@ -1921,7 +1921,7 @@ class RealTimePlotter(QtWidgets.QWidget):
             self.plot.setXRange(-self.PLOT_DURATION_S, 0, padding=0)
             self.plot_widget.setBackground('k') # Color de fondo negro
         else:
-            # MODO AN├üLISIS (Congelado)
+            # MODO ANÁLISIS (Congelado)
             self.plot.setMouseEnabled(x=True, y=True) # Zoom X e Y
             self.plot.getViewBox().enableAutoRange(pg.ViewBox.XAxis)
             self.plot.getViewBox().enableAutoRange(axis=pg.ViewBox.YAxis) # Auto-escala todo al congelar
@@ -1931,7 +1931,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         Ejecuta la funcionalidad de on_record_click.
 
         Returns:
-            Any: Resultado de la ejecuci├│n de la funci├│n.
+            Any: Resultado de la ejecución de la función.
         """
         if not self.is_recording:
             # --- EMPEZAR A GRABAR ---
@@ -1942,7 +1942,7 @@ class RealTimePlotter(QtWidgets.QWidget):
             
             self.counting_started = False # Reiniciar la bandera de conteo
             self.current_recording.clear()
-            self.cmb_terminal_config.setEnabled(False) # <-- NUEVO: Bloquear cambio en plena grabaci├│n
+            self.cmb_terminal_config.setEnabled(False) # <-- NUEVO: Bloquear cambio en plena grabación
             
             # --- NUEVO: Reiniciar variables de ruido ---
             self.noise_data_accumulated = [[] for _ in range(self.NUM_CANALES)]
@@ -1961,7 +1961,7 @@ class RealTimePlotter(QtWidgets.QWidget):
             self.initial_noise_std = [0.0] * self.NUM_CANALES
             self.last_phase = 0.0
             
-            # --- NUEVO: Variables para gr├ífico final de estad├¡sticas ---
+            # --- NUEVO: Variables para gráfico final de estadísticas ---
             self.stats_time = [[] for _ in range(self.NUM_CANALES)]
             self.stats_snr = [[] for _ in range(self.NUM_CANALES)]
             self.stats_noise_mean = [[] for _ in range(self.NUM_CANALES)]
@@ -1977,9 +1977,9 @@ class RealTimePlotter(QtWidgets.QWidget):
                     label.setText("Ruido inter-pulso: Evaluando base...")
                     label.setStyleSheet("color: gray; font-size: 11px; background-color: transparent;")
             
-            self.config_stack.setCurrentIndex(1) # Ocultar configuraci├│n
+            self.config_stack.setCurrentIndex(1) # Ocultar configuración
             
-            # --- NUEVO: Re-lanzar el metr├│nomo con count-in (mismo beep que autograbado) al inicio de grabar ruido ---
+            # --- NUEVO: Re-lanzar el metrónomo con count-in (mismo beep que autograbado) al inicio de grabar ruido ---
             if self.chk_use_metronome.isChecked():
                 if self.metronome_process:
                     try:
@@ -1994,7 +1994,7 @@ class RealTimePlotter(QtWidgets.QWidget):
                     script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'metronomo_visual.py')
                     bpm = self.spin_bpm.value()
                     if bpm <= 0: bpm = 60
-                    print(f"Lanzando metr├│nomo para grabaci├│n con count-in (BPM={bpm}) al inicio de la fase de ruido...")
+                    print(f"Lanzando metrónomo para grabación con count-in (BPM={bpm}) al inicio de la fase de ruido...")
                     
                     pos = self.config_stack.mapToGlobal(QtCore.QPoint(0, 0))
                     metro_x = pos.x()
@@ -2008,66 +2008,66 @@ class RealTimePlotter(QtWidgets.QWidget):
                         text=True
                     )
                 except Exception as e:
-                    print(f"Error al lanzar el metr├│nomo con count-in: {e}")
+                    print(f"Error al lanzar el metrónomo con count-in: {e}")
             
-            self.btn_record.setText("Detener Grabaci├│n")
+            self.btn_record.setText("Detener Grabación")
             self.btn_record.setStyleSheet(self.BTN_REC_STOP_STYLE)
             self.recording_start_time = time.perf_counter()
             self.label_rec_time.setText("Grabando: 00:00.0")
             self.label_rec_time.setVisible(True)
         else:
-            # --- DETENER GRABACI├ôN ---
+            # --- DETENER GRABACIÓN ---
             self.is_recording = False
             self.btn_record.setText("Empezar a Grabar")
             self.btn_record.setStyleSheet(self.BTN_REC_START_STYLE)
             self.label_rec_time.setVisible(False)
-            self.config_stack.setCurrentIndex(0) # Restaurar configuraci├│n
+            self.config_stack.setCurrentIndex(0) # Restaurar configuración
             self.cmb_terminal_config.setEnabled(not self.chk_modo_prueba.isChecked()) # <-- NUEVO: Desbloquear
             self.recording_start_time = None
             
-            # --- MEJORA: Terminar el proceso del metr├│nomo solo si todav├¡a existe ---
+            # --- MEJORA: Terminar el proceso del metrónomo solo si todavía existe ---
             if self.metronome_process and self.metronome_process.poll() is None:
                 try:
-                    print("Enviando comando STOP_APP al metr├│nomo al detener grabaci├│n...")
+                    print("Enviando comando STOP_APP al metrónomo al detener grabación...")
                     self.metronome_process.stdin.write("STOP_APP\n")
                     self.metronome_process.stdin.flush()
                 except (OSError, ValueError) as e:
-                    print(f"Advertencia: No se pudo comunicar con el proceso del metr├│nomo. Error: {e}")
+                    print(f"Advertencia: No se pudo comunicar con el proceso del metrónomo. Error: {e}")
             
             if self.metronome_process:
                 try:
                     self.metronome_process.wait(timeout=2) # Esperar a que el proceso termine
                 except subprocess.TimeoutExpired:
-                    print("Advertencia: El metr├│nomo no se cerr├│ a tiempo. Forzando cierre...")
+                    print("Advertencia: El metrónomo no se cerró a tiempo. Forzando cierre...")
                     self.metronome_process.kill()
                 self.metronome_process = None
 
             if self.current_recording:
-                self.on_export_click() # <-- LLAMADA AUTOM├üTICA A EXPORTAR (AHORA DESPU├ëS DE CERRAR EL METR├ôNOMO)
+                self.on_export_click() # <-- LLAMADA AUTOMÁTICA A EXPORTAR (AHORA DESPUÉS DE CERRAR EL METRÓNOMO)
 
-    # --- MODIFICADO v3.12: Manejo de errores de exportaci├│n individual ---
+    # --- MODIFICADO v3.12: Manejo de errores de exportación individual ---
     def on_export_click(self):
-        # --- MODIFICADO: Usar el nuevo di├ílogo personalizado ---
+        # --- MODIFICADO: Usar el nuevo diálogo personalizado ---
         """
         Ejecuta la funcionalidad de on_export_click.
 
         Returns:
-            Any: Resultado de la ejecuci├│n de la funci├│n.
+            Any: Resultado de la ejecución de la función.
         """
         dialog = SaveMeasurementDialog(self)
-        result = dialog.exec() # Esto muestra el di├ílogo y espera
+        result = dialog.exec() # Esto muestra el diálogo y espera
 
         if result == QtWidgets.QDialog.Accepted:
             measurement_name = dialog.measurement_name
-            # --- NUEVO: Capturar los detalles del di├ílogo ---
+            # --- NUEVO: Capturar los detalles del diálogo ---
             is_formal = dialog.es_formal
             details = {"sujeto": dialog.sujeto, "letra": dialog.letra, "prueba": dialog.prueba}
             comentario = dialog.comentario
         else:
-            measurement_name = None # El usuario cancel├│
+            measurement_name = None # El usuario canceló
 
         if not measurement_name:
-            return # El usuario cancel├│
+            return # El usuario canceló
 
         # Crear la estructura de directorios
         import os
@@ -2080,22 +2080,22 @@ class RealTimePlotter(QtWidgets.QWidget):
         try:
             os.makedirs(output_dir, exist_ok=True)
         except Exception as e:
-            print(f"--- ÔØî ERROR FATAL AL CREAR DIRECTORIO ---\n{e}")
+            print(f"--- ❌ ERROR FATAL AL CREAR DIRECTORIO ---\n{e}")
             return
 
         # --- NUEVO: Crear las carpetas de los canales desde el principio ---
         for i in range(self.NUM_CANALES):
             channel_output_dir = os.path.join(output_dir, f"canal_{i}")
             os.makedirs(channel_output_dir, exist_ok=True)
-        print(f"   Ô£à Creadas {self.NUM_CANALES} carpetas de canal en '{output_dir}'")
+        print(f"   ✅ Creadas {self.NUM_CANALES} carpetas de canal en '{output_dir}'")
 
-        print(f"\n--- INICIANDO EXPORTACI├ôN a la carpeta '{output_dir}' ---")
+        print(f"\n--- INICIANDO EXPORTACIÓN a la carpeta '{output_dir}' ---")
         
         if not self.current_recording:
             print("Error: No hay datos grabados para exportar.")
             return
         
-        # --- NUEVO: Leer el conteo de pulsos desde el archivo de config del metr├│nomo ---
+        # --- NUEVO: Leer el conteo de pulsos desde el archivo de config del metrónomo ---
         pulse_count_from_metronome = None
         if os.path.exists('metronome_config.json'):
             try:
@@ -2104,10 +2104,10 @@ class RealTimePlotter(QtWidgets.QWidget):
                     data = json.load(f)
                     pulse_count_from_metronome = data.get('last_beat_count')
                     if pulse_count_from_metronome is not None:
-                        # --- MENSAJE DE CONFIRMACI├ôN ---
-                        print(f"Ô£à Guardados {pulse_count_from_metronome} pulsos en el metadata.")
+                        # --- MENSAJE DE CONFIRMACIÓN ---
+                        print(f"✅ Guardados {pulse_count_from_metronome} pulsos en el metadata.")
                     else:
-                        print("ÔÜá´©Å No se encontr├│ 'last_beat_count' en metronome_config.json.")
+                        print("⚠️ No se encontró 'last_beat_count' en metronome_config.json.")
             except Exception as e:
                 print(f"Advertencia: No se pudo leer el conteo de pulsos desde metronome_config.json. Error: {e}")
 
@@ -2119,60 +2119,60 @@ class RealTimePlotter(QtWidgets.QWidget):
             "bpm": self.spin_bpm.value(), # BPM se sigue tomando de la GUI del adquisidor
             "noise_seconds": self.spin_noise_duration.value(),
             "pulse_count": pulse_count_from_metronome,
-            # --- NUEVO: A├▒adir los detalles del nombre al metadata ---
+            # --- NUEVO: Añadir los detalles del nombre al metadata ---
             "is_formal": is_formal,
             "sujeto": details["sujeto"],
             "letra": details["letra"],
             "prueba": details["prueba"],
-            "comentario": comentario # <-- NUEVO: A├▒adir el comentario al metadata
+            "comentario": comentario # <-- NUEVO: Añadir el comentario al metadata
         }
-        # --- CORRECCI├ôN: Guardar metadata ├ÜNICAMENTE en la carpeta de cada canal ---
+        # --- CORRECCIÓN: Guardar metadata ÚNICAMENTE en la carpeta de cada canal ---
         for i in range(self.NUM_CANALES):
             current_dir = os.path.join(output_dir, f"canal_{i}")
             metadata_path = os.path.join(current_dir, "metadata.json")
             try:
                 with open(metadata_path, 'w', encoding='utf-8') as f:
                     json.dump(metadata, f, indent=4)
-                print(f"   Ô£à Metadata guardado en: {metadata_path}")
+                print(f"   ✅ Metadata guardado en: {metadata_path}")
             except Exception as e:
-                print(f"--- ÔØî ERROR AL GUARDAR METADATA.JSON en '{current_dir}' ---\n{e}")
+                print(f"--- ❌ ERROR AL GUARDAR METADATA.JSON en '{current_dir}' ---\n{e}")
 
         # 1. Guarda el .wav
         try:
             guardar_grabacion_wav(self.current_recording, self.SAMPLE_RATE, output_dir, self.NUM_CANALES)
         except Exception as e:
-            print(f"--- ÔØî ERROR FATAL AL GUARDAR ARCHIVOS .WAV ---\n{e}")
+            print(f"--- ❌ ERROR FATAL AL GUARDAR ARCHIVOS .WAV ---\n{e}")
 
         # 2. Guarda el .csv
         try:
             guardar_grabacion_csv(self.current_recording, self.SAMPLE_RATE, output_dir, self.NUM_CANALES)
         except Exception as e:
-            print(f"--- ÔØî ERROR FATAL AL GUARDAR .CSV ---\n{e}")
+            print(f"--- ❌ ERROR FATAL AL GUARDAR .CSV ---\n{e}")
 
-        # 3. Genera el gr├ífico .png
+        # 3. Genera el gráfico .png
         try:
             generar_grafico_grabacion(self.current_recording, self.SAMPLE_RATE, output_dir, self.NUM_CANALES, self.CANALES_DAQ)
         except Exception as e:
-            print(f"--- ÔØî ERROR FATAL AL GUARDAR .PNG ---\n{e}")
-            print("   (┬┐Est├ís seguro de que 'matplotlib' est├í instalado? -> pip install matplotlib)")
+            print(f"--- ❌ ERROR FATAL AL GUARDAR .PNG ---\n{e}")
+            print("   (¿Estás seguro de que 'matplotlib' está instalado? -> pip install matplotlib)")
 
-        # 4. Genera el gr├ífico de estad├¡sticas (Evoluci├│n de SNR y Ruido)
+        # 4. Genera el gráfico de estadísticas (Evolución de SNR y Ruido)
         try:
             generar_grafico_estadisticas(self.stats_time, self.stats_snr, self.stats_noise_mean, self.stats_noise_std, output_dir, self.NUM_CANALES, self.CANALES_DAQ)
         except Exception as e:
-            print(f"--- ÔØî ERROR FATAL AL GUARDAR GR├üFICO ESTAD├ìSTICO ---\n{e}")
+            print(f"--- ❌ ERROR FATAL AL GUARDAR GRÁFICO ESTADÍSTICO ---\n{e}")
 
-        print("--- EXPORTACI├ôN FINALIZADA ---")
+        print("--- EXPORTACIÓN FINALIZADA ---")
 
     def actualizar_plot(self):
         """
         Ejecuta la funcionalidad de actualizar_plot.
 
         Returns:
-            Any: Resultado de la ejecuci├│n de la funci├│n.
+            Any: Resultado de la ejecución de la función.
         """
         if not self.is_acquiring:
-            return # No hacer nada si la adquisici├│n no est├í activa
+            return # No hacer nada si la adquisición no está activa
 
         try:
             # --- REFACTOR: Procesamiento por lotes ---
@@ -2192,14 +2192,14 @@ class RealTimePlotter(QtWidgets.QWidget):
             if self.is_recording:
                 self.current_recording.append(all_new_data.copy())
 
-            # 4. Calibrar para la visualizaci├│n y an├ílisis en tiempo real
+            # 4. Calibrar para la visualización y análisis en tiempo real
             
-            # --- NUEVO: Imprimir el voltaje RAW de la placa 1 vez por medici├│n para depurar ---
+            # --- NUEVO: Imprimir el voltaje RAW de la placa 1 vez por medición para depurar ---
             if not getattr(self, '_raw_print_done', False) and not self.chk_modo_prueba.isChecked():
                 print(f"\n[DEBUG DAQ] Voltaje RAW puro entregado por la placa (Canal 0): {all_new_data[0, 0]:.6f} V")
                 self._raw_print_done = True
 
-            # Calibraci├│n a microvoltios (Ganancia = 495 con R_electrodo = 100 ohm)
+            # Calibración a microvoltios (Ganancia = 495 con R_electrodo = 100 ohm)
             processed_data = (all_new_data / 495.0) * 1000000.0
 
             # --- NUEVO: Matar el pico transitorio al iniciar/cambiar el filtro ---
@@ -2211,7 +2211,7 @@ class RealTimePlotter(QtWidgets.QWidget):
                         self.filter_zi[:, :, i] *= processed_data[i, 0]
                 self._init_filter_state = False
 
-            # Aplicar filtros (si est├ín habilitados) al bloque calibrado
+            # Aplicar filtros (si están habilitados) al bloque calibrado
             # --- NUEVO: Aplicar filtro Notch primero ---
             if self.chk_notch_enable.isChecked() and self.notch_sos is not None and self.notch_zi is not None:
                 notch_filtered_data = np.zeros_like(processed_data)
@@ -2219,18 +2219,18 @@ class RealTimePlotter(QtWidgets.QWidget):
                     notch_filtered_data[i, :], self.notch_zi[:, :, i] = signal.sosfilt(self.notch_sos, processed_data[i, :], zi=self.notch_zi[:, :, i])
                 processed_data = notch_filtered_data
 
-            # --- Aplicar filtro Pasa-Banda despu├®s ---
+            # --- Aplicar filtro Pasa-Banda después ---
             if self.chk_filter_enable.isChecked() and self.filter_sos is not None and self.filter_zi is not None:
                 bandpass_filtered_data = np.zeros_like(processed_data)
                 for i in range(self.NUM_CANALES):
-                    # --- CORRECCI├ôN: Indexar correctamente el array de estado del filtro 'zi' ---
+                    # --- CORRECCIÓN: Indexar correctamente el array de estado del filtro 'zi' ---
                     # La forma de self.filter_zi es (n_sections, 2, NUM_CANALES).
                     bandpass_filtered_data[i, :], self.filter_zi[:, :, i] = signal.sosfilt(self.filter_sos, processed_data[i, :], zi=self.filter_zi[:, :, i])
                 processed_data = bandpass_filtered_data
             
             # 5. Actualizar el buffer de ploteo
             if total_muestras_leidas >= self.PLOT_SAMPLES:
-                # Si llegan m├ís datos que el tama├▒o del buffer, tomar solo los m├ís recientes
+                # Si llegan más datos que el tamaño del buffer, tomar solo los más recientes
                 self.plot_buffer_datos[:, :] = processed_data[:, -self.PLOT_SAMPLES:]
             else:
                 self.plot_buffer_datos = np.roll(self.plot_buffer_datos, -total_muestras_leidas, axis=1)
@@ -2238,24 +2238,24 @@ class RealTimePlotter(QtWidgets.QWidget):
 
             # --- NUEVO: Auto-ajuste de umbral ANTES de grabar ---
             if getattr(self, 'needs_auto_threshold', False):
-                # Esperar 1.5 segundos desde que inici├│ para que la se├▒al se estabilice
+                # Esperar 1.5 segundos desde que inició para que la señal se estabilice
                 if time.perf_counter() - getattr(self, 'acq_start_time', 0) > 1.5:
-                    samples_1s = int(self.SAMPLE_RATE * 1.0) # Tomar el ├║ltimo segundo de datos
+                    samples_1s = int(self.SAMPLE_RATE * 1.0) # Tomar el último segundo de datos
                     if samples_1s <= self.PLOT_SAMPLES and self.NUM_CANALES > 0:
                         last_1s_data = self.plot_buffer_datos[:, -samples_1s:]
-                        # Calcular la desviaci├│n est├índar de cada canal
+                        # Calcular la desviación estándar de cada canal
                         stds = [np.std(last_1s_data[i, :]) for i in range(self.NUM_CANALES)]
                         max_std = max(stds)
                         if max_std > 0:
                             self.spin_peak_th.setValue(max_std * 5.0)
-                            print(f"[Auto-Ajuste] Umbral de picos fijado en {max_std * 5.0:.1f} ┬ÁV (basado en el ruido inicial en reposo).")
-                    self.needs_auto_threshold = False # Solo se hace una vez por adquisici├│n
+                            print(f"[Auto-Ajuste] Umbral de picos fijado en {max_std * 5.0:.1f} µV (basado en el ruido inicial en reposo).")
+                    self.needs_auto_threshold = False # Solo se hace una vez por adquisición
 
-            # --- NUEVO: Acumular datos de ruido y establecer promedio autom├íticamente ---
+            # --- NUEVO: Acumular datos de ruido y establecer promedio automáticamente ---
             if self.is_recording and self.recording_start_time is not None:
                 elapsed_time = time.perf_counter() - self.recording_start_time
                 
-                # --- FIX: Calcular duration seg├║n si se usa metr├│nomo en modo manual ---
+                # --- FIX: Calcular duration según si se usa metrónomo en modo manual ---
                 if self.chk_use_metronome.isChecked() and not getattr(self, 'is_autoforge_running', False):
                     bpm = self.spin_bpm.value()
                     if bpm <= 0: bpm = 60
@@ -2264,13 +2264,13 @@ class RealTimePlotter(QtWidgets.QWidget):
                 else:
                     noise_dur = self.spin_noise_duration.value()
 
-                # CRITICAL FIX: Verificamos si el ruido ya fue calculado para evitar re-entrar aqu├¡
-                # cuando AutoForge resetea el elapsed_time a 0 para grabar la se├▒al.
+                # CRITICAL FIX: Verificamos si el ruido ya fue calculado para evitar re-entrar aquí
+                # cuando AutoForge resetea el elapsed_time a 0 para grabar la señal.
                 if not getattr(self, 'noise_calculated', False) and elapsed_time < noise_dur:
                     for i in range(self.NUM_CANALES):
                         self.noise_data_accumulated[i].append(processed_data[i, :])
                         
-                    # --- NUEVO: L├│gica de Cuenta Regresiva dentro del ruido (Solo si no es AutoForge) ---
+                    # --- NUEVO: Lógica de Cuenta Regresiva dentro del ruido (Solo si no es AutoForge) ---
                     if not getattr(self, 'is_autoforge_running', False):
                         if self.chk_use_metronome.isChecked():
                             time_remaining = noise_dur - elapsed_time
@@ -2280,7 +2280,7 @@ class RealTimePlotter(QtWidgets.QWidget):
                             if current_countdown < 1: current_countdown = 1
                             
                             self.countdown_text.setPos(-self.PLOT_DURATION_S/2.0, 0)
-                            self.countdown_text.setText(f"PREP├üRATE...\n{current_countdown}")
+                            self.countdown_text.setText(f"PREPÁRATE...\n{current_countdown}")
                             self.countdown_text.show()
                             self.countdown_active = True
                         else:
@@ -2295,7 +2295,7 @@ class RealTimePlotter(QtWidgets.QWidget):
                                         import threading
                                         threading.Thread(target=winsound.Beep, args=(800, 200), daemon=True).start()
                                 
-                                self.countdown_text.setText(f"PREP├üRATE...\n{current_countdown}")
+                                self.countdown_text.setText(f"PREPÁRATE...\n{current_countdown}")
                                 self.countdown_text.show()
                                 self.countdown_active = True
                             else:
@@ -2309,7 +2309,7 @@ class RealTimePlotter(QtWidgets.QWidget):
                             if winsound and getattr(self, 'countdown_active', False) and not getattr(self, 'is_autoforge_running', False) and not self.chk_use_metronome.isChecked():
                                 import threading
                                 threading.Thread(target=winsound.Beep, args=(1200, 500), daemon=True).start()
-                            self.countdown_text.setText("┬íGO!")
+                            self.countdown_text.setText("¡GO!")
                             QtCore.QTimer.singleShot(1000, self.countdown_text.hide)
                             self.countdown_active = False
                         
@@ -2328,7 +2328,7 @@ class RealTimePlotter(QtWidgets.QWidget):
                                     self.noise_regions[i].show()
                                     
                                     if hasattr(self, 'noise_status_labels'):
-                                        self.noise_status_labels[i].setText(f"Ruido Base: x╠ä={self.initial_noise_mean[i]:.1f}┬ÁV, ¤â={self.initial_noise_std[i]:.1f}┬ÁV")
+                                        self.noise_status_labels[i].setText(f"Ruido Base: x̄={self.initial_noise_mean[i]:.1f}µV, σ={self.initial_noise_std[i]:.1f}µV")
                                         self.noise_status_labels[i].setStyleSheet("color: #00FFFF; font-size: 11px; font-weight: bold; background-color: #111111; border: 1px solid #00FFFF;")
                             
                             if self.NUM_CANALES > 0:
@@ -2355,23 +2355,23 @@ class RealTimePlotter(QtWidgets.QWidget):
                     if current_max * 1.1 > current_y_max or current_y_max < 0.0001:
                         self.plot.setYRange(-current_max * 1.2, current_max * 1.2, padding=0)
                     else:
-                        # Auto-escala din├ímica con decaimiento r├ípido
+                        # Auto-escala dinámica con decaimiento rápido
                         new_y_max = max(current_max * 1.2, current_y_max * 0.94)
                         self.plot.setYRange(-new_y_max, new_y_max, padding=0)
             self.check_for_trigger(processed_data, total_muestras_leidas)
             self.actualizar_mediciones(processed_data, self.plot_buffer_datos)
             self.actualizar_espectrograma(processed_data)
 
-            # --- Actualiza el cron├│metro (esto se ejecuta siempre) ---
+            # --- Actualiza el cronómetro (esto se ejecuta siempre) ---
             if self.is_recording and self.recording_start_time is not None:
                 elapsed_time = time.perf_counter() - self.recording_start_time
                 if getattr(self, 'is_autoforge_running', False):
                     # En AutoForge, ponemos textos personalizados
                     tr_str = getattr(self, 'tiempo_restante_str', '00:00')
-                    cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;ÔÅ▒´©Å Resta: {tr_str}&nbsp;</span>"
+                    cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;⏱️ Resta: {tr_str}&nbsp;</span>"
                     if not getattr(self, 'noise_calculated', False):
                         self.label_rec_time.setText(f"GRABANDO RUIDO... {elapsed_time:.1f} s{cuadro_azul}")
-                        self.label_rec_time.setStyleSheet("font-weight: bold; color: #FFFF00;") # Amarillo ne├│n
+                        self.label_rec_time.setStyleSheet("font-weight: bold; color: #FFFF00;") # Amarillo neón
                     else:
                         if getattr(self, 'is_autoforge_continuo', False):
                             bpm = self.spin_bpm.value()
@@ -2398,7 +2398,7 @@ class RealTimePlotter(QtWidgets.QWidget):
                             self.label_rec_time.setStyleSheet("font-weight: bold; color: #aa00ff;")
                         else:
                             self.label_rec_time.setText(f"GRABANDO PALABRA... {elapsed_time:.1f} s{cuadro_azul}")
-                            self.label_rec_time.setStyleSheet("font-weight: bold; color: #FF00FF;") # Magenta ne├│n
+                            self.label_rec_time.setStyleSheet("font-weight: bold; color: #FF00FF;") # Magenta neón
                 else:
                     # Modo Manual
                     if self.chk_use_metronome.isChecked():
@@ -2415,19 +2415,19 @@ class RealTimePlotter(QtWidgets.QWidget):
                             if countdown < 1: countdown = 1
                             
                             tr_str = f"{time_remaining:.1f}s"
-                            cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white; font-size: 20px;'>&nbsp;ÔÅ▒´©Å Resta: {tr_str}&nbsp;</span>"
+                            cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white; font-size: 20px;'>&nbsp;⏱️ Resta: {tr_str}&nbsp;</span>"
                             
-                            time_str = f"PREP├üRATE... {countdown}{cuadro_azul}"
+                            time_str = f"PREPÁRATE... {countdown}{cuadro_azul}"
                             self.label_rec_time.setStyleSheet("font-weight: bold; color: #FF8800; font-size: 30px;") # Naranja gigante
                         else:
                             signal_time = elapsed_time - noise_dur
                             minutes = int(signal_time // 60)
                             seconds = int(signal_time % 60)
                             tenths = int((signal_time % 1) * 10)
-                            time_str = f"GRABANDO SE├æAL: {minutes:02d}:{seconds:02d}.{tenths}"
-                            self.label_rec_time.setStyleSheet("font-weight: bold; color: #FF00FF;") # Magenta ne├│n
+                            time_str = f"GRABANDO SEÑAL: {minutes:02d}:{seconds:02d}.{tenths}"
+                            self.label_rec_time.setStyleSheet("font-weight: bold; color: #FF00FF;") # Magenta neón
                             
-                            # --- NUEVO: Iniciar el conteo del metr├│nomo justo aqu├¡ ---
+                            # --- NUEVO: Iniciar el conteo del metrónomo justo aquí ---
                             if not getattr(self, 'counting_started', False):
                                 self.counting_started = True
                     else:
@@ -2435,30 +2435,30 @@ class RealTimePlotter(QtWidgets.QWidget):
                         if not getattr(self, 'noise_calculated', False) and elapsed_time < noise_dur:
                             time_remaining = noise_dur - elapsed_time
                             tr_str = f"{time_remaining:.1f}s"
-                            cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white; font-size: 20px;'>&nbsp;ÔÅ▒´©Å Resta: {tr_str}&nbsp;</span>"
+                            cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white; font-size: 20px;'>&nbsp;⏱️ Resta: {tr_str}&nbsp;</span>"
                             
                             if time_remaining <= 3.0:
                                 import math
                                 countdown = int(math.ceil(time_remaining))
-                                time_str = f"PREP├üRATE... {countdown}{cuadro_azul}"
+                                time_str = f"PREPÁRATE... {countdown}{cuadro_azul}"
                                 self.label_rec_time.setStyleSheet("font-weight: bold; color: #FF8800; font-size: 30px;") # Naranja gigante
                             else:
                                 time_str = f"GRABANDO RUIDO ({elapsed_time:.1f}s / {noise_dur:.1f}s){cuadro_azul}"
-                                self.label_rec_time.setStyleSheet("font-weight: bold; color: #FFFF00;") # Amarillo ne├│n
+                                self.label_rec_time.setStyleSheet("font-weight: bold; color: #FFFF00;") # Amarillo neón
                         else:
                             signal_time = elapsed_time - noise_dur
                             minutes = int(signal_time // 60)
                             seconds = int(signal_time % 60)
                             tenths = int((signal_time % 1) * 10)
-                            time_str = f"GRABANDO SE├æAL: {minutes:02d}:{seconds:02d}.{tenths}"
-                            self.label_rec_time.setStyleSheet("font-weight: bold; color: #FF00FF;") # Magenta ne├│n
+                            time_str = f"GRABANDO SEÑAL: {minutes:02d}:{seconds:02d}.{tenths}"
+                            self.label_rec_time.setStyleSheet("font-weight: bold; color: #FF00FF;") # Magenta neón
 
                     self.label_rec_time.setText(time_str)
                     
-                # --- NUEVO: Evaluador de Ruido Inter-pulso (Tester de relajaci├│n) ---
-                # Para el evaluador es necesario usar el tiempo de se├▒al (ya sin ruido base).
+                # --- NUEVO: Evaluador de Ruido Inter-pulso (Tester de relajación) ---
+                # Para el evaluador es necesario usar el tiempo de señal (ya sin ruido base).
                 if getattr(self, 'is_autoforge_running', False):
-                    signal_time = elapsed_time # En AutoForge, ya se resete├│ el tiempo
+                    signal_time = elapsed_time # En AutoForge, ya se reseteó el tiempo
                 else:
                     signal_time = elapsed_time - noise_dur # En Manual, calculamos el offset
                     
@@ -2466,7 +2466,7 @@ class RealTimePlotter(QtWidgets.QWidget):
                     period_s = 60.0 / max(1, self.spin_bpm.value())
                     phase = signal_time % period_s
                     
-                    # Al cruzar la mitad del ciclo (punto de m├íxima relajaci├│n te├│rica)
+                    # Al cruzar la mitad del ciclo (punto de máxima relajación teórica)
                     if getattr(self, 'last_phase', 0) < period_s * 0.5 <= phase:
                         window_s = period_s / 8.0 # Ventana de 1/8 del pulso
                         samples_window = int(window_s * self.SAMPLE_RATE)
@@ -2480,24 +2480,24 @@ class RealTimePlotter(QtWidgets.QWidget):
                                 init_std = getattr(self, 'initial_noise_std', [0]*self.NUM_CANALES)[i]
                                 init_mean = getattr(self, 'initial_noise_mean', [0]*self.NUM_CANALES)[i]
                                 
-                                # Calcular el radio de deterioro (manejar divisi├│n por cero en se├▒ales perfectas simuladas)
+                                # Calcular el radio de deterioro (manejar división por cero en señales perfectas simuladas)
                                 if init_std > 0.01:
                                     ratio = curr_std / init_std
                                 elif init_mean > 0.01:
                                     ratio = curr_mean / init_mean
                                 else:
-                                    ratio = 1.0 # Se├▒al base sin ruido
+                                    ratio = 1.0 # Señal base sin ruido
                                 
                                 if hasattr(self, 'noise_status_labels'):
-                                    # Ne├│n verde si se mantiene por debajo del 120% del original, si no, Rojo Cyberpunk
+                                    # Neón verde si se mantiene por debajo del 120% del original, si no, Rojo Cyberpunk
                                     bg_color = "#000000"
                                     fg_color = "#00FF00" if ratio <= 1.20 else "#FF0000" 
-                                    text = f"Inter-pulso: x╠ä={curr_mean:.1f}┬ÁV (Base={init_mean:.1f}┬ÁV) | {ratio*100:.0f}%"
+                                    text = f"Inter-pulso: x̄={curr_mean:.1f}µV (Base={init_mean:.1f}µV) | {ratio*100:.0f}%"
                                     self.noise_status_labels[i].setText(text)
                                     self.noise_status_labels[i].setStyleSheet(f"color: {fg_color}; background-color: {bg_color}; border: 1px solid {fg_color}; border-radius: 3px; padding: 2px; font-weight: bold; font-size: 11px;")
                                     print(f"[DEBUG UI] Actualizada etiqueta de ruido: {text}")
                                 
-                                # --- NUEVO: Actualizar l├¡neas din├ímicas en el gr├ífico ---
+                                # --- NUEVO: Actualizar líneas dinámicas en el gráfico ---
                                 if hasattr(self, 'dynamic_noise_lines_pos'):
                                     line_color = 'g' if ratio <= 1.20 else 'r'
                                     self.dynamic_noise_lines_pos[i].setPos(curr_mean)
@@ -2508,7 +2508,7 @@ class RealTimePlotter(QtWidgets.QWidget):
                                     self.dynamic_noise_lines_neg[i].setPen(pg.mkPen(line_color, width=2, style=QtCore.Qt.DotLine))
                                     self.dynamic_noise_lines_neg[i].show()
                                 
-                                # --- NUEVO: Guardar m├®tricas para el gr├ífico final ---
+                                # --- NUEVO: Guardar métricas para el gráfico final ---
                                 samples_period = min(int(period_s * self.SAMPLE_RATE), self.PLOT_SAMPLES)
                                 full_period_segment = self.plot_buffer_datos[i, -samples_period:]
                                 peak_val = np.max(np.abs(full_period_segment))
@@ -2545,7 +2545,7 @@ class RealTimePlotter(QtWidgets.QWidget):
             return
 
         try:
-            # C├ílculo instant├íneo para el chunk (Vp-p y RMS del ├║ltimo paquete)
+            # Cálculo instantáneo para el chunk (Vp-p y RMS del último paquete)
             max_vals = np.max(chunk_data, axis=1)
             min_vals = np.min(chunk_data, axis=1)
             vp_p = max_vals - min_vals
@@ -2554,30 +2554,30 @@ class RealTimePlotter(QtWidgets.QWidget):
             
             # --- MEJORA: Buscar el pico absoluto en el entorno del pulso actual ---
             # En lugar de buscar en todo el buffer visible (lo que deja el marcador "pegado" a pulsos viejos),
-            # limitamos la b├║squeda al tiempo equivalente a 1.5 ciclos del metr├│nomo.
+            # limitamos la búsqueda al tiempo equivalente a 1.5 ciclos del metrónomo.
             period_s = 60.0 / max(1, self.spin_bpm.value())
             samples_to_search = int((period_s * 1.5) * self.SAMPLE_RATE)
             search_start_idx = max(0, self.PLOT_SAMPLES - samples_to_search)
             
             peak_th = self.spin_peak_th.value()
 
-            # Actualiza los labels y el marcador gr├ífico
+            # Actualiza los labels y el marcador gráfico
             for i in range(self.NUM_CANALES):
                 musculo = self.nombres_musculos[i % len(self.nombres_musculos)]
-                texto = f"<b>{musculo}:</b> {vp_p[i]:.1f} ┬ÁVp-p, {rms[i]:.1f} ┬ÁVrms"
+                texto = f"<b>{musculo}:</b> {vp_p[i]:.1f} µVp-p, {rms[i]:.1f} µVrms"
                 
-                # Aislar la ventana de b├║squeda para este canal
+                # Aislar la ventana de búsqueda para este canal
                 window_data = plot_buffer_datos[i, search_start_idx:]
                 abs_window = np.abs(window_data)
                 
-                # --- NUEVO: Encontrar los puntos que superan la l├¡nea de threshold y promediarlos ---
+                # --- NUEVO: Encontrar los puntos que superan la línea de threshold y promediarlos ---
                 mask_superan = abs_window >= peak_th
                 
                 if np.any(mask_superan):
-                    # Promediar las amplitudes absolutas de todos los puntos por encima de la l├¡nea
+                    # Promediar las amplitudes absolutas de todos los puntos por encima de la línea
                     avg_peak_val = np.mean(abs_window[mask_superan])
                     
-                    # Encontrar el tiempo del pico m├íximo para ubicar el marcador visualmente
+                    # Encontrar el tiempo del pico máximo para ubicar el marcador visualmente
                     idx_max_local = np.argmax(abs_window)
                     idx_max = search_start_idx + idx_max_local
                     t_max = self.plot_vector_tiempo[idx_max]
@@ -2613,7 +2613,7 @@ class RealTimePlotter(QtWidgets.QWidget):
             print(f"Error al calcular mediciones: {e}")
 
     def actualizar_espectrograma(self, new_data):
-        """Calcula y actualiza el gr├ífico del espectrograma."""
+        """Calcula y actualiza el gráfico del espectrograma."""
         if not self.chk_spectrogram_enable.isChecked() or not SCIPY_DISPONIBLE or self.NUM_CANALES == 0:
             return
 
@@ -2624,18 +2624,18 @@ class RealTimePlotter(QtWidgets.QWidget):
             # Calcular STFT (Short-Time Fourier Transform)
             f, t, Zxx = signal.stft(data_canal, fs=self.SAMPLE_RATE, nperseg=self.CURRENT_FFT_LEN)
             
-            # Tomar la magnitud y aplicar escala logar├¡tmica para mejor visualizaci├│n
+            # Tomar la magnitud y aplicar escala logarítmica para mejor visualización
             Zxx_mag = np.abs(Zxx)
-            Zxx_log = np.log10(Zxx_mag + 1e-12) # Se suma un valor peque├▒o para evitar log(0)
+            Zxx_log = np.log10(Zxx_mag + 1e-12) # Se suma un valor pequeño para evitar log(0)
 
             num_nuevas_columnas = Zxx_log.shape[1]
             if num_nuevas_columnas > 0:
                 # Desplazar el buffer del espectrograma hacia la izquierda
                 self.spectrogram_buffer = np.roll(self.spectrogram_buffer, -num_nuevas_columnas, axis=0)
-                # A├▒adir las nuevas columnas al final
+                # Añadir las nuevas columnas al final
                 self.spectrogram_buffer[-num_nuevas_columnas:, :] = Zxx_log.T[:num_nuevas_columnas, :]
                 
-                # --- CORRECCI├ôN v3: Actualizar solo la imagen ---
+                # --- CORRECCIÓN v3: Actualizar solo la imagen ---
                 # La escala y el rango ya fueron configurados en setup_gui_for_channels.
                 # Simplemente actualizamos los datos de la imagen.
                 self.spectrogram_view.setImage(self.spectrogram_buffer.T, autoLevels=True)
@@ -2653,7 +2653,7 @@ class RealTimePlotter(QtWidgets.QWidget):
             event (Any): Argumento posicional event.
 
         Returns:
-            Any: Resultado de la ejecuci├│n de la funci├│n.
+            Any: Resultado de la ejecución de la función.
         """
         if obj == getattr(self, 'plot_widget', None) and event.type() == QtCore.QEvent.Type.Resize:
             if hasattr(self, 'autoforge_overlay'):
@@ -2665,12 +2665,12 @@ class RealTimePlotter(QtWidgets.QWidget):
         Ejecuta la funcionalidad de iniciar_autoforge.
 
         Returns:
-            Any: Resultado de la ejecuci├│n de la funci├│n.
+            Any: Resultado de la ejecución de la función.
         """
         try:
             if getattr(self, 'is_autoforge_running', False):
                 self.is_autoforge_running = False
-                self.btn_autoforge.setText("­ƒöÑ Autograbado")
+                self.btn_autoforge.setText("🔥 Autograbado")
                 self.btn_autoforge.setStyleSheet("background-color: #ff0055; color: white; font-weight: bold; font-family: 'Courier New'; font-size: 14px; padding: 8px; border: 2px solid #ff0055; border-radius: 4px;")
                 self.autoforge_overlay.hide()
                 self.config_stack.setCurrentIndex(0)
@@ -2681,7 +2681,7 @@ class RealTimePlotter(QtWidgets.QWidget):
                     self.metronome_process = None
                 return
                 
-            # --- NUEVO: Apagar metr├│nomo general si estaba corriendo para que no choquen ---
+            # --- NUEVO: Apagar metrónomo general si estaba corriendo para que no choquen ---
             if hasattr(self, 'metronome_process') and self.metronome_process:
                 try:
                     self.metronome_process.kill()
@@ -2692,7 +2692,7 @@ class RealTimePlotter(QtWidgets.QWidget):
             if not self.is_acquiring:
                 QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
                 try:
-                    # Disparar autom├íticamente la adquisici├│n pero sin metr├│nomo doble
+                    # Disparar automáticamente la adquisición pero sin metrónomo doble
                     old_state = self.chk_use_metronome.isChecked()
                     self.chk_use_metronome.setChecked(False)
                     self.on_start_acq_click()
@@ -2711,7 +2711,7 @@ class RealTimePlotter(QtWidgets.QWidget):
                 self.autoforge_words = [line.strip() for line in f if line.strip()]
                 
             if not self.autoforge_words:
-                QtWidgets.QMessageBox.warning(self, "Error", "palabras.txt est├í vac├¡o.")
+                QtWidgets.QMessageBox.warning(self, "Error", "palabras.txt está vacío.")
                 return
                 
             dialog = AutoForgeDialog(self)
@@ -2723,7 +2723,7 @@ class RealTimePlotter(QtWidgets.QWidget):
                     self.autoforge_words = [line.strip() for line in f if line.strip()]
                     
                 if not self.autoforge_words:
-                    QtWidgets.QMessageBox.warning(self, "Error", "palabras.txt qued├│ vac├¡o despu├®s de editar.")
+                    QtWidgets.QMessageBox.warning(self, "Error", "palabras.txt quedó vacío después de editar.")
                     return
 
                 self.autoforge_prueba = dialog.edit_prueba.text().strip()
@@ -2740,7 +2740,7 @@ class RealTimePlotter(QtWidgets.QWidget):
                 
                 self.autoforge_word_idx = 0
                 self.is_autoforge_running = True
-                self.btn_autoforge.setText("ÔÅ╣ Detener Grabaci├│n")
+                self.btn_autoforge.setText("⏹ Detener Grabación")
                 self.btn_autoforge.setStyleSheet("background-color: #555555; color: white; font-weight: bold; font-family: 'Courier New'; font-size: 14px; padding: 8px; border: 2px solid #ffffff; border-radius: 4px;")
                 
                 self.showMaximized() # Auto-maximizar al iniciar AutoForge
@@ -2756,7 +2756,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         try:
             if getattr(self, 'is_autoforge_running', False):
                 self.is_autoforge_running = False
-                self.btn_autoforge_continuo.setText("­ƒöÑ Secuencia Continua")
+                self.btn_autoforge_continuo.setText("🔥 Secuencia Continua")
                 self.btn_autoforge_continuo.setStyleSheet("background-color: #aa00ff; color: white; font-weight: bold; font-family: 'Courier New'; font-size: 14px; padding: 8px; border: 2px solid #aa00ff; border-radius: 4px;")
                 self.autoforge_overlay.hide()
                 self.config_stack.setCurrentIndex(0)
@@ -2794,11 +2794,11 @@ class RealTimePlotter(QtWidgets.QWidget):
                 self.autoforge_words = [line.strip() for line in f if line.strip()]
                 
             if not self.autoforge_words:
-                QtWidgets.QMessageBox.warning(self, "Error", "palabras.txt est├í vac├¡o.")
+                QtWidgets.QMessageBox.warning(self, "Error", "palabras.txt está vacío.")
                 return
                 
             dialog = AutoForgeDialog(self)
-            dialog.setWindowTitle("Configuraci├│n de Secuencia Continua")
+            dialog.setWindowTitle("Configuración de Secuencia Continua")
             dialog.spin_reps.setValue(25) # 25 secuencias enteras por defecto
             dialog.spin_bpm.setValue(40)
             if dialog.exec() == QtWidgets.QDialog.Accepted:
@@ -2806,7 +2806,7 @@ class RealTimePlotter(QtWidgets.QWidget):
                     self.autoforge_words = [line.strip() for line in f if line.strip()]
                     
                 if not self.autoforge_words:
-                    QtWidgets.QMessageBox.warning(self, "Error", "palabras.txt qued├│ vac├¡o despu├®s de editar.")
+                    QtWidgets.QMessageBox.warning(self, "Error", "palabras.txt quedó vacío después de editar.")
                     return
 
                 self.autoforge_prueba = dialog.edit_prueba.text().strip()
@@ -2825,7 +2825,7 @@ class RealTimePlotter(QtWidgets.QWidget):
                 self.is_autoforge_continuo = True
                 self.last_continuo_beat = -1
                 
-                self.btn_autoforge_continuo.setText("ÔÅ╣ Detener Grabaci├│n")
+                self.btn_autoforge_continuo.setText("⏹ Detener Grabación")
                 self.btn_autoforge_continuo.setStyleSheet("background-color: #555555; color: white; font-weight: bold; font-family: 'Courier New'; font-size: 14px; padding: 8px; border: 2px solid #ffffff; border-radius: 4px;")
                 
                 self.showMaximized() # Auto-maximizar al iniciar AutoForge
@@ -2853,13 +2853,13 @@ class RealTimePlotter(QtWidgets.QWidget):
     def estado_iniciar_secuencia_continua(self):
         self.is_recording = False
         self.label_rec_time.setVisible(True)
-        self.config_stack.setCurrentIndex(1) # Ocultar configuraci├│n
+        self.config_stack.setCurrentIndex(1) # Ocultar configuración
         
         total_pulsos = len(self.autoforge_words) * self.autoforge_target_reps
         self.autoforge_estado_actual_str = f"Secuencia: {total_pulsos} pulsos"
         
         tr_str = getattr(self, 'tiempo_restante_str', '00:00')
-        cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;ÔÅ▒´©Å Resta: {tr_str}&nbsp;</span>"
+        cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;⏱️ Resta: {tr_str}&nbsp;</span>"
         self.label_rec_time.setText(f"{self.autoforge_estado_actual_str}{cuadro_azul}")
         
         self.autoforge_overlay.setText("<div align='center'>HAZ SILENCIO<br>PREPARANDO ENTORNO...</div>")
@@ -2910,10 +2910,10 @@ class RealTimePlotter(QtWidgets.QWidget):
     def estado_mostrar_preparate_continuo(self):
         self.is_recording = False
         self.autoforge_ruido_guardado = self.current_recording.copy()
-        self.autoforge_estado_actual_str = "ESCUCHA EL METR├ôNOMO..."
+        self.autoforge_estado_actual_str = "ESCUCHA EL METRÓNOMO..."
         
         tr_str = getattr(self, 'tiempo_restante_str', '00:00')
-        cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;ÔÅ▒´©Å Resta: {tr_str}&nbsp;</span>"
+        cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;⏱️ Resta: {tr_str}&nbsp;</span>"
         self.label_rec_time.setText(f"{self.autoforge_estado_actual_str}{cuadro_azul}")
         self.label_rec_time.setStyleSheet("font-weight: bold; color: #FF8800;")
         
@@ -2934,7 +2934,7 @@ class RealTimePlotter(QtWidgets.QWidget):
                     self.noise_regions[i].show()
                     
                     if hasattr(self, 'noise_status_labels'):
-                        self.noise_status_labels[i].setText(f"Ruido Base: x╠ä={self.initial_noise_mean[i]:.1f}┬ÁV, s={self.initial_noise_std[i]:.1f}┬ÁV")
+                        self.noise_status_labels[i].setText(f"Ruido Base: x̄={self.initial_noise_mean[i]:.1f}µV, s={self.initial_noise_std[i]:.1f}µV")
                         self.noise_status_labels[i].setStyleSheet("color: #00FFFF; font-size: 11px; font-weight: bold; background-color: #111111; border: 1px solid #00FFFF;")
             
             if self.NUM_CANALES > 0:
@@ -2949,7 +2949,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         
         try:
             if hasattr(self, 'word_window_process') and self.word_window_process:
-                self.word_window_process.stdin.write("PREP├üRATE\\n")
+                self.word_window_process.stdin.write("PREPÁRATE\\n")
                 self.word_window_process.stdin.flush()
         except: pass
         
@@ -2976,15 +2976,15 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.countdown_text.setPos(-self.PLOT_DURATION_S/2.0, 0)
         self.countdown_text.show()
         
-        self.countdown_text.setText("PREP├üRATE...\n3")
-        QtCore.QTimer.singleShot(int(beat_interval_s * 1000), lambda: self.countdown_text.setText("PREP├üRATE...\n2"))
-        QtCore.QTimer.singleShot(int(2 * beat_interval_s * 1000), lambda: self.countdown_text.setText("PREP├üRATE...\n1"))
+        self.countdown_text.setText("PREPÁRATE...\n3")
+        QtCore.QTimer.singleShot(int(beat_interval_s * 1000), lambda: self.countdown_text.setText("PREPÁRATE...\n2"))
+        QtCore.QTimer.singleShot(int(2 * beat_interval_s * 1000), lambda: self.countdown_text.setText("PREPÁRATE...\n1"))
         
         QtCore.QTimer.singleShot(int(3 * beat_interval_s * 1000), self.estado_iniciar_grabacion_continua)
 
     def estado_iniciar_grabacion_continua(self):
         self.autoforge_overlay.hide()
-        self.countdown_text.setText("┬íGO!")
+        self.countdown_text.setText("¡GO!")
         QtCore.QTimer.singleShot(1000, self.countdown_text.hide)
         
         import time
@@ -3001,12 +3001,12 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     def estado_guardar_secuencia_continua(self):
         """
-        Guarda la sesi├│n de grabaci├│n de la Secuencia Continua.
+        Guarda la sesión de grabación de la Secuencia Continua.
         A diferencia del modo palabra-por-palabra, esto guarda todo en un solo
         bloque, incluyendo un metadato 'words_sequence' que contiene la lista
-        c├¡clica de palabras (ej. ['A', 'E', 'I', 'O', 'U']).
-        Esto permite que los scripts de an├ílisis (ej. correlaciondese├▒ales.py)
-        lean este diccionario y etiqueten din├ímicamente cada ventana recortada.
+        cíclica de palabras (ej. ['A', 'E', 'I', 'O', 'U']).
+        Esto permite que los scripts de análisis (ej. correlaciondeseñales.py)
+        lean este diccionario y etiqueten dinámicamente cada ventana recortada.
         """
         self.is_recording = False
         
@@ -3079,12 +3079,12 @@ class RealTimePlotter(QtWidgets.QWidget):
         QtCore.QTimer.singleShot(5000, self.estado_finalizar_secuencia_continua)
 
     def estado_finalizar_secuencia_continua(self):
-        self.autoforge_overlay.setText("<div align='center'>┬íSECUENCIA COMPLETADA!</div>")
+        self.autoforge_overlay.setText("<div align='center'>¡SECUENCIA COMPLETADA!</div>")
         QtCore.QTimer.singleShot(2000, self.autoforge_overlay.hide)
         self.is_acquiring = False
         self.is_autoforge_running = False
         self.is_autoforge_continuo = False
-        self.config_stack.setCurrentIndex(0) # Restaurar configuraci├│n
+        self.config_stack.setCurrentIndex(0) # Restaurar configuración
         if hasattr(self, 'session_timer'):
             self.session_timer.stop()
 
@@ -3093,7 +3093,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         Ejecuta la funcionalidad de _iniciar_timer_global.
 
         Returns:
-            Any: Resultado de la ejecuci├│n de la funci├│n.
+            Any: Resultado de la ejecución de la función.
         """
         bpm = self.spin_bpm.value()
         if bpm <= 0: bpm = 60
@@ -3112,7 +3112,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         Ejecuta la funcionalidad de _tick_session_timer.
 
         Returns:
-            Any: Resultado de la ejecuci├│n de la funci├│n.
+            Any: Resultado de la ejecución de la función.
         """
         if getattr(self, 'tiempo_restante_global', 0) > 0:
             self.tiempo_restante_global -= 1
@@ -3120,10 +3120,10 @@ class RealTimePlotter(QtWidgets.QWidget):
             secs = int(self.tiempo_restante_global % 60)
             self.tiempo_restante_str = f"{mins:02d}:{secs:02d}"
             
-            # Actualizamos el label si no est├í grabando ruido/palabra, o si est├í en un descanso
+            # Actualizamos el label si no está grabando ruido/palabra, o si está en un descanso
             if not getattr(self, 'is_recording', False) and getattr(self, 'is_autoforge_running', False):
                 if hasattr(self, 'autoforge_estado_actual_str'):
-                    cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;ÔÅ▒´©Å Resta: {self.tiempo_restante_str}&nbsp;</span>"
+                    cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;⏱️ Resta: {self.tiempo_restante_str}&nbsp;</span>"
                     self.label_rec_time.setText(f"{self.autoforge_estado_actual_str}{cuadro_azul}")
         else:
             self.tiempo_restante_str = "00:00"
@@ -3134,7 +3134,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         Ejecuta la funcionalidad de calcular_tiempo_restante_autograbado.
 
         Returns:
-            Any: Resultado de la ejecuci├│n de la funci├│n.
+            Any: Resultado de la ejecución de la función.
         """
         return getattr(self, 'tiempo_restante_str', "00:00")
 
@@ -3143,29 +3143,29 @@ class RealTimePlotter(QtWidgets.QWidget):
         Ejecuta la funcionalidad de estado_iniciar_palabra.
 
         Returns:
-            Any: Resultado de la ejecuci├│n de la funci├│n.
+            Any: Resultado de la ejecución de la función.
         """
         if self.autoforge_word_idx >= len(self.autoforge_words):
-            self.autoforge_overlay.setText("<div align='center'>┬íAUTOGRABADO COMPLETADO!</div>")
+            self.autoforge_overlay.setText("<div align='center'>¡AUTOGRABADO COMPLETADO!</div>")
             self.autoforge_overlay.show()
             QtCore.QTimer.singleShot(2000, self.autoforge_overlay.hide)
             self.current_recording = []
             self.is_acquiring = False
             self.is_autoforge_running = False
-            self.config_stack.setCurrentIndex(0) # Restaurar configuraci├│n
+            self.config_stack.setCurrentIndex(0) # Restaurar configuración
             return
             
         palabra = self.autoforge_words[self.autoforge_word_idx]
         self.is_recording = False
-        self.label_rec_time.setVisible(True) # --- NUEVO: Habilitado para no dar sensaci├│n de "congelamiento"
-        self.config_stack.setCurrentIndex(1) # Ocultar configuraci├│n
+        self.label_rec_time.setVisible(True) # --- NUEVO: Habilitado para no dar sensación de "congelamiento"
+        self.config_stack.setCurrentIndex(1) # Ocultar configuración
         
         palabra_num = self.autoforge_word_idx + 1
         total_palabras = len(self.autoforge_words)
         self.autoforge_estado_actual_str = f"Set: {palabra_num}/{total_palabras}"
         
         tr_str = getattr(self, 'tiempo_restante_str', '00:00')
-        cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;ÔÅ▒´©Å Resta: {tr_str}&nbsp;</span>"
+        cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;⏱️ Resta: {tr_str}&nbsp;</span>"
         self.label_rec_time.setText(f"{self.autoforge_estado_actual_str}{cuadro_azul}")
         
         self.autoforge_overlay.setText("<div align='center'>HAZ SILENCIO<br>PREPARANDO ENTORNO...</div>")
@@ -3183,7 +3183,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         Ejecuta la funcionalidad de estado_grabar_ruido.
 
         Returns:
-            Any: Resultado de la ejecuci├│n de la funci├│n.
+            Any: Resultado de la ejecución de la función.
         """
         self.autoforge_overlay.setText("") 
         self.autoforge_overlay.hide()
@@ -3215,28 +3215,28 @@ class RealTimePlotter(QtWidgets.QWidget):
         # --- NUEVO: Resetear escala Y para cada nueva palabra ---
         self.plot.setYRange(-0.01, 0.01)
         
-        # Programar la aparici├│n de la ventana "Preparate" y el metr├│nomo CUANDO TERMINE EL RUIDO
+        # Programar la aparición de la ventana "Preparate" y el metrónomo CUANDO TERMINE EL RUIDO
         noise_dur = self.spin_noise_duration.value()
         QtCore.QTimer.singleShot(int(noise_dur * 1000), self.estado_mostrar_preparate)
 
     def estado_mostrar_preparate(self):
-        # 1. El ruido base acaba de terminar. PAUSAMOS LA GRABACI├ôN.
+        # 1. El ruido base acaba de terminar. PAUSAMOS LA GRABACIÓN.
         """
         Ejecuta la funcionalidad de estado_mostrar_preparate.
 
         Returns:
-            Any: Resultado de la ejecuci├│n de la funci├│n.
+            Any: Resultado de la ejecución de la función.
         """
         self.is_recording = False
         self.autoforge_ruido_guardado = self.current_recording.copy()
-        self.autoforge_estado_actual_str = "ESCUCHA EL METR├ôNOMO..."
+        self.autoforge_estado_actual_str = "ESCUCHA EL METRÓNOMO..."
         
         tr_str = getattr(self, 'tiempo_restante_str', '00:00')
-        cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;ÔÅ▒´©Å Resta: {tr_str}&nbsp;</span>"
+        cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;⏱️ Resta: {tr_str}&nbsp;</span>"
         self.label_rec_time.setText(f"{self.autoforge_estado_actual_str}{cuadro_azul}")
         self.label_rec_time.setStyleSheet("font-weight: bold; color: #FF8800;") # Naranja
         
-        # --- NUEVO: Forzamos el c├ílculo matem├ítico del ruido aqu├¡ para evitar desincronizaciones de UI ---
+        # --- NUEVO: Forzamos el cálculo matemático del ruido aquí para evitar desincronizaciones de UI ---
         if not getattr(self, 'noise_calculated', False):
             import numpy as np
             for i in range(self.NUM_CANALES):
@@ -3254,7 +3254,7 @@ class RealTimePlotter(QtWidgets.QWidget):
                     self.noise_regions[i].show()
                     
                     if hasattr(self, 'noise_status_labels'):
-                        self.noise_status_labels[i].setText(f"Ruido Base: x╠ä={self.initial_noise_mean[i]:.1f}┬ÁV, s={self.initial_noise_std[i]:.1f}┬ÁV")
+                        self.noise_status_labels[i].setText(f"Ruido Base: x̄={self.initial_noise_mean[i]:.1f}µV, s={self.initial_noise_std[i]:.1f}µV")
                         self.noise_status_labels[i].setStyleSheet("color: #00FFFF; font-size: 11px; font-weight: bold; background-color: #111111; border: 1px solid #00FFFF;")
             
             # --- NUEVO: Auto-ajuste del umbral de SNR ---
@@ -3265,7 +3265,7 @@ class RealTimePlotter(QtWidgets.QWidget):
                     
             self.noise_calculated = True
         
-        # 2. Iniciamos el Count-In ac├║stico (3 compases) antes de saltar a la palabra.
+        # 2. Iniciamos el Count-In acústico (3 compases) antes de saltar a la palabra.
         bpm = self.spin_bpm.value()
         if bpm <= 0: bpm = 60
         beat_interval_s = 60.0 / bpm
@@ -3276,7 +3276,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.lbl_recording_space.setText(texto_ventana)
         self.word_window_process = None
         
-        # Lanzar el metr├│nomo AHORA MISMO con un Count-in de tipo carreras (3 graves, 1 agudo)
+        # Lanzar el metrónomo AHORA MISMO con un Count-in de tipo carreras (3 graves, 1 agudo)
         script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'metronomo_visual.py')
         
         pos = self.config_stack.mapToGlobal(QtCore.QPoint(0, 0))
@@ -3296,13 +3296,13 @@ class RealTimePlotter(QtWidgets.QWidget):
         
         self.autoforge_overlay.hide()
         
-        # --- NUEVO: Sincronizaci├│n del texto amarillo de PREPARATE con el count-in ac├║stico ---
+        # --- NUEVO: Sincronización del texto amarillo de PREPARATE con el count-in acústico ---
         self.countdown_text.setPos(-self.PLOT_DURATION_S/2.0, 0)
         self.countdown_text.show()
         
-        self.countdown_text.setText("PREP├üRATE...\n3")
-        QtCore.QTimer.singleShot(int(beat_interval_s * 1000), lambda: self.countdown_text.setText("PREP├üRATE...\n2"))
-        QtCore.QTimer.singleShot(int(2 * beat_interval_s * 1000), lambda: self.countdown_text.setText("PREP├üRATE...\n1"))
+        self.countdown_text.setText("PREPÁRATE...\n3")
+        QtCore.QTimer.singleShot(int(beat_interval_s * 1000), lambda: self.countdown_text.setText("PREPÁRATE...\n2"))
+        QtCore.QTimer.singleShot(int(2 * beat_interval_s * 1000), lambda: self.countdown_text.setText("PREPÁRATE...\n1"))
         
         # A los 3 compases justos (cuando suene el pitido Agudo), pasamos a la palabra.
         QtCore.QTimer.singleShot(int(3 * beat_interval_s * 1000), self.estado_cambiar_ventana_palabra)
@@ -3312,20 +3312,20 @@ class RealTimePlotter(QtWidgets.QWidget):
         Ejecuta la funcionalidad de estado_cambiar_ventana_palabra.
 
         Returns:
-            Any: Resultado de la ejecuci├│n de la funci├│n.
+            Any: Resultado de la ejecución de la función.
         """
         self.autoforge_overlay.hide() # Quitamos el "PREPARATE" del medio
         
         # Mostrar el "GO!" en amarillo y luego esconderlo
-        self.countdown_text.setText("┬íGO!")
+        self.countdown_text.setText("¡GO!")
         QtCore.QTimer.singleShot(1000, self.countdown_text.hide)
         
-        # --- REACTIVAMOS LA GRABACI├ôN: AQU├ì EMPIEZA LA PALABRA REAL ---
+        # --- REACTIVAMOS LA GRABACIÓN: AQUÍ EMPIEZA LA PALABRA REAL ---
         import time
         self.recording_start_time = time.perf_counter() # Reseteamos tiempo UI para empezar desde 0.0s en la palabra
         self.is_recording = True
         
-        # --- NUEVO: Limpiamos los buffers de guardado y estad├¡sticas para cada palabra ---
+        # --- NUEVO: Limpiamos los buffers de guardado y estadísticas para cada palabra ---
         self.current_recording = getattr(self, 'autoforge_ruido_guardado', []).copy()
         self.stats_time = [[] for _ in range(self.NUM_CANALES)]
         self.stats_snr = [[] for _ in range(self.NUM_CANALES)]
@@ -3336,8 +3336,8 @@ class RealTimePlotter(QtWidgets.QWidget):
         
         palabra = self.autoforge_words[self.autoforge_word_idx]
         
-        # Lanzamos la ventana limpia con solo la palabra para la grabaci├│n
-        # El metr├│nomo YA EST├ü corriendo, aqu├¡ justo emitir├í el pitido Agudo (GO).
+        # Lanzamos la ventana limpia con solo la palabra para la grabación
+        # El metrónomo YA ESTÁ corriendo, aquí justo emitirá el pitido Agudo (GO).
         self.lbl_recording_space.setText(palabra.upper())
         self.word_window_process = None
         
@@ -3352,7 +3352,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         Ejecuta la funcionalidad de estado_guardar_palabra.
 
         Returns:
-            Any: Resultado de la ejecuci├│n de la funci├│n.
+            Any: Resultado de la ejecución de la función.
         """
         self.is_recording = False
         palabra = self.autoforge_words[self.autoforge_word_idx]
@@ -3379,7 +3379,7 @@ class RealTimePlotter(QtWidgets.QWidget):
             Ejecuta la funcionalidad de guardar_async.
 
             Returns:
-                Any: Resultado de la ejecuci├│n de la funci├│n.
+                Any: Resultado de la ejecución de la función.
             """
             import os, json
             from pathlib import Path
@@ -3416,14 +3416,14 @@ class RealTimePlotter(QtWidgets.QWidget):
                         json.dump(metadata, f, indent=4)
                 except: pass
 
-            # 3. Guardar Datos Raw CSV y WAV (las funciones internas ya manejan la divisi├│n por canales)
+            # 3. Guardar Datos Raw CSV y WAV (las funciones internas ya manejan la división por canales)
             try: guardar_grabacion_csv(self.current_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion")
             except: pass
             
             try: guardar_grabacion_wav(self.current_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion")
             except: pass
             
-            # 4. Generar Gr├íficos
+            # 4. Generar Gráficos
             try: generar_grafico_grabacion(self.current_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, self.CANALES_DAQ)
             except: pass
             
@@ -3443,7 +3443,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         Ejecuta la funcionalidad de estado_siguiente.
 
         Returns:
-            Any: Resultado de la ejecuci├│n de la funci├│n.
+            Any: Resultado de la ejecución de la función.
         """
         self.autoforge_word_idx += 1
         self.estado_iniciar_palabra()
@@ -3452,7 +3452,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         pass
 
     def resizeEvent(self, event):
-        """Maneja la redimensi├│n de la ventana para ajustar las ventanas flotantes."""
+        """Maneja la redimensión de la ventana para ajustar las ventanas flotantes."""
         super().resizeEvent(event)
         QtCore.QTimer.singleShot(300, self._update_floating_windows_pos)
 
@@ -3471,10 +3471,10 @@ class RealTimePlotter(QtWidgets.QWidget):
             event (Any): Argumento posicional event.
 
         Returns:
-            Any: Resultado de la ejecuci├│n de la funci├│n.
+            Any: Resultado de la ejecución de la función.
         """
         print("Ventana de ploteo cerrada. Deteniendo hilos...")
-        self.stop_event.set() # Env├¡a la se├▒al a TODOS los hilos
+        self.stop_event.set() # Envía la señal a TODOS los hilos
         self.timer.stop() # Detiene el timer de la GUI
         
         # --- NUEVO: Guardar estado de la GUI al cerrar el programa ---
@@ -3488,7 +3488,7 @@ class RealTimePlotter(QtWidgets.QWidget):
             with open('metronome_config.json', 'w', encoding='utf-8') as f:
                 json.dump(config_data, f, indent=4)
         except Exception as e:
-            print(f"Error guardando configuraci├│n al cerrar: {e}")
+            print(f"Error guardando configuración al cerrar: {e}")
             
         event.accept() # Acepta el cierre
 
@@ -3530,12 +3530,12 @@ def main():
     gui = RealTimePlotter()
     gui.show()
     
-    # Inicia el bucle de la aplicaci├│n (bloqueante)
+    # Inicia el bucle de la aplicación (bloqueante)
     exit_code = app.exec()
     sys.exit(exit_code)
 
 if __name__ == '__main__':
     main()
-    # hilo.join() ya no es necesario aqu├¡, se maneja en on_start_acq_click y closeEvent
+    # hilo.join() ya no es necesario aquí, se maneja en on_start_acq_click y closeEvent
     
     print("Programa finalizado.")

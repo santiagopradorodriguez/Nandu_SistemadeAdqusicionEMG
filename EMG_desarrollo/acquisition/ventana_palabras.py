@@ -1,8 +1,8 @@
-﻿# ==============================================================================
-# Proyecto: NANDU LSD - Sistema de Adquisici├│n EMG y Deep Learning
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
 # Autores: Lucas Braunstein y Santiago Prado
-# Instituci├│n: Laboratorio de Sistemas Din├ímicos (LSD) - FCEyN, UBA
-# Descripci├│n: Interfaz de ventana para mostrar palabras clave durante la adquisici├│n.
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Interfaz de ventana para mostrar palabras clave durante la adquisición.
 # ==============================================================================
 
 import sys
@@ -35,14 +35,14 @@ def main():
             except ValueError: pass
             
     root = tk.Tk()
-    root.title("├æand├║ LSD - AutoForge - Palabra Actual")
+    root.title("Ñandú LSD - AutoForge - Palabra Actual")
     
-    # Obtener resoluci├│n para anclar a la derecha debajo del metr├│nomo
+    # Obtener resolución para anclar a la derecha debajo del metrónomo
     screen_w = root.winfo_screenwidth()
     window_w = w_arg if w_arg is not None else 600
     window_h = h_arg if h_arg is not None else 250
     x_pos = x_arg if x_arg is not None else screen_w - window_w - 20 # 20px de margen derecho
-    y_pos = y_arg if y_arg is not None else 480 # Debajo del metr├│nomo
+    y_pos = y_arg if y_arg is not None else 480 # Debajo del metrónomo
     root.geometry(f"{window_w}x{window_h}+{x_pos}+{y_pos}")
     
     root.configure(bg="#050505")
