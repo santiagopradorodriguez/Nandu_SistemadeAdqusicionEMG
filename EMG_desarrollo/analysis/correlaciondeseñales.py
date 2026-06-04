@@ -783,7 +783,7 @@ def _plot_muscle_overlay(measure_name, channels_dict, out_dir, master_name=None,
             # Dibujar línea exactamente en 0
             plt.axvline(x=0, color='gray', linestyle='--', alpha=0.8, label="Pico señal de micrófono")
             
-            plt.legend(loc='upper right')
+            plt.legend(loc='upper right', fontsize=8)
             plt.grid(True, alpha=0.5)
             plt.ylim(bottom=0, top=max_y_overlay * 1.2 if max_y_overlay > 0 else 1.0)
             
