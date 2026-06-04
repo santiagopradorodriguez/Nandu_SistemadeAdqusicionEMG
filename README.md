@@ -214,6 +214,7 @@ El proyecto está en desarrollo activo. Consulta `ROADMAP.md` para más detalles
 - [ ] **Distribución y Empaquetado:** Crear un archivo ejecutable `.exe` independiente para facilitar la instalación en computadoras de laboratorio.
 - [ ] **Módulos de Deep Learning:** Empezar a crear scripts base usando **PyTorch** para el entrenamiento de redes neuronales a futuro con los datos extraídos.
 - [ ] **Metrónomo Nativo:** Incrustar el metrónomo visual (actualmente en un proceso Tkinter independiente en `metronomo_visual.py`) de forma nativa dentro de la interfaz PySide6 de AutoForge, eliminando el proceso externo para mejorar la sincronización del DAQ.
+- [ ] **Envolvente EMG en Tiempo Real**: Implementar visualización de la envolvente de la señal EMG en tiempo real tanto en el módulo de Autograbado como en el DAQ principal. La envolvente puede calcularse mediante RMS deslizante (Root Mean Square) o media móvil sobre la señal rectificada, permitiendo una mejor interpretación visual de la activación muscular durante la adquisición.
 
 ---
 
