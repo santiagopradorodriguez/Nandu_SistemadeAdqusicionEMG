@@ -232,7 +232,7 @@ def main(mediciones_dirs=None, medicion_dir=None, master_dir=None, slave_dirs=No
             parent_meas_dir = os.path.dirname(current_master_dir)
             meas_name = os.path.basename(parent_meas_dir)
             master_basename = os.path.basename(current_master_dir)
-            _plot_muscle_overlay(meas_name, resultados_canales, parent_meas_dir, master_basename)
+            _plot_muscle_overlay(meas_name, resultados_canales, parent_meas_dir, master_basename, normalize_all=opts.get("normalizar_overlay", False))
 
     if console_win:
         print("\n\n✅ --- PROCESAMIENTO FINALIZADO --- ✅")
@@ -670,7 +670,7 @@ def _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds,
     return sorted(list(excluded_set_plot))
 
 # ---------------------- NUEVA FUNCIÓN: Overlay de Músculos ---------------------
-def _plot_muscle_overlay(measure_name, channels_dict, out_dir, master_name=None):
+def _plot_muscle_overlay(measure_name, channels_dict, out_dir, master_name=None, normalize_all=False):
     all_files = set()
     for c_data in channels_dict.values():
         all_files.update(c_data.keys())
@@ -732,10 +732,16 @@ def _plot_muscle_overlay(measure_name, channels_dict, out_dir, master_name=None)
                 y_min = np.min(y)
                 y = y - y_min
                 
-                # Normalizar la señal líder a la escala de los esclavos
-                if ch == master_name and scale_factor != 1.0:
-                    y = y * scale_factor
-                    err = err * scale_factor
+                if normalize_all:
+                    y_max = np.max(y)
+                    if y_max > 0:
+                        y = y / y_max
+                        err = err / y_max
+                else:
+                    # Normalizar la señal líder a la escala de los esclavos (solo si no se normaliza todo al 100%)
+                    if ch == master_name and scale_factor != 1.0:
+                        y = y * scale_factor
+                        err = err * scale_factor
                     
                 if np.max(y + err) > max_y_overlay:
                     max_y_overlay = np.max(y + err)
@@ -1241,6 +1247,10 @@ class ProcessingOptionsDialog(QDialog):
         self.chk_table.setChecked(True)
         self.form_layout.addRow(self.chk_table)
         
+        self.chk_normalize_overlay = QCheckBox("Normalizar Patrón (Visualización de Desfases)")
+        self.chk_normalize_overlay.setChecked(False)
+        self.form_layout.addRow(self.chk_normalize_overlay)
+        
         self.chk_rand_color = QCheckBox("Usar Colores Aleatorios")
         self.chk_rand_color.setChecked(False)
         self.form_layout.addRow(self.chk_rand_color)
@@ -1332,6 +1342,7 @@ class ProcessingOptionsDialog(QDialog):
                 "show_interactive_plot": interactivo and self.chk_recortes.isChecked(),
                 "mostrar_espectrograma": self.chk_spec.isChecked(),
                 "mostrar_tabla": self.chk_table.isChecked(),
+                "normalizar_overlay": self.chk_normalize_overlay.isChecked(),
                 "colores_aleatorios": self.chk_rand_color.isChecked(),
                 "colorgrafico": self.entries["color_fijo"].text(),
                 "tema_oscuro": self.chk_dark_mode.isChecked(),

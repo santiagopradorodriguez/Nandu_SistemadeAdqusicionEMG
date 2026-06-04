@@ -324,6 +324,9 @@ class CSVViewerApp:
         selection = self.var_medicion_seleccionada.get()
         fecha = self.var_fecha_seleccionada.get()
         if not selection or not fecha: return
+        
+        # Limpiar memoria de offsets al cambiar de medición
+        self.channel_offsets_vars = {}
 
         measurement_path = os.path.join(self.BASE_DIR, fecha, selection)
         csv_file = None
@@ -447,25 +450,38 @@ class CSVViewerApp:
             self.btn_autoscale.config(state="disabled")
 
     def setup_channel_checkboxes(self):
-        """Crea los checkboxes para cada canal detectado."""
-        # Limpiar checkboxes anteriores
-        # --- CORRECCIÓN: Destruir todos los widgets hijos del frame de canales ---
+        """Crea los checkboxes y controles de offset para cada canal detectado."""
         for widget in self.channels_frame.winfo_children(): widget.destroy()
 
-        # --- NUEVO: Crear un frame interno para alinear los checkboxes ---
         inner_frame = tk.Frame(self.channels_frame, bg="#f0f0f0")
         inner_frame.pack(fill="x")
         self.channel_vars = {}
+        
+        # --- NUEVO: Inicializar memoria de offsets solo si no existe para esta medición ---
+        if not hasattr(self, 'channel_offsets_vars'):
+            self.channel_offsets_vars = {}
+
         for i, col_name in enumerate(self.channel_cols):
+            display_name = col_name.strip()
+            
+            row_frame = tk.Frame(inner_frame, bg="#f0f0f0")
+            row_frame.pack(fill="x", pady=2)
+            
             var = tk.BooleanVar(value=True)
-            # Al cambiar un checkbox, se redibuja todo y luego se ajusta la vista
-            display_name = col_name.strip() # Eliminar espacios extra del header del CSV
-            chk = tk.Checkbutton(inner_frame, text=display_name, variable=var, command=self.on_channel_toggle, bg="#f0f0f0", font=self.font_label)
-            # --- CORRECCIÓN: Usar grid para asegurar que todos los checkboxes sean visibles ---
-            row = i // 2
-            col = i % 2
-            chk.grid(row=row, column=col, sticky="w", padx=2)
+            chk = tk.Checkbutton(row_frame, text=display_name, variable=var, command=self.on_channel_toggle, bg="#f0f0f0", font=self.font_label)
+            chk.pack(side="left")
             self.channel_vars[col_name] = var
+            
+            # Control de offset
+            tk.Label(row_frame, text="Offset(µV):", font=("Helvetica", 8), bg="#f0f0f0").pack(side="left", padx=(5, 1))
+            offset_var = tk.StringVar(value="0")
+            if col_name in self.channel_offsets_vars:
+                offset_var.set(self.channel_offsets_vars[col_name].get())
+            self.channel_offsets_vars[col_name] = offset_var
+            
+            spin = tk.Spinbox(row_frame, from_=-10000, to=10000, increment=100, width=5, textvariable=offset_var, command=self.plot_full_data)
+            spin.pack(side="left")
+            spin.bind('<Return>', lambda e: self.plot_full_data())
 
     def plot_full_data(self, reset_y_zoom=False):
         """Limpia y dibuja los datos completos de los canales seleccionados. Aplica filtros."""
@@ -556,7 +572,16 @@ class CSVViewerApp:
                 # Submuestreo inteligente sobre los datos procesados
                 x_data, y_data = downsample_lttb_fast(time_data, y_data_processed, MAX_POINTS_TO_PLOT)
                 
+                # Aplicar offset manual de la UI
+                offset_val = 0.0
+                if hasattr(self, 'channel_offsets_vars') and col_name in self.channel_offsets_vars:
+                    try:
+                        offset_val = float(self.channel_offsets_vars[col_name].get())
+                    except ValueError:
+                        pass
+                
                 if len(y_data) > 0:
+                    y_data = y_data + offset_val
                     y_min_plot = min(y_min_plot, np.min(y_data))
                     y_max_plot = max(y_max_plot, np.max(y_data))
                     
@@ -565,6 +590,7 @@ class CSVViewerApp:
                 if y_data_env is not None:
                     x_env, y_env = downsample_lttb_fast(time_data, y_data_env, MAX_POINTS_TO_PLOT)
                     if len(y_env) > 0:
+                        y_env = y_env + offset_val
                         y_min_plot = min(y_min_plot, np.min(y_env))
                         y_max_plot = max(y_max_plot, np.max(y_env))
                     self.ax.plot(x_env, y_env, label=f"{col_name} (Env)", lw=1.5, color=line.get_color())
