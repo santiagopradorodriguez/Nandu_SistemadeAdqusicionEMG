@@ -1077,6 +1077,10 @@ class RealTimePlotter(QtWidgets.QWidget):
         
         self.label_rec_time = QtWidgets.QLabel("Grabando: --:--.-")
         self.label_rec_time.setStyleSheet("font-weight: bold; color: #E91E63;")
+        sp = self.label_rec_time.sizePolicy()
+        sp.setRetainSizeWhenHidden(True)
+        self.label_rec_time.setSizePolicy(sp)
+        self.label_rec_time.setFixedWidth(280) # Evitar que el texto expanda la ventana
         self.label_rec_time.setVisible(False)
         
         self.chk_autoscroll = QtWidgets.QCheckBox("Auto-scroll (Armar Trigger)")
@@ -1165,6 +1169,8 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.plot = self.plot_widget.addPlot(title="Canales de Adquisición")
         self.plot.setLabel('bottom', 'Tiempo (s)')
         self.plot.setLabel('left', 'Amplitud (µV)')
+        # Fijar ancho del eje Y para evitar que los números grandes empujen el gráfico
+        self.plot.getAxis('left').setWidth(60)
 
         # Widget para el espectrograma (ImageView)
         self.spectrogram_view = pg.ImageView()
@@ -1230,22 +1236,28 @@ class RealTimePlotter(QtWidgets.QWidget):
 
         # --- NUEVO: QStackedWidget para ocultar Configuración durante grabación ---
         self.config_stack = QtWidgets.QStackedWidget()
-        self.config_stack.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+        self.config_stack.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
+        self.config_groupbox.setMinimumHeight(180)
+        self.config_stack.setMinimumHeight(180)
         self.config_stack.addWidget(self.config_groupbox)
         
         self.empty_recording_widget = QtWidgets.QWidget()
         self.empty_recording_widget.setStyleSheet("background-color: #050505;")
         
-        self.lbl_recording_space = QtWidgets.QLabel("VENTANAS EXTERNAS ACTIVAS")
+        self.lbl_recording_space = QtWidgets.QLabel("VENTANAS EXTERNAS ACTIVAS", self.empty_recording_widget)
         self.lbl_recording_space.setAlignment(QtCore.Qt.AlignCenter)
-        self.lbl_recording_space.setMinimumSize(0, 0)
         self.lbl_recording_space.setWordWrap(True)
-        self.lbl_recording_space.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Expanding)
-        self.lbl_recording_space.setStyleSheet("background-color: #050510; color: #00FF00; font-family: 'Courier New', monospace; font-size: 65px; font-weight: 900; border: 2px dashed #FF0055; padding: 15px;")
+        self.lbl_recording_space.setStyleSheet("background-color: #050510; color: #00FF00; font-family: 'Courier New', monospace; font-size: 45px; font-weight: 900; border: 2px dashed #FF0055; padding: 10px;")
         
+        # En lugar de usar un layout que puede forzar anchos mínimos, usamos un layout con restricciones duras
         empty_layout = QtWidgets.QVBoxLayout(self.empty_recording_widget)
+        empty_layout.setContentsMargins(0, 0, 0, 0)
         empty_layout.addWidget(self.lbl_recording_space)
+        
         self.empty_recording_widget.setLayout(empty_layout)
+        
+        # FUERZA BRUTA HORIZONTAL: NUNCA podrá expandir la pantalla principal
+        self.empty_recording_widget.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
         
         self.config_stack.addWidget(self.empty_recording_widget)
 
@@ -1675,17 +1687,22 @@ class RealTimePlotter(QtWidgets.QWidget):
             # --- NUEVO: Crear un QFrame para cada medición ---
             measurement_frame = QtWidgets.QFrame()
             measurement_frame.setStyleSheet("background-color: #050505; border: 2px solid #00FFFF; border-radius: 5px;")
+            measurement_frame.setMinimumWidth(100)
             
             frame_layout = QtWidgets.QVBoxLayout(measurement_frame)
             frame_layout.setContentsMargins(5, 5, 5, 5) # Padding interno
             
             label = QtWidgets.QLabel(f"<b>{musculo}:</b> -- µVp-p, -- µVrms")
             label.setStyleSheet(f"color: {pg.mkColor(color).name()}; font-size: 14px; font-weight: bold; background-color: transparent; border: none;")
+            label.setWordWrap(True)
+            label.setMinimumWidth(0)
             frame_layout.addWidget(label)
             
             # --- NUEVO: Etiqueta para el tester de ruido ---
             label_ruido = QtWidgets.QLabel("Ruido inter-pulso: Esperando grabación...")
             label_ruido.setStyleSheet("color: gray; font-size: 11px; background-color: transparent;")
+            label_ruido.setWordWrap(True)
+            label_ruido.setMinimumWidth(0)
             frame_layout.addWidget(label_ruido)
             self.noise_status_labels.append(label_ruido)
             
@@ -1977,6 +1994,8 @@ class RealTimePlotter(QtWidgets.QWidget):
                     label.setText("Ruido inter-pulso: Evaluando base...")
                     label.setStyleSheet("color: gray; font-size: 11px; background-color: transparent;")
             
+            target_h = self.config_groupbox.height()
+            self.empty_recording_widget.setFixedHeight(target_h)
             self.config_stack.setCurrentIndex(1) # Ocultar configuración
             
             # --- NUEVO: Re-lanzar el metrónomo con count-in (mismo beep que autograbado) al inicio de grabar ruido ---
@@ -1996,9 +2015,10 @@ class RealTimePlotter(QtWidgets.QWidget):
                     if bpm <= 0: bpm = 60
                     print(f"Lanzando metrónomo para grabación con count-in (BPM={bpm}) al inicio de la fase de ruido...")
                     
-                    pos = self.config_stack.mapToGlobal(QtCore.QPoint(0, 0))
-                    metro_x = pos.x()
-                    metro_y = pos.y()
+                    # Posicionar en la esquina superior derecha, pero debajo del panel de configuración
+                    pos = self.mapToGlobal(QtCore.QPoint(self.width(), 0))
+                    metro_x = pos.x() - 250 # 230 width + 20 margin
+                    metro_y = pos.y() + self.config_stack.height() + 10
                     
                     self.metronome_process = subprocess.Popen(
                         [python_executable, script_path, '--autostart', '--count', f'--bpm={bpm}', '--count-in=4', f'--x={metro_x}', f'--y={metro_y}'],
@@ -2853,6 +2873,8 @@ class RealTimePlotter(QtWidgets.QWidget):
     def estado_iniciar_secuencia_continua(self):
         self.is_recording = False
         self.label_rec_time.setVisible(True)
+        target_h = self.config_groupbox.height()
+        self.empty_recording_widget.setFixedHeight(target_h)
         self.config_stack.setCurrentIndex(1) # Ocultar configuración
         
         total_pulsos = len(self.autoforge_words) * self.autoforge_target_reps
@@ -2959,9 +2981,10 @@ class RealTimePlotter(QtWidgets.QWidget):
             script_path = 'metronomo_visual.py'
         else:
             script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'metronomo_visual.py')
-        pos = self.config_stack.mapToGlobal(QtCore.QPoint(0, 0))
-        metro_x = pos.x()
-        metro_y = pos.y()
+        # Posicionar en la esquina superior derecha, pero debajo del panel de configuración
+        pos = self.mapToGlobal(QtCore.QPoint(self.width(), 0))
+        metro_x = pos.x() - 250
+        metro_y = pos.y() + self.config_stack.height() + 10
         
         self.metronome_process = subprocess.Popen(
             [python_executable, script_path, '--autostart', '--count', f'--bpm={bpm}', '--count-in=4', f'--x={metro_x}', f'--y={metro_y}'],
@@ -3158,6 +3181,8 @@ class RealTimePlotter(QtWidgets.QWidget):
         palabra = self.autoforge_words[self.autoforge_word_idx]
         self.is_recording = False
         self.label_rec_time.setVisible(True) # --- NUEVO: Habilitado para no dar sensación de "congelamiento"
+        target_h = self.config_groupbox.height()
+        self.empty_recording_widget.setFixedHeight(target_h)
         self.config_stack.setCurrentIndex(1) # Ocultar configuración
         
         palabra_num = self.autoforge_word_idx + 1
@@ -3279,12 +3304,13 @@ class RealTimePlotter(QtWidgets.QWidget):
         # Lanzar el metrónomo AHORA MISMO con un Count-in de tipo carreras (3 graves, 1 agudo)
         script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'metronomo_visual.py')
         
-        pos = self.config_stack.mapToGlobal(QtCore.QPoint(0, 0))
-        metro_x = pos.x()
-        metro_y = pos.y()
-        
         import sys
         python_executable = sys.executable
+        
+        # Posicionar en la esquina superior derecha, pero debajo del panel de configuración
+        pos = self.mapToGlobal(QtCore.QPoint(self.width(), 0))
+        metro_x = pos.x() - 250
+        metro_y = pos.y() + self.config_stack.height() + 10
         
         self.metronome_process = subprocess.Popen(
             [python_executable, script_path, '--autostart', '--count', f'--bpm={bpm}', '--count-in=4', f'--x={metro_x}', f'--y={metro_y}'],
