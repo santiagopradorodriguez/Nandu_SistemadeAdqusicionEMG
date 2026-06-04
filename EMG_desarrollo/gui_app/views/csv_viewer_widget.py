@@ -294,13 +294,14 @@ class CsvViewerWidget(QWidget):
             self.lbl_status.setText(f"Error: No se encuentra el archivo {filepath}")
             return
         
-        if not hasattr(self, 'channel_offsets'):
-            self.channel_offsets = {}
+        if not hasattr(self, 'offsets_por_archivo'):
+            self.offsets_por_archivo = {}
         
-        # Si el archivo es distinto, borramos la memoria de los offsets
-        if getattr(self, 'current_filepath', None) != filepath:
-            self.channel_offsets = {}
-            self.current_filepath = filepath
+        self.current_filepath = filepath
+        if filepath not in self.offsets_por_archivo:
+            self.offsets_por_archivo[filepath] = {}
+            
+        self.channel_offsets = self.offsets_por_archivo[filepath]
             
         self.lbl_status.setText(f"Cargando archivo: {os.path.basename(filepath)} ...")
         self.loader = DataLoaderThread(filepath)
