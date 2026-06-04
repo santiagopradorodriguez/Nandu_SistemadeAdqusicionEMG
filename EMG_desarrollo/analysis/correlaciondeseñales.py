@@ -163,6 +163,8 @@ def main(mediciones_dirs=None, medicion_dir=None, master_dir=None, slave_dirs=No
             plt.style.use('dark_background')
         else:
             plt.style.use('default')
+            
+        normalizar = opts.pop("normalizar_overlay", False)
     else:
         return
 
@@ -232,7 +234,7 @@ def main(mediciones_dirs=None, medicion_dir=None, master_dir=None, slave_dirs=No
             parent_meas_dir = os.path.dirname(current_master_dir)
             meas_name = os.path.basename(parent_meas_dir)
             master_basename = os.path.basename(current_master_dir)
-            _plot_muscle_overlay(meas_name, resultados_canales, parent_meas_dir, master_basename, normalize_all=opts.get("normalizar_overlay", False))
+            _plot_muscle_overlay(meas_name, resultados_canales, parent_meas_dir, master_basename, normalize_all=normalizar)
 
     if console_win:
         print("\n\n✅ --- PROCESAMIENTO FINALIZADO --- ✅")
