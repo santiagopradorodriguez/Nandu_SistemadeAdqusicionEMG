@@ -648,6 +648,26 @@ def _plot_muscle_overlay(measure_name, channels_dict, out_dir, master_name=None)
                 
             time_shift = master_t[peak_idx]
         
+        # --- Calcular la amplitud máxima de los slaves y del master para normalizar ---
+        max_slave_amp = 0.0
+        master_max_amp = 1.0
+        if master_name and master_name in channels_dict and fname in channels_dict[master_name]:
+            master_y_raw = np.array(channels_dict[master_name][fname]['mean_pulse'])
+            baseline = np.mean(master_y_raw[:max(1, len(master_y_raw) // 8)])
+            master_max_amp = np.max(master_y_raw - baseline)
+            
+        for ch in sorted_chans:
+            if ch != master_name and fname in channels_dict[ch]:
+                y_slave = np.array(channels_dict[ch][fname]['mean_pulse'])
+                baseline = np.mean(y_slave[:max(1, len(y_slave) // 8)])
+                m_amp = np.max(y_slave - baseline)
+                if m_amp > max_slave_amp:
+                    max_slave_amp = m_amp
+                    
+        scale_factor = 1.0
+        if max_slave_amp > 0 and master_max_amp > 0:
+            scale_factor = max_slave_amp / master_max_amp
+
         # 2. Graficar todos los canales con el tiempo corregido y offset restado
         max_y_overlay = 0
         for ch in sorted_chans:
@@ -657,10 +677,17 @@ def _plot_muscle_overlay(measure_name, channels_dict, out_dir, master_name=None)
                 y = np.array(data['mean_pulse'])
                 err = np.array(data.get('pulse_err', np.zeros_like(y)))
                 
-                # Offset: para asegurar que inicie desde el 0 en el eje Y
-                # aplicando el equivalente a un pasa altos ideal sobre la línea base
-                y_min = np.min(y)
-                y = y - y_min
+                # Offset: promedio del primer OCTAVO del patrón promedio
+                # para que el nivel de reposo de cada músculo esté centrado en el cero
+                n_eighth = max(1, len(y) // 8)
+                baseline = np.mean(y[:n_eighth])
+                y = y - baseline
+                
+                # Normalizar la señal líder a la escala de los esclavos
+                if ch == master_name and scale_factor != 1.0:
+                    y = y * scale_factor
+                    err = err * scale_factor
+                    
                 if np.max(y + err) > max_y_overlay:
                     max_y_overlay = np.max(y + err)
                 
@@ -669,6 +696,8 @@ def _plot_muscle_overlay(measure_name, channels_dict, out_dir, master_name=None)
                 ch_conf = canales_config.get(conf_key, {})
                 
                 lbl = ch_conf.get("musculo", f"Canal {ch_idx_str}")
+                if ch == master_name:
+                    lbl += " (Master Normalizado)"
                 col = ch_conf.get("color_hex", fallback_colors.get(ch, 'gray'))
                 
                 if ch == 'canal_3':
@@ -1166,10 +1195,15 @@ class ProcessingOptionsDialog(QDialog):
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
         
-        self.btn_run = QPushButton("Ejecutar")
-        self.btn_run.setStyleSheet("QPushButton { background-color: #00ffcc; color: #000; font-weight: bold; padding: 10px 20px; border-radius: 3px; }")
-        self.btn_run.clicked.connect(self.on_ok)
-        btn_layout.addWidget(self.btn_run)
+        self.btn_run_interactive = QPushButton("Procesar Interactivo")
+        self.btn_run_interactive.setStyleSheet("QPushButton { background-color: #00ffcc; color: #000; font-weight: bold; padding: 10px 20px; border-radius: 3px; }")
+        self.btn_run_interactive.clicked.connect(lambda: self.on_ok(interactivo=True))
+        btn_layout.addWidget(self.btn_run_interactive)
+        
+        self.btn_run_fast = QPushButton("Procesar Rápido")
+        self.btn_run_fast.setStyleSheet("QPushButton { background-color: #ff00ff; color: #fff; font-weight: bold; padding: 10px 20px; border-radius: 3px; }")
+        self.btn_run_fast.clicked.connect(lambda: self.on_ok(interactivo=False))
+        btn_layout.addWidget(self.btn_run_fast)
         
         main_layout.addLayout(btn_layout)
 
@@ -1190,7 +1224,7 @@ class ProcessingOptionsDialog(QDialog):
         self.form_layout.addRow(label_text, widget)
         self.entries[key] = entry
 
-    def on_ok(self):
+    def on_ok(self, interactivo=True):
         try:
             bpm_val = 50.0
             n_pulsos_val = 10
@@ -1238,7 +1272,7 @@ class ProcessingOptionsDialog(QDialog):
                 
                 "mostrar_individuales": self.chk_indiv.isChecked(),
                 "mostrar_recortes": self.chk_recortes.isChecked(),
-                "show_interactive_plot": self.chk_recortes.isChecked(),
+                "show_interactive_plot": interactivo and self.chk_recortes.isChecked(),
                 "mostrar_espectrograma": self.chk_spec.isChecked(),
                 "mostrar_tabla": self.chk_table.isChecked(),
                 "colores_aleatorios": self.chk_rand_color.isChecked(),

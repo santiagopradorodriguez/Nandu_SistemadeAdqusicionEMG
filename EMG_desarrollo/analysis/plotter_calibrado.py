@@ -438,8 +438,8 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
                     noise_end_idx = np.searchsorted(tiempo_actual, noise_seconds, side='right')
                     if noise_end_idx > 0:
                         noise_level = np.mean(env[:noise_end_idx])
-                        env = np.maximum(0, env - noise_level)
-                        #etiqueta_env += 
+                        env = env - noise_level
+                        etiqueta_env += " (Offset restado)"
             
             ax.plot(df[col_tiempo], env, color=color_hex, lw=1.2)
 
@@ -455,7 +455,8 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
                     if noise_end_idx > 0:
                         noise_level = np.nanmean(env_rms[:noise_end_idx])
                         if not np.isnan(noise_level):
-                            env_rms = np.maximum(0, env_rms - noise_level)
+                            env_rms = env_rms - noise_level
+                            etiqueta_env += " (Offset restado)"
 
             ax.plot(df[col_tiempo], env_rms, color=color_hex, lw=1.5, label='RMS')
             max_rms = np.nanmax(env_rms)

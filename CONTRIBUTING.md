@@ -23,6 +23,7 @@ Actualmente, el proyecto ha dado un gran salto hacia su **versión 4.0** (introd
 
 ### 📚 Documentación
 - **Comentarios en Código:** Agregar comentarios explicativos (Docstrings) dentro de las funciones críticas de la máquina de estados de AutoForge.
+- **Metadatos y JSONs:** Siempre que se agreguen nuevas funcionalidades (como el modo Secuencia Continua que introduce el metadato `valid_words`), es imperativo documentar su estructura para no romper el pipeline de Machine Learning (`dl_data_pipeline.py`).
 - **Entorno Virtual:** Ayudar a mantener actualizada la lista de `requirements.txt` y crear una guía de instalación específica para usuarios de Linux/Mac que quieran correr el "Modo Simulador".
 
 ### 💡 Lecciones de Desarrollo (Scoping en UI)

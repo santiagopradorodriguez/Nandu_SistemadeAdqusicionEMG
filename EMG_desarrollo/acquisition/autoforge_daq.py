@@ -1065,6 +1065,10 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.btn_autoforge.setStyleSheet("background-color: #ff0055; color: white; font-weight: bold; font-family: 'Courier New'; font-size: 14px; padding: 8px; border: 2px solid #ff0055; border-radius: 4px;")
         self.btn_autoforge.clicked.connect(self.iniciar_autoforge)
 
+        self.btn_autoforge_continuo = QtWidgets.QPushButton("🔥 Secuencia Continua")
+        self.btn_autoforge_continuo.setStyleSheet("background-color: #aa00ff; color: white; font-weight: bold; font-family: 'Courier New'; font-size: 14px; padding: 8px; border: 2px solid #aa00ff; border-radius: 4px;")
+        self.btn_autoforge_continuo.clicked.connect(self.iniciar_autoforge_continuo)
+
         self.btn_record = QtWidgets.QPushButton("Empezar a Grabar")
         self.btn_record.setStyleSheet(self.BTN_REC_START_STYLE)
         
@@ -1078,6 +1082,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         # --- Armar layout de botones ---
         self.button_layout.addWidget(self.btn_record)
         self.button_layout.addWidget(self.btn_autoforge)
+        self.button_layout.addWidget(self.btn_autoforge_continuo)
         self.button_layout.addWidget(self.label_rec_time)
         
         self.button_layout.addSpacing(10)
@@ -1366,6 +1371,7 @@ class RealTimePlotter(QtWidgets.QWidget):
             
             # --- NUEVO: Abortar AutoForge o grabación activa ---
             self.is_autoforge_running = False
+            self.is_autoforge_continuo = False
             if hasattr(self, 'autoforge_overlay'):
                 self.autoforge_overlay.hide()
             if getattr(self, 'is_recording', False):
@@ -2323,8 +2329,32 @@ class RealTimePlotter(QtWidgets.QWidget):
                         self.label_rec_time.setText(f"GRABANDO RUIDO... {elapsed_time:.1f} s{cuadro_azul}")
                         self.label_rec_time.setStyleSheet("font-weight: bold; color: #FFFF00;") # Amarillo neón
                     else:
-                        self.label_rec_time.setText(f"GRABANDO PALABRA... {elapsed_time:.1f} s{cuadro_azul}")
-                        self.label_rec_time.setStyleSheet("font-weight: bold; color: #FF00FF;") # Magenta neón
+                        if getattr(self, 'is_autoforge_continuo', False):
+                            bpm = self.spin_bpm.value()
+                            if bpm <= 0: bpm = 60
+                            beat_interval_s = 60.0 / bpm
+                            current_beat = int(elapsed_time / beat_interval_s)
+                            
+                            if current_beat != getattr(self, 'last_continuo_beat', -1):
+                                self.last_continuo_beat = current_beat
+                                total_words = len(self.autoforge_words)
+                                target_total = total_words * self.autoforge_target_reps
+                                
+                                if current_beat >= target_total:
+                                    self.estado_guardar_secuencia_continua()
+                                else:
+                                    palabra = self.autoforge_words[current_beat % total_words]
+                                    try:
+                                        if hasattr(self, 'word_window_process') and self.word_window_process:
+                                            self.word_window_process.stdin.write(f"{palabra}\n")
+                                            self.word_window_process.stdin.flush()
+                                    except: pass
+                                    
+                            self.label_rec_time.setText(f"GRABANDO SECUENCIA... {elapsed_time:.1f} s{cuadro_azul}")
+                            self.label_rec_time.setStyleSheet("font-weight: bold; color: #aa00ff;")
+                        else:
+                            self.label_rec_time.setText(f"GRABANDO PALABRA... {elapsed_time:.1f} s{cuadro_azul}")
+                            self.label_rec_time.setStyleSheet("font-weight: bold; color: #FF00FF;") # Magenta neón
                 else:
                     # Modo Manual
                     if self.chk_use_metronome.isChecked():
@@ -2653,6 +2683,318 @@ class RealTimePlotter(QtWidgets.QWidget):
             print(f"Error iniciando Autograbado: {e}")
             import traceback
             traceback.print_exc()
+            
+    def iniciar_autoforge_continuo(self):
+        try:
+            if hasattr(self, 'metronome_process') and self.metronome_process:
+                try: self.metronome_process.kill()
+                except: pass
+                self.metronome_process = None
+                self.chk_use_metronome.setChecked(False)
+
+            if not self.is_acquiring:
+                old_state = self.chk_use_metronome.isChecked()
+                self.chk_use_metronome.setChecked(False)
+                self.on_start_acq_click()
+                self.chk_use_metronome.setChecked(old_state)
+                
+            import os
+            root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            ruta_palabras = os.path.join(root_dir, "palabras.txt")
+            if not os.path.exists(ruta_palabras):
+                with open(ruta_palabras, 'w', encoding='utf-8') as f:
+                    f.write("A\nE\nI\nO\nU\n")
+                
+            with open(ruta_palabras, 'r', encoding='utf-8') as f:
+                self.autoforge_words = [line.strip() for line in f if line.strip()]
+                
+            if not self.autoforge_words:
+                QtWidgets.QMessageBox.warning(self, "Error", "palabras.txt está vacío.")
+                return
+                
+            dialog = AutoForgeDialog(self)
+            dialog.setWindowTitle("Configuración de Secuencia Continua")
+            dialog.spin_reps.setValue(25) # 25 secuencias enteras por defecto
+            dialog.spin_bpm.setValue(40)
+            if dialog.exec() == QtWidgets.QDialog.Accepted:
+                with open(ruta_palabras, 'r', encoding='utf-8') as f:
+                    self.autoforge_words = [line.strip() for line in f if line.strip()]
+                    
+                if not self.autoforge_words:
+                    QtWidgets.QMessageBox.warning(self, "Error", "palabras.txt quedó vacío después de editar.")
+                    return
+
+                self.autoforge_prueba = dialog.edit_prueba.text().strip()
+                self.autoforge_sujeto = dialog.edit_sujeto.text().strip()
+                self.autoforge_target_reps = dialog.spin_reps.value() # Total cycles
+                bpm = dialog.spin_bpm.value()
+                
+                try:
+                    self.spin_bpm.setValue(bpm)
+                    self._save_metronome_config()
+                except:
+                    pass
+                
+                self.autoforge_word_idx = 0
+                self.is_autoforge_running = True
+                self.is_autoforge_continuo = True
+                self.last_continuo_beat = -1
+                
+                self._iniciar_timer_global_continuo()
+                self.estado_iniciar_secuencia_continua()
+        except Exception as e:
+            print(f"Error iniciando Autograbado Continuo: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _iniciar_timer_global_continuo(self):
+        bpm = self.spin_bpm.value()
+        if bpm <= 0: bpm = 60
+        total_words = len(self.autoforge_words) * self.autoforge_target_reps
+        tiempo_por_secuencia = self.spin_noise_duration.value() + (3 * (60.0/bpm)) + (total_words * (60.0/bpm)) + 2.0
+        self.tiempo_restante_global = int(tiempo_por_secuencia)
+        
+        self.autoforge_estado_actual_str = "Iniciando Secuencia..."
+        
+        self.session_timer = QtCore.QTimer()
+        self.session_timer.timeout.connect(self._tick_session_timer)
+        self.session_timer.start(1000)
+
+    def estado_iniciar_secuencia_continua(self):
+        self.is_recording = False
+        self.label_rec_time.setVisible(True)
+        
+        total_pulsos = len(self.autoforge_words) * self.autoforge_target_reps
+        self.autoforge_estado_actual_str = f"Secuencia: {total_pulsos} pulsos"
+        
+        tr_str = getattr(self, 'tiempo_restante_str', '00:00')
+        cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;⏱️ Resta: {tr_str}&nbsp;</span>"
+        self.label_rec_time.setText(f"{self.autoforge_estado_actual_str}{cuadro_azul}")
+        
+        self.autoforge_overlay.setText("HAZ SILENCIO\nPREPARANDO ENTORNO...")
+        self.autoforge_overlay.show()
+        
+        import subprocess, sys, os
+        python_executable = sys.executable
+        if getattr(sys, 'frozen', False):
+            word_script_path = 'ventana_palabras.py'
+        else:
+            word_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ventana_palabras.py')
+        texto_ventana = "PREPARANDO..."
+        self.word_window_process = subprocess.Popen(
+            [python_executable, word_script_path, f'--word={texto_ventana}'],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            text=True
+        )
+        
+        QtCore.QTimer.singleShot(3000, self.estado_grabar_ruido_continuo)
+
+    def estado_grabar_ruido_continuo(self):
+        self.autoforge_overlay.setText("") 
+        self.autoforge_overlay.hide()
+        self.label_rec_time.setVisible(True) 
+        
+        self.current_recording = []
+        
+        self.noise_data_accumulated = [[] for _ in range(self.NUM_CANALES)]
+        self.noise_levels = [0.0] * self.NUM_CANALES
+        self.noise_calculated = False
+        self.noise_initialized = False
+        self.initial_noise_mean = [0.0] * self.NUM_CANALES
+        self.initial_noise_std = [0.0] * self.NUM_CANALES
+        self.stats_time = [[] for _ in range(self.NUM_CANALES)]
+        self.stats_snr = [[] for _ in range(self.NUM_CANALES)]
+        self.stats_noise_mean = [[] for _ in range(self.NUM_CANALES)]
+        self.stats_noise_std = [[] for _ in range(self.NUM_CANALES)]
+        self.global_snr_acumulado = [0.0] * self.NUM_CANALES
+        self.global_snr_count = [0] * self.NUM_CANALES
+        
+        import time
+        self.recording_start_time = time.perf_counter() 
+        self.is_recording = True
+        
+        self.plot.setYRange(-0.01, 0.01)
+        
+        noise_dur = self.spin_noise_duration.value()
+        QtCore.QTimer.singleShot(int(noise_dur * 1000), self.estado_mostrar_preparate_continuo)
+
+    def estado_mostrar_preparate_continuo(self):
+        self.is_recording = False
+        self.autoforge_ruido_guardado = self.current_recording.copy()
+        self.autoforge_estado_actual_str = "ESCUCHA EL METRÓNOMO..."
+        
+        tr_str = getattr(self, 'tiempo_restante_str', '00:00')
+        cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;⏱️ Resta: {tr_str}&nbsp;</span>"
+        self.label_rec_time.setText(f"{self.autoforge_estado_actual_str}{cuadro_azul}")
+        self.label_rec_time.setStyleSheet("font-weight: bold; color: #FF8800;")
+        
+        if not getattr(self, 'noise_calculated', False):
+            import numpy as np
+            for i in range(self.NUM_CANALES):
+                if self.noise_data_accumulated[i]:
+                    all_noise = np.concatenate(self.noise_data_accumulated[i])
+                    self.noise_levels[i] = np.mean(np.abs(all_noise))
+                    self.initial_noise_mean[i] = self.noise_levels[i]
+                    self.initial_noise_std[i] = np.std(all_noise)
+                    
+                    self.noise_lines[i].setPos(self.noise_levels[i])
+                    self.noise_lines[i].show()
+                    self.noise_lines_neg[i].setPos(-self.noise_levels[i])
+                    self.noise_lines_neg[i].show()
+                    self.noise_regions[i].setRegion([-self.noise_levels[i], self.noise_levels[i]])
+                    self.noise_regions[i].show()
+                    
+                    if hasattr(self, 'noise_status_labels'):
+                        self.noise_status_labels[i].setText(f"Ruido Base: x̄={self.initial_noise_mean[i]:.1f}µV, s={self.initial_noise_std[i]:.1f}µV")
+                        self.noise_status_labels[i].setStyleSheet("color: #00FFFF; font-size: 11px; font-weight: bold; background-color: #111111; border: 1px solid #00FFFF;")
+            
+            if self.NUM_CANALES > 0:
+                ruido_maximo_std = max(getattr(self, 'initial_noise_std', [0]))
+                if ruido_maximo_std > 0:
+                    self.spin_peak_th.setValue(ruido_maximo_std * 5.0)
+            self.noise_calculated = True
+        
+        bpm = self.spin_bpm.value()
+        if bpm <= 0: bpm = 60
+        beat_interval_s = 60.0 / bpm
+        
+        try:
+            if hasattr(self, 'word_window_process') and self.word_window_process:
+                self.word_window_process.stdin.write("PREPÁRATE\\n")
+                self.word_window_process.stdin.flush()
+        except: pass
+        
+        import subprocess, sys, os
+        python_executable = sys.executable
+        if getattr(sys, 'frozen', False):
+            script_path = 'metronomo_visual.py'
+        else:
+            script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'metronomo_visual.py')
+        self.metronome_process = subprocess.Popen(
+            [python_executable, script_path, '--autostart', '--count', f'--bpm={bpm}', '--count-in=4'],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            text=True
+        )
+        
+        self.autoforge_overlay.hide()
+        
+        self.countdown_text.setPos(-self.PLOT_DURATION_S/2.0, 0)
+        self.countdown_text.show()
+        
+        self.countdown_text.setText("PREPÁRATE...\n3")
+        QtCore.QTimer.singleShot(int(beat_interval_s * 1000), lambda: self.countdown_text.setText("PREPÁRATE...\n2"))
+        QtCore.QTimer.singleShot(int(2 * beat_interval_s * 1000), lambda: self.countdown_text.setText("PREPÁRATE...\n1"))
+        
+        QtCore.QTimer.singleShot(int(3 * beat_interval_s * 1000), self.estado_iniciar_grabacion_continua)
+
+    def estado_iniciar_grabacion_continua(self):
+        self.autoforge_overlay.hide()
+        self.countdown_text.setText("¡GO!")
+        QtCore.QTimer.singleShot(1000, self.countdown_text.hide)
+        
+        import time
+        self.recording_start_time = time.perf_counter()
+        self.is_recording = True
+        
+        self.current_recording = getattr(self, 'autoforge_ruido_guardado', []).copy()
+        self.stats_time = [[] for _ in range(self.NUM_CANALES)]
+        self.stats_snr = [[] for _ in range(self.NUM_CANALES)]
+        self.stats_noise_mean = [[] for _ in range(self.NUM_CANALES)]
+        self.stats_noise_std = [[] for _ in range(self.NUM_CANALES)]
+        
+        self.label_rec_time.setText("GRABANDO SECUENCIA CONTINUA...")
+
+    def estado_guardar_secuencia_continua(self):
+        """
+        Guarda la sesión de grabación de la Secuencia Continua.
+        A diferencia del modo palabra-por-palabra, esto guarda todo en un solo
+        bloque, incluyendo un metadato 'words_sequence' que contiene la lista
+        cíclica de palabras (ej. ['A', 'E', 'I', 'O', 'U']).
+        Esto permite que los scripts de análisis (ej. correlaciondeseñales.py)
+        lean este diccionario y etiqueten dinámicamente cada ventana recortada.
+        """
+        self.is_recording = False
+        
+        if hasattr(self, 'metronome_process') and self.metronome_process:
+            try: self.metronome_process.kill()
+            except: pass
+            self.metronome_process = None
+            
+        if hasattr(self, 'word_window_process') and self.word_window_process:
+            try: self.word_window_process.kill()
+            except: pass
+            self.word_window_process = None
+            
+        self.autoforge_estado_actual_str = "GUARDANDO SECUENCIA"
+        self.autoforge_overlay.setText("SECUENCIA COMPLETADA\nGUARDANDO DATOS...")
+        self.autoforge_overlay.show()
+        
+        import threading
+        def guardar_async():
+            import os, json
+            from pathlib import Path
+            from datetime import datetime
+            fecha_str = datetime.now().strftime("%Y-%m-%d")
+            folder_name = f"SecuenciaContinua_{self.autoforge_prueba}_{self.autoforge_sujeto}"
+            root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            base_dir = Path(root_dir) / "base_de_datos_electrodos" / fecha_str / folder_name
+            os.makedirs(base_dir, exist_ok=True)
+            
+            total_pulsos = len(self.autoforge_words) * self.autoforge_target_reps
+            metadata = {
+                "measurement_date": datetime.now().isoformat(),
+                "sample_rate": self.SAMPLE_RATE,
+                "channels": self.CANALES_DAQ,
+                "bpm": self.spin_bpm.value(),
+                "noise_seconds": self.spin_noise_duration.value(),
+                "pulse_count": total_pulsos,
+                "is_formal": True,
+                "sujeto": self.autoforge_sujeto,
+                "letra": "SecuenciaContinua",
+                "prueba": self.autoforge_prueba,
+                "comentario": "Grabado mediante AutoForge Secuencia Continua",
+                "words_sequence": self.autoforge_words
+            }
+            
+            for i in range(self.NUM_CANALES):
+                channel_output_dir = os.path.join(base_dir, f"canal_{i}")
+                os.makedirs(channel_output_dir, exist_ok=True)
+                metadata_path = os.path.join(channel_output_dir, "metadata.json")
+                try:
+                    with open(metadata_path, 'w', encoding='utf-8') as f:
+                        json.dump(metadata, f, indent=4)
+                except: pass
+
+            try: guardar_grabacion_csv(self.current_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion")
+            except: pass
+            
+            try: guardar_grabacion_wav(self.current_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion")
+            except: pass
+            
+            try: generar_grafico_grabacion(self.current_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, self.CANALES_DAQ)
+            except: pass
+            
+            try: generar_grafico_estadisticas(self.stats_time, self.stats_snr, self.stats_noise_mean, self.stats_noise_std, str(base_dir), self.NUM_CANALES, self.CANALES_DAQ)
+            except: pass
+            
+            self.current_recording = [] 
+            
+        threading.Thread(target=guardar_async, daemon=True).start()
+        
+        QtCore.QTimer.singleShot(5000, self.estado_finalizar_secuencia_continua)
+
+    def estado_finalizar_secuencia_continua(self):
+        self.autoforge_overlay.setText("¡SECUENCIA COMPLETADA!")
+        QtCore.QTimer.singleShot(2000, self.autoforge_overlay.hide)
+        self.is_acquiring = False
+        self.is_autoforge_running = False
+        self.is_autoforge_continuo = False
+        if hasattr(self, 'session_timer'):
+            self.session_timer.stop()
 
     def _iniciar_timer_global(self):
         """
@@ -2739,7 +3081,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         import subprocess, sys, os
         python_executable = sys.executable
         if getattr(sys, 'frozen', False):
-            word_script_path = 'acquisition/ventana_palabras.py'
+            word_script_path = 'ventana_palabras.py'
         else:
             word_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ventana_palabras.py')
         texto_ventana = f"SIGUIENTE:\n{palabra.upper()}"
@@ -2846,14 +3188,14 @@ class RealTimePlotter(QtWidgets.QWidget):
         import subprocess, sys, os
         python_executable = sys.executable
         if getattr(sys, 'frozen', False):
-            word_script_path = 'acquisition/ventana_palabras.py'
+            word_script_path = 'ventana_palabras.py'
         else:
             word_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ventana_palabras.py')        
         if hasattr(self, 'word_window_process') and self.word_window_process:
             try: self.word_window_process.kill()
             except: pass
             
-        texto_ventana = f"{palabra.upper()}\nPREPÁRATE"
+        texto_ventana = f"{palabra.upper()}\\nPREPÁRATE"
         self.word_window_process = subprocess.Popen(
             [python_executable, word_script_path, f'--word={texto_ventana}'],
             stdin=subprocess.DEVNULL,

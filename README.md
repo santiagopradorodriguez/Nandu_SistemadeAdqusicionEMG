@@ -46,14 +46,15 @@ El proyecto se gestiona desde el **Lanzador Principal** (`gui_app/main_app.py`) 
 AutoForge es la nueva máquina de estados central del proyecto, diseñada para capturar datasets de forma masiva y estructurada sin intervención manual constante. Su flujo de trabajo automatizado incluye:
 
 - **Lectura Automática de Diccionarios:** Lee un archivo `palabras.txt` para guiar al sujeto secuencialmente por todos los gestos.
-- **Calibración de Ruido Base:** Antes de cada palabra, graba silenciosamente para muestrear y promediar el ruido electromagnético de fondo.
+- **Modo Secuencia Continua:** Permite grabar el diccionario entero de forma cíclica (Ej: A, E, I, O, U, A, E...). Al procesar, el sistema automáticamente genera un vector de metadatos `valid_words` que mapea cada pulso/ventana detectada a su palabra real, facilitando el etiquetado para Machine Learning.
+- **Calibración Dinámica de Ruido Base:** Antes de cada palabra o secuencia, graba silenciosamente para muestrear el ruido electromagnético de fondo y aplica un umbral estadístico adaptativo.
 - **Sincronización:** Dispara el metrónomo visual y sonoro ("3, 2, 1, GO") para estandarizar los tiempos de preparación y contracción.
-- **Validación SNR:** Registra el esfuerzo muscular y calcula automáticamente el SNR (Relación Señal-Ruido) para descartar mediciones contaminadas.
+- **Validación SNR:** Registra el esfuerzo muscular y calcula automáticamente el SNR (Relación Señal-Ruido) para descartar mediciones contaminadas, restando el offset basal de forma dinámica.
 - **Auto-Guardado:** Guarda las grabaciones crudas, procesadas y metadatos con la nomenclatura perfecta para su posterior entrenamiento en Machine Learning.
 
 ---
-### 🛠️ Herramientas y Módulos (Nueva Arquitectura v4.x)
-El proyecto ha sido refactorizado en una arquitectura modular dentro de la rama principal de desarrollo:
+### 🛠️ Herramientas y Módulos (Nueva Arquitectura v4.x PySide6)
+El proyecto ha sido completamente refactorizado en una arquitectura modular usando **PySide6** para interfaces gráficas modernas y fluidas:
 
 #### 1. Módulo `acquisition/` (Adquisición de Hardware)
 *   **`manual_daq.py`**: Interfaz de captura libre con configuración manual de ganancia y hardware.

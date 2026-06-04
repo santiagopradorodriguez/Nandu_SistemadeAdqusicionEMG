@@ -7,7 +7,7 @@ matplotlib.use('TkAgg')
 sys.path.append(r"c:\Users\MSI\OneDrive\Documentos\DOCUMENTOS SANTIAGO\santiago-prado-repositorio\EMG_desarrollo")
 import analysis.analisis_por_track_integrado as api
 
-mediciones = ['2026-06-01/A_Prueba1_Sujeto1', '2026-06-01/E_Prueba1_Sujeto1', '2026-06-01/I_Prueba1_Sujeto1', '2026-06-01/O_Prueba1_Sujeto1', '2026-06-01/U_Prueba1_Sujeto1']
+mediciones = ['2026-06-03/A_Prueba4_Lucas', '2026-06-03/A_Prueba5_Lucas', '2026-06-03/E_Prueba4_Lucas', '2026-06-03/E_Prueba5_Lucas', '2026-06-03/I_Prueba4_Lucas', '2026-06-03/I_Prueba5_Lucas', '2026-06-03/I_VOCALESAU_Lucas', '2026-06-03/O_Prueba4_Lucas', '2026-06-03/O_Prueba5_Lucas', '2026-06-03/U_Prueba4_Lucas', '2026-06-03/U_Prueba5_Lucas', '2026-06-03/a_Prueba1_Lucas', '2026-06-03/a_Prueba3_Lucas', '2026-06-03/e_Prueba1_Lucas', '2026-06-03/e_Prueba3_Lucas', '2026-06-03/i_Prueba1_Lucas', '2026-06-03/i_Prueba3_Lucas', '2026-06-03/o_Prueba1_Lucas', '2026-06-03/o_Prueba3_Lucas', '2026-06-03/u_Prueba1_Lucas', '2026-06-03/u_Prueba2_Lucas', '2026-06-03/u_Prueba3_Lucas', '2026-06-01/A_Prueba1_Sujeto1', '2026-06-01/E_Prueba1_Sujeto1', '2026-06-01/I_Prueba1_Sujeto1', '2026-06-01/O_Prueba1_Sujeto1', '2026-06-01/U_Prueba1_Sujeto1']
 base_dir = r"c:\Users\MSI\OneDrive\Documentos\DOCUMENTOS SANTIAGO\santiago-prado-repositorio\EMG_desarrollo\base_de_datos_electrodos"
 
 try:
@@ -17,7 +17,7 @@ try:
     dialog.populate_channels(base_dir, mediciones)
 
     # Trasplantar la selección de canales de PySide6 a Tkinter
-    canales_elegidos = ['canal_0', 'canal_1', 'canal_2', 'canal_3', 'canal_4']
+    canales_elegidos = ['canal_0', 'canal_1', 'canal_2', 'canal_3']
     for canal_key, var in dialog.canales_seleccionados.items():
         var.set(canal_key in canales_elegidos)
 

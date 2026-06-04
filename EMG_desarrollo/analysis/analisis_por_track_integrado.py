@@ -303,7 +303,8 @@ def _plot_pulse_full(
     show_plot=False,         # <-- NUEVO: para mostrar el gráfico interactivamente
     noise_drift_pct=np.nan,  # <-- NUEVO: para mostrar en el gráfico
     snr_drop_pct=np.nan,     # <-- NUEVO: para mostrar en el gráfico
-    pulso_sigma=None         # <-- NUEVO: para mostrar la desviación estándar
+    pulso_sigma=None,        # <-- NUEVO: para mostrar la desviación estándar
+    noise_sigma=None         # <-- NUEVO: para mostrar el error en el umbral
 ):
     """
     Plot del pulso completo manteniendo el estilo original,
@@ -369,6 +370,8 @@ def _plot_pulse_full(
     # umbral y sombreado
     if calcular_umbral and mostrar_umbral and (umbral is not None):
         plt.axhline(umbral, color="green", linestyle="--", alpha=0.9, label=f"Umbral ({umbral:.2f})")
+        if noise_sigma is not None and not np.isnan(noise_sigma):
+            plt.fill_between(t_pulso, umbral - noise_sigma, umbral + noise_sigma, color="green", alpha=0.2, label=f"Error Umbral (±1σ)")
         plt.fill_between(t_pulso, -umbral, umbral, color="red", alpha=0.06)
         porc_ruido_samples = float(100.0 * np.mean(np.abs(pulso_promedio) < umbral)) if umbral > 0 else 0.0
         plt.annotate(f"% muestras |x|<umbral: {porc_ruido_samples:.1f}%%", xy=(0.98, 0.95),
@@ -1738,7 +1741,8 @@ def procesar_wavs_promedio(
             show_plot=show_average_plot, # <-- Pasar el nuevo parámetro
             noise_drift_pct=noise_drift_pct,
             snr_drop_pct=snr_drop_pct,
-            pulso_sigma=pulso_sigma
+            pulso_sigma=pulso_sigma,
+            noise_sigma=noise_sigma
         )
 
         # --- BLOQUE: Espectrograma y espectro de frecuencias del pulso promedio ---

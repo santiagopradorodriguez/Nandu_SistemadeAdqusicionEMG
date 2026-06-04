@@ -273,6 +273,7 @@ class ReaperStyleHub(QMainWindow):
             ("⚙️ Configuración General", "_internal_config"),
             ("Instrucciones y Créditos", "instrucciones_uso.py"),
             ("Metrónomo", "acquisition/metronomo_visual.py"),
+            ("Entrenamiento AutoForge", "acquisition/modulo_de_entrenamiento.py"),
             ("Editar Medición", "utils/editor_mediciones.py"),
             ("Extraer Datos ML", "analysis/feature_extractor.py"),
             ("Graficador", "analysis/plotter_calibrado.py"),
@@ -362,15 +363,15 @@ class ReaperStyleHub(QMainWindow):
         
         html_intro = f"""
         <div style='padding: 20px;'>
-            <h2 style='color:#00ffff;'>🔬 Plataforma de Investigación EMG v3.0</h2>
+            <h2 style='color:#00ffff;'>🔬 Plataforma de Investigación EMG v4.0</h2>
             <p>Bienvenido al hub centralizado para adquisición en tiempo real, curación y análisis comparativo de señales electromiográficas.</p>
             
-            <h3 style='color:#00ffaa;'>✨ Novedades Actualización v3.0 (PySide6):</h3>
+            <h3 style='color:#00ffaa;'>✨ Novedades Actualización v4.0 (Secuencia Continua & AutoForge):</h3>
             <ul>
-                <li><b>Framework Moderno:</b> Refactorización total a PySide6, garantizando fluidez extrema y estandarización visual.</li>
-                <li><b>Gestor de Configuración Central:</b> Configura tus canales por defecto, colores (ahora persistentes), y parámetros DAQ desde una única ventana de ajustes.</li>
-                <li><b>Editor de Palabras (AutoForge):</b> Modifica la lista de palabras para estimulación directamente desde la GUI antes de iniciar el experimento.</li>
-                <li><b>Resiliencia del Sistema:</b> La consola de análisis interactiva ahora atrapa errores de ejecución (tracebacks) y se mantiene abierta para facilitar el debugging en vivo.</li>
+                <li><b>AutoForge Secuencia Continua:</b> Captura el diccionario entero de forma cíclica en un solo click, autogenerando las etiquetas correctas de Machine Learning (valid_words) para cada pulso en los metadatos.</li>
+                <li><b>Cálculo de Ruido y SNR Dinámico:</b> Análisis automático del ruido de fondo previo a cada estímulo, con offset centrado en base al primer octavo del pulso promedio para lograr gráficos de overlay precisos.</li>
+                <li><b>Sincronización Perfecta:</b> La geometría de búsqueda de pulsos se centra dinámicamente usando como referencia la ventana exacta del beat del metrónomo.</li>
+                <li><b>Framework Moderno PySide6:</b> Estabilidad extrema, estética Cyberpunk, colores persistentes y prevención de caídas de UI frente a errores internos.</li>
             </ul>
 
             <h3 style='color:#ffaa00;'>📋 Instrucciones Rápidas:</h3>

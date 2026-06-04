@@ -8,12 +8,14 @@
 import sys
 import tkinter as tk
 from tkinter import font
+import threading
 
 def main():
     target_word = "ESPERANDO..."
     for arg in sys.argv:
         if arg.startswith("--word="):
             target_word = arg.split("=")[1]
+            target_word = target_word.replace("\\n", "\n")
             
     root = tk.Tk()
     root.title("Ñandú LSD - AutoForge - Palabra Actual")
@@ -36,6 +38,15 @@ def main():
     
     label = tk.Label(root, text=target_word.upper(), font=word_font, fg="#00FFFF", bg="#050505")
     label.pack(expand=True, fill="both")
+    
+    def listen_for_commands():
+        for line in sys.stdin:
+            word = line.strip().replace("\\n", "\n")
+            if word:
+                root.after(0, lambda w=word: label.config(text=w.upper()))
+                
+    t = threading.Thread(target=listen_for_commands, daemon=True)
+    t.start()
     
     root.mainloop()
 

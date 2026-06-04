@@ -55,6 +55,7 @@ class MetronomeApp:
         self.is_muted = False # <-- NUEVO: Controla si el beep suena o no
         # --- MODIFICADO: Cargar BPM desde el archivo de configuración ---
         self.bpm = tk.IntVar(value=60)
+        self.subdivisions = tk.IntVar(value=4) # <-- NUEVO: Para sub-pulsos
         self.timer_id = None
         # --- NUEVO: Variable para el contador de pulsos ---
         self.beat_count = tk.StringVar(value="0")
@@ -62,6 +63,8 @@ class MetronomeApp:
         # --- NUEVO: Hilo para escuchar comandos ---
         self.command_thread = threading.Thread(target=self._listen_for_commands, daemon=True)
         self.command_thread.start()
+        # --- NUEVO: Índice para el ciclo de sub-pulsos ---
+        self.beat_cycle_index = 0
         # --- Colores para el pulso visual ---
         self.COLOR_BEAT = "#00FFFF"  # Cian Neón para el pulso
         self.COLOR_IDLE = "#111111"  # Negro profundo cuando está en reposo
@@ -115,6 +118,21 @@ class MetronomeApp:
         )
         self.bpm_slider.pack(pady=10)
 
+        # --- NUEVO: Control de Subdivisiones ---
+        tk.Label(controls_frame, text="Subdivisiones por Pulso", font=title_font, fg="#00FF00", bg="#050505").pack()
+        self.subdiv_spinbox = tk.Spinbox(
+            controls_frame,
+            from_=1,
+            to=8,
+            textvariable=self.subdivisions,
+            width=5,
+            font=button_font,
+            bg="#111111",
+            fg="#00FFFF",
+            state="readonly"
+        )
+        self.subdiv_spinbox.pack(pady=5)
+
         # Botones de Start/Stop
         button_container = tk.Frame(controls_frame, bg="#050505")
         button_container.pack(pady=20)
@@ -139,6 +157,7 @@ class MetronomeApp:
                 with open('metronome_config.json', 'r') as f:
                     config = json.load(f)
                     self.bpm.set(config.get('last_bpm', 60))
+                    self.subdivisions.set(config.get('subdivisions', 4))
                     print(f"Configuración de metrónomo cargada: BPM={self.bpm.get()}")
             except Exception as e:
                 print(f"Error al cargar config del metrónomo, usando valores por defecto. Error: {e}")
@@ -147,10 +166,12 @@ class MetronomeApp:
         if self.is_running:
             return
         self.is_running = True
+        self.beat_cycle_index = 0 # Iniciar siempre desde el pulso principal
         self.reset_counter() # Reinicia el contador al iniciar
         self.btn_start.config(state="disabled")
         self.btn_stop.config(state="normal")
         self.bpm_slider.config(state="disabled")
+        self.subdiv_spinbox.config(state="disabled")
         self.beat()
 
     def stop(self):
@@ -164,7 +185,9 @@ class MetronomeApp:
         self.btn_stop.config(state="disabled")
         self.count_in_remaining = 0
         self.beat_count.set("0")
+        self.beat_cycle_index = 0
         self.bpm_slider.config(state="normal")
+        self.subdiv_spinbox.config(state="readonly")
 
     def _listen_for_commands(self):
         """Escucha comandos desde stdin en un hilo separado."""
@@ -195,7 +218,8 @@ class MetronomeApp:
         """Guarda la configuración del metrónomo en un archivo JSON."""
         config = {
             "last_bpm": self.bpm.get(),
-            "last_beat_count": self.beat_count.get()
+            "last_beat_count": self.beat_count.get(),
+            "subdivisions": self.subdivisions.get()
         }
         try:
             with open('metronome_config.json', 'w') as f:
@@ -216,57 +240,71 @@ class MetronomeApp:
         if not self.is_running:
             return # Si no está corriendo, no hace nada (ni cuenta ni suena)
 
-        # Pulso visual y sonoro
-        self.pulse_frame.config(bg=self.COLOR_BEAT)
-        count_in = getattr(self, 'count_in_remaining', 0)
-        
-        # Actualización de la GUI y del número de conteo
-        if count_in > 1:
-            # Fase preparatoria (Rojo, cuenta regresiva)
-            if hasattr(self, 'lbl_title_var'):
-                self.lbl_title_var.set("INICIANDO")
-                self.lbl_title.config(fg="#FF0000")
-            if hasattr(self, 'counter_label'):
-                self.counter_label.config(fg="#FF0000")
-            self.beat_count.set(str(count_in - 1))
-            self.count_in_remaining -= 1
-        else:
-            # Fase normal o pulso de arranque (GO)
-            if hasattr(self, 'lbl_title_var'):
-                self.lbl_title_var.set("PULSO")
-                self.lbl_title.config(fg="#00FFFF")
-            if hasattr(self, 'counter_label'):
-                self.counter_label.config(fg="#00FFFF")
+        num_subdivs = self.subdivisions.get()
+        is_main_beat = (self.beat_cycle_index == 0)
+
+        if is_main_beat:
+            # --- LÓGICA DEL PULSO PRINCIPAL (EL "1") ---
+            self.pulse_frame.config(bg=self.COLOR_BEAT)
+            count_in = getattr(self, 'count_in_remaining', 0)
             
-            # Si count_in está activo, no incrementamos el beat normal
-            if self.count_in_remaining > 0:
-                self.beat_count.set("1") # Muestra '1' en el pulso de GO
-                self.count_in_remaining = 0
+            # Actualización de la GUI y del número de conteo
+            if count_in > 1:
+                # Fase preparatoria (Rojo, cuenta regresiva)
+                if hasattr(self, 'lbl_title_var'):
+                    self.lbl_title_var.set("INICIANDO")
+                    self.lbl_title.config(fg="#FF0000")
+                if hasattr(self, 'counter_label'):
+                    self.counter_label.config(fg="#FF0000")
+                self.beat_count.set(str(count_in - 1))
+                self.count_in_remaining -= 1
             else:
-                try:
-                    current = int(self.beat_count.get())
-                except ValueError:
-                    current = 0
-                self.beat_count.set(str(current + 1))
-                    
-        # Sonidos de metrónomo (Graves para cuenta atrás, Agudo para GO, Normal el resto)
-        if winsound and not self.is_muted:
-            try:
-                if count_in > 1:
-                    threading.Thread(target=winsound.Beep, args=(800, 200), daemon=True).start()
-                elif count_in == 1:
-                    threading.Thread(target=winsound.Beep, args=(1200, 500), daemon=True).start()
+                # Fase normal o pulso de arranque (GO)
+                if hasattr(self, 'lbl_title_var'):
+                    self.lbl_title_var.set("PULSO")
+                    self.lbl_title.config(fg="#00FFFF")
+                if hasattr(self, 'counter_label'):
+                    self.counter_label.config(fg="#00FFFF")
+                
+                if self.count_in_remaining > 0:
+                    self.beat_count.set("1") # Muestra '1' en el pulso de GO
+                    self.count_in_remaining = 0
                 else:
-                    threading.Thread(target=winsound.Beep, args=(1000, 50), daemon=True).start()
-            except Exception as e:
-                print(f"Error al reproducir sonido con winsound: {e}")
+                    try:
+                        current = int(self.beat_count.get())
+                    except ValueError:
+                        current = 0
+                    self.beat_count.set(str(current + 1))
+                        
+            # Sonidos de metrónomo (Graves para cuenta atrás, Agudo para GO, Normal el resto)
+            if winsound and not self.is_muted:
+                try:
+                    if count_in > 1:
+                        threading.Thread(target=winsound.Beep, args=(800, 200), daemon=True).start()
+                    elif count_in == 1:
+                        threading.Thread(target=winsound.Beep, args=(1200, 500), daemon=True).start()
+                    else:
+                        threading.Thread(target=winsound.Beep, args=(1000, 100), daemon=True).start()
+                except Exception as e:
+                    print(f"Error al reproducir sonido con winsound: {e}")
 
-        # Apagar el pulso visual después de un corto tiempo
-        self.root.after(50, lambda: self.pulse_frame.config(bg=self.COLOR_IDLE))
+            self.root.after(50, lambda: self.pulse_frame.config(bg=self.COLOR_IDLE))
 
-        # Programar el siguiente pulso
+        elif getattr(self, 'count_in_remaining', 0) == 0:
+            # --- LÓGICA DEL SUB-PULSO (EL "2, 3, 4...") ---
+            self.pulse_frame.config(bg="#00AAAA") # Cian más oscuro
+            self.root.after(50, lambda: self.pulse_frame.config(bg=self.COLOR_IDLE))
+            if winsound and not self.is_muted:
+                try:
+                    threading.Thread(target=winsound.Beep, args=(1600, 50), daemon=True).start()
+                except Exception as e:
+                    print(f"Error al reproducir sonido de sub-beat: {e}")
+
+        # --- LÓGICA DE TEMPORIZACIÓN (COMÚN A AMBOS) ---
+        self.beat_cycle_index = (self.beat_cycle_index + 1) % num_subdivs
         interval_ms = int(60000 / self.bpm.get())
-        self.timer_id = self.root.after(interval_ms, self.beat)
+        sub_interval_ms = interval_ms // num_subdivs if num_subdivs > 1 else interval_ms
+        self.timer_id = self.root.after(sub_interval_ms, self.beat)
 
 def main():
     # --- NUEVO: Lógica para autostart ---
