@@ -293,6 +293,15 @@ class CsvViewerWidget(QWidget):
         if not os.path.exists(filepath):
             self.lbl_status.setText(f"Error: No se encuentra el archivo {filepath}")
             return
+        
+        if not hasattr(self, 'channel_offsets'):
+            self.channel_offsets = {}
+        
+        # Si el archivo es distinto, borramos la memoria de los offsets
+        if getattr(self, 'current_filepath', None) != filepath:
+            self.channel_offsets = {}
+            self.current_filepath = filepath
+            
         self.lbl_status.setText(f"Cargando archivo: {os.path.basename(filepath)} ...")
         self.loader = DataLoaderThread(filepath)
         self.loader.finished_loading.connect(self._on_csv_loaded)
@@ -334,9 +343,12 @@ class CsvViewerWidget(QWidget):
                 canales_desactivados.add(c)
 
         # Limpiar canales previos
-        for chk in self.channel_checkboxes.values():
-            self.lyt_channels.removeWidget(chk)
-            chk.deleteLater()
+        if not hasattr(self, 'channel_rows'):
+            self.channel_rows = []
+        for row_widget in self.channel_rows:
+            self.lyt_channels.removeWidget(row_widget)
+            row_widget.deleteLater()
+        self.channel_rows.clear()
         self.channel_checkboxes.clear()
         
         # Guardar data original y crear checkboxes
@@ -344,7 +356,6 @@ class CsvViewerWidget(QWidget):
         for idx, canal in enumerate(canales):
             self.canales_originales[canal] = self.df[canal].values
             
-            # Intentar extraer el número de canal para mapear, o usar idx
             try:
                 ch_num = int(''.join(filter(str.isdigit, canal)))
             except:
@@ -353,9 +364,11 @@ class CsvViewerWidget(QWidget):
             nombre_musc = self.canal_nombres[ch_num] if ch_num < len(self.canal_nombres) else canal
             color_canal = self.channel_colors[ch_num] if ch_num < len(self.channel_colors) else '#ffffff'
             
-            chk = QCheckBox(f"{canal} - {nombre_musc}")
+            row_widget = QWidget()
+            row_layout = QHBoxLayout(row_widget)
+            row_layout.setContentsMargins(0, 0, 0, 0)
             
-            # Respetar la memoria: si estaba desactivado en la medición anterior, dejarlo desactivado
+            chk = QCheckBox(f"{canal} - {nombre_musc}")
             if canal in canales_desactivados:
                 chk.setChecked(False)
             else:
@@ -363,12 +376,31 @@ class CsvViewerWidget(QWidget):
                 
             chk.setStyleSheet(f"color: {color_canal}; font-weight: bold;")
             chk.stateChanged.connect(self.update_plot)
-            self.lyt_channels.addWidget(chk)
             
-            # Guardar propiedades para update_plot
             chk.setProperty("ch_num", ch_num)
             chk.setProperty("nombre_plot", nombre_musc)
             self.channel_checkboxes[canal] = chk
+            
+            row_layout.addWidget(chk)
+            
+            lbl_offset = QLabel("Offset(µV):")
+            lbl_offset.setStyleSheet("color: #888; font-size: 10px;")
+            row_layout.addWidget(lbl_offset)
+            
+            spin_offset = QSpinBox()
+            spin_offset.setRange(-20000, 20000)
+            spin_offset.setSingleStep(100)
+            spin_offset.setValue(int(self.channel_offsets.get(canal, 0)))
+            
+            # Lambda helper para capturar 'canal' correctamente
+            def make_offset_handler(c_name):
+                return lambda val: self._on_offset_changed(c_name, val)
+            spin_offset.valueChanged.connect(make_offset_handler(canal))
+            
+            row_layout.addWidget(spin_offset)
+            
+            self.lyt_channels.addWidget(row_widget)
+            self.channel_rows.append(row_widget)
             
         self.update_plot()
         self._apply_view_ranges()
@@ -420,6 +452,10 @@ class CsvViewerWidget(QWidget):
                         kernel = np.ones(env_window) / env_window
                         y_data = np.convolve(y_data, kernel, mode='same')
                     
+                # Offset Manual
+                offset_val = self.channel_offsets.get(canal, 0)
+                y_data = y_data + offset_val
+                    
                 # Downsampling
                 x_plot, y_plot = downsample_lttb_fast(self.time_data, y_data, MAX_POINTS_TO_PLOT)
                 
@@ -427,6 +463,10 @@ class CsvViewerWidget(QWidget):
                 nombre_plot = chk.property("nombre_plot")
                 color = self.channel_colors[ch_num % len(self.channel_colors)]
                 self.plot_widget.plot(x_plot, y_plot, name=nombre_plot, pen=pg.mkPen(color, width=1.5))
+
+    def _on_offset_changed(self, canal, offset_val):
+        self.channel_offsets[canal] = offset_val
+        self.update_plot()
 
     def _autoscale(self):
         if self.df is None: return
