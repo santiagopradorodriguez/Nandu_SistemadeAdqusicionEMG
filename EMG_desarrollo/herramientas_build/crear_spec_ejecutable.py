@@ -5,6 +5,13 @@
 # Descripción: Genera el archivo spec de PyInstaller para la construcción.
 # ==============================================================================
 
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Genera el archivo spec de PyInstaller para la construcción.
+# ==============================================================================
+
 import os
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
@@ -47,13 +54,16 @@ block_cipher = None
 additional_modules = [
     'acquisition.manual_daq',
     'acquisition.autoforge_daq',
+    'acquisition.autoforge_daq_experimental',
     'acquisition.metronomo_visual',
     'analysis.analisis_por_track_integrado',
+    'analysis.analisis_por_track_integrado_experimental',
     'analysis.electrode_viewer_4',
     'analysis.feature_extractor',
     'analysis.plotter_calibrado',
     'analysis.correlaciondeseñales',
     'analysis.analisis_estadistico_pulsos',
+    'analysis.reproductor_canal3',
     'utils.editor_mediciones',
     'utils.actualizar_metadata',
     'utils.migrar_mediciones_por_fecha',
@@ -99,12 +109,12 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='NanduLsd',
+    name='NanduLsd_Core',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=True, 
+    console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
@@ -121,7 +131,7 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='NanduLsd'
+    name='NanduLsd_Core'
 )
 """
     spec_path = os.path.join(build_dir, "EMG_Studio.spec")

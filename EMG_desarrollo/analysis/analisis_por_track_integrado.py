@@ -5,6 +5,13 @@
 # Descripción: Procesamiento, filtrado y análisis de señales por track integrado.
 # ==============================================================================
 
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Procesamiento, filtrado y análisis de señales por track integrado.
+# ==============================================================================
+
 #%%
 #%%
 import os
@@ -29,7 +36,7 @@ import tkinter as tk
 from tkinter import filedialog, simpledialog, messagebox
 
 # --- Versión del script de análisis ---
-__version__ = "5.0.0"
+__version__ = "5.0.1"
 
 plt.rcParams.update({
     "font.size": 16,
@@ -1446,10 +1453,26 @@ def procesar_wavs_promedio(
 
         # --- CORRECCIÓN: Usar un umbral de búsqueda de picos variable ---
         # En lugar de usar el 'peak_search_threshold' fijo, usamos el 'umbral'
-        # que ya calculamos a partir del ruido de la señal. Esto hace la
-        # detección mucho más robusta para señales de diferentes amplitudes.
-        # Si el umbral no se pudo calcular, usamos el valor fijo como fallback.
-        search_threshold_dinamico = umbral if umbral is not None and umbral > 0 else peak_search_threshold
+        # --- CORRECCIÓN: Usar un umbral de búsqueda de picos variable ---
+        base_threshold = umbral if umbral is not None and umbral > 0 else peak_search_threshold
+        
+        # Primera pasada: promediar picos que superan el umbral base
+        first_pass_peaks = []
+        for i in range(n_pulsos):
+            c_start = start_sample_noise + i * muestras_pulso
+            c_end = min(c_start + muestras_pulso, len(env_recortada))
+            if c_start < len(env_recortada):
+                seg = env_recortada[c_start:c_end]
+                if seg.size > 0:
+                    m_val = np.max(seg)
+                    if m_val >= base_threshold:
+                        first_pass_peaks.append(m_val)
+                        
+        if len(first_pass_peaks) > 0:
+            search_threshold_dinamico = np.mean(first_pass_peaks) * 0.5
+        else:
+            search_threshold_dinamico = base_threshold
+            
         print(f"[Análisis] Usando umbral de búsqueda de picos dinámico: {search_threshold_dinamico:.4f}")
 
         # listas
@@ -1529,8 +1552,8 @@ def procesar_wavs_promedio(
         stats_peak_vals = []
         stats_raw_noise_vals = []
 
-        # longitud (en muestras) de la ventana local de ruido (1/16 del periodo)
-        noise_win_samples = max(3, int(round((periodo / 8.0) * samplerate)))
+        # longitud (en muestras) de la ventana local de ruido (1/4 del periodo, +/- tau/8)
+        noise_win_samples = max(3, int(round((periodo / 4.0) * samplerate)))
         
         valid_idx = 0
         n_pulsos_total = int(n_pulsos_manual) if n_pulsos_manual is not None and n_pulsos_manual > 0 else n_pulsos
@@ -1549,12 +1572,9 @@ def procesar_wavs_promedio(
             
             seg_start = int(max_idx) - pre_samples
             
-            # --- MODIFICACIÓN: Buscar el valle real (punto medio entre picos) ---
-            if valid_idx > 0:
-                prev_max_idx = maxima_per_cut[valid_idx - 1]
-                midpoint = (max_idx + prev_max_idx) // 2
-            else:
-                midpoint = int(max_idx) - (muestras_pulso // 2)
+            # --- MODIFICACIÓN: Buscar el valle real (punto medio entre timestamps del metrónomo) ---
+            cut_start = start_sample_noise + i * muestras_pulso
+            midpoint = cut_start + (muestras_pulso // 2)
                 
             noise_start = max(0, int(midpoint - noise_win_samples // 2))
             noise_end = min(len(env_recortada), noise_start + noise_win_samples)

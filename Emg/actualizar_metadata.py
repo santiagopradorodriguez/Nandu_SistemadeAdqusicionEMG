@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Utilidad para actualizar o corregir metadatos de las sesiones grabadas.
+# ==============================================================================
+
 """
 actualizar_metadata.py - v1.0
 

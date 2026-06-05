@@ -5,6 +5,13 @@
 # Descripción: Visualización gráfica de señales EMG calibradas (multi-archivo).
 # ==============================================================================
 
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Visualización gráfica de señales EMG calibradas (multi-archivo).
+# ==============================================================================
+
 # -*- coding: utf-8 -*-
 """
 plotter_calibrado_secuencial_final.py
@@ -442,6 +449,13 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
                         etiqueta_env += " (Offset restado)"
             
             ax.plot(df[col_tiempo], env, color=color_hex, lw=1.2)
+            
+            # Auto-escala Y-axis (Hilbert)
+            min_val = np.nanmin(env)
+            max_val = np.nanmax(env)
+            if max_val > min_val:
+                margin = (max_val - min_val) * 0.10
+                ax.set_ylim(min_val - margin, max_val + margin)
 
         elif tipo_envolvente == 'rms':
             env_rms = calcular_rms(sig, fs, RMS_WINDOW_MS)
@@ -459,10 +473,23 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
                             etiqueta_env += " (Offset restado)"
 
             ax.plot(df[col_tiempo], env_rms, color=color_hex, lw=1.5, label='RMS')
-            max_rms = np.nanmax(env_rms)
-            if max_rms > 0: ax.set_ylim(-5, max_rms * 2)
+            
+            # Auto-escala Y-axis (RMS)
+            min_val = np.nanmin(env_rms)
+            max_val = np.nanmax(env_rms)
+            if max_val > min_val:
+                margin = (max_val - min_val) * 0.10
+                ax.set_ylim(min_val - margin, max_val + margin)
+                
         else:
             ax.plot(df[col_tiempo], sig, color=color_hex, lw=0.8)
+            
+            # Auto-escala Y-axis (Original)
+            min_val = np.nanmin(sig)
+            max_val = np.nanmax(sig)
+            if max_val > min_val:
+                margin = (max_val - min_val) * 0.10
+                ax.set_ylim(min_val - margin, max_val + margin)
         
         if bpm and noise_seconds is not None:
             tau = 60.0/bpm
@@ -583,10 +610,26 @@ def flujo_principal():
         total = len(mediciones)
         print(f"--- Iniciando secuencia de {total} mediciones ---")
         
+        from PySide6.QtWidgets import QProgressDialog
+        progress = QProgressDialog("Procesando mediciones (Cargando CSV)...", "Cancelar", 0, total)
+        progress.setWindowModality(Qt.WindowModal)
+        progress.show()
+        app.processEvents()
+        
         limits_cache = {}
         for i, nombre_medicion in enumerate(mediciones):
+            if progress.wasCanceled():
+                print("Secuencia cancelada por el usuario.")
+                break
+                
+            progress.setValue(i)
+            progress.setLabelText(f"Procesando {i+1} de {total}:\n{nombre_medicion}")
+            app.processEvents()
+            
             print(f"[{i+1}/{total}] Cargando datos...")
             plotear_medicion_secuencial(nombre_medicion, config, limits_cache)
+            
+        progress.setValue(total)
 
         print("--- Todas las mediciones procesadas ---")
 

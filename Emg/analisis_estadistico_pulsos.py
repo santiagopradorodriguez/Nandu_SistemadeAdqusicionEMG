@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Realiza análisis estadístico sobre pulsos extraídos y genera métricas.
+# ==============================================================================
+
 """
 analisis_estadistico_pulsos.py - v1.0
 

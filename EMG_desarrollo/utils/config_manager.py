@@ -5,6 +5,13 @@
 # Descripción: Gestor de carga y guardado de configuraciones globales del sistema.
 # ==============================================================================
 
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Gestor de carga y guardado de configuraciones globales del sistema.
+# ==============================================================================
+
 import os
 import json
 

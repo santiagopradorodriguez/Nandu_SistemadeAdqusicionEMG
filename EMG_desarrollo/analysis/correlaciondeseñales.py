@@ -5,6 +5,13 @@
 # Descripción: Cálculo y visualización de correlación cruzada entre diferentes señales.
 # ==============================================================================
 
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Cálculo y visualización de correlación cruzada entre diferentes señales.
+# ==============================================================================
+
 #%%
 import os
 import json
@@ -824,7 +831,7 @@ def export_results_for_file(out_dir, filename, resultados_entry):
 
 # ---------------------- Comparative plotting --------------------
 def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, resultados, nombre_salida,
-                       show_overlay=True, show_amplitude=True):
+                       show_overlay=True, show_amplitude=True, normalize_overlay=False):
     
     import matplotlib.cm as cm
     n_files = len(promedios_globales)
@@ -845,7 +852,10 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
             ax_ov.plot(t_plot, pulso, label=str(i+1), linewidth=2, alpha=0.9, color=plot_colors[i])
         ax_ov.set_title('Overlay: FORMAS MUSCULARES (Líder)')
         ax_ov.set_xlabel('Tiempo [s]')
-        ax_ov.set_ylabel('Amplitud [V]')
+        if normalize_overlay:
+            ax_ov.set_ylabel('Normalizado')
+        else:
+            ax_ov.set_ylabel('Unidades Arbitrarias')
         ax_ov.grid(True, alpha=0.4)
         ax_ov.legend(title='Archivo #', fontsize=8, loc='upper right')
         plt.tight_layout()
@@ -1160,7 +1170,7 @@ def procesar_wavs_promedio(
         plt.close('all') # --- Limpieza forzada ---
 
     if mostrar_tabla and promedios_globales:
-        _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, resultados, nombre_salida)
+        _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, resultados, nombre_salida, normalize_overlay=normalizar)
 
     return resultados
 
@@ -1441,7 +1451,7 @@ class ComparativeOptionsDialog(QDialog):
         out = os.path.join("comparativos", f"comp_{datetime.now().strftime('%H%M%S')}.png")
         
         _comparative_plots(proms, times, names, glob_res, out, 
-                           show_overlay=self.var_ov.get(), show_amplitude=self.var_amp.get())
+                           show_overlay=self.chk_ov.isChecked(), show_amplitude=self.chk_amp.isChecked())
 
 class AnalysisGUI:
     def __init__(self, root):

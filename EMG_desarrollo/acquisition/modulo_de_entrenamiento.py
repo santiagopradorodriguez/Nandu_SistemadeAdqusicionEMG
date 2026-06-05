@@ -2,6 +2,13 @@
 # Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
 # Autores: Lucas Braunstein y Santiago Prado
 # Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Módulo modulo_de_entrenamiento.py del sistema NANDU LSD.
+# ==============================================================================
+
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
 # Descripción: Módulo de entrenamiento para practicar la cadencia de autograbado.
 # ==============================================================================
 

@@ -26,7 +26,7 @@
 """
 
 # --- Versión del script ---
-__version__ = "5.0.1"
+__version__ = "5.0.0"
 
 import numpy as np
 from scipy.io.wavfile import write as write_wav
@@ -94,6 +94,320 @@ from pyqtgraph.Qt import QtWidgets, QtCore, QtGui
 
 # NUEVO: Import para SpinBox y Línea
 from pyqtgraph import SpinBox, InfiniteLine
+
+
+# --- INYECCION REAPER ARCHITECTURE ---
+from PySide6.QtCore import QThread, Signal
+
+class RingBuffer:
+    """
+    Buffer circular basado en NumPy estático para evitar recolección de basura.
+    Almacena datos en la forma (canales, muestras) para coincidir de forma nativa
+    con el formato de salida de NI-DAQmx.
+    """
+    def __init__(self, capacity: int, num_channels: int):
+        self.capacity = capacity
+        self.num_channels = num_channels
+        # Array estático gigante pre-asignado
+        self.buffer = np.zeros((num_channels, capacity), dtype=np.float64)
+        self.head = 0
+        self.is_full = False
+        self._lock = threading.Lock()
+        
+    def push(self, data: np.ndarray):
+        """
+        Inserta datos en el buffer circular.
+        Se asume que data tiene la forma (num_channels, samples).
+        """
+        samples = data.shape[1]
+        if samples == 0:
+            return
+
+        with self._lock:
+            if self.head + samples <= self.capacity:
+                self.buffer[:, self.head:self.head+samples] = data
+                self.head += samples
+            else:
+                first_part = self.capacity - self.head
+                self.buffer[:, self.head:self.capacity] = data[:, :first_part]
+                second_part = samples - first_part
+                self.buffer[:, 0:second_part] = data[:, first_part:]
+                self.head = second_part
+                self.is_full = True
+
+    def get_latest(self, num_samples: int) -> np.ndarray:
+        """
+        Retorna las últimas num_samples muestras añadidas.
+        """
+        with self._lock:
+            if num_samples > self.capacity:
+                num_samples = self.capacity
+            
+            if self.head >= num_samples:
+                return self.buffer[:, self.head-num_samples:self.head].copy()
+            else:
+                if not self.is_full:
+                    return self.buffer[:, :self.head].copy()
+                else:
+                    first_part = num_samples - self.head
+                    res = np.empty((self.num_channels, num_samples), dtype=np.float64)
+                    res[:, :first_part] = self.buffer[:, self.capacity-first_part:self.capacity]
+                    res[:, first_part:] = self.buffer[:, :self.head]
+                    return res
+
+
+class DAQThread(QThread):
+    """
+    Hilo dedicado exclusivamente a la adquisición de datos de NI-DAQmx.
+    Escribe directamente en el RingBuffer de forma optimizada.
+    """
+    data_acquired = Signal(int)
+    error_occurred = Signal(str)
+
+    def __init__(self, ring_buffer: RingBuffer, channels: list, sample_rate: float, read_chunk_size: int = 1000, parent=None):
+        super().__init__(parent)
+        self.ring_buffer = ring_buffer
+        self.channels = channels
+        self.sample_rate = sample_rate
+        self.read_chunk_size = read_chunk_size
+        self._is_running = False
+        # Cola lock-free para eventos de control (ej. detener el hilo) desde el hilo principal
+        self.event_queue = queue.Queue()
+
+    def stop(self):
+        """
+        Señaliza al hilo para que se detenga de manera segura.
+        """
+        self._is_running = False
+        self.event_queue.put("STOP")
+        self.wait()
+
+    def run(self):
+        self._is_running = True
+        num_channels = len(self.channels)
+        
+        # Buffer de lectura estático pre-asignado para evitar recolección de basura durante la adquisición
+        read_buffer = np.zeros((num_channels, self.read_chunk_size), dtype=np.float64)
+
+        try:
+            with nidaqmx.Task() as task:
+                # Configurar canales
+                for ch in self.channels:
+                    task.ai_channels.add_ai_voltage_chan(ch)
+                
+                # Configurar reloj y buffer interno de la tarjeta
+                task.timing.cfg_samp_clk_timing(
+                    rate=self.sample_rate,
+                    sample_mode=AcquisitionType.CONTINUOUS,
+                    samps_per_chan=self.read_chunk_size * 10
+                )
+                
+                # Usar stream_readers.AnalogMultiChannelReader es más eficiente y permite volcar en arrays pre-asignados
+                reader = AnalogMultiChannelReader(task.in_stream)
+                task.start()
+                
+                while self._is_running:
+                    # Verificar eventos externos de forma asíncrona y sin bloqueos
+                    try:
+                        event = self.event_queue.get_nowait()
+                        if event == "STOP":
+                            break
+                    except queue.Empty:
+                        pass
+                    
+                    try:
+                        # Leer fragmentos directamente al buffer en memoria estática (sin crear nuevos objetos)
+                        reader.read_many_sample(
+                            read_buffer, 
+                            number_of_samples_per_channel=self.read_chunk_size, 
+                            timeout=0.1
+                        )
+                        
+                        # Guardar al RingBuffer
+                        self.ring_buffer.push(read_buffer)
+                        
+                        # Notificar al sistema principal, enviando solo el número para no pasar arrays pesados
+                        self.data_acquired.emit(self.read_chunk_size)
+                        
+                    except nidaqmx.errors.DaqError as e:
+                        # El código -200284 corresponde a un timeout en la lectura
+                        # Se ignora para permitir revisar la cola de eventos y volver a intentar
+                        if e.error_code == -200284:
+                            continue
+                        else:
+                            raise e
+
+        except Exception as e:
+            self.error_occurred.emit(str(e))
+        finally:
+            self._is_running = False
+
+from numba import jit
+
+@jit(nopython=True, nogil=True)
+def calculate_rms_envelope(buffer: np.ndarray, window_size: int) -> np.ndarray:
+    """
+    Calcula la envolvente RMS sobre un buffer continuo usando una ventana deslizante.
+    """
+    n = len(buffer)
+    out = np.zeros(n, dtype=np.float64)
+    if window_size <= 0:
+        return out
+    
+    sum_sq = 0.0
+    for i in range(min(window_size, n)):
+        sum_sq += buffer[i] ** 2
+        out[i] = np.sqrt(sum_sq / (i + 1))
+        
+    for i in range(window_size, n):
+        val_add = buffer[i]
+        val_sub = buffer[i - window_size]
+        
+        # Ignorar NaNs que puedan venir del filtro
+        if np.isnan(val_add): val_add = 0.0
+        if np.isnan(val_sub): val_sub = 0.0
+        
+        sum_sq += val_add ** 2 - val_sub ** 2
+        if sum_sq < 0.0 or np.isnan(sum_sq):
+            sum_sq = 0.0
+        out[i] = np.sqrt(sum_sq / window_size)
+        
+    return out
+
+# --- NUEVO: Pre-compilar Numba para evitar lag al activarlo por primera vez ---
+_dummy = calculate_rms_envelope(np.zeros(10, dtype=np.float64), 5)
+
+@jit(nopython=True, nogil=True)
+def moving_average(buffer: np.ndarray, window_size: int) -> np.ndarray:
+    """
+    Calcula la media movil de un arreglo utilizando suma acumulativa.
+    """
+    n = len(buffer)
+    out = np.zeros(n, dtype=np.float64)
+    if window_size <= 0:
+        return out
+        
+    current_sum = 0.0
+    for i in range(min(window_size, n)):
+        current_sum += buffer[i]
+        out[i] = current_sum / (i + 1)
+        
+    for i in range(window_size, n):
+        current_sum += buffer[i] - buffer[i - window_size]
+        out[i] = current_sum / window_size
+        
+    return out
+
+@jit(nopython=True, nogil=True)
+def apply_iir_filter(data: np.ndarray, b: np.ndarray, a: np.ndarray, zi: np.ndarray) -> tuple:
+    """
+    Aplica un filtro IIR a un bloque de datos usando coeficientes b, a y estado zi.
+    Retorna la data filtrada y el nuevo estado zf.
+    """
+    n = len(data)
+    m = len(a)
+    out = np.zeros(n, dtype=np.float64)
+    zf = np.copy(zi)
+    
+    for i in range(n):
+        x_val = data[i]
+        y_val = b[0] * x_val + zf[0]
+        out[i] = y_val
+        
+        for j in range(m - 2):
+            zf[j] = b[j + 1] * x_val - a[j + 1] * y_val + zf[j + 1]
+            
+        zf[m - 2] = b[m - 1] * x_val - a[m - 1] * y_val
+        
+    return out, zf
+
+@jit(nopython=True, nogil=True)
+def estimate_instantaneous_snr(signal_buffer: np.ndarray, noise_power: float) -> float:
+    """
+    Estima el SNR (Signal-to-Noise Ratio) instantaneo basado en la varianza
+    de la senal respecto a una potencia de ruido conocida de fondo (50Hz u otro).
+    Penaliza fuertemente niveles bajos.
+    """
+    n = len(signal_buffer)
+    if n == 0:
+        return 0.0
+        
+    mean = 0.0
+    for i in range(n):
+        mean += signal_buffer[i]
+    mean /= n
+    
+    variance = 0.0
+    for i in range(n):
+        variance += (signal_buffer[i] - mean) ** 2
+    variance /= n
+    
+    if variance <= noise_power or noise_power <= 1e-12:
+        return 0.0
+        
+    signal_power = variance - noise_power
+    if signal_power <= 0:
+        return 0.0
+        
+    # En decibelios
+    return 10.0 * np.log10(signal_power / noise_power)
+
+def decimate_min_max(data_x, data_y, max_points=2000):
+    """
+    Decimación Dinámica usando Min/Max Peaking (Downsampling).
+    Divide los datos en fragmentos y extrae el mínimo y el máximo de cada fragmentos.
+    Esto preserva la envolvente visual de señales de alta frecuencia como el EMG,
+    evitando el aliasing visual y reduciendo drásticamente la carga de renderizado.
+    
+    Args:
+        data_x: Array Numpy de coordenadas X (tiempo).
+        data_y: Array Numpy de coordenadas Y (amplitud).
+        max_points: Número máximo de puntos a renderizar en pantalla.
+        
+    Returns:
+        decimated_x, decimated_y: Arrays reducidos listos para graficar.
+    """
+    n = len(data_y)
+    if n <= max_points:
+        return data_x, data_y
+        
+    # Necesitamos max_points en la salida. Cada bloque aporta 2 puntos (min y max).
+    num_chunks = max_points // 2
+    chunk_size = n // num_chunks
+    
+    # Truncar arrays para que sean múltiplos exactos de chunk_size
+    trunc_length = chunk_size * num_chunks
+    y_trunc = data_y[:trunc_length].reshape((num_chunks, chunk_size))
+    x_trunc = data_x[:trunc_length].reshape((num_chunks, chunk_size))
+    
+    # Encontrar los índices del mínimo y máximo dentro de cada fragmento
+    min_indices = np.argmin(y_trunc, axis=1)
+    max_indices = np.argmax(y_trunc, axis=1)
+    
+    # Extraer los valores correspondientes
+    y_mins = y_trunc[np.arange(num_chunks), min_indices]
+    x_mins = x_trunc[np.arange(num_chunks), min_indices]
+    
+    y_maxs = y_trunc[np.arange(num_chunks), max_indices]
+    x_maxs = x_trunc[np.arange(num_chunks), max_indices]
+    
+    # Combinar los arrays intercalando mínimos y máximos
+    x_combined = np.column_stack((x_mins, x_maxs))
+    y_combined = np.column_stack((y_mins, y_maxs))
+    
+    # Ordenar cada par para asegurar que el eje X siga siendo monótonamente creciente
+    sort_mask = x_combined[:, 0] > x_combined[:, 1]
+    
+    if np.any(sort_mask):
+        # Intercambiar elementos donde el mínimo ocurrió después del máximo en el tiempo
+        x_combined[sort_mask, 0], x_combined[sort_mask, 1] = x_combined[sort_mask, 1], x_combined[sort_mask, 0].copy()
+        y_combined[sort_mask, 0], y_combined[sort_mask, 1] = y_combined[sort_mask, 1], y_combined[sort_mask, 0].copy()
+    
+    return x_combined.flatten(), y_combined.flatten()
+
+
+# --- FIN INYECCION ---
+
 
 # NUEVO: Import para el espectrograma
 try:
@@ -848,7 +1162,6 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.counting_started = False # NUEVO: Bandera para controlar el inicio del conteo del metrónomo
     self.current_recording = []
     self.recording_start_time = None
-    self.metronome_process = None # Para guardar la referencia al proceso del metrónomo
     self.acquisition_thread = None
     # --- REFACTOR: Encapsular cola y evento ---
     self.data_queue = queue.Queue()
@@ -1046,7 +1359,10 @@ class RealTimePlotter(QtWidgets.QWidget):
     # --- NUEVO: Controles de Protocolo ---
     self.label_bpm = QtWidgets.QLabel("BPM:")
     self.spin_bpm = SpinBox(value=60, int=True, bounds=(30, 200), step=1)
-    self.spin_bpm.setFixedWidth(80) # Acortar el recuadro del BPM
+    self.spin_bpm.setFixedWidth(60) # Acortar el recuadro del BPM
+    self.spin_metro_subdivs = SpinBox(value=4, int=True, bounds=(1, 8), step=1)
+    self.spin_metro_subdivs.setFixedWidth(50)
+    self.spin_metro_subdivs.setToolTip("Subdivisiones rítmicas del metrónomo")
     self.label_noise_duration = QtWidgets.QLabel("Noise (Inicio) (s):")
     adq_conf = self.config_mgr.get("adquisicion") or {}
     default_noise = adq_conf.get("ruido_segundos", 3.0)
@@ -1065,8 +1381,11 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.config_layout.addWidget(self.cmb_sample_rate, 1, 1) 
     self.config_layout.addWidget(self.label_plot_duration, 1, 2)
     self.config_layout.addWidget(self.spin_plot_duration, 1, 3)
-    self.config_layout.addWidget(self.label_bpm, 1, 5)
-    self.config_layout.addWidget(self.spin_bpm, 1, 6) # BPM
+    self.config_layout.addWidget(QtWidgets.QLabel("BPM / Sub:"), 1, 5)
+    bpm_layout = QtWidgets.QHBoxLayout()
+    bpm_layout.addWidget(self.spin_bpm)
+    bpm_layout.addWidget(self.spin_metro_subdivs)
+    self.config_layout.addLayout(bpm_layout, 1, 6) # BPM y Subdivs en la misma celda
     self.config_layout.addWidget(self.label_noise_duration, 2, 5)
     self.config_layout.addWidget(self.spin_noise_duration, 2, 6) # Ruido
     self.config_layout.addWidget(self.label_channels, 2, 0)
@@ -1091,6 +1410,15 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.chk_notch_enable.setChecked(True) # Filtro Notch por predeterminado
     self.chk_notch_enable.setToolTip("Aplica un filtro para eliminar el ruido de la red eléctrica (50 Hz).")
 
+    self.chk_rms_env = QtWidgets.QCheckBox("Envolvente RMS (Realtime)")
+    self.chk_rms_env.setChecked(False)
+    self.chk_rms_env.setToolTip("Calcula y grafica la envolvente RMS en tiempo real.")
+    
+    self.label_rms_window = QtWidgets.QLabel("Ventana (ms):")
+    self.spin_rms_window = SpinBox(value=100.0, step=10.0, bounds=(10.0, 1000.0), dec=True)
+    self.spin_rms_window.setFixedWidth(60)
+    self.spin_rms_window.setToolTip("Tamaño de la ventana de integración de la envolvente en milisegundos.")
+
     self.chk_filter_enable = QtWidgets.QCheckBox("Habilitar Filtro")
     self.chk_filter_enable.setChecked(True) # Filtro Pasa-Banda habilitado por defecto
     
@@ -1105,6 +1433,26 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.filter_layout.addWidget(self.chk_notch_enable)
     self.filter_layout.addSpacing(20)
     self.filter_layout.addWidget(self.chk_filter_enable)
+    self.filter_layout.addSpacing(20)
+    
+    # --- NUEVO: Toggles UI para mostrar/ocultar regiones ---
+    self.chk_show_noise = QtWidgets.QCheckBox("Mostrar Ruido")
+    self.chk_show_noise.setChecked(True)
+    self.chk_show_noise.setToolTip("Muestra u oculta las regiones de ruido.")
+    self.chk_show_noise.clicked.connect(self.toggle_noise_regions)
+    self.filter_layout.addWidget(self.chk_show_noise)
+    self.filter_layout.addSpacing(20)
+
+    self.chk_show_peaks = QtWidgets.QCheckBox("Mostrar Picos")
+    self.chk_show_peaks.setChecked(True)
+    self.chk_show_peaks.setToolTip("Muestra u oculta los marcadores de picos (Peak-Hold).")
+    self.chk_show_peaks.clicked.connect(self.toggle_peak_scatter)
+    self.filter_layout.addWidget(self.chk_show_peaks)
+    self.filter_layout.addSpacing(20)
+
+    self.filter_layout.addWidget(self.chk_rms_env)
+    self.filter_layout.addWidget(self.label_rms_window)
+    self.filter_layout.addWidget(self.spin_rms_window)
     self.filter_layout.addSpacing(15)
 
     self.filter_layout.addSpacing(15)
@@ -1147,11 +1495,10 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.button_layout.addWidget(self.btn_autoforge_continuo)
     self.button_layout.addWidget(self.label_rec_time)
     
-    self.button_layout.addSpacing(10)
-    self.button_layout.addStretch(1) # Espaciador
+    self.button_layout.addStretch(1) # Mover todo el espacio vacío aquí
     self.button_layout.addWidget(self.chk_autoscroll)
     
-    # --- Widgets del Trigger ---
+    # Opciones de trigger ---
     self.chk_trigger = QtWidgets.QCheckBox("Habilitar Trigger")
     self.label_trig_chan = QtWidgets.QLabel("Canal:")
     self.cmb_trig_chan = QtWidgets.QComboBox()
@@ -1305,9 +1652,9 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.lbl_recording_space.setStyleSheet("background-color: #050510; color: #00FF00; font-family: 'Courier New', monospace; font-size: 45px; font-weight: 900; border: 2px dashed #FF0055; padding: 10px;")
     
     # En lugar de usar un layout que puede forzar anchos mínimos, usamos un layout con restricciones duras
-    empty_layout = QtWidgets.QVBoxLayout(self.empty_recording_widget)
-    empty_layout.setContentsMargins(0, 0, 0, 0)
-    empty_layout.addWidget(self.lbl_recording_space)
+    empty_layout = QtWidgets.QHBoxLayout(self.empty_recording_widget)
+    empty_layout.setContentsMargins(10, 0, 10, 0)
+    empty_layout.addWidget(self.lbl_recording_space, stretch=4)
     
     self.empty_recording_widget.setLayout(empty_layout)
     
@@ -1324,8 +1671,9 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.main_layout.addWidget(self.measure_widget)
     self.main_layout.addWidget(self.spectrogram_groupbox) # Añadir controles del espectrograma
     
+    self._setup_native_metronome()
+    self.spectrogram_layout.addWidget(self.metronome_container) # Añadir al layout del espectrograma (abajo a la derecha)
     self.main_layout.addWidget(self.splitter) # Añadir el divisor con los gráficos
-
   def _connect_signals(self):
     
     # --- Conectar Señales (Botones) ---
@@ -1472,22 +1820,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.on_record_click()
       
       # --- MEJORA: Detener el metrónomo solo si el proceso todavía existe ---
-      if self.metronome_process and self.metronome_process.poll() is None:
-        try:
-          print("Enviando comando STOP_APP al metrónomo...")
-          self.metronome_process.stdin.write("STOP_APP\n")
-          self.metronome_process.stdin.flush()
-        except (OSError, ValueError) as e:
-          # Captura errores si la tubería (pipe) ya está cerrada.
-          print(f"Advertencia: No se pudo comunicar con el proceso del metrónomo (puede que ya estuviera cerrado). Error: {e}")
-      
-      if self.metronome_process:
-        try:
-          self.metronome_process.wait(timeout=2) # Esperar a que se cierre solo
-        except subprocess.TimeoutExpired:
-          print("Advertencia: El metrónomo no se cerró a tiempo. Forzando cierre...")
-          self.metronome_process.kill()
-        self.metronome_process = None
+      self.stop_native_metronome()
 
       if hasattr(self, 'word_window_process') and self.word_window_process:
         try:
@@ -1574,25 +1907,7 @@ class RealTimePlotter(QtWidgets.QWidget):
       # --- NUEVO: Lanzar el metrónomo si está seleccionado ---
       if self.chk_use_metronome.isChecked():
         self._save_metronome_config() # Guardar el BPM actual antes de lanzar
-        try:
-          python_executable = sys.executable
-          if getattr(sys, 'frozen', False):
-            script_path = 'acquisition/metronomo_visual.py'
-          else:
-            script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'metronomo_visual.py')
-          print("Lanzando metrónomo con --autostart...")
-          # --- MODIFICADO: Añadir stdin=subprocess.PIPE para poder enviarle comandos ---
-          self.metronome_process = subprocess.Popen(
-            [python_executable, script_path, '--autostart', '--count'],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            text=True,
-                        creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000) # Evitar consola
-          )
-        except Exception as e:
-          print(f"Error al lanzar el metrónomo: {e}")
-          self.metronome_process = None
+        self.start_native_metronome(count_in=0, force_start=True)
 
       # Iniciar hilo
       self.stop_event.clear()
@@ -1765,6 +2080,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     
     # Inicializar buffers con el tamaño correcto
     self.plot_buffer_datos = np.zeros((self.NUM_CANALES, self.PLOT_SAMPLES))
+    self.env_buffer_datos = np.zeros((self.NUM_CANALES, self.PLOT_SAMPLES))
     self.plot_vector_tiempo = np.linspace(-self.PLOT_DURATION_S, 0, self.PLOT_SAMPLES)
     self.trigger_last_values = np.zeros(self.NUM_CANALES)
 
@@ -1812,6 +2128,164 @@ class RealTimePlotter(QtWidgets.QWidget):
       return
     self.spectrogram_channel_index = index
     self.spectrogram_buffer.fill(0) # Limpiar historial al cambiar de canal
+
+  def toggle_noise_regions(self):
+    show = self.chk_show_noise.isChecked()
+    for reg in getattr(self, 'noise_regions', []): reg.setVisible(show)
+    for reg in getattr(self, 'dynamic_noise_regions', []): reg.setVisible(show)
+
+  def toggle_peak_scatter(self):
+    show = self.chk_show_peaks.isChecked()
+    for scatter in getattr(self, 'peak_scatters', []): scatter.setVisible(show)
+
+  def _setup_native_metronome(self):
+    self.metronome_container = QtWidgets.QGroupBox("Metrónomo")
+    self.metronome_container.setFixedWidth(150)
+    self.metronome_container.setStyleSheet("""
+      QGroupBox {
+          border: 2px solid #00FFFF;
+          border-radius: 6px;
+          margin-top: 1.5ex;
+          font-family: 'Courier New', monospace;
+          color: #00FFFF;
+          background-color: #050505;
+      }
+      QGroupBox::title {
+          subcontrol-origin: margin;
+          left: 10px;
+          padding: 0 3px 0 3px;
+          color: #00FFFF;
+          font-weight: bold;
+      }
+    """)
+    self.metronome_container.setFixedSize(160, 160)
+    metro_layout = QtWidgets.QVBoxLayout(self.metronome_container)
+    
+    self.metro_pulse_frame = QtWidgets.QFrame()
+    self.metro_pulse_frame.setFixedHeight(60)
+    self.metro_pulse_frame.setStyleSheet("background-color: #111111; border: 2px solid #00FFFF;")
+    metro_layout.addWidget(self.metro_pulse_frame)
+
+    self.metro_lbl_title = QtWidgets.QLabel("PULSO")
+    self.metro_lbl_title.setAlignment(QtCore.Qt.AlignCenter)
+    self.metro_lbl_title.setStyleSheet("font-size: 16px; color: #00FFFF; font-family: 'Courier New', monospace; font-weight: bold;")
+    metro_layout.addWidget(self.metro_lbl_title)
+
+    self.metro_lbl_count = QtWidgets.QLabel("0")
+    self.metro_lbl_count.setAlignment(QtCore.Qt.AlignCenter)
+    self.metro_lbl_count.setStyleSheet("font-size: 48px; color: #00FFFF; font-weight: bold; font-family: 'Courier New', monospace;")
+    metro_layout.addWidget(self.metro_lbl_count)
+    metro_layout.addStretch()
+
+    # --- TREADING PERSISTENTE PARA BEEPS (ELIMINA EL LAG) ---
+    import queue
+    self.beep_queue = queue.Queue()
+    def beep_worker():
+        while True:
+            item = self.beep_queue.get()
+            if item is None: break
+            freq, duration = item
+            if winsound:
+                winsound.Beep(freq, duration)
+    self.beep_thread = threading.Thread(target=beep_worker, daemon=True)
+    self.beep_thread.start()
+
+    self.metro_timer = QtCore.QTimer()
+    self.metro_timer.timeout.connect(self.on_metro_beat)
+    
+    self.metro_is_running = False
+    self.metro_count_in_remaining = 0
+    self.metro_beat_count = 0
+    
+    self.COLOR_IDLE = "#111111"
+    self.COLOR_BEAT = "#00FFFF"
+    self.COLOR_PREP = "#FF0000"
+
+    self.metronome_container.setVisible(self.chk_use_metronome.isChecked())
+    self.chk_use_metronome.toggled.connect(self.metronome_container.setVisible)
+
+  def start_native_metronome(self, count_in=0, force_start=False):
+    if not force_start and not self.chk_use_metronome.isChecked():
+        return
+    self.metro_count_in_remaining = count_in
+    self.metro_is_running = True
+    self.metro_beat_count = 0
+    self.metro_subdiv_index = 0
+    self.on_metro_beat()
+
+  def save_metronome_config(self):
+    config = {
+        "last_bpm": self.spin_bpm.value(),
+        "last_beat_count": str(getattr(self, 'metro_beat_count', 0)),
+        "subdivisions": self.spin_metro_subdivs.value()
+    }
+    try:
+        with open('metronome_config.json', 'w') as f:
+            json.dump(config, f, indent=4)
+    except: pass
+
+  def stop_native_metronome(self):
+    self.metro_is_running = False
+    self.metro_timer.stop()
+    self.metro_pulse_frame.setStyleSheet(f"background-color: {self.COLOR_IDLE}; border: 2px solid #00FFFF;")
+    self.metro_lbl_count.setText("0")
+    self.metro_lbl_title.setText("PULSO")
+    self.metro_lbl_title.setStyleSheet("font-size: 16px; color: #00FFFF;")
+    self.metro_lbl_count.setStyleSheet("font-size: 48px; color: #00FFFF; font-weight: bold;")
+    self.save_metronome_config()
+    self.spectrogram_layout.addWidget(self.metronome_container)
+
+  def reset_metro_color(self):
+    self.metro_pulse_frame.setStyleSheet(f"background-color: {self.COLOR_IDLE}; border: 2px solid #00FFFF;")
+
+  def on_metro_beat(self):
+    if not self.metro_is_running:
+        return
+
+    bpm = self.spin_bpm.value()
+    num_subdivs = self.spin_metro_subdivs.value()
+    interval_ms = int(60000 / bpm) if bpm > 0 else 1000
+    sub_interval_ms = interval_ms // num_subdivs
+    
+    self.metro_timer.start(sub_interval_ms)
+
+    is_main_beat = (self.metro_subdiv_index == 0)
+
+    if is_main_beat:
+        if self.metro_count_in_remaining > 1:
+            self.metro_lbl_title.setText("INICIANDO")
+            self.metro_lbl_title.setStyleSheet("font-size: 16px; color: #FF0000;")
+            self.metro_lbl_count.setStyleSheet("font-size: 48px; color: #FF0000; font-weight: bold;")
+            self.metro_lbl_count.setText(str(self.metro_count_in_remaining - 1))
+            self.metro_pulse_frame.setStyleSheet(f"background-color: {self.COLOR_PREP}; border: 2px solid #FF0000;")
+            self.metro_count_in_remaining -= 1
+            self.beep_queue.put((800, 200))
+        else:
+            self.metro_lbl_title.setText("PULSO")
+            self.metro_lbl_title.setStyleSheet("font-size: 16px; color: #00FFFF;")
+            self.metro_lbl_count.setStyleSheet("font-size: 48px; color: #00FFFF; font-weight: bold;")
+            
+            if self.metro_count_in_remaining == 1:
+                self.metro_beat_count = 1
+                self.metro_count_in_remaining = 0
+                self.beep_queue.put((1200, 500))
+            else:
+                self.metro_beat_count += 1
+                self.beep_queue.put((1000, 100))
+            
+            self.metro_lbl_count.setText(str(self.metro_beat_count))
+            self.metro_pulse_frame.setStyleSheet(f"background-color: {self.COLOR_BEAT}; border: 2px solid #00FFFF;")
+        
+        QtCore.QTimer.singleShot(50, self.reset_metro_color)
+    elif self.metro_count_in_remaining == 0:
+        # Sub-pulso sónico/visual ligero
+        self.metro_pulse_frame.setStyleSheet("background-color: #00AAAA; border: 2px solid #00FFFF;")
+        self.metro_lbl_count.setStyleSheet("font-size: 48px; color: #005577; font-weight: bold;")
+        self.metro_lbl_count.setText(str(self.metro_subdiv_index + 1))
+        self.beep_queue.put((1600, 50))
+        QtCore.QTimer.singleShot(50, self.reset_metro_color)
+        
+    self.metro_subdiv_index = (self.metro_subdiv_index + 1) % num_subdivs
 
   # --- NUEVO: FUNCIONES DEL FILTRO ---
   def on_filter_settings_changed(self):
@@ -1871,6 +2345,17 @@ class RealTimePlotter(QtWidgets.QWidget):
       self.notch_sos = None
       self.notch_zi = None
       
+    # --- NUEVO: Lógica para el filtro Envolvente RMS (Fluidez extrema) ---
+    is_rms_enabled = hasattr(self, 'chk_rms_env') and self.chk_rms_env.isChecked()
+    if is_rms_enabled and self.is_acquiring and SCIPY_DISPONIBLE:
+      # Filtro pasa-bajos simple (2do orden, 5Hz) para envolvente visual fluida sin sobrecarga
+      self.env_sos = signal.butter(2, 5.0, btype='low', fs=self.SAMPLE_RATE, output='sos')
+      zi_single_env = signal.sosfilt_zi(self.env_sos)
+      self.env_zi = np.stack([zi_single_env] * self.NUM_CANALES, axis=-1)
+    else:
+      self.env_sos = None
+      self.env_zi = None
+
     self._init_filter_state = True # <-- NUEVO: Bandera para eliminar el pico transitorio inicial
 
   # --- FUNCIONES v3.7 (Trigger) ---
@@ -2050,72 +2535,9 @@ class RealTimePlotter(QtWidgets.QWidget):
       
       # --- NUEVO: Re-lanzar el metrónomo con count-in (mismo beep que autograbado) al inicio de grabar ruido ---
       if self.chk_use_metronome.isChecked():
-        if self.metronome_process:
-          try:
-            self.metronome_process.kill()
-            self.metronome_process.wait(timeout=1)
-          except:
-            pass
-          self.metronome_process = None
+        self.stop_native_metronome()
         
-        try:
-          python_executable = sys.executable
-          script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'metronomo_visual.py')
-          bpm = self.spin_bpm.value()
-          if bpm <= 0: bpm = 60
-          print(f"Lanzando metrónomo para grabación con count-in (BPM={bpm}) al inicio de la fase de ruido...")
-          
-          # Posicionar en la esquina superior derecha, pero debajo del panel de configuración
-          pos = self.mapToGlobal(QtCore.QPoint(self.width(), 0))
-          metro_x = pos.x() - 250 # 230 width + 20 margin
-          metro_y = pos.y() + self.config_stack.height() + 10
-          
-          self.metronome_process = subprocess.Popen(
-            [python_executable, script_path, '--autostart', '--count', f'--bpm={bpm}', '--count-in=4', f'--x={metro_x}', f'--y={metro_y}'],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            text=True,
-                        creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
-          )
-        except Exception as e:
-          print(f"Error al lanzar el metrónomo con count-in: {e}")
-      
-      self.btn_record.setText("Detener Grabación")
-      self.btn_record.setStyleSheet(self.BTN_REC_STOP_STYLE)
-      self.recording_start_time = time.perf_counter()
-      self.label_rec_time.setText("Grabando: 00:00.0")
-      self.label_rec_time.setVisible(True)
-    else:
-      # --- DETENER GRABACIÓN ---
-      self.is_recording = False
-      self.btn_record.setText("Empezar a Grabar")
-      self.btn_record.setStyleSheet(self.BTN_REC_START_STYLE)
-      self.label_rec_time.setVisible(False)
-      self.config_stack.setCurrentIndex(0) # Restaurar configuración
-      self.cmb_terminal_config.setEnabled(not self.chk_modo_prueba.isChecked()) # <-- NUEVO: Desbloquear
-      self.recording_start_time = None
-      
-      # --- NUEVO: Detener la adquisición automáticamente al detener la grabación ---
-      if self.is_acquiring:
-        self.on_start_acq_click()
-      
-      # --- MEJORA: Terminar el proceso del metrónomo solo si todavía existe ---
-      if self.metronome_process and self.metronome_process.poll() is None:
-        try:
-          print("Enviando comando STOP_APP al metrónomo al detener grabación...")
-          self.metronome_process.stdin.write("STOP_APP\n")
-          self.metronome_process.stdin.flush()
-        except (OSError, ValueError) as e:
-          print(f"Advertencia: No se pudo comunicar con el proceso del metrónomo. Error: {e}")
-      
-      if self.metronome_process:
-        try:
-          self.metronome_process.wait(timeout=2) # Esperar a que el proceso termine
-        except subprocess.TimeoutExpired:
-          print("Advertencia: El metrónomo no se cerró a tiempo. Forzando cierre...")
-          self.metronome_process.kill()
-        self.metronome_process = None
+        self.start_native_metronome(count_in=0, force_start=True)
 
       if self.current_recording:
         self.on_export_click() # <-- LLAMADA AUTOMÁTICA A EXPORTAR (AHORA DESPUÉS DE CERRAR EL METRÓNOMO)
@@ -2170,21 +2592,13 @@ class RealTimePlotter(QtWidgets.QWidget):
       print("Error: No hay datos grabados para exportar.")
       return
     
-    # --- NUEVO: Leer el conteo de pulsos desde el archivo de config del metrónomo ---
+    # --- NUEVO: Leer el conteo de pulsos desde el metrónomo nativo ---
     pulse_count_from_metronome = None
-    if os.path.exists('metronome_config.json'):
-      try:
-        print("Leyendo metronome_config.json para pulse_count...")
-        with open('metronome_config.json', 'r') as f:
-          data = json.load(f)
-          pulse_count_from_metronome = data.get('last_beat_count')
-          if pulse_count_from_metronome is not None:
-            # --- MENSAJE DE CONFIRMACIÓN ---
-            print(f" Guardados {pulse_count_from_metronome} pulsos en el metadata.")
-          else:
-            print("⚠ No se encontró 'last_beat_count' en metronome_config.json.")
-      except Exception as e:
-        print(f"Advertencia: No se pudo leer el conteo de pulsos desde metronome_config.json. Error: {e}")
+    if self.chk_use_metronome.isChecked():
+      pulse_count_from_metronome = self.metro_beat_count
+      print(f" Guardados {pulse_count_from_metronome} pulsos en el metadata.")
+    else:
+      pulse_count_from_metronome = 0
 
     # --- NUEVO: Guardar metadata.json con la fecha y hora ---
     metadata = {
@@ -2249,6 +2663,8 @@ class RealTimePlotter(QtWidgets.QWidget):
     if not self.is_acquiring:
       return # No hacer nada si la adquisición no está activa
 
+
+
     try:
       # --- REFACTOR: Procesamiento por lotes ---
       # 1. Drenar toda la cola en una lista
@@ -2286,6 +2702,10 @@ class RealTimePlotter(QtWidgets.QWidget):
         if self.filter_zi is not None:
           for i in range(self.NUM_CANALES):
             self.filter_zi[:, :, i] = self.filter_zi[:, :, i] * initial_vals[i]
+        if getattr(self, 'env_zi', None) is not None:
+          initial_rect = np.abs(initial_vals)
+          for i in range(self.NUM_CANALES):
+            self.env_zi[:, :, i] = self.env_zi[:, :, i] * initial_rect[i]
         self._init_filter_state = False
 
       # Aplicar filtros (si están habilitados) al bloque calibrado
@@ -2393,9 +2813,14 @@ class RealTimePlotter(QtWidgets.QWidget):
               for i in range(self.NUM_CANALES):
                 if self.noise_data_accumulated[i]:
                   all_noise = np.concatenate(self.noise_data_accumulated[i])
-                  self.noise_levels[i] = np.mean(np.abs(all_noise))
+                  window_size_ms = self.spin_rms_window.value()
+                  window_size = int((window_size_ms / 1000.0) * self.SAMPLE_RATE)
+                  if window_size < 1: window_size = 1
+                  all_noise_env = calculate_rms_envelope(all_noise, window_size)
+                  
+                  self.noise_levels[i] = np.mean(all_noise_env)
                   self.initial_noise_mean[i] = self.noise_levels[i]
-                  self.initial_noise_std[i] = np.std(all_noise)
+                  self.initial_noise_std[i] = np.std(all_noise_env)
                   
                   self.noise_lines[i].setPos(self.noise_levels[i])
                   self.noise_lines[i].show()
@@ -2417,26 +2842,57 @@ class RealTimePlotter(QtWidgets.QWidget):
               self.noise_calculated = True
 
       # 6. Actualizar la GUI
+      is_rms = hasattr(self, 'chk_rms_env') and self.chk_rms_env.isChecked()
+      
+      # --- NUEVO: Envolvente RMS Numba (Rendimiento Extremo) ---
+      # Siempre se calcula para asegurar cálculos de SNR robustos
+      window_size_ms = self.spin_rms_window.value()
+      window_size = int((window_size_ms / 1000.0) * self.SAMPLE_RATE)
+      if window_size < 1: window_size = 1
       for i in range(self.NUM_CANALES):
-        self.curvas[i].setData(self.plot_vector_tiempo, self.plot_buffer_datos[i])
+        self.env_buffer_datos[i, :] = calculate_rms_envelope(self.plot_buffer_datos[i, :], window_size)
+          
+      for i in range(self.NUM_CANALES):
+        try:
+          if is_rms:
+            # Asegurar que no hay NaNs antes de decimar
+            valid_env = np.nan_to_num(self.env_buffer_datos[i])
+            x_dec, y_dec = decimate_min_max(self.plot_vector_tiempo, valid_env, max_points=3000)
+            self.curvas[i].setData(x_dec, y_dec)
+          else:
+            valid_raw = np.nan_to_num(self.plot_buffer_datos[i])
+            x_dec, y_dec = decimate_min_max(self.plot_vector_tiempo, valid_raw, max_points=3000)
+            self.curvas[i].setData(x_dec, y_dec)
+        except Exception as e:
+          print(f"[ERROR RENDER CANAL {i}] {e}")
+          pass # Evita que se congele toda la GUI si hay un error matemático
       
       if self.chk_autoscroll.isChecked():
         self.plot.setXRange(-self.PLOT_DURATION_S, 0, padding=0)
         
         # --- NUEVO: Peak-Hold Auto Scaling ---
         if self.NUM_CANALES > 0 and self.plot_buffer_datos.size > 0:
-          current_max = np.max(np.abs(self.plot_buffer_datos))
+          if is_rms:
+            current_max = np.max(self.env_buffer_datos)
+            mult = 1.4 # Dar más espacio arriba (40% de headroom)
+          else:
+            current_max = np.max(np.abs(self.plot_buffer_datos))
+            mult = 1.2
+            
           view_range = self.plot.getViewBox().viewRange()[1]
           current_y_max = max(abs(view_range[0]), abs(view_range[1]))
           
           if current_max * 1.1 > current_y_max or current_y_max < 0.0001:
-            self.plot.setYRange(-current_max * 1.2, current_max * 1.2, padding=0)
+            safe_max = max(current_max * mult, 0.001)
+            self.plot.setYRange(-safe_max, safe_max, padding=0)
           else:
             # Auto-escala dinámica con decaimiento rápido
-            new_y_max = max(current_max * 1.2, current_y_max * 0.94)
+            new_y_max = max(current_max * mult, current_y_max * 0.94)
+            new_y_max = max(new_y_max, 0.001)
             self.plot.setYRange(-new_y_max, new_y_max, padding=0)
       self.check_for_trigger(processed_data, total_muestras_leidas)
-      self.actualizar_mediciones(processed_data, self.plot_buffer_datos)
+      # --- NUEVO: Pasar env_buffer_datos a las mediciones para que el pico visual se evalúe sobre la envolvente RMS ---
+      self.actualizar_mediciones(processed_data, self.env_buffer_datos)
       self.actualizar_espectrograma(processed_data)
 
       # --- Actualiza el cronómetro (esto se ejecuta siempre) ---
@@ -2550,29 +3006,27 @@ class RealTimePlotter(QtWidgets.QWidget):
             
             if samples_window > 0 and samples_window <= self.PLOT_SAMPLES:
               for i in range(self.NUM_CANALES):
-                noise_segment = self.plot_buffer_datos[i, -samples_window:]
-                curr_mean = np.mean(np.abs(noise_segment))
+                noise_segment = self.env_buffer_datos[i, -samples_window:]
+                curr_mean = np.mean(noise_segment)
                 curr_std = np.std(noise_segment)
                 
                 init_std = getattr(self, 'initial_noise_std', [0]*self.NUM_CANALES)[i]
                 init_mean = getattr(self, 'initial_noise_mean', [0]*self.NUM_CANALES)[i]
                 
-                # Calcular el radio de deterioro (manejar división por cero en señales perfectas simuladas)
+                # Calcular el radio de deterioro
                 if init_std > 0.01:
                   ratio = curr_std / init_std
                 elif init_mean > 0.01:
                   ratio = curr_mean / init_mean
                 else:
-                  ratio = 1.0 # Señal base sin ruido
+                  ratio = 1.0
                 
                 if hasattr(self, 'noise_status_labels'):
-                  # Neón verde si se mantiene por debajo del 120% del original, si no, Rojo Cyberpunk
                   bg_color = "#000000"
                   fg_color = "#00FF00" if ratio <= 1.20 else "#FF0000" 
                   text = f"Inter-pulso: x̄={curr_mean:.1f}µV (Base={init_mean:.1f}µV) | {ratio*100:.0f}%"
                   self.noise_status_labels[i].setText(text)
                   self.noise_status_labels[i].setStyleSheet(f"color: {fg_color}; background-color: {bg_color}; border: 1px solid {fg_color}; border-radius: 3px; padding: 2px; font-weight: bold; font-size: 11px;")
-                  print(f"[DEBUG UI] Actualizada etiqueta de ruido: {text}")
                 
                 # --- NUEVO: Actualizar región dinámica en el gráfico ---
                 if hasattr(self, 'dynamic_noise_regions'):
@@ -2581,10 +3035,10 @@ class RealTimePlotter(QtWidgets.QWidget):
                   self.dynamic_noise_regions[i].setBrush(brush_color)
                   self.dynamic_noise_regions[i].show()
                 
-                # --- NUEVO: Guardar métricas para el gráfico final ---
+                # --- NUEVO: Guardar métricas para el gráfico final usando Envolvente ---
                 samples_period = min(int(period_s * self.SAMPLE_RATE), self.PLOT_SAMPLES)
-                full_period_segment = self.plot_buffer_datos[i, -samples_period:]
-                peak_val = np.max(np.abs(full_period_segment))
+                full_period_segment = self.env_buffer_datos[i, -samples_period:]
+                peak_val = np.max(full_period_segment)
                 baseline_noise = self.initial_noise_mean[i] if self.initial_noise_mean[i] > 0 else 1e-12
                 curr_snr = peak_val / baseline_noise
                 
@@ -2655,9 +3109,8 @@ class RealTimePlotter(QtWidgets.QWidget):
           idx_max = search_start_idx + idx_max_local
           t_max = self.plot_vector_tiempo[idx_max]
           
-          # Colocar el marcador en el tiempo del pico, ajustando el valor (Y) al promedio calculado
-          signo = np.sign(plot_buffer_datos[i, idx_max])
-          v_visual = avg_peak_val * (1 if signo >= 0 else -1)
+          # Colocar el marcador en el tiempo del pico. Al ser sobre la envolvente RMS, siempre es positivo (arriba)
+          v_visual = avg_peak_val
           
           self.peak_scatters[i].setData([t_max], [v_visual])
           if getattr(self, 'is_recording', False) and getattr(self, 'noise_calculated', False):
@@ -2748,18 +3201,11 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.autoforge_overlay.hide()
         self.config_stack.setCurrentIndex(0)
         if hasattr(self, 'session_timer'): self.session_timer.stop()
-        if hasattr(self, 'metronome_process') and self.metronome_process:
-          try: self.metronome_process.kill()
-          except: pass
-          self.metronome_process = None
+        self.stop_native_metronome()
         return
         
       # --- NUEVO: Apagar metrónomo general si estaba corriendo para que no choquen ---
-      if hasattr(self, 'metronome_process') and self.metronome_process:
-        try:
-          self.metronome_process.kill()
-        except: pass
-        self.metronome_process = None
+        self.stop_native_metronome()
         self.chk_use_metronome.setChecked(False) # Reflejar en UI
 
       if not self.is_acquiring:
@@ -2834,16 +3280,10 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.autoforge_overlay.hide()
         self.config_stack.setCurrentIndex(0)
         if hasattr(self, 'session_timer'): self.session_timer.stop()
-        if hasattr(self, 'metronome_process') and self.metronome_process:
-          try: self.metronome_process.kill()
-          except: pass
-          self.metronome_process = None
+        self.stop_native_metronome()
         return
         
-      if hasattr(self, 'metronome_process') and self.metronome_process:
-        try: self.metronome_process.kill()
-        except: pass
-        self.metronome_process = None
+        self.stop_native_metronome()
         self.chk_use_metronome.setChecked(False)
 
       if not self.is_acquiring:
@@ -2997,9 +3437,14 @@ class RealTimePlotter(QtWidgets.QWidget):
       for i in range(self.NUM_CANALES):
         if self.noise_data_accumulated[i]:
           all_noise = np.concatenate(self.noise_data_accumulated[i])
-          self.noise_levels[i] = np.mean(np.abs(all_noise))
+          window_size_ms = self.spin_rms_window.value()
+          window_size = int((window_size_ms / 1000.0) * self.SAMPLE_RATE)
+          if window_size < 1: window_size = 1
+          all_noise_env = calculate_rms_envelope(all_noise, window_size)
+          
+          self.noise_levels[i] = np.mean(all_noise_env)
           self.initial_noise_mean[i] = self.noise_levels[i]
-          self.initial_noise_std[i] = np.std(all_noise)
+          self.initial_noise_std[i] = np.std(all_noise_env)
           
           self.noise_lines[i].setPos(self.noise_levels[i])
           self.noise_lines[i].show()
@@ -3039,14 +3484,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     metro_x = pos.x() - 250
     metro_y = pos.y() + self.config_stack.height() + 10
     
-    self.metronome_process = subprocess.Popen(
-      [python_executable, script_path, '--autostart', '--count', f'--bpm={bpm}', '--count-in=4', f'--x={metro_x}', f'--y={metro_y}'],
-      stdin=subprocess.PIPE,
-      stdout=subprocess.DEVNULL,
-      stderr=subprocess.DEVNULL,
-      text=True,
-                        creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
-    )
+    self.start_native_metronome(count_in=self.spin_trig_reps.value(), force_start=True)
     
     self.autoforge_overlay.hide()
     
@@ -3087,10 +3525,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     """
     self.is_recording = False
     
-    if hasattr(self, 'metronome_process') and self.metronome_process:
-      try: self.metronome_process.kill()
-      except: pass
-      self.metronome_process = None
+    self.stop_native_metronome()
       
     if hasattr(self, 'word_window_process') and self.word_window_process:
       try: self.word_window_process.kill()
@@ -3321,9 +3756,14 @@ class RealTimePlotter(QtWidgets.QWidget):
       for i in range(self.NUM_CANALES):
         if self.noise_data_accumulated[i]:
           all_noise = np.concatenate(self.noise_data_accumulated[i])
-          self.noise_levels[i] = np.mean(np.abs(all_noise))
+          window_size_ms = self.spin_rms_window.value()
+          window_size = int((window_size_ms / 1000.0) * self.SAMPLE_RATE)
+          if window_size < 1: window_size = 1
+          all_noise_env = calculate_rms_envelope(all_noise, window_size)
+          
+          self.noise_levels[i] = np.mean(all_noise_env)
           self.initial_noise_mean[i] = self.noise_levels[i]
-          self.initial_noise_std[i] = np.std(all_noise)
+          self.initial_noise_std[i] = np.std(all_noise_env)
           
           self.noise_lines[i].setPos(self.noise_levels[i])
           self.noise_lines[i].show()
@@ -3356,24 +3796,10 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.word_window_process = None
     
     # Lanzar el metrónomo AHORA MISMO con un Count-in de tipo carreras (3 graves, 1 agudo)
-    script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'metronomo_visual.py')
+    # Posicionar el metrónomo en el panel de grabación activo
+    self.empty_recording_widget.layout().addWidget(self.metronome_container)
     
-    import sys
-    python_executable = sys.executable
-    
-    # Posicionar en la esquina superior derecha, pero debajo del panel de configuración
-    pos = self.mapToGlobal(QtCore.QPoint(self.width(), 0))
-    metro_x = pos.x() - 250
-    metro_y = pos.y() + self.config_stack.height() + 10
-    
-    self.metronome_process = subprocess.Popen(
-      [python_executable, script_path, '--autostart', '--count', f'--bpm={bpm}', '--count-in=4', f'--x={metro_x}', f'--y={metro_y}'],
-      stdin=subprocess.PIPE,
-      stdout=subprocess.DEVNULL,
-      stderr=subprocess.DEVNULL,
-      text=True,
-                        creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
-    )
+    self.start_native_metronome(count_in=4, force_start=True)
     
     self.autoforge_overlay.hide()
     
@@ -3438,19 +3864,16 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.is_recording = False
     palabra = self.autoforge_words[self.autoforge_word_idx]
     
-    if hasattr(self, 'metronome_process') and self.metronome_process:
-      try: self.metronome_process.kill()
-      except: pass
-      self.metronome_process = None
+    self.stop_native_metronome()
       
     if hasattr(self, 'word_window_process') and self.word_window_process:
       try: self.word_window_process.kill()
       except: pass
       self.word_window_process = None
       
-    # 10 segundos de descanso en pantalla
-    self.autoforge_estado_actual_str = "DESCANSO 10s (GUARDANDO)"
-    self.autoforge_overlay.setText("<div align='center'>DESCANSO 10s<br>GUARDANDO DATOS...</div>")
+    # 5 segundos de descanso mientras se guardan los datos pesados (lag)
+    self.autoforge_estado_actual_str = "DESCANSO 5s (GUARDANDO)"
+    self.autoforge_overlay.setText("<div align='center'>DESCANSO 5s<br>GUARDANDO DATOS...</div>")
     self.autoforge_overlay.show()
     self.lbl_recording_space.setText("<div align='center' style='color:#777777; font-size:40px;'>DESCANSO</div>")
     
@@ -3515,8 +3938,23 @@ class RealTimePlotter(QtWidgets.QWidget):
       
     threading.Thread(target=guardar_async, daemon=True).start()
     
-    # Ir a la siguiente palabra tras los 10 segundos de descanso
-    QtCore.QTimer.singleShot(10000, self.estado_siguiente)
+    # Tras 5 segundos, pasar a verificación muscular para que el usuario pueda ver su señal fluida
+    QtCore.QTimer.singleShot(5000, self.estado_verificacion_muscular)
+
+  @QtCore.Slot()
+  def estado_verificacion_muscular(self):
+    self.autoforge_estado_actual_str = "VERIFICACIÓN MUSCULAR 5s"
+    # Ocultar el overlay oscuro para que la señal se vea limpia y sin sombra
+    self.autoforge_overlay.hide()
+    self.lbl_recording_space.setText(
+      "<div align='center' style='color:#00FF00; font-size:30px; font-weight:bold;'>"
+      "VERIFICACIÓN MUSCULAR<br>"
+      "<span style='font-size:18px; color:#88FF88;'>Activa tus músculos para probar la señal</span>"
+      "</div>"
+    )
+    
+    # Ir a la siguiente palabra tras los 5 segundos de verificación (10s totales)
+    QtCore.QTimer.singleShot(5000, self.estado_siguiente)
 
   @QtCore.Slot()
   def estado_siguiente(self):

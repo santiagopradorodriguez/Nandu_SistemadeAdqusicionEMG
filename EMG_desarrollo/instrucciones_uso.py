@@ -5,6 +5,13 @@
 # Descripción: Módulo de interfaz gráfica que muestra las instrucciones de uso del sistema.
 # ==============================================================================
 
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Módulo de interfaz gráfica que muestra las instrucciones de uso del sistema.
+# ==============================================================================
+
 # -*- coding: utf-8 -*-
 """
 instrucciones_uso.py - v4.0
@@ -60,7 +67,9 @@ INSTRUCTIONS_HTML = """
     <p>El hub principal permite lanzar dos modalidades de adquisición:</p>
     <ul>
         <li><b>Adquisición Manual:</b> Ideal para pruebas libres. Inicia una grabación continua con semáforo y metrónomo visual. Genera archivos <code>.wav</code> y <code>.csv</code>.</li>
-        <li><b>Auto-Forge (Auto-Grabado):</b> Rutina estricta y automatizada. Graba secuencias exactas de reposo y contracción. Diseñado para estandarizar bases de datos de Deep Learning.</li>
+        <li><b>Auto-Forge (Auto-Grabado):</b> Rutina estricta y automatizada. Graba secuencias exactas de reposo y contracción. Diseñado para estandarizar bases de datos de Deep Learning.
+            <br><i>*Nota: Para activar el Modo de Envolvente RMS en Tiempo Real, marca la casilla correspondiente en la interfaz de AutoForge antes de comenzar a grabar.</i>
+        </li>
     </ul>
 
     <h2>PASO 2: Análisis Individual y Curación (Tab 2)</h2>
@@ -85,6 +94,7 @@ INSTRUCTIONS_HTML = """
 
     <h2>Herramientas Secundarias (Barra Superior)</h2>
     <ul>
+        <li><span class="highlight">Reproductor de Audios (Mini-DAW):</span> Selecciona el Reproductor desde la barra de herramientas para emitir estímulos auditivos directamente a través del Canal 3 del DAQ.</li>
         <li><span class="highlight">Configuración General (NUEVO):</span> Menú centralizado para personalizar todos los aspectos del programa. Permite ajustar el mapeo de músculos por canal, elegir colores hexadecilmales, setear parámetros por defecto para la DAQ (Sample Rate, Filtro, Canales activos) y guardar estas preferencias para futuros usos.</li>
         <li><span class="highlight">Extractor de Datos (Deep Learning):</span> Recolecta todos los pulsos procesados, aplica un resampling a 500 puntos (Nyquist estandarizado), normaliza vía Min-Max, y exporta tensores listos en formato <code>.npy</code> para PyTorch.</li>
         <li><span class="highlight">Editor de Mediciones:</span> Utilidad para renombrar formalmente las carpetas de adquisición y re-rutear sus metadatos internos de manera segura.</li>

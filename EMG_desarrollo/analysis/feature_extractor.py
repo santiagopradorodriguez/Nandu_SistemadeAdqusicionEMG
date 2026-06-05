@@ -5,6 +5,13 @@
 # Descripción: Extracción de características y pulsos desde mediciones procesadas.
 # ==============================================================================
 
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Extracción de características y pulsos desde mediciones procesadas.
+# ==============================================================================
+
 # -*- coding: utf-8 -*-
 """
 extractor_de_datos_procesados.py - v1.3

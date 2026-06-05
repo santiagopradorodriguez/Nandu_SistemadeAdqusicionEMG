@@ -20,7 +20,7 @@ Desarrollado por la comunidad para el **Laboratorio de Sistemas Dinámicos**.
 
 ---
 
-## 🚀 Características del Sistema (Beta 5.0 - PySide6 & AutoForge)
+## 🚀 Características del Sistema (Beta 5.1 - PySide6 & AutoForge)
 
 El proyecto se gestiona desde el **Lanzador Principal** (`gui_app/main_app.py`) que integra estética Cyberpunk, aceleración de hardware y múltiples módulos independientes:
 
@@ -34,11 +34,16 @@ El proyecto se gestiona desde el **Lanzador Principal** (`gui_app/main_app.py`) 
 3.  **Visualización y Calidad en Tiempo Real**: 
     - Auto-escala dinámica con sistema **"Peak-Hold"** para estabilizar la gráfica durante la captura de contracciones intensas, evitando los mareos visuales del autoscroll.
     - Medición en vivo de la Relación Señal-Ruido (**SNR**), comparando la energía de la contracción actual con el ruido de fondo (inter-pulso) evaluado automáticamente en cada ciclo.
+    - **Modo de Envolvente RMS en Tiempo Real**: Cálculo dinámico y vectorizado para visualizar la activación muscular durante la adquisición.
 4.  **Procesamiento de Señal (DSP)**: 
     - Filtros matemáticos en vivo (Notch 50Hz y Pasa-banda) procesados de forma continua (estado `zi`) para transiciones perfectas sin saltos.
     - Espectrograma (STFT) integrado reactivo e independiente para cada canal.
 5.  **Análisis Comparativo y Extracción**:
     - Generación estandarizada de archivos de grabación para alimentar la base de datos de letras y gestos listos para el pipeline de Machine Learning.
+6.  **Reproductor de Audios (Mini-DAW)**:
+    - Integrado para reproducir estímulos auditivos a través del Canal 3.
+7.  **Pantallas de Carga (Splash Screens)**:
+    - Indicadores visuales durante el inicio y carga de los módulos principales.
 
 ---
 
@@ -49,7 +54,7 @@ AutoForge es la nueva máquina de estados central del proyecto, diseñada para c
 - **Modo Secuencia Continua:** Permite grabar el diccionario entero de forma cíclica (Ej: A, E, I, O, U, A, E...). Al procesar, el sistema automáticamente genera un vector de metadatos `valid_words` que mapea cada pulso/ventana detectada a su palabra real, facilitando el etiquetado para Machine Learning.
 - **Calibración Dinámica de Ruido Base:** Antes de cada palabra o secuencia, graba silenciosamente para muestrear el ruido electromagnético de fondo y aplica un umbral estadístico adaptativo.
 - **Sincronización:** Dispara el metrónomo visual y sonoro ("3, 2, 1, GO") para estandarizar los tiempos de preparación y contracción.
-- **Validación SNR:** Registra el esfuerzo muscular y calcula automáticamente el SNR (Relación Señal-Ruido) para descartar mediciones contaminadas, restando el offset basal de forma dinámica.
+- **Validación SNR y Ruido Adaptativo:** Registra el esfuerzo muscular y calcula automáticamente el SNR (Relación Señal-Ruido) para descartar mediciones contaminadas. Además incluye un **Cálculo de Ruido Inter-pulso Adaptativo** basado en el punto medio del metrónomo.
 - **Auto-Guardado:** Guarda las grabaciones crudas, procesadas y metadatos con la nomenclatura perfecta para su posterior entrenamiento en Machine Learning.
 
 ---
@@ -214,7 +219,6 @@ El proyecto está en desarrollo activo. Consulta `ROADMAP.md` para más detalles
 - [ ] **Distribución y Empaquetado:** Crear un archivo ejecutable `.exe` independiente para facilitar la instalación en computadoras de laboratorio.
 - [ ] **Módulos de Deep Learning:** Empezar a crear scripts base usando **PyTorch** para el entrenamiento de redes neuronales a futuro con los datos extraídos.
 - [ ] **Metrónomo Nativo:** Incrustar el metrónomo visual (actualmente en un proceso Tkinter independiente en `metronomo_visual.py`) de forma nativa dentro de la interfaz PySide6 de AutoForge, eliminando el proceso externo para mejorar la sincronización del DAQ.
-- [ ] **Envolvente EMG en Tiempo Real**: Implementar visualización de la envolvente de la señal EMG en tiempo real tanto en el módulo de Autograbado como en el DAQ principal. La envolvente puede calcularse mediante RMS deslizante (Root Mean Square) o media móvil sobre la señal rectificada, permitiendo una mejor interpretación visual de la activación muscular durante la adquisición.
 
 ---
 

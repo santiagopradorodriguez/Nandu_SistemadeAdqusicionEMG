@@ -5,6 +5,13 @@
 # Descripción: Diálogo de configuración de hardware y parámetros del sistema.
 # ==============================================================================
 
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Diálogo de configuración de hardware y parámetros del sistema.
+# ==============================================================================
+
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
     QPushButton, QGroupBox, QFormLayout, QColorDialog, QSpinBox, QDoubleSpinBox, QCheckBox, QTabWidget, QWidget

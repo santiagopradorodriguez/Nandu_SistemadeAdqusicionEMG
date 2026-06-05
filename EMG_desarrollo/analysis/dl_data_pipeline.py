@@ -5,6 +5,13 @@
 # Descripción: Pipeline Batch Processing de señales sEMG para Deep Learning.
 # ==============================================================================
 
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Pipeline Batch Processing de señales sEMG para Deep Learning.
+# ==============================================================================
+
 import os
 import glob
 import json

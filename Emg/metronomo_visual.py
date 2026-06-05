@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Metrónomo visual y sonoro para guiar las pruebas de adquisición.
+# ==============================================================================
+
 """
 # Esta es la última versión funcional conocida.
 Metrónomo Visual y Sonoro v1.0

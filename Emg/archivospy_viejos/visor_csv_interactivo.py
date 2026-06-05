@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Visor interactivo antiguo para explorar datos en formato CSV.
+# ==============================================================================
+
 """
 Visor CSV Interactivo v4.4 (Exportación en Alta Calidad)
 # Esta es la última versión funcional conocida.

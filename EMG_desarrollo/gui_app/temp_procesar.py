@@ -1,3 +1,9 @@
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Script temporal/de soporte para procesamiento de datos.
+# ==============================================================================
 
 import sys
 import os

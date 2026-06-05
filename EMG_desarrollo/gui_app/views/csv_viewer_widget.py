@@ -5,6 +5,13 @@
 # Descripción: Widget de interfaz para visualizar datos crudos desde archivos CSV.
 # ==============================================================================
 
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Widget de interfaz para visualizar datos crudos desde archivos CSV.
+# ==============================================================================
+
 import os
 import json
 import numpy as np

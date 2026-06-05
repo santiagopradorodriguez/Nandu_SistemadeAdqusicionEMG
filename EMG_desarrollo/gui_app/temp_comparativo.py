@@ -5,6 +5,13 @@
 # Descripción: Script temporal/de soporte para la vista comparativa.
 # ==============================================================================
 
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Script temporal/de soporte para la vista comparativa.
+# ==============================================================================
+
 import sys
 import os
 import json

@@ -5,6 +5,13 @@
 # Descripción: Widget de interfaz para exploración comparativa de sesiones.
 # ==============================================================================
 
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Widget de interfaz para exploración comparativa de sesiones.
+# ==============================================================================
+
 import os
 import re
 from PySide6.QtWidgets import (

@@ -5,6 +5,13 @@
 # Descripción: Interfaz de ventana para mostrar palabras clave durante la adquisición.
 # ==============================================================================
 
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Interfaz de ventana para mostrar palabras clave durante la adquisición.
+# ==============================================================================
+
 import sys
 import tkinter as tk
 from tkinter import font
