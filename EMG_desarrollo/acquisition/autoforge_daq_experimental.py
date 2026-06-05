@@ -1405,6 +1405,9 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     self.config_layout.addWidget(self.btn_start_acq, 0, 7, 4, 1) # Ocupa 4 filas
 
+    self._setup_native_metronome()
+    self.config_layout.addWidget(self.metronome_container, 0, 9, 4, 1)
+
   def _setup_ui_filter_panel(self):
     """Configura el panel de filtro."""
     self.chk_notch_enable = QtWidgets.QCheckBox("Filtro Notch 50 Hz")
@@ -1727,6 +1730,11 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.empty_recording_widget.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
     
     self.config_stack.addWidget(self.empty_recording_widget)
+    
+    # --- NUEVO: Doble Ubicación del Metrónomo ---
+    self.config_stack.currentChanged.connect(self._reubicar_metronomo_dinamico)
+    # Ubicación Inicial
+    self._reubicar_metronomo_dinamico(0)
 
     # --- Añadir layouts a la ventana ---
     self.main_layout.addWidget(self.config_stack) # Reemplaza a config_groupbox
@@ -2223,14 +2231,33 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.spectrogram_channel_index = index
     self.spectrogram_buffer.fill(0) # Limpiar historial al cambiar de canal
 
-  def toggle_noise_regions(self):
-    show = self.chk_show_noise.isChecked()
+  def toggle_noise_regions(self, checked=None):
+    if checked is None:
+      show = self.chk_show_noise.isChecked()
+    else:
+      show = checked
     for reg in getattr(self, 'noise_regions', []): reg.setVisible(show)
     for reg in getattr(self, 'dynamic_noise_regions', []): reg.setVisible(show)
+    for line in getattr(self, 'noise_lines', []): line.setVisible(show)
+    for line in getattr(self, 'noise_lines_neg', []): line.setVisible(show)
 
   def toggle_peak_scatter(self):
     show = self.chk_show_peaks.isChecked()
     for scatter in getattr(self, 'peak_scatters', []): scatter.setVisible(show)
+
+  def _reubicar_metronomo_dinamico(self, index):
+    """
+    Maneja la doble ubicación del metrónomo dependiendo del estado de la UI
+    (Reposo vs Grabando).
+    """
+    if not hasattr(self, 'metronome_container') or self.metronome_container is None:
+      return
+    if index == 0:
+      # Estado Reposo/Inicial / Restauración
+      self.config_layout.addWidget(self.metronome_container, 0, 9, 4, 1)
+    else:
+      # Estado Autograbado
+      self.empty_recording_layout.addWidget(self.metronome_container, stretch=1)
 
   def _setup_native_metronome(self):
     self.metronome_container = QtWidgets.QGroupBox("Metrónomo")
@@ -2251,22 +2278,22 @@ class RealTimePlotter(QtWidgets.QWidget):
           font-weight: bold;
       }
     """)
-    self.metronome_container.setFixedSize(160, 160)
+    self.metronome_container.setFixedSize(144, 144)
     metro_layout = QtWidgets.QVBoxLayout(self.metronome_container)
     
     self.metro_pulse_frame = QtWidgets.QFrame()
-    self.metro_pulse_frame.setFixedHeight(60)
+    self.metro_pulse_frame.setFixedHeight(54)
     self.metro_pulse_frame.setStyleSheet("background-color: #111111; border: 2px solid #00FFFF;")
     metro_layout.addWidget(self.metro_pulse_frame)
 
     self.metro_lbl_title = QtWidgets.QLabel("PULSO")
     self.metro_lbl_title.setAlignment(QtCore.Qt.AlignCenter)
-    self.metro_lbl_title.setStyleSheet("font-size: 16px; color: #00FFFF; font-family: 'Courier New', monospace; font-weight: bold;")
+    self.metro_lbl_title.setStyleSheet("font-size: 14px; color: #00FFFF; font-family: 'Courier New', monospace; font-weight: bold;")
     metro_layout.addWidget(self.metro_lbl_title)
 
     self.metro_lbl_count = QtWidgets.QLabel("0")
     self.metro_lbl_count.setAlignment(QtCore.Qt.AlignCenter)
-    self.metro_lbl_count.setStyleSheet("font-size: 48px; color: #00FFFF; font-weight: bold; font-family: 'Courier New', monospace;")
+    self.metro_lbl_count.setStyleSheet("font-size: 42px; color: #00FFFF; font-weight: bold; font-family: 'Courier New', monospace;")
     metro_layout.addWidget(self.metro_lbl_count)
     metro_layout.addStretch()
 
