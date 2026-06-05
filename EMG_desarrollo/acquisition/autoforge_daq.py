@@ -1026,6 +1026,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.label_channels = QtWidgets.QLabel("Canales:")
     self.channel_checkboxes = []
     self.channel_layout = QtWidgets.QHBoxLayout()
+    
     any_checked = False
     for i in range(8): # Ofrecer 8 canales
       chk = QtWidgets.QCheckBox(f"ai{i}")
@@ -1204,9 +1205,36 @@ class RealTimePlotter(QtWidgets.QWidget):
 
   def _setup_ui_plots(self):
     """Configura los widgets de ploteo y el splitter."""
-    # Widget para el ploteo de tiempo
     
-    # --- NUEVO: Overlay AutoForge ---
+    # Widget contenedor para el grafico y sus controles
+    self.plot_container = QtWidgets.QWidget()
+    self.plot_container_layout = QtWidgets.QVBoxLayout(self.plot_container)
+    self.plot_container_layout.setContentsMargins(0, 0, 0, 0)
+    self.plot_container_layout.setSpacing(2)
+    
+    # Panel de control de visualización
+    self.viz_control_panel = QtWidgets.QWidget()
+    self.viz_control_panel.setStyleSheet("background-color: #050505; border-bottom: 1px solid #333;")
+    self.viz_control_layout = QtWidgets.QHBoxLayout(self.viz_control_panel)
+    self.viz_control_layout.setContentsMargins(5, 2, 5, 2)
+    
+    lbl_viz = QtWidgets.QLabel("Visualización de Canales:")
+    lbl_viz.setStyleSheet("color: #00FFFF; font-weight: bold; border: none;")
+    self.viz_control_layout.addWidget(lbl_viz)
+    
+    self.btn_hide_all_viz = QtWidgets.QPushButton("Ocultar Todos")
+    self.btn_hide_all_viz.setStyleSheet("background-color: #330000; color: #ff5555; border: 1px solid #ff5555; padding: 2px 8px; font-size: 11px; font-weight: bold; border-radius: 3px;")
+    self.btn_hide_all_viz.clicked.connect(self.hide_all_viz_channels)
+    self.viz_control_layout.addWidget(self.btn_hide_all_viz)
+    
+    # Contenedor para los checkboxes dinámicos
+    self.viz_checkbox_layout = QtWidgets.QHBoxLayout()
+    self.viz_control_layout.addLayout(self.viz_checkbox_layout)
+    self.viz_control_layout.addStretch()
+    
+    self.viz_checkboxes = []
+    
+    self.plot_container_layout.addWidget(self.viz_control_panel)
 
     self.plot_widget = pg.GraphicsLayoutWidget()
 
@@ -1218,6 +1246,8 @@ class RealTimePlotter(QtWidgets.QWidget):
     
     # Hacemos que cambie de tamaño junto con plot_widget
     self.plot_widget.installEventFilter(self)
+
+    self.plot_container_layout.addWidget(self.plot_widget)
 
     self.plot_widget.setBackground('k') # Fondo Negro
     
@@ -1285,7 +1315,7 @@ class RealTimePlotter(QtWidgets.QWidget):
       Any: Resultado de la ejecución de la función.
     """
     self.splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
-    self.splitter.addWidget(self.plot_widget)
+    self.splitter.addWidget(self.plot_container)
     self.splitter.addWidget(self.spectrogram_view)
     self.splitter.setSizes([600, 200]) # Tamaños iniciales
 
@@ -1427,6 +1457,17 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.label_test_freq.setEnabled(checked)
     self.spin_test_freq.setEnabled(checked)
     print(f"Modo Prueba {'Activado' if checked else 'Desactivado'}.")
+
+  def hide_all_viz_channels(self):
+    all_unchecked = all(not chk.isChecked() for chk in self.viz_checkboxes)
+    if all_unchecked:
+      for chk in self.viz_checkboxes:
+        chk.setChecked(True)
+      self.btn_hide_all_viz.setText("Ocultar Todos")
+    else:
+      for chk in self.viz_checkboxes:
+        chk.setChecked(False)
+      self.btn_hide_all_viz.setText("Mostrar Todos")
 
   def set_controls_enabled(self, enabled):
     """Habilita o deshabilita todos los controles excepto el de Start/Stop Acq."""
@@ -1681,6 +1722,13 @@ class RealTimePlotter(QtWidgets.QWidget):
       self.plot.scene().removeItem(self.plot.legend)
       self.plot.legend = None
       
+    # Limpiar checkboxes de visualizacion
+    while self.viz_checkbox_layout.count():
+      item = self.viz_checkbox_layout.takeAt(0)
+      if item.widget():
+        item.widget().deleteLater()
+    self.viz_checkboxes.clear()
+      
     self.plot.getViewBox().setLimits(xMin=-self.PLOT_DURATION_S) # Actualizar límite de zoom
     self.plot.addLegend()
     
@@ -1703,6 +1751,19 @@ class RealTimePlotter(QtWidgets.QWidget):
       color = self.colores_curvas[i % len(self.colores_curvas)]
       musculo = self.nombres_musculos[i % len(self.nombres_musculos)]
       self.curvas.append(self.plot.plot(pen=color, name=musculo))
+      
+      # --- NUEVO: Checkbox de visualización ---
+      chk_viz = QtWidgets.QCheckBox(musculo)
+      chk_viz.setChecked(True)
+      chk_viz.setStyleSheet(f"color: {pg.mkColor(color).name()}; font-weight: bold; border: none;")
+      
+      def toggle_viz(state, idx=i):
+        if idx < len(self.curvas):
+          self.curvas[idx].setVisible(state)
+          
+      chk_viz.toggled.connect(toggle_viz)
+      self.viz_checkbox_layout.addWidget(chk_viz)
+      self.viz_checkboxes.append(chk_viz)
       
       # --- NUEVO: Línea de piso de ruido ---
       line_ruido = pg.InfiniteLine(angle=0, pen=pg.mkPen('r', width=4, style=QtCore.Qt.DashLine))

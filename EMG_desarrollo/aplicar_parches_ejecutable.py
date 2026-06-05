@@ -52,6 +52,8 @@ def user_data_path(relative_path):
     """ Obtiene la ruta a los datos del usuario (lectura/escritura) """
     if getattr(sys, 'frozen', False):
         base_path = os.path.dirname(sys.executable)
+        if os.path.basename(base_path) == "_internal":
+            base_path = os.path.dirname(base_path)
     else:
         base_path = os.path.abspath(os.path.dirname(__file__))
         if os.path.basename(base_path) == "gui_app":

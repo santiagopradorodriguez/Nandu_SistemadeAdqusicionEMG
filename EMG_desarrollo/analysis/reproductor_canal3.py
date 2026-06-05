@@ -231,13 +231,15 @@ class AudioPlayer(QMainWindow):
         s = s % 60
         return f"{m:02d}:{s:02d}"
 
-if __name__ == "__main__":
+def main():
     app = QApplication(sys.argv)
     window = AudioPlayer()
     
     # --- Ruteo Automático ---
     if getattr(sys, 'frozen', False):
-        base_dir = os.getcwd()
+        base_dir = os.path.dirname(sys.executable)
+        if os.path.basename(base_dir) == "_internal":
+            base_dir = os.path.dirname(base_dir)
     else:
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     
@@ -256,3 +258,6 @@ if __name__ == "__main__":
             
     window.show()
     sys.exit(app.exec())
+
+if __name__ == "__main__":
+    main()

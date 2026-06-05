@@ -509,7 +509,7 @@ class ReaperStyleHub(QMainWindow):
     btn_autoforge.clicked.connect(lambda: self._launch_external("acquisition/autoforge_daq.py"))
     vbox_btn.addWidget(btn_autoforge)
 
-    btn_autoforge_staging = QPushButton("⚡ AUTOGRABADO\nSTAGING")
+    btn_autoforge_staging = QPushButton(" AUTOGRABADO 2.0\n(STAGING)")
     btn_autoforge_staging.setStyleSheet("""
       QPushButton {
         font-family: 'Consolas', 'Courier New', monospace;

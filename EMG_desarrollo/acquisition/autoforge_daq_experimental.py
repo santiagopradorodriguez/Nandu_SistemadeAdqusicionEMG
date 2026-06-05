@@ -1339,6 +1339,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.label_channels = QtWidgets.QLabel("Canales:")
     self.channel_checkboxes = []
     self.channel_layout = QtWidgets.QHBoxLayout()
+    
     any_checked = False
     for i in range(8): # Ofrecer 8 canales
       chk = QtWidgets.QCheckBox(f"ai{i}")
@@ -1468,12 +1469,44 @@ class RealTimePlotter(QtWidgets.QWidget):
   def _setup_ui_controls(self):
     """Configura los controles de grabación, trigger y mediciones."""
     
-    self.btn_autoforge = QtWidgets.QPushButton(" Autograbado")
-    self.btn_autoforge.setStyleSheet("background-color: #ff0055; color: white; font-weight: bold; font-family: 'Courier New'; font-size: 14px; padding: 8px; border: 2px solid #ff0055; border-radius: 4px;")
+    self.btn_autoforge = QtWidgets.QPushButton(" AUTOGRABADO")
+    self.btn_autoforge.setStyleSheet("""
+      QPushButton {
+        background-color: #1a001a; 
+        color: #ff00ff; 
+        font-weight: 900; 
+        font-family: 'Consolas', 'Courier New', monospace; 
+        font-size: 15px; 
+        padding: 8px; 
+        border-radius: 4px;
+        border: 2px solid #ff00ff;
+        border-right: 4px solid #00ffff;
+        border-bottom: 4px solid #00ffff;
+      }
+      QPushButton:hover {
+        background-color: #ff00ff; color: #000000; border: 2px solid #00ffff;
+      }
+    """)
     self.btn_autoforge.clicked.connect(self.iniciar_autoforge)
 
-    self.btn_autoforge_continuo = QtWidgets.QPushButton(" Secuencia Continua")
-    self.btn_autoforge_continuo.setStyleSheet("background-color: #aa00ff; color: white; font-weight: bold; font-family: 'Courier New'; font-size: 14px; padding: 8px; border: 2px solid #aa00ff; border-radius: 4px;")
+    self.btn_autoforge_continuo = QtWidgets.QPushButton(" SECUENCIA CONTINUA")
+    self.btn_autoforge_continuo.setStyleSheet("""
+      QPushButton {
+        background-color: #0d001a; 
+        color: #aa00ff; 
+        font-weight: 900; 
+        font-family: 'Consolas', 'Courier New', monospace; 
+        font-size: 15px; 
+        padding: 8px; 
+        border-radius: 4px;
+        border: 2px solid #aa00ff;
+        border-right: 4px solid #ff00ff;
+        border-bottom: 4px solid #ff00ff;
+      }
+      QPushButton:hover {
+        background-color: #aa00ff; color: #ffffff; border: 2px solid #ff00ff;
+      }
+    """)
     self.btn_autoforge_continuo.clicked.connect(self.iniciar_autoforge_continuo)
 
     self.btn_record = QtWidgets.QPushButton("Empezar a Grabar")
@@ -1551,9 +1584,36 @@ class RealTimePlotter(QtWidgets.QWidget):
 
   def _setup_ui_plots(self):
     """Configura los widgets de ploteo y el splitter."""
-    # Widget para el ploteo de tiempo
     
-    # --- NUEVO: Overlay AutoForge ---
+    # Widget contenedor para el grafico y sus controles
+    self.plot_container = QtWidgets.QWidget()
+    self.plot_container_layout = QtWidgets.QVBoxLayout(self.plot_container)
+    self.plot_container_layout.setContentsMargins(0, 0, 0, 0)
+    self.plot_container_layout.setSpacing(2)
+    
+    # Panel de control de visualización
+    self.viz_control_panel = QtWidgets.QWidget()
+    self.viz_control_panel.setStyleSheet("background-color: #050505; border-bottom: 1px solid #333;")
+    self.viz_control_layout = QtWidgets.QHBoxLayout(self.viz_control_panel)
+    self.viz_control_layout.setContentsMargins(5, 2, 5, 2)
+    
+    lbl_viz = QtWidgets.QLabel("Visualización de Canales:")
+    lbl_viz.setStyleSheet("color: #00FFFF; font-weight: bold; border: none;")
+    self.viz_control_layout.addWidget(lbl_viz)
+    
+    self.btn_hide_all_viz = QtWidgets.QPushButton("Ocultar Todos")
+    self.btn_hide_all_viz.setStyleSheet("background-color: #330000; color: #ff5555; border: 1px solid #ff5555; padding: 2px 8px; font-size: 11px; font-weight: bold; border-radius: 3px;")
+    self.btn_hide_all_viz.clicked.connect(self.hide_all_viz_channels)
+    self.viz_control_layout.addWidget(self.btn_hide_all_viz)
+    
+    # Contenedor para los checkboxes dinámicos
+    self.viz_checkbox_layout = QtWidgets.QHBoxLayout()
+    self.viz_control_layout.addLayout(self.viz_checkbox_layout)
+    self.viz_control_layout.addStretch()
+    
+    self.viz_checkboxes = []
+    
+    self.plot_container_layout.addWidget(self.viz_control_panel)
 
     self.plot_widget = pg.GraphicsLayoutWidget()
 
@@ -1565,6 +1625,8 @@ class RealTimePlotter(QtWidgets.QWidget):
     
     # Hacemos que cambie de tamaño junto con plot_widget
     self.plot_widget.installEventFilter(self)
+
+    self.plot_container_layout.addWidget(self.plot_widget)
 
     self.plot_widget.setBackground('k') # Fondo Negro
     
@@ -1632,7 +1694,7 @@ class RealTimePlotter(QtWidgets.QWidget):
       Any: Resultado de la ejecución de la función.
     """
     self.splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
-    self.splitter.addWidget(self.plot_widget)
+    self.splitter.addWidget(self.plot_container)
     self.splitter.addWidget(self.spectrogram_view)
     self.splitter.setSizes([600, 200]) # Tamaños iniciales
 
@@ -1652,11 +1714,14 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.lbl_recording_space.setStyleSheet("background-color: #050510; color: #00FF00; font-family: 'Courier New', monospace; font-size: 45px; font-weight: 900; border: 2px dashed #FF0055; padding: 10px;")
     
     # En lugar de usar un layout que puede forzar anchos mínimos, usamos un layout con restricciones duras
-    empty_layout = QtWidgets.QHBoxLayout(self.empty_recording_widget)
-    empty_layout.setContentsMargins(10, 0, 10, 0)
-    empty_layout.addWidget(self.lbl_recording_space, stretch=4)
+    self.empty_recording_layout = QtWidgets.QHBoxLayout(self.empty_recording_widget)
+    self.empty_recording_layout.setContentsMargins(10, 0, 10, 0)
+    self.empty_recording_layout.addWidget(self.lbl_recording_space, stretch=4)
     
-    self.empty_recording_widget.setLayout(empty_layout)
+    self._setup_native_metronome()
+    self.empty_recording_layout.addWidget(self.metronome_container, stretch=1) # Añadir fijo al recuadro de arriba
+    
+    self.empty_recording_widget.setLayout(self.empty_recording_layout)
     
     # FUERZA BRUTA HORIZONTAL: NUNCA podrá expandir la pantalla principal
     self.empty_recording_widget.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
@@ -1670,9 +1735,6 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.main_layout.addLayout(self.trigger_layout)
     self.main_layout.addWidget(self.measure_widget)
     self.main_layout.addWidget(self.spectrogram_groupbox) # Añadir controles del espectrograma
-    
-    self._setup_native_metronome()
-    self.spectrogram_layout.addWidget(self.metronome_container) # Añadir al layout del espectrograma (abajo a la derecha)
     self.main_layout.addWidget(self.splitter) # Añadir el divisor con los gráficos
   def _connect_signals(self):
     
@@ -1776,6 +1838,17 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.spin_test_freq.setEnabled(checked)
     print(f"Modo Prueba {'Activado' if checked else 'Desactivado'}.")
 
+  def hide_all_viz_channels(self):
+    all_unchecked = all(not chk.isChecked() for chk in self.viz_checkboxes)
+    if all_unchecked:
+      for chk in self.viz_checkboxes:
+        chk.setChecked(True)
+      self.btn_hide_all_viz.setText("Ocultar Todos")
+    else:
+      for chk in self.viz_checkboxes:
+        chk.setChecked(False)
+      self.btn_hide_all_viz.setText("Mostrar Todos")
+
   def set_controls_enabled(self, enabled):
     """Habilita o deshabilita todos los controles excepto el de Start/Stop Acq."""
     self.btn_record.setEnabled(enabled)
@@ -1814,6 +1887,7 @@ class RealTimePlotter(QtWidgets.QWidget):
       # --- NUEVO: Abortar AutoForge o grabación activa ---
       self.is_autoforge_running = False
       self.is_autoforge_continuo = False
+      self.reset_autoforge_buttons() # Restaurar aspecto de botones
       if hasattr(self, 'autoforge_overlay'):
         self.autoforge_overlay.hide()
       if getattr(self, 'is_recording', False):
@@ -1996,6 +2070,13 @@ class RealTimePlotter(QtWidgets.QWidget):
       self.plot.scene().removeItem(self.plot.legend)
       self.plot.legend = None
       
+    # Limpiar checkboxes de visualizacion
+    while self.viz_checkbox_layout.count():
+      item = self.viz_checkbox_layout.takeAt(0)
+      if item.widget():
+        item.widget().deleteLater()
+    self.viz_checkboxes.clear()
+      
     self.plot.getViewBox().setLimits(xMin=-self.PLOT_DURATION_S) # Actualizar límite de zoom
     self.plot.addLegend()
     
@@ -2018,6 +2099,19 @@ class RealTimePlotter(QtWidgets.QWidget):
       color = self.colores_curvas[i % len(self.colores_curvas)]
       musculo = self.nombres_musculos[i % len(self.nombres_musculos)]
       self.curvas.append(self.plot.plot(pen=color, name=musculo))
+      
+      # --- NUEVO: Checkbox de visualización ---
+      chk_viz = QtWidgets.QCheckBox(musculo)
+      chk_viz.setChecked(True)
+      chk_viz.setStyleSheet(f"color: {pg.mkColor(color).name()}; font-weight: bold; border: none;")
+      
+      def toggle_viz(state, idx=i):
+        if idx < len(self.curvas):
+          self.curvas[idx].setVisible(state)
+          
+      chk_viz.toggled.connect(toggle_viz)
+      self.viz_checkbox_layout.addWidget(chk_viz)
+      self.viz_checkboxes.append(chk_viz)
       
       # --- NUEVO: Línea de piso de ruido ---
       line_ruido = pg.InfiniteLine(angle=0, pen=pg.mkPen('r', width=4, style=QtCore.Qt.DashLine))
@@ -2140,7 +2234,6 @@ class RealTimePlotter(QtWidgets.QWidget):
 
   def _setup_native_metronome(self):
     self.metronome_container = QtWidgets.QGroupBox("Metrónomo")
-    self.metronome_container.setFixedWidth(150)
     self.metronome_container.setStyleSheet("""
       QGroupBox {
           border: 2px solid #00FFFF;
@@ -2193,6 +2286,8 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.metro_timer = QtCore.QTimer()
     self.metro_timer.timeout.connect(self.on_metro_beat)
     
+    # Hacer que el metrónomo sea visible por defecto
+    self.metronome_container.show()
     self.metro_is_running = False
     self.metro_count_in_remaining = 0
     self.metro_beat_count = 0
@@ -2233,7 +2328,6 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.metro_lbl_title.setStyleSheet("font-size: 16px; color: #00FFFF;")
     self.metro_lbl_count.setStyleSheet("font-size: 48px; color: #00FFFF; font-weight: bold;")
     self.save_metronome_config()
-    self.spectrogram_layout.addWidget(self.metronome_container)
 
   def reset_metro_color(self):
     self.metro_pulse_frame.setStyleSheet(f"background-color: {self.COLOR_IDLE}; border: 2px solid #00FFFF;")
@@ -3186,6 +3280,45 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.autoforge_overlay.resize(event.size())
     return super().eventFilter(obj, event)
 
+  def reset_autoforge_buttons(self):
+    """Restaura los botones de autoforge a su estado normal (Cyberpunk)."""
+    self.btn_autoforge.setText(" AUTOGRABADO")
+    self.btn_autoforge.setStyleSheet("""
+      QPushButton {
+        background-color: #1a001a; 
+        color: #ff00ff; 
+        font-weight: 900; 
+        font-family: 'Consolas', 'Courier New', monospace; 
+        font-size: 15px; 
+        padding: 8px; 
+        border-radius: 4px;
+        border: 2px solid #ff00ff;
+        border-right: 4px solid #00ffff;
+        border-bottom: 4px solid #00ffff;
+      }
+      QPushButton:hover {
+        background-color: #ff00ff; color: #000000; border: 2px solid #00ffff;
+      }
+    """)
+    self.btn_autoforge_continuo.setText(" SECUENCIA CONTINUA")
+    self.btn_autoforge_continuo.setStyleSheet("""
+      QPushButton {
+        background-color: #0d001a; 
+        color: #aa00ff; 
+        font-weight: 900; 
+        font-family: 'Consolas', 'Courier New', monospace; 
+        font-size: 15px; 
+        padding: 8px; 
+        border-radius: 4px;
+        border: 2px solid #aa00ff;
+        border-right: 4px solid #ff00ff;
+        border-bottom: 4px solid #ff00ff;
+      }
+      QPushButton:hover {
+        background-color: #aa00ff; color: #ffffff; border: 2px solid #ff00ff;
+      }
+    """)
+
   def iniciar_autoforge(self):
     """
     Ejecuta la funcionalidad de iniciar_autoforge.
@@ -3196,8 +3329,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     try:
       if getattr(self, 'is_autoforge_running', False):
         self.is_autoforge_running = False
-        self.btn_autoforge.setText(" Autograbado")
-        self.btn_autoforge.setStyleSheet("background-color: #ff0055; color: white; font-weight: bold; font-family: 'Courier New'; font-size: 14px; padding: 8px; border: 2px solid #ff0055; border-radius: 4px;")
+        self.reset_autoforge_buttons()
         self.autoforge_overlay.hide()
         self.config_stack.setCurrentIndex(0)
         if hasattr(self, 'session_timer'): self.session_timer.stop()
@@ -3275,8 +3407,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     try:
       if getattr(self, 'is_autoforge_running', False):
         self.is_autoforge_running = False
-        self.btn_autoforge_continuo.setText(" Secuencia Continua")
-        self.btn_autoforge_continuo.setStyleSheet("background-color: #aa00ff; color: white; font-weight: bold; font-family: 'Courier New'; font-size: 14px; padding: 8px; border: 2px solid #aa00ff; border-radius: 4px;")
+        self.reset_autoforge_buttons()
         self.autoforge_overlay.hide()
         self.config_stack.setCurrentIndex(0)
         if hasattr(self, 'session_timer'): self.session_timer.stop()
@@ -3593,9 +3724,14 @@ class RealTimePlotter(QtWidgets.QWidget):
   def estado_finalizar_secuencia_continua(self):
     self.autoforge_overlay.setText("<div align='center'>¡SECUENCIA COMPLETADA!</div>")
     QtCore.QTimer.singleShot(2000, self.autoforge_overlay.hide)
-    self.is_acquiring = False
-    self.is_autoforge_running = False
-    self.is_autoforge_continuo = False
+    
+    if getattr(self, 'is_acquiring', False):
+      self.on_start_acq_click() # Esto detiene el DAQ y llama a reset_autoforge_buttons()
+    else:
+      self.is_autoforge_running = False
+      self.is_autoforge_continuo = False
+      self.reset_autoforge_buttons()
+      
     self.config_stack.setCurrentIndex(0) # Restaurar configuración
     if hasattr(self, 'session_timer'):
       self.session_timer.stop()
@@ -3662,9 +3798,15 @@ class RealTimePlotter(QtWidgets.QWidget):
       self.autoforge_overlay.show()
       QtCore.QTimer.singleShot(2000, self.autoforge_overlay.hide)
       self.current_recording = []
-      self.is_acquiring = False
-      self.is_autoforge_running = False
+      
+      if getattr(self, 'is_acquiring', False):
+        self.on_start_acq_click() # Detiene el DAQ correctamente y llama a reset_autoforge_buttons()
+      else:
+        self.is_autoforge_running = False
+        self.reset_autoforge_buttons()
+        
       self.config_stack.setCurrentIndex(0) # Restaurar configuración
+      if hasattr(self, 'session_timer'): self.session_timer.stop()
       return
       
     palabra = self.autoforge_words[self.autoforge_word_idx]
@@ -3795,9 +3937,8 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.lbl_recording_space.setText(texto_ventana)
     self.word_window_process = None
     
-    # Lanzar el metrónomo AHORA MISMO con un Count-in de tipo carreras (3 graves, 1 agudo)
-    # Posicionar el metrónomo en el panel de grabación activo
-    self.empty_recording_widget.layout().addWidget(self.metronome_container)
+    # Lanzar el metrónomo AHORA MISMO con un Count-in de tipo carreras (3 graves, 1 ya estaba agregado)
+    # (El metrónomo ya está fijo en el recuadro superior)
     
     self.start_native_metronome(count_in=4, force_start=True)
     
@@ -3967,19 +4108,17 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.autoforge_word_idx += 1
     self.estado_iniciar_palabra()
 
-  def _update_floating_windows_pos(self):
     pass
 
   def resizeEvent(self, event):
     """Maneja la redimensión de la ventana para ajustar las ventanas flotantes."""
     super().resizeEvent(event)
-    QtCore.QTimer.singleShot(300, self._update_floating_windows_pos)
 
   def changeEvent(self, event):
     """Maneja eventos de cambio de estado (como pantalla completa)."""
     super().changeEvent(event)
     if event.type() == QtCore.QEvent.WindowStateChange:
-      QtCore.QTimer.singleShot(300, self._update_floating_windows_pos)
+      pass
 
   def closeEvent(self, event):
     # Se llama cuando el usuario cierra la ventana
