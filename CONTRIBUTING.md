@@ -41,7 +41,7 @@ Actualmente, necesitamos colaboración urgente en las siguientes áreas:
 
 ---
 
-## 🤖 Ecosistema de Agentes Autónomos
+## Ecosistema de Agentes Autónomos
 Este repositorio es pionero en el desarrollo asistido por Inteligencia Artificial Estructurada. El proyecto es co-desarrollado por un "Enjambre de Agentes Autónomos" liderado por el meta-agente principal **Antigravity**.
 Al contribuir, ten en cuenta el flujo de trabajo Multi-Agente:
 - **Especialización**: Tareas complejas son delegadas a agentes específicos (Frontend Expert, DSP Auditor, Backend Optimizer).

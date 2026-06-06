@@ -11,7 +11,7 @@ Este repositorio aloja el software para la **adquisición automatizada, almacena
 
 Desarrollado por la comunidad para el **Laboratorio de Sistemas Dinámicos**.
 
-> 🌌 **Desarrollo Guiado por Agentes Autónomos (IA)**
+> **Desarrollo Guiado por Agentes Autónomos (IA)**
 > Este proyecto es un hito pionero co-desarrollado en simbiosis con un ecosistema de agentes autónomos de Inteligencia Artificial (coordinados por el meta-agente **Antigravity** de Google DeepMind). Los agentes operan como ingenieros especializados (Frontend, DSP, Backend) para garantizar robustez matemática y estética Cyberpunk.
 
 ## Tabla de Contenidos
