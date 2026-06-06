@@ -189,7 +189,7 @@ def lanzar_script(script_name, args=[]):
     archivos_auxiliares = [
         "analysis/plotter_calibrado.py", "analysis/feature_extractor.py", 
         "analysis/electrode_viewer_4.py", "utils/editor_mediciones.py", "analysis/analisis_por_track_integrado.py", 
-        "analysis/analisis_por_track_integrado_experimental.py", "analysis/correlaciondeseñales.py", 
+        "analysis/analisis_por_track_integrado_experimental.py", "analysis/correlaciondeseñales.py", "analysis/segmentador_secuencias.py", 
         "utils/actualizar_metadata.py", "utils/migrar_mediciones_por_fecha.py"
     ]
     for archivo in archivos_auxiliares:

@@ -58,6 +58,7 @@ additional_modules = [
     'acquisition.metronomo_visual',
     'analysis.analisis_por_track_integrado',
     'analysis.analisis_por_track_integrado_experimental',
+    'analysis.segmentador_secuencias',
     'analysis.electrode_viewer_4',
     'analysis.feature_extractor',
     'analysis.plotter_calibrado',

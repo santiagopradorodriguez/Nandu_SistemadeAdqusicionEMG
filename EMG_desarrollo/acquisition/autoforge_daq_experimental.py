@@ -2319,6 +2319,18 @@ class RealTimePlotter(QtWidgets.QWidget):
             
             self.metro_lbl_count.setText(str(self.metro_beat_count))
             self.metro_pulse_frame.setStyleSheet(f"background-color: {self.COLOR_BEAT}; border: 2px solid #00FFFF;")
+            
+            # --- NUEVO: Intercalar Letras dinámicamente en Secuencia Continua ---
+            if getattr(self, 'is_autoforge_continuo', False) and getattr(self, 'is_recording', False):
+                total_pulsos = len(self.autoforge_words) * self.autoforge_target_reps
+                if self.metro_beat_count > total_pulsos:
+                    if not getattr(self, 'is_finishing_sequence', False):
+                        self.is_finishing_sequence = True
+                        self.estado_guardar_secuencia_continua()
+                else:
+                    idx = (self.metro_beat_count - 1) % len(self.autoforge_words)
+                    palabra_actual = self.autoforge_words[idx].upper()
+                    self.lbl_recording_space.setText(f"<div align='center' style='font-size: 100px; font-weight: bold;'>{palabra_actual}</div>")
         
         QtCore.QTimer.singleShot(50, self.reset_metro_color)
     elif self.metro_count_in_remaining == 0:
@@ -3669,6 +3681,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     import time
     self.recording_start_time = time.perf_counter()
     self.is_recording = True
+    self.is_finishing_sequence = False
     
     self.current_recording = getattr(self, 'autoforge_ruido_guardado', []).copy()
     self.stats_time = [[] for _ in range(self.NUM_CANALES)]
@@ -3677,6 +3690,8 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.stats_noise_std = [[] for _ in range(self.NUM_CANALES)]
     
     self.label_rec_time.setText("GRABANDO SECUENCIA CONTINUA...")
+    if len(self.autoforge_words) > 0:
+        self.lbl_recording_space.setText(f"<div align='center' style='font-size: 100px; font-weight: bold;'>{self.autoforge_words[0].upper()}</div>")
 
   def estado_guardar_secuencia_continua(self):
     """
@@ -3700,6 +3715,9 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.autoforge_overlay.setText("<div align='center'>SECUENCIA COMPLETADA<br>GUARDANDO DATOS...</div>")
     self.autoforge_overlay.show()
     
+    local_recording = self.current_recording.copy()
+    local_ruido = getattr(self, 'autoforge_ruido_guardado', []).copy()
+    
     import threading
     def guardar_async():
       import os, json
@@ -3712,6 +3730,11 @@ class RealTimePlotter(QtWidgets.QWidget):
       os.makedirs(base_dir, exist_ok=True)
       
       total_pulsos = len(self.autoforge_words) * self.autoforge_target_reps
+      
+      full_word_sequence = []
+      for i in range(total_pulsos):
+          full_word_sequence.append(self.autoforge_words[i % len(self.autoforge_words)])
+          
       metadata = {
         "measurement_date": datetime.now().isoformat(),
         "sample_rate": self.SAMPLE_RATE,
@@ -3724,7 +3747,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         "letra": "SecuenciaContinua",
         "prueba": self.autoforge_prueba,
         "comentario": "Grabado mediante AutoForge Secuencia Continua",
-        "words_sequence": self.autoforge_words
+        "words_sequence": full_word_sequence
       }
       
       for i in range(self.NUM_CANALES):
@@ -3736,13 +3759,13 @@ class RealTimePlotter(QtWidgets.QWidget):
             json.dump(metadata, f, indent=4)
         except: pass
 
-      try: guardar_grabacion_csv(self.current_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion")
+      try: guardar_grabacion_csv(local_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion")
       except: pass
       
-      try: guardar_grabacion_wav(self.current_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion")
+      try: guardar_grabacion_wav(local_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion")
       except: pass
       
-      try: generar_grafico_grabacion(self.current_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, self.CANALES_DAQ)
+      try: generar_grafico_grabacion(local_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, self.CANALES_DAQ)
       except: pass
       
       try: generar_grafico_estadisticas(self.stats_time, self.stats_snr, self.stats_noise_mean, self.stats_noise_std, str(base_dir), self.NUM_CANALES, self.CANALES_DAQ)

@@ -51,6 +51,12 @@ if getattr(sys, 'frozen', False) and len(sys.argv) > 1 and sys.argv[1].endswith(
       import utils.actualizar_metadata as module
     elif module_name == 'utils.migrar_mediciones_por_fecha':
       import utils.migrar_mediciones_por_fecha as module
+    elif module_name == 'analysis.segmentador_secuencias':
+      import analysis.segmentador_secuencias as module
+    elif module_name == 'analysis.extractor_de_datos_letras':
+      import analysis.extractor_de_datos_letras as module
+    elif module_name == 'machine_learning.dl_data_pipeline':
+      import machine_learning.dl_data_pipeline as module
     else:
       import importlib
       module = importlib.import_module(module_name)
@@ -311,32 +317,58 @@ class ReaperStyleHub(QMainWindow):
     toolbar = QToolBar("Herramientas Adicionales")
     toolbar.setIconSize(QSize(16, 16))
     self.addToolBar(Qt.TopToolBarArea, toolbar)
+    from PySide6.QtWidgets import QToolButton, QMenu
     
-    utils = [
-      ("⚙ Configuración General", "_internal_config"),
-      ("Instrucciones y Créditos", "instrucciones_uso.py"),
-      ("Metrónomo", "acquisition/metronomo_visual.py"),
-      ("Entrenamiento AutoForge", "acquisition/modulo_de_entrenamiento.py"),
-      ("Editar Medición", "utils/editor_mediciones.py"),
-      ("Extraer Datos ML", "analysis/feature_extractor.py"),
-      ("Graficador", "analysis/plotter_calibrado.py"),
-      ("Análisis Correlación", "analysis/correlaciondeseñales.py"),
-      ("Reproductor de Audios", "analysis/reproductor_canal3.py")
-    ]
+    def create_menu_button(title, items):
+        btn = QToolButton()
+        btn.setText(title)
+        btn.setPopupMode(QToolButton.InstantPopup)
+        menu = QMenu(btn)
+        for name, script in items:
+            action = QAction(name, self)
+            if script == "_internal_config":
+                action.triggered.connect(self._open_config_dialog)
+            elif script == "analysis/plotter_calibrado.py":
+                action.triggered.connect(self._run_plotter_calibrado)
+            elif script == "analysis/correlaciondeseñales.py":
+                action.triggered.connect(self._run_correlacion_nativo)
+            elif script == "analysis/reproductor_canal3.py":
+                action.triggered.connect(self._run_reproductor_audio)
+            else:
+                action.triggered.connect(lambda checked=False, s=script: self._launch_external(s))
+            menu.addAction(action)
+        btn.setMenu(menu)
+        toolbar.addWidget(btn)
+        
+    create_menu_button("⚙ Configuración & Ayuda", [
+        ("⚙ Configuración General", "_internal_config"),
+        ("Instrucciones y Créditos", "instrucciones_uso.py")
+    ])
     
-    for name, script in utils:
-      action = QAction(name, self)
-      if script == "_internal_config":
-        action.triggered.connect(self._open_config_dialog)
-      elif script == "analysis/plotter_calibrado.py":
-        action.triggered.connect(self._run_plotter_calibrado)
-      elif script == "analysis/correlaciondeseñales.py":
-        action.triggered.connect(self._run_correlacion_nativo)
-      elif script == "analysis/reproductor_canal3.py":
-        action.triggered.connect(self._run_reproductor_audio)
-      else:
-        action.triggered.connect(lambda checked=False, s=script: self._launch_external(s))
-      toolbar.addAction(action)
+    create_menu_button("🎙 Adquisición", [
+        ("Metrónomo", "acquisition/metronomo_visual.py"),
+        ("Entrenamiento AutoForge", "acquisition/modulo_de_entrenamiento.py")
+    ])
+    
+    create_menu_button("📊 Análisis", [
+        ("Graficador", "analysis/plotter_calibrado.py"),
+        ("Análisis Correlación", "analysis/correlaciondeseñales.py")
+    ])
+    
+    create_menu_button("🛠 Utilidades Dataset", [
+        ("Segmentador de Secuencias Continuas", "analysis/segmentador_secuencias.py"),
+        ("Extractor Letras (Fase 3)", "analysis/extractor_de_datos_letras.py"),
+        ("Editar Medición", "utils/editor_mediciones.py")
+    ])
+    
+    create_menu_button("🧠 Machine Learning", [
+        ("Pipeline ML (Fase 4)", "machine_learning/dl_data_pipeline.py"),
+        ("Extraer Datos ML", "analysis/feature_extractor.py")
+    ])
+    
+    create_menu_button("🎵 Audio", [
+        ("Reproductor de Audios", "analysis/reproductor_canal3.py")
+    ])
 
   def _open_config_dialog(self):
     """
@@ -552,6 +584,7 @@ class ReaperStyleHub(QMainWindow):
     self.analysis_panel.tab_procesamiento.btn_run_procesar.clicked.connect(lambda: self._run_analysis(interactivo=True))
     self.analysis_panel.tab_procesamiento.btn_run_rapido.clicked.connect(lambda: self._run_analysis(interactivo=False))
     self.analysis_panel.tab_comparativo.btn_run_comparativo.clicked.connect(self.run_analisis_comparativo_nativo)
+    self.analysis_panel.tab_comparativo.btn_run_sesion.clicked.connect(self.run_analisis_sesion_nativo)
     lyt_analysis.addWidget(self.analysis_panel, stretch=1)
     
     # Visor de Imágenes Integrado
@@ -600,6 +633,13 @@ class ReaperStyleHub(QMainWindow):
     
     self.comparative_viewer = ComparativeViewerWidget(root_path=comparative_path)
     self.tabs.addTab(self.comparative_viewer, "4. HISTORIAL DE COMPARATIVAS")
+
+    # --- TAB 5: HISTORIAL DE SESIÓN ---
+    session_path = os.path.join(root_dir, "analisis_de_sesiones")
+    if not os.path.exists(session_path):
+        os.makedirs(session_path)
+    self.session_viewer = ComparativeViewerWidget(root_path=session_path)
+    self.tabs.addTab(self.session_viewer, "5. HISTORIAL DE SESIÓN")
 
   def _create_dock_explorer(self):
     """Panel tipo 'Media Explorer' o 'Gestor de Sesiones'"""
@@ -650,6 +690,7 @@ class ReaperStyleHub(QMainWindow):
     # 1. Habilitar/Deshabilitar botones
     self.analysis_panel.tab_procesamiento.btn_run_procesar.setEnabled(n > 0)
     self.analysis_panel.tab_comparativo.btn_run_comparativo.setEnabled(n > 1)
+    self.analysis_panel.tab_comparativo.btn_run_sesion.setEnabled(n > 1)
     
     # 2. Calcular Canales Totales (Procesamiento) y Comunes (Comparativo)
     cmb = self.analysis_panel.tab_comparativo.cmb_canal_comun
@@ -954,6 +995,181 @@ finally:
         
     self.comparative_thread.finished_signal.connect(on_comparative_finished)
     self.comparative_thread.start()
+    
+    self.log_console.append(f"> Tarea enviada exitosamente. Abriendo terminal CMD nativa...")
+
+  def run_analisis_sesion_nativo(self):
+    rutas = self.explorer_widget.get_selected_paths()
+    if len(rutas) < 2: return
+    
+    nombre_custom = self.analysis_panel.tab_comparativo.inp_nombre_analisis.text().strip()
+    
+    self.log_console.append("\n" + "="*45)
+    self.log_console.append("> LEVANTANDO EVOLUCIÓN CONTINUA DE SESIÓN")
+    self.log_console.append("="*45)
+    
+    import subprocess
+    import sys
+    
+    base_dir = os.path.dirname(os.path.dirname(rutas[0]))
+    nombres_medicion = [f"{os.path.basename(os.path.dirname(r))}/{os.path.basename(r)}" for r in rutas]
+    emg_root = os.path.dirname(base_dir)
+    
+    emg_root_escaped = emg_root.replace('\\', '/')
+    base_dir_escaped = base_dir.replace('\\', '/')
+    
+    bridge_script = f"""
+import sys
+import os
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+  sys.path.insert(0, current_dir)
+
+from pathlib import Path
+import json
+import re
+from datetime import datetime
+import numpy as np
+import matplotlib
+matplotlib.use('TkAgg')
+sys.path.append("{emg_root_escaped}")
+import analysis.analisis_por_track_integrado as api
+
+mediciones_a_comparar = {nombres_medicion}
+base_dir = "{base_dir_escaped}"
+nombre_custom = "{nombre_custom}"
+
+try:
+    mediciones_data = []
+    for nombre_medicion in mediciones_a_comparar:
+        path_medicion = os.path.join(base_dir, nombre_medicion)
+        folder_name = os.path.basename(path_medicion)
+        
+        letra_match = re.match(r'^([AEIOUaeiou])_', folder_name)
+        letra = letra_match.group(1).upper() if letra_match else '?'
+        
+        dt_obj = None
+        hora_str = ""
+        pulse_count = 0
+        canales_data = {{}}
+        
+        for ch_idx in [0, 1, 2]:
+            ch_key = f'canal_{{ch_idx}}'
+            ch_path = os.path.join(path_medicion, ch_key)
+            if not os.path.exists(ch_path): continue
+            
+            res_path = os.path.join(ch_path, 'analisis_results.json')
+            meta_path = os.path.join(ch_path, 'metadata.json')
+            
+            if not os.path.exists(res_path): continue
+            
+            with open(res_path, 'r') as f:
+                res = json.load(f)
+                
+            if os.path.exists(meta_path):
+                with open(meta_path, 'r') as f:
+                    meta = json.load(f)
+                    
+                    if dt_obj is None:
+                        mdate = meta.get('measurement_date', '')
+                        if mdate:
+                            try:
+                                dt_obj = datetime.fromisoformat(mdate)
+                                hora_str = dt_obj.strftime("%H:%M:%S")
+                            except:
+                                pass
+                                
+                    if pulse_count == 0:
+                        pulse_count = meta.get('pulse_count', 0)
+            
+            snr_per_pulse = []
+            segmentos_rs = res.get('segmentos_rs', [])
+            if not isinstance(segmentos_rs, list):
+                segmentos_rs = []
+                
+            umbral = res.get('umbral', None)
+            
+            amp_per_pulse = []
+            if isinstance(segmentos_rs, list) and len(segmentos_rs) > 0:
+                for p in segmentos_rs:
+                    if isinstance(p, list) and len(p) > 0:
+                        mav_val = float(np.mean(np.abs(p)))
+                        amp_per_pulse.append(mav_val)
+                        if umbral and umbral > 0:
+                            snr_per_pulse.append(mav_val / umbral)
+                        else:
+                            snr_per_pulse.append(np.nan)
+                    else:
+                        amp_per_pulse.append(np.nan)
+                        snr_per_pulse.append(np.nan)
+            else:
+                amp_per_pulse = [np.nan] * len(snr_per_pulse)
+                
+            canales_data[ch_key] = {{
+                'snr': snr_per_pulse,
+                'amp': amp_per_pulse
+            }}
+            
+        if dt_obj is None:
+            dt_obj = datetime.now()
+            hora_str = "??.??"
+            
+        mediciones_data.append({{
+            'folder_name': folder_name,
+            'letra': letra,
+            'dt_obj': dt_obj,
+            'hora_str': hora_str,
+            'pulse_count': pulse_count,
+            'canales': canales_data
+        }})
+        
+    mediciones_data.sort(key=lambda x: x['dt_obj'])
+    
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    timestamp = datetime.now().strftime("%H%M%S")
+    
+    nombre_carpeta = nombre_custom if nombre_custom else f"Sesion_{{timestamp}}"
+    output_comp_dir = os.path.join("{emg_root_escaped}", "analisis_de_sesiones", today_str, nombre_carpeta)
+    os.makedirs(output_comp_dir, exist_ok=True)
+    
+    nombre_salida_base = os.path.join(output_comp_dir, "Sesion")
+    
+    api._comparative_session_plots(mediciones_data, nombre_salida_base)
+
+except Exception as e:
+    import traceback
+    print("\\n" + "="*50)
+    print(" OCURRIÓ UN ERROR CRÍTICO DURANTE EL ANÁLISIS DE SESIÓN")
+    print("="*50)
+    traceback.print_exc()
+finally:
+    input("\\nPresione ENTER para cerrar esta ventana...")
+"""
+    script_path = os.path.join(emg_root, "gui_app", "temp_sesion.py")
+    with open(script_path, "w", encoding="utf-8") as f:
+      f.write(bridge_script)
+      
+    from PySide6.QtCore import QThread, Signal
+    class SessionRunner(QThread):
+      finished_signal = Signal(object)
+      def __init__(self, spath):
+        super().__init__()
+        self.spath = spath
+      def run(self):
+        import subprocess
+        p = subprocess.run([sys.executable, self.spath], creationflags=subprocess.CREATE_NEW_CONSOLE)
+        self.finished_signal.emit(p.returncode)
+        
+    self.sesion_thread = SessionRunner(script_path)
+    
+    def on_sesion_finished(exit_code):
+      self.analysis_panel.tab_comparativo.btn_run_sesion.setText("LANZAR EVOLUCIÓN DE SESIÓN")
+      self.analysis_panel.tab_comparativo.btn_run_sesion.setEnabled(True)
+      self.log_console.append(f"> Evolución Continua de Sesión finalizada en terminal nativa.")
+      
+    self.sesion_thread.finished_signal.connect(on_sesion_finished)
+    self.sesion_thread.start()
     
     self.log_console.append(f"> Tarea enviada exitosamente. Abriendo terminal CMD nativa...")
 

@@ -52,7 +52,7 @@ class ProcessingTab(QWidget):
         self.chk_cyberpunk.setChecked(True)
         l_ind.addWidget(self.chk_cyberpunk)
 
-        self.chk_espectrograma = QCheckBox("Generar espectrograma (spec.png)")
+        self.chk_espectrograma = QCheckBox("Generar Espectrograma Señal Completa (Estilo Praat)")
         self.chk_espectrograma.setChecked(False)
         l_ind.addWidget(self.chk_espectrograma)
 
@@ -208,7 +208,9 @@ class ComparativeTab(QWidget):
         
         self.layout.addStretch()
 
-        # Botón Lanzar
+        # Botones Lanzar
+        btn_layout = QHBoxLayout()
+        
         self.btn_run_comparativo = QPushButton("📊 LANZAR ANÁLISIS COMPARATIVO")
         self.btn_run_comparativo.setFixedHeight(50)
         self.btn_run_comparativo.setCursor(Qt.PointingHandCursor)
@@ -220,7 +222,22 @@ class ComparativeTab(QWidget):
             QPushButton:hover { background-color: #ffff00; color: #000; }
             QPushButton:disabled { border: 2px solid #555; color: #555; }
         """)
-        self.layout.addWidget(self.btn_run_comparativo)
+        btn_layout.addWidget(self.btn_run_comparativo)
+
+        self.btn_run_sesion = QPushButton("📈 LANZAR EVOLUCIÓN DE SESIÓN")
+        self.btn_run_sesion.setFixedHeight(50)
+        self.btn_run_sesion.setCursor(Qt.PointingHandCursor)
+        self.btn_run_sesion.setStyleSheet("""
+            QPushButton {
+                font-weight: bold; font-size: 14px;
+                background-color: transparent; color: #00ffff; border: 2px solid #00ffff; border-radius: 5px;
+            }
+            QPushButton:hover { background-color: #00ffff; color: #000; }
+            QPushButton:disabled { border: 2px solid #555; color: #555; }
+        """)
+        btn_layout.addWidget(self.btn_run_sesion)
+        
+        self.layout.addLayout(btn_layout)
 
 
 class AnalysisPanel(QWidget):

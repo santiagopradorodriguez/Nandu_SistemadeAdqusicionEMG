@@ -930,6 +930,7 @@ def procesar_wavs_promedio(
     show_interactive_plot=False,
     show_average_plot=False,
     apply_notch_filter=False,
+    normalize_overlay=False,
     # --- ARGUMENTOS NUEVOS PARA ALINEACIÓN FORZADA ---
     dict_shifts_externos=None, # Diccionario { 'archivo.wav': [shift1, shift2...] }
     indices_validos_externos=None # Pasó a ser forced_maxima
@@ -1170,8 +1171,8 @@ def procesar_wavs_promedio(
         plt.close('all') # --- Limpieza forzada ---
 
     if mostrar_tabla and promedios_globales:
-        _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, resultados, nombre_salida, normalize_overlay=normalizar)
-
+        _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, resultados, nombre_salida, normalize_overlay=normalize_overlay)
+    
     return resultados
 
 # ---------------------- GUI Classes (PySide6) ----------------------
