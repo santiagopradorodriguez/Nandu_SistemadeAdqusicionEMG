@@ -1,5 +1,12 @@
 # CHANGELOG
 
+## [v5.1.0] - 2026-06-05
+### Agregado (Added)
+- **Desarrollo IA**: Integración profunda del flujo de trabajo con Agentes Autónomos (Ecosistema Antigravity).
+- **DSP en Vivo**: Nuevo Evaluador Retrospectivo Determinista de Ruido Inter-pulso (atado al metrónomo) en el DAQ en tiempo real.
+- **UI Cyberpunk**: Integración de Metrónomo Nativo en PySide6 y filtro estético Cyberpunk para el análisis de señales.
+- **Métricas Robustas**: El SNR acumulado ahora se calcula usando la envolvente del ruido basal inicial, con exactitud biológica.
+
 ## [v5.0.1] - 2026-06-05
 ### Solucionado (Fixed)
 - Corregida la creación del directorio `base_de_datos_electrodos` que fallaba al usar el Launcher C#. Se reemplazó `sys.executable` por `os.getcwd()` en `user_data_path`.

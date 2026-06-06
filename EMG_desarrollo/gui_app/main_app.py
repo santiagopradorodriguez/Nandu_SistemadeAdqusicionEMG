@@ -1061,6 +1061,8 @@ try:
   dialog.var_tipo_env.set("{kwargs.get('tipo_envolvente', 'media_movil')}")
   dialog.var_highpass_cutoff.set("{kwargs['highpass_cutoff_hz']}")
   dialog.var_lowpass_cutoff.set("{kwargs['lowpass_cutoff_hz']}")
+  if hasattr(dialog, 'var_cyberpunk'):
+    dialog.var_cyberpunk.set({kwargs.get('tema_cyberpunk', False)})
 
   excl_list = {kwargs['excluded_windows_list']}
   excl_str = ",".join(map(str, excl_list)) if excl_list else ""

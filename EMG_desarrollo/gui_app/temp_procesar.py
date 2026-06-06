@@ -7,7 +7,7 @@ matplotlib.use('TkAgg')
 sys.path.append(r"c:\Users\MSI\OneDrive\Documentos\DOCUMENTOS SANTIAGO\santiago-prado-repositorio\EMG_desarrollo")
 import analysis.analisis_por_track_integrado as api
 
-mediciones = ['2026-06-05/co_Prueba1_Sujeto1']
+mediciones = ['2026-06-03/A_Prueba4_Lucas', '2026-06-01/A_Prueba1_Sujeto1']
 base_dir = r"c:\Users\MSI\OneDrive\Documentos\DOCUMENTOS SANTIAGO\santiago-prado-repositorio\EMG_desarrollo\base_de_datos_electrodos"
 
 try:
@@ -33,8 +33,10 @@ try:
   dialog.var_tipo_env.set("media_movil")
   dialog.var_highpass_cutoff.set("20.0")
   dialog.var_lowpass_cutoff.set("500.0")
+  if hasattr(dialog, 'var_cyberpunk'):
+    dialog.var_cyberpunk.set(True)
 
-  excl_list = []
+  excl_list = [1]
   excl_str = ",".join(map(str, excl_list)) if excl_list else ""
   dialog.var_excluded_windows.set(excl_str)
 

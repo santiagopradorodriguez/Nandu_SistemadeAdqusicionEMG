@@ -48,6 +48,10 @@ class ProcessingTab(QWidget):
         self.chk_cruda.setChecked(False)
         l_ind.addWidget(self.chk_cruda)
 
+        self.chk_cyberpunk = QCheckBox("Tema Cyberpunk (Gráficos oscuros y neón)")
+        self.chk_cyberpunk.setChecked(True)
+        l_ind.addWidget(self.chk_cyberpunk)
+
         self.chk_espectrograma = QCheckBox("Generar espectrograma (spec.png)")
         self.chk_espectrograma.setChecked(False)
         l_ind.addWidget(self.chk_espectrograma)
@@ -300,7 +304,8 @@ class AnalysisPanel(QWidget):
             'mostrar_evolucion': self.tab_procesamiento.chk_evolucion.isChecked(),
             'evol_t_start': ev_start,
             'evol_t_end': ev_end,
-            'excluded_windows_list': excluded
+            'excluded_windows_list': excluded,
+            'tema_cyberpunk': self.tab_procesamiento.chk_cyberpunk.isChecked()
         }
 
     def get_comparative_kwargs(self):

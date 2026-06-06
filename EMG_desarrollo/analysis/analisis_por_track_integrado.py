@@ -235,10 +235,11 @@ def _detect_maxima_and_extract(env_recortada,
         # chequeo de encaje del segmento alrededor del máximo
         seg_start = max_sample - pre_samples
         seg_end = max_sample + post_samples
-        if seg_start < 0 or seg_end > len(env_recortada):
-            # segmento no cabe completamente -> omitir
-            # (esto evita indices fuera de rango)
+        if seg_start < 0:
+            # segmento no cabe completamente al inicio -> omitir
             continue
+        if seg_end > len(env_recortada):
+            seg_end = len(env_recortada) # Ajustar el final si excede la señal (para evitar omitir la penúltima/última ventana)
 
         # si el máximo está demasiado cerca del último aceptado, decidir:
         if len(maxima_per_cut) > 0:
@@ -468,9 +469,15 @@ def _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds,
                    excluded_windows=None, show_plot=False, signal_original_unfiltered=None, mostrar_senal_cruda=True):
     
     plt.figure(figsize=(12, 4))
+
+    is_dark = plt.rcParams.get('axes.facecolor', '') == 'black'
+    color_signal = "#FE53BB" if is_dark else "red"
+    color_env = "#08F7FE" if is_dark else "Blue"
+    color_line = "white" if is_dark else "Black"
+
     # --- NUEVO: Graficar la señal original sin filtrar para comparación ---
     if signal_original_unfiltered is not None and mostrar_senal_cruda:
-        plt.plot(t_recortada, np.abs(signal_original_unfiltered), color="red", linewidth=1.0, alpha=0.4, label="Módulo original (sin filtrar)")
+        plt.plot(t_recortada, np.abs(signal_original_unfiltered), color=color_signal, linewidth=1.0, alpha=0.4, label="Módulo original (sin filtrar)")
 
     # sombrear ventana inicial de ruido en violeta
     noise_t0 = t_recortada[0]
@@ -478,7 +485,7 @@ def _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds,
     plt.axvspan(noise_t0, noise_t1, color='violet', alpha=0.75, label=f"Ventana ruido ({noise_seconds}s)")
 
     # envolvente superpuesta
-    plt.plot(t_recortada, env_recortada, color="Blue", linewidth=1.5, linestyle='-', alpha=0.9, label="Envolvente (global)")
+    plt.plot(t_recortada, env_recortada, color=color_env, linewidth=1.5, linestyle='-', alpha=0.9, label="Envolvente (global)")
 
     # líneas verticales de corte (cada periodo)
     offset_start = t_recortada[0] + float(start_sample_noise)/samplerate
@@ -488,13 +495,15 @@ def _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds,
     n_pulsos = math.ceil(duracion_analizable_grafico / muestras_pulso)
     for i in range(n_pulsos+1):
         xline = offset_start + i*muestras_pulso/samplerate
-        plt.axvline(x=xline, color="Black", linestyle="--", alpha=0.6)
+        plt.axvline(x=xline, color=color_line, linestyle="--", alpha=0.6)
 
     # --- NUEVO: Preparar set de ventanas excluidas para el ploteo ---
     excluded_set_plot = set()
     if excluded_windows:
         excluded_set_plot = set(excluded_windows)
     spans = []
+
+    noise_win_samples = max(3, int(round((periodo / 4.0) * samplerate)))
 
     for i in range(n_pulsos):
         start_t = offset_start + i*muestras_pulso/samplerate
@@ -504,6 +513,26 @@ def _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds,
         alpha = 0.3 if window_number in excluded_set_plot else 0.06
         span = plt.axvspan(start_t, end_t, color=color, alpha=alpha)
         spans.append((window_number, start_t, end_t, span))
+
+        # --- NUEVO: Sombreado de ruido inter-pulso (punto medio entre picos reales) ---
+        if len(maxima_per_cut) > 0:
+            if i == 0:
+                midpoint = maxima_per_cut[0] - (muestras_pulso // 2)
+            elif i < len(maxima_per_cut):
+                midpoint = (maxima_per_cut[i-1] + maxima_per_cut[i]) // 2
+            else:
+                midpoint = maxima_per_cut[-1] + (muestras_pulso // 2) * (i - len(maxima_per_cut) + 1)
+        else:
+            cut_start = start_sample_noise + i * muestras_pulso
+            midpoint = cut_start + (muestras_pulso // 2)
+            
+        noise_start = max(0, int(midpoint - noise_win_samples // 2))
+        noise_end = min(len(env_recortada)-1, noise_start + noise_win_samples)
+
+        if noise_start < len(t_recortada) and noise_end < len(t_recortada):
+            n_start_t = t_recortada[noise_start]
+            n_end_t = t_recortada[noise_end]
+            plt.axvspan(n_start_t, n_end_t, color='cyan', alpha=0.4 if is_dark else 0.3, label='Ruido inter-pulso' if i==0 else "")
 
     if len(maxima_per_cut) > 0:
         t_maxima = [t_recortada[idx] for idx in maxima_per_cut]
@@ -1572,9 +1601,12 @@ def procesar_wavs_promedio(
             
             seg_start = int(max_idx) - pre_samples
             
-            # --- MODIFICACIÓN: Buscar el valle real (punto medio entre timestamps del metrónomo) ---
-            cut_start = start_sample_noise + i * muestras_pulso
-            midpoint = cut_start + (muestras_pulso // 2)
+            # --- MODIFICACIÓN: Buscar el valle real (punto medio entre picos reales) ---
+            if valid_idx == 0:
+                midpoint = max_idx - (muestras_pulso // 2)
+            else:
+                prev_max = maxima_per_cut[valid_idx - 1]
+                midpoint = (prev_max + max_idx) // 2
                 
             noise_start = max(0, int(midpoint - noise_win_samples // 2))
             noise_end = min(len(env_recortada), noise_start + noise_win_samples)
@@ -1599,7 +1631,7 @@ def procesar_wavs_promedio(
                 curr_mean_temp = np.mean(valid_noise)
                 
                 # --- NUEVO: Filtro de outliers del 300% ---
-                if initial_noise_mean > 0 and (curr_mean_temp / initial_noise_mean) > 3.0:
+                if initial_noise_mean > 0 and (curr_mean_temp / initial_noise_mean) > 5.0:
                     curr_mean = np.nan
                     curr_std = np.nan
                     curr_err = np.nan
@@ -1900,6 +1932,8 @@ class ProcessingOptionsDialog(tk.Toplevel):
         self.var_mostrar_senal_cruda = tk.BooleanVar(value=True)
         self.var_mostrar_espectrograma = tk.BooleanVar(value=False)
         self.var_excluded_windows = tk.StringVar(value="")
+        self.var_excluir_primera = tk.BooleanVar(value=True)
+        self.var_cyberpunk = tk.BooleanVar(value=False)
         # --- NUEVO: Opción para filtro pasa-bajos ---
         self.var_lowpass_cutoff = tk.StringVar(value="500") # Valor por defecto para el filtro pasa-bajos
         # --- NUEVO: Opción para filtro pasa-altos ---
@@ -1925,7 +1959,8 @@ class ProcessingOptionsDialog(tk.Toplevel):
         
         exclude_frame = tk.Frame(individual_plots_frame, bg=self.bg_panel)
         exclude_frame.pack(fill='x', pady=(5,0))
-        tk.Label(exclude_frame, text="Excluir ventanas (ej: 1,24):", bg=self.bg_panel, fg=self.fg_text).pack(side="left")
+        tk.Checkbutton(exclude_frame, text="Excluir 1ra Ventana", variable=self.var_excluir_primera, bg=self.bg_panel, fg=self.fg_text, selectcolor=self.bg_dark, activebackground=self.bg_panel, activeforeground=self.cyan_neon).pack(side="left", padx=(0,5))
+        tk.Label(exclude_frame, text="Otras (ej: 2,24):", bg=self.bg_panel, fg=self.fg_text).pack(side="left")
         tk.Entry(exclude_frame, textvariable=self.var_excluded_windows, bg=self.bg_dark, fg=self.cyan_neon, insertbackground=self.cyan_neon).pack(side="left", fill="x", expand=True, padx=(5,0))
 
         # --- NUEVO: Campo para suavizado de envolvente ---
@@ -1942,6 +1977,7 @@ class ProcessingOptionsDialog(tk.Toplevel):
         filter_frame = tk.Frame(individual_plots_frame, bg=self.bg_panel)
         filter_frame.pack(fill='x', pady=(5,0))
         
+        tk.Checkbutton(filter_frame, text="Tema Cyberpunk", variable=self.var_cyberpunk, bg=self.bg_panel, fg=self.fg_text, selectcolor=self.bg_dark, activebackground=self.bg_panel, activeforeground=self.cyan_neon).grid(row=0, column=2, sticky="w", padx=(10, 0))
         tk.Checkbutton(filter_frame, text="Aplicar filtro Notch (50Hz)", variable=self.var_notch_filter, bg=self.bg_panel, fg=self.fg_text, selectcolor=self.bg_dark, activebackground=self.bg_panel, activeforeground=self.cyan_neon).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 5))
         
         tk.Label(filter_frame, text="Filtro Pasa-bajos (Hz):", bg=self.bg_panel, fg=self.fg_text).grid(row=1, column=0, sticky="w")
@@ -2003,6 +2039,8 @@ class ProcessingOptionsDialog(tk.Toplevel):
 
         try:
             excluded_windows_list = [int(x.strip()) for x in self.var_excluded_windows.get().split(',') if x.strip()]
+            if self.var_excluir_primera.get() and 1 not in excluded_windows_list:
+                excluded_windows_list.append(1)
         except ValueError:
             tk.messagebox.showerror("Error de Formato", "El formato de las ventanas a excluir es incorrecto.", parent=self)
             return
@@ -2029,6 +2067,22 @@ class ProcessingOptionsDialog(tk.Toplevel):
 
         # --- NUEVO: Ocultar la ventana principal en lugar de destruirla para que funcionen los pop-ups ---
         self.root.withdraw()
+
+        if getattr(self, 'var_cyberpunk', None) and self.var_cyberpunk.get():
+            plt.style.use('dark_background')
+            plt.rcParams.update({
+                "axes.prop_cycle": plt.cycler('color', ['#08F7FE', '#FE53BB', '#F5D300', '#00ff41', '#ff2a2a']),
+                "lines.linewidth": 2,
+            })
+        else:
+            plt.style.use('default')
+            plt.rcParams.update({
+                "font.size": 16,
+                "axes.labelsize": 14,
+                "xtick.labelsize": 14,
+                "ytick.labelsize": 14,
+                "legend.fontsize": 15,
+            })
 
         total_canales = len(canales_a_procesar)
         print_progress_bar(0, total_canales, prefix='Procesando Canales:', suffix='Completado', length=50)

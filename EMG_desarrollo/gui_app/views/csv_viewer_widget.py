@@ -145,6 +145,11 @@ class CsvViewerWidget(QWidget):
         self.lbl_status.setStyleSheet("color: #888; font-family: monospace; padding: 5px;")
         self.layout.addWidget(self.lbl_status)
         
+        self.lbl_filename = QLabel("Ningún archivo cargado")
+        self.lbl_filename.setAlignment(Qt.AlignCenter)
+        self.lbl_filename.setStyleSheet("font-size: 24px; font-weight: bold; color: #00ffcc; padding: 10px;")
+        self.layout.addWidget(self.lbl_filename)
+        
         # Splitter
         splitter = QSplitter(Qt.Horizontal)
         
@@ -315,7 +320,9 @@ class CsvViewerWidget(QWidget):
             
         self.channel_offsets = self.offsets_por_archivo[filepath]
             
-        self.lbl_status.setText(f"Cargando archivo: {os.path.basename(filepath)} ...")
+        medicion_name = os.path.basename(os.path.dirname(filepath))
+        self.lbl_filename.setText(f"Medición: {medicion_name}")
+        self.lbl_status.setText(f"Cargando medición: {medicion_name} ...")
         self.loader = DataLoaderThread(filepath)
         self.loader.finished_loading.connect(self._on_csv_loaded)
         self.loader.error_loading.connect(lambda err: self.lbl_status.setText(f"Error: {err}"))
