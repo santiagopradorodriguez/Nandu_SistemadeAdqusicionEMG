@@ -414,30 +414,32 @@ def _plot_pulse_full(
 
 
 # ---------------------- Plot Espectrograma Señal Completa (Estilo Praat) ----------------------
-def _plot_full_spectrogram(signal, samplerate, espectrograma_db, frecuenciamaxima, frecuenciaminima, out_spec, filename):
+def _plot_full_spectrogram(signal, samplerate, espectrograma_db, frecuenciamaxima, frecuenciaminima, out_spec, filename, smooth_ms=50, tipo_envolvente="media_movil"):
+
     try:
         from scipy.signal import spectrogram
         
         # Para evitar MemoryError en señales largas (ej. 2 min = 1.2M samples)
         # Usamos una ventana de 50 ms (nperseg) con 80% overlap
-        nperseg = int(samplerate * 0.05)
-        noverlap = int(nperseg * 0.8)
-        
-        f_s, t_s, Sxx = spectrogram(signal, fs=samplerate, nperseg=nperseg, noverlap=noverlap)
+        nperseg = int(samplerate * 1.0)   # 1s = 2000 muestras -> resolucion de 1 Hz
+        noverlap = int(nperseg * 0.95)    # 95% overlap
+        nfft = 8192                        # zero-padding para suavidad visual
+        signal = _compute_env_full(np.abs(signal), True, smooth_ms, samplerate, tipo_envolvente)
+        f_s, t_s, Sxx = spectrogram(signal, fs=samplerate, window='hann', nperseg=nperseg, noverlap=noverlap, nfft=nfft)
         
         if espectrograma_db:
             Sdisp = 10.0 * np.log10(Sxx + 1e-20)
         else:
             Sdisp = Sxx
 
-        fmax_plot = min(frecuenciamaxima, samplerate / 2.0)
-        fmin_plot = max(frecuenciaminima, 0.0)
+        fmax_plot = 5
+        fmin_plot = 0.0
 
         fig, ax = plt.subplots(figsize=(16, 6))
         im = ax.pcolormesh(t_s, f_s, Sdisp, shading='gouraud', cmap='magma')
         ax.set_ylabel('Frecuencia [Hz]', fontsize=12)
         ax.set_xlabel('Tiempo [s]', fontsize=12)
-        ax.set_title(f"Espectrograma de Señal Completa (Estilo Praat) - {filename}", fontsize=14)
+        ax.set_title(f"Espectrograma de Señal Completa (De la envolvente) - {filename}", fontsize=14)
         ax.set_ylim(fmin_plot, fmax_plot)
         fig.colorbar(im, ax=ax, label='dB' if espectrograma_db else 'Power')
 
@@ -1798,7 +1800,9 @@ def procesar_wavs_promedio(
         # --- BLOQUE: Espectrograma de la señal completa (Estilo Praat) ---
         if mostrar_espectrograma:
             _plot_full_spectrogram(signal_recortada, samplerate,
-                                   espectrograma_db, frecuenciamaxima, frecuenciaminima, out_spec, final_plot_title)
+                       espectrograma_db, frecuenciamaxima, frecuenciaminima, out_spec, final_plot_title,
+                       smooth_ms=smooth_ms, tipo_envolvente=tipo_envolvente)
+            
 
         # --- GRAFICO: señal original recortada con cortes periódicos y puntos de máximo (deteccion en envolvente) ---
         interactive_excluded = excluded_windows

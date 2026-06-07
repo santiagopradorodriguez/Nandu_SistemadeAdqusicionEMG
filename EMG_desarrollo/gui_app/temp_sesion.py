@@ -16,7 +16,7 @@ matplotlib.use('TkAgg')
 sys.path.append("c:/Users/MSI/OneDrive/Documentos/DOCUMENTOS SANTIAGO/santiago-prado-repositorio/EMG_desarrollo")
 import analysis.analisis_por_track_integrado as api
 
-mediciones_a_comparar = ['2026-06-03/A_Prueba1_Lucas', '2026-06-03/A_Prueba3_Lucas', '2026-06-03/A_Prueba4_Lucas', '2026-06-03/A_Prueba5_Lucas', '2026-06-03/A_SC_VOCALESAU_Lucas', '2026-06-03/A_SC_VOCALESUA_Lucas', '2026-06-03/E_Prueba1_Lucas', '2026-06-03/E_Prueba3_Lucas', '2026-06-03/E_Prueba4_Lucas', '2026-06-03/E_Prueba5_Lucas', '2026-06-03/E_SC_VOCALESAU_Lucas', '2026-06-03/E_SC_VOCALESUA_Lucas', '2026-06-03/I_Prueba1_Lucas', '2026-06-03/I_Prueba3_Lucas', '2026-06-03/I_Prueba4_Lucas', '2026-06-03/I_Prueba5_Lucas', '2026-06-03/I_SC_VOCALESAU_Lucas', '2026-06-03/I_SC_VOCALESUA_Lucas', '2026-06-03/O_Prueba1_Lucas', '2026-06-03/O_Prueba3_Lucas', '2026-06-03/O_Prueba4_Lucas', '2026-06-03/O_Prueba5_Lucas', '2026-06-03/O_SC_VOCALESAU_Lucas', '2026-06-03/O_SC_VOCALESUA_Lucas', '2026-06-03/U_Prueba1_Lucas', '2026-06-03/U_Prueba2_Lucas', '2026-06-03/U_Prueba3_Lucas', '2026-06-03/U_Prueba4_Lucas', '2026-06-03/U_Prueba5_Lucas', '2026-06-03/U_SC_VOCALESAU_Lucas', '2026-06-03/U_SC_VOCALESUA_Lucas', '2026-06-01/A_Prueba1_Sujeto1', '2026-06-01/E_Prueba1_Sujeto1', '2026-06-01/I_Prueba1_Sujeto1', '2026-06-01/O_Prueba1_Sujeto1', '2026-06-01/U_Prueba1_Sujeto1']
+mediciones_a_comparar = ['2026-06-03/SC_VOCALESAUTK1_Lucas', '2026-06-03/SC_VOCALESAUTK2_Lucas', '2026-06-03/SC_VOCALESAUTK3_Lucas', '2026-06-03/SC_VOCALESAUTK4_Lucas', '2026-06-03/SC_VOCALESAUTK5_Lucas']
 base_dir = "c:/Users/MSI/OneDrive/Documentos/DOCUMENTOS SANTIAGO/santiago-prado-repositorio/EMG_desarrollo/base_de_datos_electrodos"
 nombre_custom = ""
 
@@ -63,10 +63,7 @@ try:
                     if pulse_count == 0:
                         pulse_count = meta.get('pulse_count', 0)
             
-            snr_per_pulse = res.get('snr_per_pulse', [])
-            if not isinstance(snr_per_pulse, list):
-                snr_per_pulse = []
-                
+            snr_per_pulse = []
             segmentos_rs = res.get('segmentos_rs', [])
             if not isinstance(segmentos_rs, list):
                 segmentos_rs = []
@@ -79,12 +76,13 @@ try:
                     if isinstance(p, list) and len(p) > 0:
                         mav_val = float(np.mean(np.abs(p)))
                         amp_per_pulse.append(mav_val)
-                        if not res.get('snr_per_pulse') and umbral and umbral > 0:
+                        if umbral and umbral > 0:
                             snr_per_pulse.append(mav_val / umbral)
+                        else:
+                            snr_per_pulse.append(np.nan)
                     else:
                         amp_per_pulse.append(np.nan)
-                        if not res.get('snr_per_pulse') and umbral and umbral > 0:
-                            snr_per_pulse.append(np.nan)
+                        snr_per_pulse.append(np.nan)
             else:
                 amp_per_pulse = [np.nan] * len(snr_per_pulse)
                 
