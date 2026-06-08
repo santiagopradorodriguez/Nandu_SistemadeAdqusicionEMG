@@ -23,6 +23,7 @@ Actualmente, el proyecto ha dado un gran salto hacia su **versión 4.0** (introd
 
 ### 📚 Documentación
 - **Comentarios en Código:** Agregar comentarios explicativos (Docstrings) dentro de las funciones críticas de la máquina de estados de AutoForge.
+- **Metadatos y JSONs:** Siempre que se agreguen nuevas funcionalidades (como el modo Secuencia Continua que introduce el metadato `valid_words`), es imperativo documentar su estructura para no romper el pipeline de Machine Learning (`dl_data_pipeline.py`).
 - **Entorno Virtual:** Ayudar a mantener actualizada la lista de `requirements.txt` y crear una guía de instalación específica para usuarios de Linux/Mac que quieran correr el "Modo Simulador".
 
 ### 💡 Lecciones de Desarrollo (Scoping en UI)
@@ -36,6 +37,15 @@ A la hora de desarrollar o arreglar bugs en las interfaces de usuario (PySide6 /
 Actualmente, necesitamos colaboración urgente en las siguientes áreas:
 - [ ] **Sistemas de Logs:** Reparar y estandarizar todos los `logging.info()` a lo largo del código. Actualmente, la observabilidad es irregular, y necesitamos un estándar de archivo rotativo o formato único.
 - [ ] **Empaquetado EXE:** Depurar la compilación de PyInstaller para evitar pesos excesivos e inclusión de librerías innecesarias (ignorar carpetas de base de datos grandes en el `.spec`).
+- [ ] **Integración Nativa del Metrónomo:** Incrustar el metrónomo visual (actualmente en un proceso Tkinter independiente usando `metronomo_visual.py`) de forma nativa dentro de la interfaz PySide6 de AutoForge. Esta mejora arquitectónica busca eliminar el proceso externo para mejorar drásticamente la sincronización del DAQ.
+
+---
+
+## Ecosistema de Agentes Autónomos
+Este repositorio es pionero en el desarrollo asistido por Inteligencia Artificial Estructurada. El proyecto es co-desarrollado por un "Enjambre de Agentes Autónomos" liderado por el meta-agente principal **Antigravity**.
+Al contribuir, ten en cuenta el flujo de trabajo Multi-Agente:
+- **Especialización**: Tareas complejas son delegadas a agentes específicos (Frontend Expert, DSP Auditor, Backend Optimizer).
+- **Consistencia Matemática**: Todo cambio en el procesamiento de señales debe ser validado por los agentes DSP para asegurar la fidelidad de los datos.
 
 ## 🛠️ Configuración del Entorno de Desarrollo
 

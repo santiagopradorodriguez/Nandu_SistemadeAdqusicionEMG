@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Módulo extractor_de_datos_procesados.py del sistema NANDU LSD.
+# ==============================================================================
+
 """
 extractor_de_datos_procesados.py - v1.3
 

@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Visualización gráfica de señales EMG calibradas (multi-archivo).
+# ==============================================================================
+
 """
 plotter_calibrado_secuencial_final.py
 

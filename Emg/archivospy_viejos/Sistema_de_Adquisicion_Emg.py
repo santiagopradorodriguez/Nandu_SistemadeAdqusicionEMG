@@ -1,3 +1,10 @@
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Launcher antiguo del sistema de adquisición EMG.
+# ==============================================================================
+
 import tkinter as tk
 from tkinter import ttk, messagebox
 import subprocess

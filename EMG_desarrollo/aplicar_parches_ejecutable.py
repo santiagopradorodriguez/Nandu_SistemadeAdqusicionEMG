@@ -5,6 +5,13 @@
 # Descripción: Inyecta parches en scripts durante la compilación a ejecutable.
 # ==============================================================================
 
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Inyecta parches en scripts durante la compilación a ejecutable.
+# ==============================================================================
+
 import os
 import re
 
@@ -45,6 +52,8 @@ def user_data_path(relative_path):
     """ Obtiene la ruta a los datos del usuario (lectura/escritura) """
     if getattr(sys, 'frozen', False):
         base_path = os.path.dirname(sys.executable)
+        if os.path.basename(base_path) == "_internal":
+            base_path = os.path.dirname(base_path)
     else:
         base_path = os.path.abspath(os.path.dirname(__file__))
         if os.path.basename(base_path) == "gui_app":
@@ -82,12 +91,15 @@ def lanzar_script(script_name, args=[]):
 
     # --- 1. INYECTAR CABECERA EN TODOS LOS ARCHIVOS .PY ---
     print("Inyectando funciones base en todos los archivos .py...")
+    reemplazo_global = [
+        ("os.path.dirname(os.path.dirname(os.path.abspath(__file__)))", "user_data_path('')")
+    ]
     for root, dirs, files in os.walk(build_dir):
         if 'venv' in root: continue
         for file in files:
             if file.endswith('.py') and file not in ["crear_entorno_ejecutable.py", "aplicar_parches_ejecutable.py", "refactor_experimental.py", "refactor_experimental2.py", "autoforge_patcher.py"]:
                 ruta = os.path.join(root, file)
-                parchear_archivo(ruta, [])
+                parchear_archivo(ruta, reemplazo_global)
 
     # --- 2. REEMPLAZOS ESPECÍFICOS PARA ADQUISICIÓN ---
     reemplazos_daq = [

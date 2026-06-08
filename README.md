@@ -11,6 +11,9 @@ Este repositorio aloja el software para la **adquisición automatizada, almacena
 
 Desarrollado por la comunidad para el **Laboratorio de Sistemas Dinámicos**.
 
+> **Desarrollo Guiado por Agentes Autónomos (IA)**
+> Este proyecto es un hito pionero co-desarrollado en simbiosis con un ecosistema de agentes autónomos de Inteligencia Artificial (coordinados por el meta-agente **Antigravity** de Google DeepMind). Los agentes operan como ingenieros especializados (Frontend, DSP, Backend) para garantizar robustez matemática y estética Cyberpunk.
+
 ## Tabla de Contenidos
 - [Características del Sistema](#-características-del-sistema)
 - [Arquitectura y Protocolo de Datos](#-arquitectura-y-protocolo-de-datos)
@@ -20,7 +23,7 @@ Desarrollado por la comunidad para el **Laboratorio de Sistemas Dinámicos**.
 
 ---
 
-## 🚀 Características del Sistema (v4.0 - PySide6 & AutoForge)
+## 🚀 Características del Sistema (Beta 5.1 - PySide6 & AutoForge)
 
 El proyecto se gestiona desde el **Lanzador Principal** (`gui_app/main_app.py`) que integra estética Cyberpunk, aceleración de hardware y múltiples módulos independientes:
 
@@ -34,11 +37,16 @@ El proyecto se gestiona desde el **Lanzador Principal** (`gui_app/main_app.py`) 
 3.  **Visualización y Calidad en Tiempo Real**: 
     - Auto-escala dinámica con sistema **"Peak-Hold"** para estabilizar la gráfica durante la captura de contracciones intensas, evitando los mareos visuales del autoscroll.
     - Medición en vivo de la Relación Señal-Ruido (**SNR**), comparando la energía de la contracción actual con el ruido de fondo (inter-pulso) evaluado automáticamente en cada ciclo.
+    - **Modo de Envolvente RMS en Tiempo Real**: Cálculo dinámico y vectorizado para visualizar la activación muscular durante la adquisición.
 4.  **Procesamiento de Señal (DSP)**: 
     - Filtros matemáticos en vivo (Notch 50Hz y Pasa-banda) procesados de forma continua (estado `zi`) para transiciones perfectas sin saltos.
     - Espectrograma (STFT) integrado reactivo e independiente para cada canal.
 5.  **Análisis Comparativo y Extracción**:
     - Generación estandarizada de archivos de grabación para alimentar la base de datos de letras y gestos listos para el pipeline de Machine Learning.
+6.  **Reproductor de Audios (Mini-DAW)**:
+    - Integrado para reproducir estímulos auditivos a través del Canal 3.
+7.  **Pantallas de Carga (Splash Screens)**:
+    - Indicadores visuales durante el inicio y carga de los módulos principales.
 
 ---
 
@@ -46,14 +54,15 @@ El proyecto se gestiona desde el **Lanzador Principal** (`gui_app/main_app.py`) 
 AutoForge es la nueva máquina de estados central del proyecto, diseñada para capturar datasets de forma masiva y estructurada sin intervención manual constante. Su flujo de trabajo automatizado incluye:
 
 - **Lectura Automática de Diccionarios:** Lee un archivo `palabras.txt` para guiar al sujeto secuencialmente por todos los gestos.
-- **Calibración de Ruido Base:** Antes de cada palabra, graba silenciosamente para muestrear y promediar el ruido electromagnético de fondo.
+- **Modo Secuencia Continua:** Permite grabar el diccionario entero de forma cíclica (Ej: A, E, I, O, U, A, E...). Al procesar, el sistema automáticamente genera un vector de metadatos `valid_words` que mapea cada pulso/ventana detectada a su palabra real, facilitando el etiquetado para Machine Learning.
+- **Calibración Dinámica de Ruido Base:** Antes de cada palabra o secuencia, graba silenciosamente para muestrear el ruido electromagnético de fondo y aplica un umbral estadístico adaptativo.
 - **Sincronización:** Dispara el metrónomo visual y sonoro ("3, 2, 1, GO") para estandarizar los tiempos de preparación y contracción.
-- **Validación SNR:** Registra el esfuerzo muscular y calcula automáticamente el SNR (Relación Señal-Ruido) para descartar mediciones contaminadas.
+- **Validación SNR y Ruido Adaptativo:** Registra el esfuerzo muscular y calcula automáticamente el SNR (Relación Señal-Ruido) para descartar mediciones contaminadas. Además incluye un **Cálculo de Ruido Inter-pulso Adaptativo** basado en el punto medio del metrónomo.
 - **Auto-Guardado:** Guarda las grabaciones crudas, procesadas y metadatos con la nomenclatura perfecta para su posterior entrenamiento en Machine Learning.
 
 ---
-### 🛠️ Herramientas y Módulos (Nueva Arquitectura v4.x)
-El proyecto ha sido refactorizado en una arquitectura modular dentro de la rama principal de desarrollo:
+### 🛠️ Herramientas y Módulos (Nueva Arquitectura Beta 5.0 PySide6)
+El proyecto ha sido completamente refactorizado en una arquitectura modular usando **PySide6** para interfaces gráficas modernas y fluidas:
 
 #### 1. Módulo `acquisition/` (Adquisición de Hardware)
 *   **`manual_daq.py`**: Interfaz de captura libre con configuración manual de ganancia y hardware.
@@ -205,19 +214,20 @@ python gui_app/main_app.py
 
 ---
 
-## 🗺️ Roadmap y Tareas Pendientes (v4.0+)
+## 🗺️ Roadmap y Tareas Pendientes (Beta 5.0+)
 
 El proyecto está en desarrollo activo. Consulta `ROADMAP.md` para más detalles o `CONTRIBUTING.md` si quieres ayudar con:
 
 - [ ] **Visualización Anatómica:** Permitir mostrar fotos (ej. `configuracion.jpg`) automáticamente en la interfaz para documentar la disposición física de los electrodos en el sujeto.
 - [ ] **Distribución y Empaquetado:** Crear un archivo ejecutable `.exe` independiente para facilitar la instalación en computadoras de laboratorio.
 - [ ] **Módulos de Deep Learning:** Empezar a crear scripts base usando **PyTorch** para el entrenamiento de redes neuronales a futuro con los datos extraídos.
+- [ ] **Metrónomo Nativo:** Incrustar el metrónomo visual (actualmente en un proceso Tkinter independiente en `metronomo_visual.py`) de forma nativa dentro de la interfaz PySide6 de AutoForge, eliminando el proceso externo para mejorar la sincronización del DAQ.
 
 ---
 
 ## 🐛 Errores Conocidos y Soluciones Históricas
 
-Durante el desarrollo de la versión 4.0, nos enfrentamos a problemas de "scoping" en Python al migrar componentes de la UI. 
+Durante el desarrollo de la versión Beta 5.0, nos enfrentamos a problemas de "scoping" en Python al migrar componentes de la UI. 
 - **El Problema:** Al instanciar colores (`bg_panel`) en métodos `__init__`, otras funciones internas de la clase perdían la referencia en tiempo de ejecución, provocando caídas completas del programa (`NameError`).
 - **La Solución:** Todo objeto visual que deba perdurar o ser accedido por funciones secundarias **debe ser instanciado usando `self.`** (ej. `self.bg_panel`). 
 - **Resiliencia de la Terminal:** Como medida adicional, todos los procesos que abran sub-ventanas analíticas (como Análisis Comparativo o Análisis Integrado) ahora se ejecutan en terminales persistentes mediante `subprocess.Popen` con un `try/except` general que pausa la terminal (`input()`) al detectar un traceback, impidiendo que el error sea invisible.

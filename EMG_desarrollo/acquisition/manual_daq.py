@@ -5,6 +5,13 @@
 # Descripción: Módulo de adquisición manual para pruebas de hardware.
 # ==============================================================================
 
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Módulo de adquisición manual para pruebas de hardware.
+# ==============================================================================
+
 # -*- coding: utf-8 -*-
 """
 # =============================================================================
@@ -19,7 +26,7 @@
 """
 
 # --- Versión del script ---
-__version__ = "5.0.0"
+__version__ = "5.0.1"
 
 import numpy as np
 from scipy.io.wavfile import write as write_wav
@@ -28,7 +35,47 @@ import time
 import queue
 import threading
 import sys
-import os # Necesario para separar nombres de archivo
+import os
+
+# --- SPLASH SCREEN LOGIC (CARGA DE MÓDULOS PESADOS) ---
+from PySide6.QtWidgets import QApplication, QSplashScreen, QProgressBar
+from PySide6.QtGui import QPixmap, QColor, QIcon
+from PySide6.QtCore import Qt
+import time
+
+app = QApplication.instance()
+if not app:
+    app = QApplication(sys.argv)
+
+logo_path = None
+try:
+    from pathlib import Path
+    root_dir = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    search_dirs = [Path(os.path.dirname(os.path.abspath(__file__))) / "assets", Path(os.path.dirname(os.path.abspath(__file__))), root_dir, Path.home() / "Pictures"]
+    for search_dir in search_dirs:
+        if search_dir.exists():
+            for filename in os.listdir(search_dir):
+                if filename.lower().startswith("logo") and filename.lower().endswith((".png", ".jpg", ".jpeg")):
+                    logo_path = str(search_dir / filename)
+                    break
+        if logo_path: break
+except Exception: pass
+
+global_splash = None
+global_progress = None
+if logo_path and os.path.exists(logo_path):
+    pixmap = QPixmap(logo_path)
+    if pixmap.width() > 800: pixmap = pixmap.scaledToWidth(800, Qt.SmoothTransformation)
+    global_splash = QSplashScreen(pixmap, Qt.WindowStaysOnTopHint)
+    
+    global_progress = QProgressBar(global_splash)
+    global_progress.setGeometry(10, pixmap.height() - 30, pixmap.width() - 20, 20)
+    global_progress.setStyleSheet("QProgressBar { border: 1px solid white; border-radius: 5px; text-align: center; color: white; font-weight: bold; } QProgressBar::chunk { background-color: #00ffcc; width: 10px; }")
+    global_progress.setValue(10)
+    
+    global_splash.show()
+    global_splash.showMessage("Cargando entorno base...", Qt.AlignBottom | Qt.AlignCenter, QColor("white"))
+    app.processEvents()
 
 # Asegurar que el directorio raíz está en el path para importar utils
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -45,6 +92,7 @@ try:
 except ImportError:
     winsound = None
 
+if global_progress: global_progress.setValue(30); global_splash.showMessage("Cargando PyQtGraph...", Qt.AlignBottom | Qt.AlignCenter, QColor("white")); app.processEvents()
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtWidgets, QtCore, QtGui 
 
@@ -62,6 +110,8 @@ except ImportError:
 # NUEVO: Import para generar el gráfico
 # matplotlib.pyplot se importa de forma diferida en las funciones para que la GUI cargue más rápido.
 
+if global_progress: global_progress.setValue(70); global_splash.showMessage("Cargando NIDAQmx...", Qt.AlignBottom | Qt.AlignCenter, QColor("white")); app.processEvents()
+
 # Configuración de PyQtGraph para MÁXIMO rendimiento
 pg.setConfigOptions(antialias=False) # Optimización
 
@@ -74,6 +124,8 @@ try:
 except ImportError:
     NIDAQMX_DISPONIBLE = False
     print("Advertencia: La librería 'nidaqmx' no está instalada. El programa solo funcionará en MODO_PRUEBA.")
+
+if global_progress: global_progress.setValue(100); global_splash.showMessage("Iniciando Adquisición Manual...", Qt.AlignBottom | Qt.AlignCenter, QColor("white")); app.processEvents()
 
 import sys
 root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -2304,7 +2356,9 @@ class RealTimePlotter(QtWidgets.QWidget):
 # =============================================================================
 def main():
     # Inicia la GUI
-    app = QtWidgets.QApplication(sys.argv)
+    app = QtWidgets.QApplication.instance()
+    if not app:
+        app = QtWidgets.QApplication(sys.argv)
     app.setStyleSheet("""
         QWidget {
             background-color: #050505;
@@ -2335,6 +2389,8 @@ def main():
         }
     """)
     gui = RealTimePlotter()
+    if global_splash:
+        global_splash.finish(gui)
     gui.show()
     
     # Inicia el bucle de la aplicación (bloqueante)

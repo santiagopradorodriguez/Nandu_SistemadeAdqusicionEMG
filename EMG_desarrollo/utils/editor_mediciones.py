@@ -5,6 +5,13 @@
 # Descripción: Herramienta de utilidad para editar detalles de mediciones existentes.
 # ==============================================================================
 
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Herramienta de utilidad para editar detalles de mediciones existentes.
+# ==============================================================================
+
 # -*- coding: utf-8 -*-
 """
 editor_mediciones.py - v1.0

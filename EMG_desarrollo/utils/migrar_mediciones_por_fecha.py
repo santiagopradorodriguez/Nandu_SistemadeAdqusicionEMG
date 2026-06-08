@@ -5,6 +5,13 @@
 # Descripción: Script de migración para organizar mediciones en carpetas por fecha.
 # ==============================================================================
 
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Script de migración para organizar mediciones en carpetas por fecha.
+# ==============================================================================
+
 # -*- coding: utf-8 -*-
 """
 migrar_mediciones_por_fecha.py

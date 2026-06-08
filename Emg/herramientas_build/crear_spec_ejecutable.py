@@ -1,3 +1,10 @@
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Genera el archivo spec de PyInstaller para la construcción.
+# ==============================================================================
+
 import os
 
 def generar_spec():

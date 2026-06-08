@@ -5,6 +5,13 @@
 # Descripción: Procesamiento, filtrado y análisis de señales por track integrado.
 # ==============================================================================
 
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Procesamiento, filtrado y análisis de señales por track integrado.
+# ==============================================================================
+
 #%%
 #%%
 import os
@@ -29,7 +36,7 @@ import tkinter as tk
 from tkinter import filedialog, simpledialog, messagebox
 
 # --- Versión del script de análisis ---
-__version__ = "5.0.0"
+__version__ = "5.0.1"
 
 plt.rcParams.update({
     "font.size": 16,
@@ -86,9 +93,13 @@ def _compute_env_full(signal_abs, apply_envelope, smooth_ms, samplerate, tipo_en
 
     if apply_envelope:
         try:
+            from scipy.fft import next_fast_len
             from scipy.signal import hilbert
-            env_full = np.abs(hilbert(signal_abs))
-        except Exception:
+            N = len(signal_abs)
+            fast_len = next_fast_len(N)
+            env_full = np.abs(hilbert(signal_abs, N=fast_len)[:N])
+        except Exception as e:
+            print(f"Error en hilbert: {e}")
             env_full = signal_abs.copy()
     else:
         env_full = signal_abs.copy()
@@ -224,10 +235,11 @@ def _detect_maxima_and_extract(env_recortada,
         # chequeo de encaje del segmento alrededor del máximo
         seg_start = max_sample - pre_samples
         seg_end = max_sample + post_samples
-        if seg_start < 0 or seg_end > len(env_recortada):
-            # segmento no cabe completamente -> omitir
-            # (esto evita indices fuera de rango)
+        if seg_start < 0:
+            # segmento no cabe completamente al inicio -> omitir
             continue
+        if seg_end > len(env_recortada):
+            seg_end = len(env_recortada) # Ajustar el final si excede la señal (para evitar omitir la penúltima/última ventana)
 
         # si el máximo está demasiado cerca del último aceptado, decidir:
         if len(maxima_per_cut) > 0:
@@ -303,7 +315,8 @@ def _plot_pulse_full(
     show_plot=False,         # <-- NUEVO: para mostrar el gráfico interactivamente
     noise_drift_pct=np.nan,  # <-- NUEVO: para mostrar en el gráfico
     snr_drop_pct=np.nan,     # <-- NUEVO: para mostrar en el gráfico
-    pulso_sigma=None         # <-- NUEVO: para mostrar la desviación estándar
+    pulso_sigma=None,        # <-- NUEVO: para mostrar la desviación estándar
+    noise_sigma=None         # <-- NUEVO: para mostrar el error en el umbral
 ):
     """
     Plot del pulso completo manteniendo el estilo original,
@@ -369,6 +382,8 @@ def _plot_pulse_full(
     # umbral y sombreado
     if calcular_umbral and mostrar_umbral and (umbral is not None):
         plt.axhline(umbral, color="green", linestyle="--", alpha=0.9, label=f"Umbral ({umbral:.2f})")
+        if noise_sigma is not None and not np.isnan(noise_sigma):
+            plt.fill_between(t_pulso, umbral - noise_sigma, umbral + noise_sigma, color="green", alpha=0.2, label=f"Error Umbral (±1σ)")
         plt.fill_between(t_pulso, -umbral, umbral, color="red", alpha=0.06)
         porc_ruido_samples = float(100.0 * np.mean(np.abs(pulso_promedio) < umbral)) if umbral > 0 else 0.0
         plt.annotate(f"% muestras |x|<umbral: {porc_ruido_samples:.1f}%%", xy=(0.98, 0.95),
@@ -398,54 +413,41 @@ def _plot_pulse_full(
     plt.close(plt.gcf()) # Cierra la figura para liberar memoria y evitar que se muestre
 
 
-# ---------------------- Plot espectrograma (idéntico) ----------------------
-def _plot_espectro_and_spectrogram(pulso_promedio, target_len, pre_w, post_w,
-                                   espectrograma_db, frecuenciamaxima, frecuenciaminima, out_spec, filename):
-    try:
-        duration = (pre_w + post_w)
-        if duration <= 0:
-            fs_seg = 1.0
-        else:
-            fs_seg = float(target_len) / float(duration)
+# ---------------------- Plot Espectrograma Señal Completa (Estilo Praat) ----------------------
+def _plot_full_spectrogram(signal, samplerate, espectrograma_db, frecuenciamaxima, frecuenciaminima, out_spec, filename, smooth_ms=50, tipo_envolvente="media_movil"):
 
-        nperseg = min(256, target_len)
-        if nperseg < 4:
-            nperseg = max(4, target_len)
-        noverlap = int(nperseg * 0.875)
-        f_s, t_s, Sxx = spectrogram(pulso_promedio, fs=fs_seg, nperseg=nperseg, noverlap=noverlap)
+    try:
+        from scipy.signal import spectrogram
+        
+        # Para evitar MemoryError en señales largas (ej. 2 min = 1.2M samples)
+        # Usamos una ventana de 50 ms (nperseg) con 80% overlap
+        nperseg = int(samplerate * 1.0)   # 1s = 2000 muestras -> resolucion de 1 Hz
+        noverlap = int(nperseg * 0.95)    # 95% overlap
+        nfft = 8192                        # zero-padding para suavidad visual
+        signal = _compute_env_full(np.abs(signal), True, smooth_ms, samplerate, tipo_envolvente)
+        f_s, t_s, Sxx = spectrogram(signal, fs=samplerate, window='hann', nperseg=nperseg, noverlap=noverlap, nfft=nfft)
+        
         if espectrograma_db:
             Sdisp = 10.0 * np.log10(Sxx + 1e-20)
         else:
             Sdisp = Sxx
 
-        freqs = np.fft.rfftfreq(len(pulso_promedio), d=duration/float(len(pulso_promedio)))
-        spec = np.abs(np.fft.rfft(pulso_promedio))
-        spec_db = 20.0 * np.log10(spec / (np.max(spec) + 1e-20) + 1e-20)
+        fmax_plot = 5
+        fmin_plot = 0.0
 
-        fmax_plot = min(frecuenciamaxima, fs_seg/2.0)
-        fmin_plot = max(frecuenciaminima, 0.0)
-
-        fig, axs = plt.subplots(2, 1, figsize=(12, 8))
-        im = axs[0].pcolormesh(t_s - pre_w, f_s, Sdisp, shading='gouraud')
-        axs[0].set_ylabel('Frecuencia [Hz]')
-        axs[0].set_title(f"Espectrograma del pulso promedio - {filename}")
-        axs[0].set_ylim(fmin_plot, fmax_plot)
-        axs[0].set_xlim(-pre_w, post_w)
-        axs[0].grid(True, alpha=0.3)
-        fig.colorbar(im, ax=axs[0], label='dB' if espectrograma_db else 'Power')
-
-        mask_freq = (freqs >= fmin_plot) & (freqs <= fmax_plot)
-        axs[1].plot(freqs[mask_freq], np.abs(spec_db[mask_freq]))
-        axs[1].set_xlabel('Frecuencia [Hz]')
-        axs[1].set_ylabel('Amplitud [dB rel.]')
-        axs[1].set_title('Espectro de frecuencias del pulso promedio')
-        axs[1].grid(True, alpha=0.3)
+        fig, ax = plt.subplots(figsize=(16, 6))
+        im = ax.pcolormesh(t_s, f_s, Sdisp, shading='gouraud', cmap='magma')
+        ax.set_ylabel('Frecuencia [Hz]', fontsize=12)
+        ax.set_xlabel('Tiempo [s]', fontsize=12)
+        ax.set_title(f"Espectrograma de Señal Completa (De la envolvente) - {filename}", fontsize=14)
+        ax.set_ylim(fmin_plot, fmax_plot)
+        fig.colorbar(im, ax=ax, label='dB' if espectrograma_db else 'Power')
 
         plt.tight_layout()
         plt.savefig(out_spec, dpi=300, bbox_inches='tight')
-        plt.close(plt.gcf()) # Cierra la figura para liberar memoria y evitar que se muestre
+        plt.close(fig) # Liberar memoria
     except Exception as e:
-        print(f"No se pudo generar espectrograma/espectro para {filename}: {e}")
+        print(f"No se pudo generar espectrograma completo para {filename}: {e}")
 
 
 # ---------------------- Plot recortes (idéntico) --------------------------
@@ -454,9 +456,15 @@ def _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds,
                    excluded_windows=None, show_plot=False, signal_original_unfiltered=None, mostrar_senal_cruda=True):
     
     plt.figure(figsize=(12, 4))
+
+    is_dark = plt.rcParams.get('axes.facecolor', '') == 'black'
+    color_signal = "#FE53BB" if is_dark else "red"
+    color_env = "#08F7FE" if is_dark else "Blue"
+    color_line = "white" if is_dark else "Black"
+
     # --- NUEVO: Graficar la señal original sin filtrar para comparación ---
     if signal_original_unfiltered is not None and mostrar_senal_cruda:
-        plt.plot(t_recortada, np.abs(signal_original_unfiltered), color="red", linewidth=1.0, alpha=0.4, label="Módulo original (sin filtrar)")
+        plt.plot(t_recortada, np.abs(signal_original_unfiltered), color=color_signal, linewidth=1.0, alpha=0.4, label="Módulo original (sin filtrar)")
 
     # sombrear ventana inicial de ruido en violeta
     noise_t0 = t_recortada[0]
@@ -464,7 +472,7 @@ def _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds,
     plt.axvspan(noise_t0, noise_t1, color='violet', alpha=0.75, label=f"Ventana ruido ({noise_seconds}s)")
 
     # envolvente superpuesta
-    plt.plot(t_recortada, env_recortada, color="Blue", linewidth=1.5, linestyle='-', alpha=0.9, label="Envolvente (global)")
+    plt.plot(t_recortada, env_recortada, color=color_env, linewidth=1.5, linestyle='-', alpha=0.9, label="Envolvente (global)")
 
     # líneas verticales de corte (cada periodo)
     offset_start = t_recortada[0] + float(start_sample_noise)/samplerate
@@ -474,13 +482,15 @@ def _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds,
     n_pulsos = math.ceil(duracion_analizable_grafico / muestras_pulso)
     for i in range(n_pulsos+1):
         xline = offset_start + i*muestras_pulso/samplerate
-        plt.axvline(x=xline, color="Black", linestyle="--", alpha=0.6)
+        plt.axvline(x=xline, color=color_line, linestyle="--", alpha=0.6)
 
     # --- NUEVO: Preparar set de ventanas excluidas para el ploteo ---
     excluded_set_plot = set()
     if excluded_windows:
         excluded_set_plot = set(excluded_windows)
     spans = []
+
+    noise_win_samples = max(3, int(round((periodo / 4.0) * samplerate)))
 
     for i in range(n_pulsos):
         start_t = offset_start + i*muestras_pulso/samplerate
@@ -490,6 +500,26 @@ def _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds,
         alpha = 0.3 if window_number in excluded_set_plot else 0.06
         span = plt.axvspan(start_t, end_t, color=color, alpha=alpha)
         spans.append((window_number, start_t, end_t, span))
+
+        # --- NUEVO: Sombreado de ruido inter-pulso (punto medio entre picos reales) ---
+        if len(maxima_per_cut) > 0:
+            if i == 0:
+                midpoint = maxima_per_cut[0] - (muestras_pulso // 2)
+            elif i < len(maxima_per_cut):
+                midpoint = (maxima_per_cut[i-1] + maxima_per_cut[i]) // 2
+            else:
+                midpoint = maxima_per_cut[-1] + (muestras_pulso // 2) * (i - len(maxima_per_cut) + 1)
+        else:
+            cut_start = start_sample_noise + i * muestras_pulso
+            midpoint = cut_start + (muestras_pulso // 2)
+            
+        noise_start = max(0, int(midpoint - noise_win_samples // 2))
+        noise_end = min(len(env_recortada)-1, noise_start + noise_win_samples)
+
+        if noise_start < len(t_recortada) and noise_end < len(t_recortada):
+            n_start_t = t_recortada[noise_start]
+            n_end_t = t_recortada[noise_end]
+            plt.axvspan(n_start_t, n_end_t, color='cyan', alpha=0.4 if is_dark else 0.3, label='Ruido inter-pulso' if i==0 else "")
 
     if len(maxima_per_cut) > 0:
         t_maxima = [t_recortada[idx] for idx in maxima_per_cut]
@@ -631,7 +661,7 @@ def export_results_for_file(out_dir, filename, resultados_entry):
     export['file'] = filename
     json_path = os.path.join(out_dir, 'results.json')
     with open(json_path, 'w') as fh:
-        json.dump(export, fh, indent=2, default=lambda x: float(np.nan) if (isinstance(x, np.ndarray)) else x)
+        json.dump(export, fh, indent=2, default=lambda x: 'Array omitido' if (isinstance(x, np.ndarray)) else x)
     
     # --- NUEVO: Guardar todos los resultados en un único archivo JSON ---
     # Esto simplifica la carga posterior para comparaciones.
@@ -819,6 +849,15 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
         except Exception:
             amp_unc = 0.0
 
+        # Si snr_manual no existe en los JSON antiguos, lo calculamos al vuelo
+        if (snr_manual is None or np.isnan(snr_manual)) and not np.isnan(max_amp):
+            umbral = r.get('umbral')
+            if umbral and umbral > 0:
+                snr_manual = max_amp / umbral
+                # Y también estimamos un error genérico (0.0) para que no rompa
+                if snr_manual_unc is None or np.isnan(snr_manual_unc):
+                    snr_manual_unc = 0.0
+
         # Extraer BPM desde el periodo guardado
         periodo = r.get('periodo')
         bpm_calculado = (60.0 / periodo) if (periodo and periodo > 0) else np.nan
@@ -959,7 +998,7 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
         
         # --- MODIFICACIÓN: Ajustar el límite Y al máximo SNR + 10% de margen ---
         # Se consideran los valores de SNR y sus incertidumbres para el cálculo del máximo.
-        max_snr_manual = np.nanmax(snr_manual_arr + np.nan_to_num(snr_manual_unc_arr)) if len(snr_manual_arr) > 0 else 0
+        max_snr_manual = np.nanmax(snr_manual_arr + np.nan_to_num(snr_manual_unc_arr)) if len(snr_manual_arr) > 0 and not np.all(np.isnan(snr_manual_arr)) else 0
         ax_snrs.set_ylim(0, max_snr_manual * 1.1 if max_snr_manual > 0 else 10)
 
         ax_snrs.set_title('SNR: Amplitud (ordenado por SNR Amplitud)')
@@ -1439,10 +1478,26 @@ def procesar_wavs_promedio(
 
         # --- CORRECCIÓN: Usar un umbral de búsqueda de picos variable ---
         # En lugar de usar el 'peak_search_threshold' fijo, usamos el 'umbral'
-        # que ya calculamos a partir del ruido de la señal. Esto hace la
-        # detección mucho más robusta para señales de diferentes amplitudes.
-        # Si el umbral no se pudo calcular, usamos el valor fijo como fallback.
-        search_threshold_dinamico = umbral if umbral is not None and umbral > 0 else peak_search_threshold
+        # --- CORRECCIÓN: Usar un umbral de búsqueda de picos variable ---
+        base_threshold = umbral if umbral is not None and umbral > 0 else peak_search_threshold
+        
+        # Primera pasada: promediar picos que superan el umbral base
+        first_pass_peaks = []
+        for i in range(n_pulsos):
+            c_start = start_sample_noise + i * muestras_pulso
+            c_end = min(c_start + muestras_pulso, len(env_recortada))
+            if c_start < len(env_recortada):
+                seg = env_recortada[c_start:c_end]
+                if seg.size > 0:
+                    m_val = np.max(seg)
+                    if m_val >= base_threshold:
+                        first_pass_peaks.append(m_val)
+                        
+        if len(first_pass_peaks) > 0:
+            search_threshold_dinamico = np.mean(first_pass_peaks) * 0.5
+        else:
+            search_threshold_dinamico = base_threshold
+            
         print(f"[Análisis] Usando umbral de búsqueda de picos dinámico: {search_threshold_dinamico:.4f}")
 
         # listas
@@ -1522,8 +1577,8 @@ def procesar_wavs_promedio(
         stats_peak_vals = []
         stats_raw_noise_vals = []
 
-        # longitud (en muestras) de la ventana local de ruido (1/16 del periodo)
-        noise_win_samples = max(3, int(round((periodo / 8.0) * samplerate)))
+        # longitud (en muestras) de la ventana local de ruido (1/4 del periodo, +/- tau/8)
+        noise_win_samples = max(3, int(round((periodo / 4.0) * samplerate)))
         
         valid_idx = 0
         n_pulsos_total = int(n_pulsos_manual) if n_pulsos_manual is not None and n_pulsos_manual > 0 else n_pulsos
@@ -1542,12 +1597,12 @@ def procesar_wavs_promedio(
             
             seg_start = int(max_idx) - pre_samples
             
-            # --- MODIFICACIÓN: Buscar el valle real (punto medio entre picos) ---
-            if valid_idx > 0:
-                prev_max_idx = maxima_per_cut[valid_idx - 1]
-                midpoint = (max_idx + prev_max_idx) // 2
+            # --- MODIFICACIÓN: Buscar el valle real (punto medio entre picos reales) ---
+            if valid_idx == 0:
+                midpoint = max_idx - (muestras_pulso // 2)
             else:
-                midpoint = int(max_idx) - (muestras_pulso // 2)
+                prev_max = maxima_per_cut[valid_idx - 1]
+                midpoint = (prev_max + max_idx) // 2
                 
             noise_start = max(0, int(midpoint - noise_win_samples // 2))
             noise_end = min(len(env_recortada), noise_start + noise_win_samples)
@@ -1572,7 +1627,7 @@ def procesar_wavs_promedio(
                 curr_mean_temp = np.mean(valid_noise)
                 
                 # --- NUEVO: Filtro de outliers del 300% ---
-                if initial_noise_mean > 0 and (curr_mean_temp / initial_noise_mean) > 3.0:
+                if initial_noise_mean > 0 and (curr_mean_temp / initial_noise_mean) > 5.0:
                     curr_mean = np.nan
                     curr_std = np.nan
                     curr_err = np.nan
@@ -1738,13 +1793,16 @@ def procesar_wavs_promedio(
             show_plot=show_average_plot, # <-- Pasar el nuevo parámetro
             noise_drift_pct=noise_drift_pct,
             snr_drop_pct=snr_drop_pct,
-            pulso_sigma=pulso_sigma
+            pulso_sigma=pulso_sigma,
+            noise_sigma=noise_sigma
         )
 
-        # --- BLOQUE: Espectrograma y espectro de frecuencias del pulso promedio ---
+        # --- BLOQUE: Espectrograma de la señal completa (Estilo Praat) ---
         if mostrar_espectrograma:
-            _plot_espectro_and_spectrogram(pulso_promedio, target_len, pre_w, post_w,
-                                           espectrograma_db, frecuenciamaxima, frecuenciaminima, out_spec, final_plot_title)
+            _plot_full_spectrogram(signal_recortada, samplerate,
+                       espectrograma_db, frecuenciamaxima, frecuenciaminima, out_spec, final_plot_title,
+                       smooth_ms=smooth_ms, tipo_envolvente=tipo_envolvente)
+            
 
         # --- GRAFICO: señal original recortada con cortes periódicos y puntos de máximo (deteccion en envolvente) ---
         interactive_excluded = excluded_windows
@@ -1872,6 +1930,8 @@ class ProcessingOptionsDialog(tk.Toplevel):
         self.var_mostrar_senal_cruda = tk.BooleanVar(value=True)
         self.var_mostrar_espectrograma = tk.BooleanVar(value=False)
         self.var_excluded_windows = tk.StringVar(value="")
+        self.var_excluir_primera = tk.BooleanVar(value=True)
+        self.var_cyberpunk = tk.BooleanVar(value=False)
         # --- NUEVO: Opción para filtro pasa-bajos ---
         self.var_lowpass_cutoff = tk.StringVar(value="500") # Valor por defecto para el filtro pasa-bajos
         # --- NUEVO: Opción para filtro pasa-altos ---
@@ -1889,7 +1949,7 @@ class ProcessingOptionsDialog(tk.Toplevel):
 
         tk.Checkbutton(individual_plots_frame, text="Graficar recortes (pulses.png)", variable=self.var_mostrar_recortes, bg=self.bg_panel, fg=self.fg_text, selectcolor=self.bg_dark, activebackground=self.bg_panel, activeforeground=self.cyan_neon).pack(anchor="w")
         tk.Checkbutton(individual_plots_frame, text="Mostrar señal cruda en recortes", variable=self.var_mostrar_senal_cruda, bg=self.bg_panel, fg=self.fg_text, selectcolor=self.bg_dark, activebackground=self.bg_panel, activeforeground=self.cyan_neon).pack(anchor="w")
-        tk.Checkbutton(individual_plots_frame, text="Generar espectrograma (spec.png)", variable=self.var_mostrar_espectrograma, bg=self.bg_panel, fg=self.fg_text, selectcolor=self.bg_dark, activebackground=self.bg_panel, activeforeground=self.cyan_neon).pack(anchor="w")
+        tk.Checkbutton(individual_plots_frame, text="Generar Espectrograma Señal Completa (Estilo Praat)", variable=self.var_mostrar_espectrograma, bg=self.bg_panel, fg=self.fg_text, selectcolor=self.bg_dark, activebackground=self.bg_panel, activeforeground=self.cyan_neon).pack(anchor="w")
 
         evol_frame = tk.Frame(individual_plots_frame, bg=self.bg_panel)
         evol_frame.pack(fill='x', pady=(5,0))
@@ -1897,7 +1957,8 @@ class ProcessingOptionsDialog(tk.Toplevel):
         
         exclude_frame = tk.Frame(individual_plots_frame, bg=self.bg_panel)
         exclude_frame.pack(fill='x', pady=(5,0))
-        tk.Label(exclude_frame, text="Excluir ventanas (ej: 1,24):", bg=self.bg_panel, fg=self.fg_text).pack(side="left")
+        tk.Checkbutton(exclude_frame, text="Excluir 1ra Ventana", variable=self.var_excluir_primera, bg=self.bg_panel, fg=self.fg_text, selectcolor=self.bg_dark, activebackground=self.bg_panel, activeforeground=self.cyan_neon).pack(side="left", padx=(0,5))
+        tk.Label(exclude_frame, text="Otras (ej: 2,24):", bg=self.bg_panel, fg=self.fg_text).pack(side="left")
         tk.Entry(exclude_frame, textvariable=self.var_excluded_windows, bg=self.bg_dark, fg=self.cyan_neon, insertbackground=self.cyan_neon).pack(side="left", fill="x", expand=True, padx=(5,0))
 
         # --- NUEVO: Campo para suavizado de envolvente ---
@@ -1914,6 +1975,7 @@ class ProcessingOptionsDialog(tk.Toplevel):
         filter_frame = tk.Frame(individual_plots_frame, bg=self.bg_panel)
         filter_frame.pack(fill='x', pady=(5,0))
         
+        tk.Checkbutton(filter_frame, text="Tema Cyberpunk", variable=self.var_cyberpunk, bg=self.bg_panel, fg=self.fg_text, selectcolor=self.bg_dark, activebackground=self.bg_panel, activeforeground=self.cyan_neon).grid(row=0, column=2, sticky="w", padx=(10, 0))
         tk.Checkbutton(filter_frame, text="Aplicar filtro Notch (50Hz)", variable=self.var_notch_filter, bg=self.bg_panel, fg=self.fg_text, selectcolor=self.bg_dark, activebackground=self.bg_panel, activeforeground=self.cyan_neon).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 5))
         
         tk.Label(filter_frame, text="Filtro Pasa-bajos (Hz):", bg=self.bg_panel, fg=self.fg_text).grid(row=1, column=0, sticky="w")
@@ -1975,6 +2037,8 @@ class ProcessingOptionsDialog(tk.Toplevel):
 
         try:
             excluded_windows_list = [int(x.strip()) for x in self.var_excluded_windows.get().split(',') if x.strip()]
+            if self.var_excluir_primera.get() and 1 not in excluded_windows_list:
+                excluded_windows_list.append(1)
         except ValueError:
             tk.messagebox.showerror("Error de Formato", "El formato de las ventanas a excluir es incorrecto.", parent=self)
             return
@@ -2001,6 +2065,22 @@ class ProcessingOptionsDialog(tk.Toplevel):
 
         # --- NUEVO: Ocultar la ventana principal en lugar de destruirla para que funcionen los pop-ups ---
         self.root.withdraw()
+
+        if getattr(self, 'var_cyberpunk', None) and self.var_cyberpunk.get():
+            plt.style.use('dark_background')
+            plt.rcParams.update({
+                "axes.prop_cycle": plt.cycler('color', ['#08F7FE', '#FE53BB', '#F5D300', '#00ff41', '#ff2a2a']),
+                "lines.linewidth": 2,
+            })
+        else:
+            plt.style.use('default')
+            plt.rcParams.update({
+                "font.size": 16,
+                "axes.labelsize": 14,
+                "xtick.labelsize": 14,
+                "ytick.labelsize": 14,
+                "legend.fontsize": 15,
+            })
 
         total_canales = len(canales_a_procesar)
         print_progress_bar(0, total_canales, prefix='Procesando Canales:', suffix='Completado', length=50)
@@ -2406,6 +2486,9 @@ class AnalysisGUI:
         self.btn_comparar = tk.Button(action_frame, text="LANZAR ANÁLISIS COMPARATIVO...", command=self.open_comparative_dialog, state="disabled", bg="#111111", fg=magenta_neon, activebackground=magenta_neon, activeforeground="#111111", font=("Consolas", 11, "bold"), bd=2, relief="solid", cursor="hand2")
         self.btn_comparar.pack(fill="x", ipady=5)
 
+        self.btn_sesion = tk.Button(action_frame, text="LANZAR EVOLUCIÓN CONTINUA DE SESIÓN...", command=self.open_session_dialog, state="disabled", bg="#111111", fg="#FFFF00", activebackground="#FFFF00", activeforeground="#111111", font=("Consolas", 11, "bold"), bd=2, relief="solid", cursor="hand2")
+        self.btn_sesion.pack(fill="x", ipady=5, pady=(10, 0))
+
         self.cargar_mediciones()
 
     def cargar_mediciones(self):
@@ -2440,8 +2523,10 @@ class AnalysisGUI:
 
         if selection_count > 1:
             self.btn_comparar.config(state="normal")
+            self.btn_sesion.config(state="normal")
         else:
             self.btn_comparar.config(state="disabled")
+            self.btn_sesion.config(state="disabled")
 
     def open_processing_dialog(self):
         mediciones = [self.listbox_mediciones.get(i) for i in self.listbox_mediciones.curselection()]
@@ -2452,6 +2537,375 @@ class AnalysisGUI:
         mediciones = [self.listbox_mediciones.get(i) for i in self.listbox_mediciones.curselection()]
         dialog = ComparativeOptionsDialog(self.root)
         dialog.populate_common_channels(self.BASE_DIR, mediciones)
+
+    def open_session_dialog(self):
+        mediciones = [self.listbox_mediciones.get(i) for i in self.listbox_mediciones.curselection()]
+        dialog = SessionComparativeDialog(self.root)
+        dialog.populate_data(self.BASE_DIR, mediciones)
+
+def _comparative_session_plots(mediciones_data, nombre_salida_base):
+    import os
+    import json
+    import csv
+    import numpy as np
+    import matplotlib.pyplot as plt
+    
+    if not mediciones_data:
+        print("No hay datos válidos para graficar en la sesión.")
+        return
+
+    # Extraer tiempo cero
+    t0 = mediciones_data[0]['dt_obj']
+    
+    # Preparamos arreglos de datos por canal
+    ch_data = {
+        0: {'x_time': [], 'snr_mean': [], 'snr_err': [], 'amp_mean': [], 'amp_err': [], 'letra': []},
+        1: {'x_time': [], 'snr_mean': [], 'snr_err': [], 'amp_mean': [], 'amp_err': [], 'letra': []},
+        2: {'x_time': [], 'snr_mean': [], 'snr_err': [], 'amp_mean': [], 'amp_err': [], 'letra': []}
+    }
+    
+    # Para los histogramas, mantenemos todos los valores crudos
+    hist_data_snr = {0: {}, 1: {}, 2: {}}
+    hist_data_amp = {0: {}, 1: {}, 2: {}}
+    
+    for med in mediciones_data:
+        t_minutes = (med['dt_obj'] - t0).total_seconds() / 60.0
+        letra = med['letra']
+        
+        for ch_idx in [0, 1, 2]:
+            ch_key = f'canal_{ch_idx}'
+            if ch_key in med['canales']:
+                snr_vals = np.array([v for v in med['canales'][ch_key]['snr'] if not np.isnan(v)])
+                amp_vals = np.array([v for v in med['canales'][ch_key]['amp'] if not np.isnan(v)])
+            else:
+                snr_vals = np.array([])
+                amp_vals = np.array([])
+                
+            if len(snr_vals) > 0:
+                snr_m = np.mean(snr_vals)
+                snr_e = np.std(snr_vals) / np.sqrt(len(snr_vals)) # Error estándar
+            else:
+                snr_m, snr_e = np.nan, np.nan
+                
+            if len(amp_vals) > 0:
+                amp_m = np.mean(amp_vals)
+                amp_e = np.std(amp_vals) / np.sqrt(len(amp_vals))
+            else:
+                amp_m, amp_e = np.nan, np.nan
+                
+            ch_data[ch_idx]['x_time'].append(t_minutes)
+            ch_data[ch_idx]['snr_mean'].append(snr_m)
+            ch_data[ch_idx]['snr_err'].append(snr_e)
+            ch_data[ch_idx]['amp_mean'].append(amp_m)
+            ch_data[ch_idx]['amp_err'].append(amp_e)
+            ch_data[ch_idx]['letra'].append(letra)
+            
+            # Para el histograma
+            if letra not in hist_data_snr[ch_idx]:
+                hist_data_snr[ch_idx][letra] = []
+                hist_data_amp[ch_idx][letra] = []
+            hist_data_snr[ch_idx][letra].extend(snr_vals.tolist())
+            
+            # Filtrar outliers mayores a 400 µV para el histograma de amplitud
+            filtered_amp = amp_vals[amp_vals <= 400]
+            hist_data_amp[ch_idx][letra].extend(filtered_amp.tolist())
+
+    colors = {0: '#66FCF1', 1: '#FF00FF', 2: '#FFFF00'}
+    labels = {0: 'Canal 0 (Masetero)', 1: 'Canal 1 (Cigomático)', 2: 'Canal 2 (Orbicular)'}
+    
+    # --- PLOT 1: Evolución SNR ---
+    fig_snr, ax_snr = plt.subplots(figsize=(15, 6))
+    fig_snr.patch.set_facecolor('#0B0C10')
+    ax_snr.set_facecolor('#1F2833')
+    
+    for ch_idx in [0, 1, 2]:
+        x = np.array(ch_data[ch_idx]['x_time'])
+        y = np.array(ch_data[ch_idx]['snr_mean'])
+        yerr = np.array(ch_data[ch_idx]['snr_err'])
+        
+        valid = ~np.isnan(y)
+        if np.any(valid):
+            ax_snr.errorbar(x[valid], y[valid], yerr=yerr[valid], fmt='-o', color=colors[ch_idx], 
+                            label=labels[ch_idx], linewidth=2, capsize=4, markersize=6)
+            
+            # Añadir etiqueta de la letra en los puntos (solo para el canal 0)
+            if ch_idx == 0:
+                letras = np.array(ch_data[ch_idx]['letra'])[valid]
+                for xv, yv, let in zip(x[valid], y[valid], letras):
+                    ax_snr.annotate(let, (xv, yv), textcoords="offset points", xytext=(0,10), ha='center', color='white', fontweight='bold', fontsize=12)
+
+    ax_snr.set_title("Evolución de SNR (MAV) en la Sesión (Promedio ± SE)", color='white', fontsize=16, pad=20)
+    ax_snr.set_xlabel("Tiempo desde inicio de sesión [Minutos]", color='white')
+    ax_snr.set_ylabel("SNR Promedio", color='white')
+    ax_snr.tick_params(colors='white')
+    ax_snr.grid(True, color='white', alpha=0.1)
+    ax_snr.legend(facecolor='#0B0C10', labelcolor='white')
+    
+    out_snr = f"{nombre_salida_base}_SNR_Timeline.png"
+    plt.tight_layout()
+    plt.savefig(out_snr, dpi=300, facecolor=fig_snr.get_facecolor())
+    plt.close(fig_snr)
+    
+    # --- PLOT 2: Evolución Amplitud ---
+    fig_amp, ax_amp = plt.subplots(figsize=(15, 6))
+    fig_amp.patch.set_facecolor('#0B0C10')
+    ax_amp.set_facecolor('#1F2833')
+    
+    for ch_idx in [0, 1, 2]:
+        x = np.array(ch_data[ch_idx]['x_time'])
+        y = np.array(ch_data[ch_idx]['amp_mean'])
+        yerr = np.array(ch_data[ch_idx]['amp_err'])
+        
+        valid = ~np.isnan(y)
+        if np.any(valid):
+            ax_amp.errorbar(x[valid], y[valid], yerr=yerr[valid], fmt='-o', color=colors[ch_idx], 
+                            label=labels[ch_idx], linewidth=2, capsize=4, markersize=6)
+            
+            if ch_idx == 0:
+                letras = np.array(ch_data[ch_idx]['letra'])[valid]
+                for xv, yv, let in zip(x[valid], y[valid], letras):
+                    ax_amp.annotate(let, (xv, yv), textcoords="offset points", xytext=(0,10), ha='center', color='white', fontweight='bold', fontsize=12)
+
+    ax_amp.set_title("Evolución de Amplitud Máxima Promedio en la Sesión (± SE)", color='white', fontsize=16, pad=20)
+    ax_amp.set_xlabel("Tiempo desde inicio de sesión [Minutos]", color='white')
+    ax_amp.set_ylabel("Amplitud Máxima Promedio [µV]", color='white')
+    ax_amp.tick_params(colors='white')
+    ax_amp.grid(True, color='white', alpha=0.1)
+    ax_amp.legend(facecolor='#0B0C10', labelcolor='white')
+    
+    out_amp = f"{nombre_salida_base}_AMP_Timeline.png"
+    plt.tight_layout()
+    plt.savefig(out_amp, dpi=300, facecolor=fig_amp.get_facecolor())
+    plt.close(fig_amp)
+    
+    letter_colors = {'A': '#FF5733', 'E': '#33FF57', 'I': '#3357FF', 'O': '#FF33A8', 'U': '#33FFF5'}
+    
+    for ch_idx in [0, 1, 2]:
+        fig_hist, (ax_hsnr, ax_hamp) = plt.subplots(1, 2, figsize=(16, 5))
+        
+        # --- BOXPLOT SNR ---
+        data_snr = []
+        labels_snr = []
+        vowels = ['A', 'E', 'I', 'O', 'U']
+        letras_presentes = list(hist_data_snr[ch_idx].keys())
+        orden_letras = [v for v in vowels if v in letras_presentes] + sorted([l for l in letras_presentes if l not in vowels])
+        
+        for letra in orden_letras:
+            vals = hist_data_snr[ch_idx][letra]
+            if len(vals) > 0:
+                data_snr.append(vals)
+                labels_snr.append(f"{letra}\n(N={len(vals)})")
+                
+        if len(data_snr) > 0:
+            bp_snr = ax_hsnr.boxplot(data_snr, labels=labels_snr, patch_artist=True)
+            for i, patch in enumerate(bp_snr['boxes']):
+                letra_pura = labels_snr[i].split('\n')[0]
+                patch.set_facecolor(letter_colors.get(letra_pura, 'gray'))
+                patch.set_alpha(0.6)
+                
+            ax_hsnr.set_title(f"Distribución de SNR (MAV) - {labels[ch_idx]}")
+            ax_hsnr.set_xlabel("Vocal")
+            ax_hsnr.set_ylabel("SNR (MAV / Ruido)")
+            
+            import scipy.stats as stats
+            if len(data_snr) > 1:
+                try:
+                    f_stat, p_val = stats.kruskal(*data_snr)
+                    ax_hsnr.text(0.05, 0.95, f"Kruskal-Wallis p-value: {p_val:.2e}", transform=ax_hsnr.transAxes, 
+                                 verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='none'))
+                except Exception as e:
+                    pass
+        
+        import scipy.stats as stats
+        
+        data_to_plot = []
+        labels_plot = []
+        vowels = ['A', 'E', 'I', 'O', 'U']
+        letras_presentes = list(hist_data_amp[ch_idx].keys())
+        orden_letras = [v for v in vowels if v in letras_presentes] + sorted([l for l in letras_presentes if l not in vowels])
+        
+        for letra in orden_letras:
+            vals = hist_data_amp[ch_idx][letra]
+            if len(vals) > 0:
+                data_to_plot.append(vals)
+                labels_plot.append(f"{letra}\n(N={len(vals)})")
+                
+        if len(data_to_plot) > 0:
+            bp = ax_hamp.boxplot(data_to_plot, labels=labels_plot, patch_artist=True)
+            for i, patch in enumerate(bp['boxes']):
+                letra_pura = labels_plot[i].split('\n')[0]
+                patch.set_facecolor(letter_colors.get(letra_pura, 'gray'))
+                patch.set_alpha(0.6)
+                
+            ax_hamp.set_title(f"Distribución de MAV - {labels[ch_idx]}")
+            ax_hamp.set_xlabel("Vocal")
+            ax_hamp.set_ylabel("MAV [µV]")
+            
+            import matplotlib.patches as mpatches
+            import matplotlib.lines as mlines
+            caja_patch = mpatches.Patch(color='gray', alpha=0.6, label='Caja: IQR (25%-75%)')
+            mediana_line = mlines.Line2D([], [], color='orange', label='Línea: Mediana')
+            bigote_line = mlines.Line2D([], [], color='black', label='Límites: 1.5x IQR')
+            outlier_point = mlines.Line2D([], [], color='none', marker='o', markeredgecolor='black', markerfacecolor='none', label='Puntos: Outliers')
+            ax_hamp.legend(handles=[caja_patch, mediana_line, bigote_line, outlier_point], loc='upper right', fontsize='small')
+            
+            if len(data_to_plot) > 1:
+                try:
+                    f_stat, p_val = stats.kruskal(*data_to_plot)
+                    ax_hamp.text(0.05, 0.95, f"Kruskal-Wallis p-value: {p_val:.2e}", transform=ax_hamp.transAxes, 
+                                 verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8, edgecolor='none'))
+                except Exception as e:
+                    pass
+        
+        out_hist = f"{nombre_salida_base}_Histogramas_Canal{ch_idx}.png"
+        plt.tight_layout()
+        plt.savefig(out_hist, dpi=300)
+        plt.close(fig_hist)
+        
+    csv_path = f"{nombre_salida_base}_TablaCronologica.csv"
+    with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerow(['Orden', 'Carpeta', 'Letra', 'Hora', 'Pulsos Totales'])
+        for i, med in enumerate(mediciones_data):
+            writer.writerow([i+1, med['folder_name'], med['letra'], med['hora_str'], med.get('pulse_count', 0)])
+            
+    print(f"\n[OK] Gráficos de Evolución de Sesión guardados exitosamente en:\n     {os.path.dirname(nombre_salida_base)}")
+
+class SessionComparativeDialog(tk.Toplevel):
+    def __init__(self, root):
+        self.root = root
+        super().__init__(root)
+        self.title("Ñandú LSD - Evolución Continua de Sesión")
+        self.geometry("450x300")
+        self.transient(root)
+        self.grab_set()
+
+        self.bg_dark = "#0B0C10"
+        self.bg_panel = "#1F2833"
+        self.cyan_neon = "#66FCF1"
+        self.yellow_neon = "#FFFF00"
+        self.fg_text = "#C5C6C7"
+        
+        self.configure(bg=self.bg_dark)
+
+        self.mediciones_a_comparar = []
+        self.BASE_DIR = ""
+
+        main_frame = tk.Frame(self, padx=15, pady=15, bg=self.bg_dark)
+        main_frame.pack(fill="both", expand=True)
+
+        name_frame = tk.Frame(main_frame, bg=self.bg_panel, bd=2, relief="ridge")
+        name_frame.pack(fill="x", pady=(0, 10))
+        tk.Label(name_frame, text="Nombre del Set de Análisis:", bg=self.bg_panel, fg=self.fg_text).pack(side="left", padx=5, pady=5)
+        self.var_nombre_analisis = tk.StringVar(value="Evolucion_Sesion")
+        tk.Entry(name_frame, textvariable=self.var_nombre_analisis, bg=self.bg_dark, fg=self.cyan_neon, insertbackground=self.cyan_neon).pack(side="left", fill="x", expand=True, padx=(5, 5))
+
+        info_frame = tk.LabelFrame(main_frame, text="Información", padx=10, pady=10, bg=self.bg_panel, fg=self.cyan_neon, font=("Consolas", 11, "bold"), bd=2, relief="ridge")
+        info_frame.pack(fill="x", pady=(0, 15))
+        
+        self.lbl_info = tk.Label(info_frame, text="Calculando...", bg=self.bg_panel, fg=self.fg_text, justify="left")
+        self.lbl_info.pack(anchor="w")
+
+        btn_lanzar = tk.Button(main_frame, text="GENERAR GRÁFICOS DE SESIÓN", command=self.lanzar, bg="#111111", fg=self.yellow_neon, activebackground=self.yellow_neon, activeforeground="#111111", font=("Consolas", 11, "bold"), bd=2, relief="solid", cursor="hand2")
+        btn_lanzar.pack(fill="x", ipady=5, pady=(10, 0))
+
+    def populate_data(self, base_dir, mediciones):
+        self.mediciones_a_comparar = mediciones
+        self.BASE_DIR = base_dir
+        self.lbl_info.config(text=f"Carpetas seleccionadas: {len(mediciones)}\n\nEl script ordenará automáticamente las\nmediciones de forma cronológica y extraerá\nlos Canales 0, 1 y 2.")
+
+    def lanzar(self):
+        import re
+        from datetime import datetime
+        
+        nombre_custom = self.var_nombre_analisis.get().strip()
+        nombre_custom = re.sub(r'[\\/*?:"<>|]', "", nombre_custom)
+
+        self.destroy()
+        self.root.destroy()
+
+        print("\n--- Analizando Evolución de Sesión ---")
+        mediciones_data = []
+        
+        for nombre_medicion in self.mediciones_a_comparar:
+            path_medicion = os.path.join(self.BASE_DIR, nombre_medicion)
+            folder_name = os.path.basename(path_medicion)
+            
+            letra_match = re.match(r'^([AEIOUaeiou])_', folder_name)
+            letra = letra_match.group(1).upper() if letra_match else '?'
+            
+            dt_obj = None
+            hora_str = ""
+            canales_data = {}
+            
+            for ch_idx in [0, 1, 2]:
+                ch_key = f'canal_{ch_idx}'
+                ch_path = os.path.join(path_medicion, ch_key)
+                if not os.path.exists(ch_path): continue
+                
+                res_path = os.path.join(ch_path, 'analisis_results.json')
+                meta_path = os.path.join(ch_path, 'metadata.json')
+                
+                if not os.path.exists(res_path): continue
+                
+                import json
+                with open(res_path, 'r') as f:
+                    res = json.load(f)
+                    
+                if dt_obj is None and os.path.exists(meta_path):
+                    with open(meta_path, 'r') as f:
+                        meta = json.load(f)
+                        mdate = meta.get('measurement_date', '')
+                        if mdate:
+                            try:
+                                dt_obj = datetime.fromisoformat(mdate)
+                                hora_str = dt_obj.strftime("%H:%M:%S")
+                            except:
+                                pass
+                
+                snr_per_pulse = res.get('snr_per_pulse', [])
+                segmentos_rs = res.get('segmentos_rs', [])
+                
+                amp_per_pulse = []
+                import numpy as np
+                if isinstance(segmentos_rs, list) and len(segmentos_rs) > 0:
+                    for p in segmentos_rs:
+                        if isinstance(p, list) and len(p) > 0:
+                            amp_per_pulse.append(float(np.max(p)))
+                        else:
+                            amp_per_pulse.append(np.nan)
+                else:
+                    amp_per_pulse = [np.nan] * len(snr_per_pulse)
+                    
+                canales_data[ch_key] = {
+                    'snr': snr_per_pulse,
+                    'amp': amp_per_pulse
+                }
+                
+            if dt_obj is None:
+                dt_obj = datetime.now()
+                hora_str = "??:??"
+                
+            mediciones_data.append({
+                'folder_name': folder_name,
+                'letra': letra,
+                'dt_obj': dt_obj,
+                'hora_str': hora_str,
+                'canales': canales_data
+            })
+            
+        mediciones_data.sort(key=lambda x: x['dt_obj'])
+        
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        timestamp = datetime.now().strftime("%H%M%S")
+        
+        nombre_carpeta = nombre_custom if nombre_custom else f"Sesion_{timestamp}"
+        output_comp_dir = os.path.join("analisis_de_sesiones", today_str, nombre_carpeta)
+        os.makedirs(output_comp_dir, exist_ok=True)
+        
+        nombre_salida_base = os.path.join(output_comp_dir, "Sesion")
+        
+        _comparative_session_plots(mediciones_data, nombre_salida_base)
 
 if __name__ == "__main__":
     print(f"--- Script de Análisis de Pistas v{__version__} ---")

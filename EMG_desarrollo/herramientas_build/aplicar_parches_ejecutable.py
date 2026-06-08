@@ -5,6 +5,13 @@
 # Descripción: Inyecta parches en scripts durante la compilación a ejecutable.
 # ==============================================================================
 
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Inyecta parches en scripts durante la compilación a ejecutable.
+# ==============================================================================
+
 import os
 import re
 
@@ -47,6 +54,8 @@ def user_data_path(relative_path):
     """ Obtiene la ruta a los datos del usuario (lectura/escritura) """
     if getattr(sys, 'frozen', False):
         base_path = os.path.dirname(sys.executable)
+        if os.path.basename(base_path) == "_internal":
+            base_path = os.path.dirname(base_path)
     else:
         base_path = os.path.abspath(os.path.dirname(__file__))
         if os.path.basename(base_path) == "gui_app":
@@ -107,13 +116,13 @@ def lanzar_script(script_name, args=[]):
         ("base_dir = \"base_de_datos_electrodos\"", "base_dir = user_data_path(\"base_de_datos_electrodos\")"),
         ('test_dir = os.path.join(script_dir, "base_de_datos_electrodos"', 'test_dir = os.path.join(user_data_path("base_de_datos_electrodos")'),
         ('ruta_palabras = os.path.join(os.path.dirname(os.path.abspath(__file__)), "palabras.txt")', 'ruta_palabras = user_data_path("palabras.txt")'),
-        ("python_executable = sys.executable", ""),
-        ("script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'metronomo_visual.py')", ""),
-        ("word_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ventana_palabras.py')", ""),
+        ("python_executable = sys.executable", "pass"),
+        ("script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'metronomo_visual.py')", "pass"),
+        ("word_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ventana_palabras.py')", "pass"),
     ]
     reemplazos_regex_daq = [
-        (r"\[\s*python_executable,\s*script_path,\s*(.*?)\]", r"lanzar_script('metronomo_visual.py', [\1])"),
-        (r"\[\s*python_executable,\s*word_script_path,\s*(.*?)\]", r"lanzar_script('ventana_palabras.py', [\1])")
+        (r"\[\s*python_executable,\s*script_path,\s*(.*?)\]", r"lanzar_script('acquisition/metronomo_visual.py', [\1])"),
+        (r"\[\s*python_executable,\s*word_script_path,\s*(.*?)\]", r"lanzar_script('acquisition/ventana_palabras.py', [\1])")
     ]
     for archivo in ["acquisition/manual_daq.py", "acquisition/autoforge_daq.py"]:
         ruta = os.path.join(build_dir, archivo)
@@ -180,7 +189,7 @@ def lanzar_script(script_name, args=[]):
     archivos_auxiliares = [
         "analysis/plotter_calibrado.py", "analysis/feature_extractor.py", 
         "analysis/electrode_viewer_4.py", "utils/editor_mediciones.py", "analysis/analisis_por_track_integrado.py", 
-        "analysis/analisis_por_track_integrado_experimental.py", "analysis/correlaciondeseñales.py", 
+        "analysis/analisis_por_track_integrado_experimental.py", "analysis/correlaciondeseñales.py", "analysis/segmentador_secuencias.py", 
         "utils/actualizar_metadata.py", "utils/migrar_mediciones_por_fecha.py"
     ]
     for archivo in archivos_auxiliares:

@@ -5,6 +5,13 @@
 # Descripción: Widget de interfaz para visualizar señales por electrodo.
 # ==============================================================================
 
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Widget de interfaz para visualizar señales por electrodo.
+# ==============================================================================
+
 import os
 import json
 from PySide6.QtWidgets import (

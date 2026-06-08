@@ -5,6 +5,13 @@
 # Descripción: Cálculo y visualización de correlación cruzada entre diferentes señales.
 # ==============================================================================
 
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Cálculo y visualización de correlación cruzada entre diferentes señales.
+# ==============================================================================
+
 #%%
 import os
 import json
@@ -41,9 +48,11 @@ except Exception:
 from PySide6.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout, QFormLayout,
     QLabel, QLineEdit, QPushButton, QCheckBox, QComboBox,
-    QMessageBox, QFileDialog, QGroupBox, QSpinBox, QDoubleSpinBox, QWidget
+    QMessageBox, QFileDialog, QGroupBox, QSpinBox, QDoubleSpinBox, QWidget,
+    QTextEdit
 )
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont, QTextCursor
 
 # --- Versión del script de análisis ---
 __version__ = "7.1 (Con Espectrograma del Promedio)"
@@ -100,6 +109,45 @@ def select_directories():
             
     return master_dir, slave_dirs
 
+class StdoutRedirector:
+    def __init__(self, text_widget):
+        self.text_widget = text_widget
+        self.original_stdout = sys.stdout
+
+    def write(self, string):
+        self.original_stdout.write(string)
+        self.text_widget.moveCursor(QTextCursor.End)
+        self.text_widget.insertPlainText(string)
+        self.text_widget.moveCursor(QTextCursor.End)
+        QApplication.processEvents()
+
+    def flush(self):
+        self.original_stdout.flush()
+
+class ConsoleWindow(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Procesando Datos...")
+        self.resize(700, 400)
+        
+        layout = QVBoxLayout(self)
+        self.text_edit = QTextEdit()
+        self.text_edit.setReadOnly(True)
+        self.text_edit.setStyleSheet("background-color: #000; color: #00ff00; border: 1px solid #333;")
+        
+        font = QFont("Consolas", 10)
+        self.text_edit.setFont(font)
+        
+        layout.addWidget(self.text_edit)
+        
+        # Redirigir stdout
+        self.redirector = StdoutRedirector(self.text_edit)
+        sys.stdout = self.redirector
+
+    def closeEvent(self, event):
+        sys.stdout = self.redirector.original_stdout
+        super().closeEvent(event)
+
 def main(mediciones_dirs=None, medicion_dir=None, master_dir=None, slave_dirs=None):
     app = QApplication.instance()
     if not app:
@@ -125,8 +173,16 @@ def main(mediciones_dirs=None, medicion_dir=None, master_dir=None, slave_dirs=No
             plt.style.use('dark_background')
         else:
             plt.style.use('default')
+            
+        normalizar = opts.pop("normalizar_overlay", False)
     else:
         return
+
+    console_win = None
+    if not opts.get("show_interactive_plot", False):
+        console_win = ConsoleWindow()
+        console_win.show()
+        QApplication.processEvents()
 
     for m_dir in (mediciones_dirs or [None]):
         if m_dir:
@@ -188,7 +244,12 @@ def main(mediciones_dirs=None, medicion_dir=None, master_dir=None, slave_dirs=No
             parent_meas_dir = os.path.dirname(current_master_dir)
             meas_name = os.path.basename(parent_meas_dir)
             master_basename = os.path.basename(current_master_dir)
-            _plot_muscle_overlay(meas_name, resultados_canales, parent_meas_dir, master_basename)
+            _plot_muscle_overlay(meas_name, resultados_canales, parent_meas_dir, master_basename, normalize_all=normalizar)
+
+    if console_win:
+        print("\n\n✅ --- PROCESAMIENTO FINALIZADO --- ✅")
+        print("Puede cerrar esta ventana para volver al menú principal.")
+        console_win.exec()
 
 if __name__ == "__main__":
     main()
@@ -272,8 +333,13 @@ def _compute_env_full(signal_abs, apply_envelope, smooth_ms, samplerate, tipo_en
 
     if apply_envelope:
         try:
-            env_full = np.abs(hilbert(signal_abs))
-        except Exception:
+            from scipy.fft import next_fast_len
+            from scipy.signal import hilbert
+            N = len(signal_abs)
+            fast_len = next_fast_len(N)
+            env_full = np.abs(hilbert(signal_abs, N=fast_len)[:N])
+        except Exception as e:
+            print(f"Error en hilbert: {e}")
             env_full = signal_abs.copy()
     else:
         env_full = signal_abs.copy()
@@ -621,7 +687,7 @@ def _plot_recortes(t_recortada, signal_recortada, env_recortada, noise_seconds,
     return sorted(list(excluded_set_plot))
 
 # ---------------------- NUEVA FUNCIÓN: Overlay de Músculos ---------------------
-def _plot_muscle_overlay(measure_name, channels_dict, out_dir, master_name=None):
+def _plot_muscle_overlay(measure_name, channels_dict, out_dir, master_name=None, normalize_all=False):
     all_files = set()
     for c_data in channels_dict.values():
         all_files.update(c_data.keys())
@@ -651,6 +717,24 @@ def _plot_muscle_overlay(measure_name, channels_dict, out_dir, master_name=None)
                 
             time_shift = master_t[peak_idx]
         
+        # --- Calcular la amplitud máxima de los slaves y del master para normalizar ---
+        max_slave_amp = 0.0
+        master_max_amp = 1.0
+        if master_name and master_name in channels_dict and fname in channels_dict[master_name]:
+            master_y_raw = np.array(channels_dict[master_name][fname]['mean_pulse'])
+            master_max_amp = np.max(master_y_raw) - np.min(master_y_raw)
+            
+        for ch in sorted_chans:
+            if ch != master_name and fname in channels_dict[ch]:
+                y_slave = np.array(channels_dict[ch][fname]['mean_pulse'])
+                m_amp = np.max(y_slave) - np.min(y_slave)
+                if m_amp > max_slave_amp:
+                    max_slave_amp = m_amp
+                    
+        scale_factor = 1.0
+        if max_slave_amp > 0 and master_max_amp > 0:
+            scale_factor = max_slave_amp / master_max_amp
+
         # 2. Graficar todos los canales con el tiempo corregido y offset restado
         max_y_overlay = 0
         for ch in sorted_chans:
@@ -664,6 +748,18 @@ def _plot_muscle_overlay(measure_name, channels_dict, out_dir, master_name=None)
                 # aplicando el equivalente a un pasa altos ideal sobre la línea base
                 y_min = np.min(y)
                 y = y - y_min
+                
+                if normalize_all:
+                    y_max = np.max(y)
+                    if y_max > 0:
+                        y = y / y_max
+                        err = err / y_max
+                else:
+                    # Normalizar la señal líder a la escala de los esclavos (solo si no se normaliza todo al 100%)
+                    if ch == master_name and scale_factor != 1.0:
+                        y = y * scale_factor
+                        err = err * scale_factor
+                    
                 if np.max(y + err) > max_y_overlay:
                     max_y_overlay = np.max(y + err)
                 
@@ -672,6 +768,8 @@ def _plot_muscle_overlay(measure_name, channels_dict, out_dir, master_name=None)
                 ch_conf = canales_config.get(conf_key, {})
                 
                 lbl = ch_conf.get("musculo", f"Canal {ch_idx_str}")
+                if ch == master_name:
+                    lbl += " (Master Normalizado)"
                 col = ch_conf.get("color_hex", fallback_colors.get(ch, 'gray'))
                 
                 if ch == 'canal_3':
@@ -683,16 +781,29 @@ def _plot_muscle_overlay(measure_name, channels_dict, out_dir, master_name=None)
                 found_any = True
                 
         if found_any:
-            plt.title(f"Patrón Muscular Sincronizado - {measure_name} - {fname}")
+            if normalize_all:
+                plt.title(f"Patrón Muscular Sincronizado (Normalizado) - {measure_name} - {fname}")
+                plt.ylabel("Amplitud Normalizada [0-1]")
+            else:
+                plt.title(f"Patrón Muscular Sincronizado - {measure_name} - {fname}")
+                plt.ylabel("Amplitud [µV]")
+            
             plt.xlabel("Tiempo respecto al pico de la señal de micrófono [s]")
-            plt.ylabel("Amplitud [µV]")
             
             # Dibujar línea exactamente en 0
             plt.axvline(x=0, color='gray', linestyle='--', alpha=0.8, label="Pico señal de micrófono")
             
-            plt.legend(loc='upper right')
+            plt.legend(loc='upper right', fontsize=8)
             plt.grid(True, alpha=0.5)
             plt.ylim(bottom=0, top=max_y_overlay * 1.2 if max_y_overlay > 0 else 1.0)
+            
+            # Forzar simetría en el eje X (Tiempo) respecto al cero
+            try:
+                current_xlims = plt.gca().get_xlim()
+                max_x = max(abs(current_xlims[0]), abs(current_xlims[1]))
+                plt.xlim(-max_x, max_x)
+            except:
+                pass
             
             name_clean = os.path.splitext(fname)[0]
             path = os.path.join(out_dir, f"patron_muscular_{name_clean}.png")
@@ -723,7 +834,7 @@ def export_results_for_file(out_dir, filename, resultados_entry):
 
 # ---------------------- Comparative plotting --------------------
 def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, resultados, nombre_salida,
-                       show_overlay=True, show_amplitude=True):
+                       show_overlay=True, show_amplitude=True, normalize_overlay=False):
     
     import matplotlib.cm as cm
     n_files = len(promedios_globales)
@@ -744,7 +855,10 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
             ax_ov.plot(t_plot, pulso, label=str(i+1), linewidth=2, alpha=0.9, color=plot_colors[i])
         ax_ov.set_title('Overlay: FORMAS MUSCULARES (Líder)')
         ax_ov.set_xlabel('Tiempo [s]')
-        ax_ov.set_ylabel('Amplitud [V]')
+        if normalize_overlay:
+            ax_ov.set_ylabel('Normalizado')
+        else:
+            ax_ov.set_ylabel('Unidades Arbitrarias')
         ax_ov.grid(True, alpha=0.4)
         ax_ov.legend(title='Archivo #', fontsize=8, loc='upper right')
         plt.tight_layout()
@@ -819,6 +933,7 @@ def procesar_wavs_promedio(
     show_interactive_plot=False,
     show_average_plot=False,
     apply_notch_filter=False,
+    normalize_overlay=False,
     # --- ARGUMENTOS NUEVOS PARA ALINEACIÓN FORZADA ---
     dict_shifts_externos=None, # Diccionario { 'archivo.wav': [shift1, shift2...] }
     indices_validos_externos=None # Pasó a ser forced_maxima
@@ -1059,8 +1174,8 @@ def procesar_wavs_promedio(
         plt.close('all') # --- Limpieza forzada ---
 
     if mostrar_tabla and promedios_globales:
-        _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, resultados, nombre_salida)
-
+        _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, resultados, nombre_salida, normalize_overlay=normalize_overlay)
+    
     return resultados
 
 # ---------------------- GUI Classes (PySide6) ----------------------
@@ -1158,6 +1273,10 @@ class ProcessingOptionsDialog(QDialog):
         self.chk_table.setChecked(True)
         self.form_layout.addRow(self.chk_table)
         
+        self.chk_normalize_overlay = QCheckBox("Normalizar Patrón (Visualización de Desfases)")
+        self.chk_normalize_overlay.setChecked(False)
+        self.form_layout.addRow(self.chk_normalize_overlay)
+        
         self.chk_rand_color = QCheckBox("Usar Colores Aleatorios")
         self.chk_rand_color.setChecked(False)
         self.form_layout.addRow(self.chk_rand_color)
@@ -1169,6 +1288,7 @@ class ProcessingOptionsDialog(QDialog):
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
         
+<<<<<<< HEAD
         self.btn_corr = QPushButton("Calcular Correlación Cruzada")
         self.btn_corr.setStyleSheet("QPushButton { background-color: #8a2be2; color: #fff; font-weight: bold; padding: 10px 20px; border-radius: 3px; }")
         self.btn_corr.clicked.connect(self.abrir_correlacion)
@@ -1178,6 +1298,17 @@ class ProcessingOptionsDialog(QDialog):
         self.btn_run.setStyleSheet("QPushButton { background-color: #00ffcc; color: #000; font-weight: bold; padding: 10px 20px; border-radius: 3px; }")
         self.btn_run.clicked.connect(self.on_ok)
         btn_layout.addWidget(self.btn_run)
+=======
+        self.btn_run_interactive = QPushButton("Procesar Interactivo")
+        self.btn_run_interactive.setStyleSheet("QPushButton { background-color: #00ffcc; color: #000; font-weight: bold; padding: 10px 20px; border-radius: 3px; }")
+        self.btn_run_interactive.clicked.connect(lambda: self.on_ok(interactivo=True))
+        btn_layout.addWidget(self.btn_run_interactive)
+        
+        self.btn_run_fast = QPushButton("Procesar Rápido")
+        self.btn_run_fast.setStyleSheet("QPushButton { background-color: #ff00ff; color: #fff; font-weight: bold; padding: 10px 20px; border-radius: 3px; }")
+        self.btn_run_fast.clicked.connect(lambda: self.on_ok(interactivo=False))
+        btn_layout.addWidget(self.btn_run_fast)
+>>>>>>> master
         
         main_layout.addLayout(btn_layout)
 
@@ -1226,7 +1357,7 @@ class ProcessingOptionsDialog(QDialog):
         self.form_layout.addRow(label_text, widget)
         self.entries[key] = entry
 
-    def on_ok(self):
+    def on_ok(self, interactivo=True):
         try:
             bpm_val = 50.0
             n_pulsos_val = 10
@@ -1274,9 +1405,10 @@ class ProcessingOptionsDialog(QDialog):
                 
                 "mostrar_individuales": self.chk_indiv.isChecked(),
                 "mostrar_recortes": self.chk_recortes.isChecked(),
-                "show_interactive_plot": self.chk_recortes.isChecked(),
+                "show_interactive_plot": interactivo and self.chk_recortes.isChecked(),
                 "mostrar_espectrograma": self.chk_spec.isChecked(),
                 "mostrar_tabla": self.chk_table.isChecked(),
+                "normalizar_overlay": self.chk_normalize_overlay.isChecked(),
                 "colores_aleatorios": self.chk_rand_color.isChecked(),
                 "colorgrafico": self.entries["color_fijo"].text(),
                 "tema_oscuro": self.chk_dark_mode.isChecked(),
@@ -1363,7 +1495,7 @@ class ComparativeOptionsDialog(QDialog):
         out = os.path.join("comparativos", f"comp_{datetime.now().strftime('%H%M%S')}.png")
         
         _comparative_plots(proms, times, names, glob_res, out, 
-                           show_overlay=self.var_ov.get(), show_amplitude=self.var_amp.get())
+                           show_overlay=self.chk_ov.isChecked(), show_amplitude=self.chk_amp.isChecked())
 
 class CorrelacionOptionsDialog(QDialog):
     def __init__(self, paths_mediciones, canales_disponibles, is_single, parent=None):

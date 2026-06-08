@@ -1,3 +1,10 @@
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Cálculo y visualización de correlación cruzada entre diferentes señales.
+# ==============================================================================
+
 #%%
 import os
 import json
@@ -353,6 +360,7 @@ def _plot_pulse_full(
     t_pulso, segmentos_norm, pulso_promedio, pulso_err, color_prom,
     snr_manual, snr_uncertainty, umbral, mostrar_umbral, filename, out_prom,
     plot_mode='mean', individual_alpha=0.25, mostrar_individuales=True, show_plot=False
+    plot_mode='mean', individual_alpha=0.25, mostrar_individuales=True, show_plot=False, noise_sigma=None
 ):
     print_progress_bar(0, 1, prefix='Graficando Avg:', suffix='...', length=20)
     plt.figure(figsize=(12, 8))
@@ -370,6 +378,8 @@ def _plot_pulse_full(
 
     if mostrar_umbral and (umbral is not None):
         plt.axhline(umbral, color="green", linestyle="--", alpha=0.9, label=f"Umbral Ruido ({umbral:.2f})")
+        if noise_sigma is not None and not np.isnan(noise_sigma):
+            plt.fill_between(t_pulso, umbral - noise_sigma, umbral + noise_sigma, color="green", alpha=0.2, label=f"Error Umbral (±1σ)")
         plt.fill_between(t_pulso, -umbral, umbral, color="red", alpha=0.06)
 
     plt.title(f"PULSO PROMEDIO (Forma Muscular) - {filename}")
@@ -533,6 +543,8 @@ def _plot_muscle_overlay(measure_name, channels_dict, out_dir):
                 y = data['mean_pulse']
                 
                 lbl = labels.get(ch, ch)
+                if ch == master_name:
+                    lbl += " (Master Normalizado)"
                 col = colors.get(ch, None)
                 
                 plt.plot(t, y, label=lbl, color=col, linewidth=2, alpha=0.8)
@@ -832,6 +844,7 @@ def procesar_wavs_promedio(
         idx_peak = int(np.argmax(pulso_promedio))
         amp_uncertainty = pulso_err[idx_peak] if idx_peak < len(pulso_err) else 0.0
         snr_uncertainty = amp_uncertainty / umbral if (umbral is not None and umbral > 0) else np.nan
+        noise_sigma = sigma_est if sigma_est is not None else np.nan
         
         out_dir = output_root
         out_prom = os.path.join(out_dir, "avg_lider.png")
@@ -845,6 +858,7 @@ def procesar_wavs_promedio(
             mostrar_individuales=mostrar_individuales, show_plot=show_average_plot,
             snr_manual=snr_manual, snr_uncertainty=snr_uncertainty, 
             umbral=umbral, mostrar_umbral=mostrar_umbral
+            umbral=umbral, mostrar_umbral=mostrar_umbral, noise_sigma=noise_sigma
         )
 
         if mostrar_espectrograma:
@@ -976,6 +990,7 @@ class ProcessingOptionsDialog(QDialog):
         self.entries[key] = entry
 
     def on_ok(self):
+    def on_ok(self, interactivo=True):
         try:
             self.result = {
                 "bpm": float(self.entries["bpm"].text()),
@@ -997,6 +1012,8 @@ class ProcessingOptionsDialog(QDialog):
                 
                 "mostrar_individuales": self.chk_indiv.isChecked(),
                 "mostrar_recortes": self.chk_recortes.isChecked(),
+                "show_interactive_plot": interactivo,
+                "show_average_plot": interactivo,
                 "mostrar_espectrograma": self.chk_spec.isChecked(),
                 "mostrar_tabla": self.chk_table.isChecked(),
                 "colores_aleatorios": self.chk_rand_color.isChecked(),

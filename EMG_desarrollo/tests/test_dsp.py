@@ -5,6 +5,13 @@
 # Descripción: Módulo test_dsp.py del sistema NANDU LSD.
 # ==============================================================================
 
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Módulo test_dsp.py del sistema NANDU LSD.
+# ==============================================================================
+
 import os
 import sys
 import numpy as np

@@ -1,3 +1,10 @@
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Módulo fix_duplicates.py del sistema NANDU LSD.
+# ==============================================================================
+
 import os, glob, re
 for f in glob.glob('**/*.py', recursive=True):
     if 'env' in f or 'venv' in f or 'EMG_Ejecutable_Build' in f or 'fix_duplicates.py' in f: continue
