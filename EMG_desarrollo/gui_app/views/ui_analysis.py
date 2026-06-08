@@ -14,7 +14,7 @@
 
 import os
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QTabWidget,
+    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox, QTabWidget,
     QLabel, QSpinBox, QDoubleSpinBox, QCheckBox, QPushButton, QLineEdit, QComboBox
 )
 from PySide6.QtCore import Qt
@@ -240,6 +240,87 @@ class ComparativeTab(QWidget):
         self.layout.addLayout(btn_layout)
 
 
+class DiscreteMotorTab(QWidget):
+    """Pestaña para Análisis de Coordenadas Discretas (Assaneo et al. 2013)"""
+    def __init__(self):
+        super().__init__()
+        self.layout = QVBoxLayout(self)
+        
+        # 1. Selector de Método (QTabWidget)
+        self.method_tabs = QTabWidget()
+        
+        # 1A. Pestaña Estadístico
+        tab_stat = QWidget()
+        l_stat = QFormLayout(tab_stat)
+        self.inp_std_multiplier = QDoubleSpinBox()
+        self.inp_std_multiplier.setRange(1.0, 10.0)
+        self.inp_std_multiplier.setSingleStep(0.5)
+        self.inp_std_multiplier.setValue(3.0)
+        l_stat.addRow("Sensibilidad (N Std):", self.inp_std_multiplier)
+        self.method_tabs.addTab(tab_stat, "📊 Umbral Estadístico (Ruido)")
+        
+        # 1B. Pestaña Manual
+        tab_man = QWidget()
+        l_man = QVBoxLayout(tab_man)
+        l_man.addWidget(QLabel("Umbrales absolutos (0.01 a 1.0) sobre la máxima amplitud global del pulso."))
+        
+        from utils.config_manager import ConfigManager
+        cm = ConfigManager()
+        c_config = cm.get("canales") or {}
+        
+        self.manual_thresholds = {}
+        form_man = QFormLayout()
+        for i in range(8):  # Soportamos hasta 8 canales por defecto
+            c_key = f"canal_{i}"
+            nombre = c_config.get(f"Canal {i}", {}).get("musculo", c_key)
+            sp = QDoubleSpinBox()
+            sp.setRange(0.01, 1.0)
+            sp.setSingleStep(0.05)
+            sp.setValue(0.5)
+            form_man.addRow(f"Umbral {nombre}:", sp)
+            self.manual_thresholds[c_key] = sp
+            
+        l_man.addLayout(form_man)
+        self.method_tabs.addTab(tab_man, "✍️ Umbral Manual por Canal")
+        
+        self.layout.addWidget(self.method_tabs)
+        
+        # 2. Anotación de Vocales
+        g_voc = QGroupBox("Anotación de Secuencia de Vocales")
+        g_voc.setCheckable(True)
+        g_voc.setChecked(False)
+        self.g_voc = g_voc
+        l_voc = QFormLayout()
+        
+        self.cmb_vocal_orden = QComboBox()
+        self.cmb_vocal_orden.addItems(["Normal (a, e, i, o, u)", "Inverso (u, o, i, e, a)"])
+        l_voc.addRow("Orden:", self.cmb_vocal_orden)
+        
+        self.cmb_vocal_inicio = QComboBox()
+        self.cmb_vocal_inicio.addItems(["a", "e", "i", "o", "u"])
+        l_voc.addRow("Primera vocal del registro:", self.cmb_vocal_inicio)
+        
+        g_voc.setLayout(l_voc)
+        self.layout.addWidget(g_voc)
+        
+        self.layout.addStretch()
+        
+        btn_layout = QHBoxLayout()
+        self.btn_run_motor = QPushButton("🧠 LANZAR COORDENADAS DISCRETAS")
+        self.btn_run_motor.setFixedHeight(50)
+        self.btn_run_motor.setCursor(Qt.PointingHandCursor)
+        self.btn_run_motor.setStyleSheet("""
+            QPushButton {
+                font-weight: bold; font-size: 14px;
+                background-color: transparent; color: #ff00ff; border: 2px solid #ff00ff; border-radius: 5px;
+            }
+            QPushButton:hover { background-color: #ff00ff; color: #000; }
+            QPushButton:disabled { border: 2px solid #555; color: #555; }
+        """)
+        btn_layout.addWidget(self.btn_run_motor)
+        
+        self.layout.addLayout(btn_layout)
+
 class AnalysisPanel(QWidget):
     """Contenedor Principal que alberga las Pestañas de Análisis y emite los kwargs"""
     def __init__(self):
@@ -279,6 +360,10 @@ class AnalysisPanel(QWidget):
         # Pestaña Comparativa
         self.tab_comparativo = ComparativeTab()
         self.tabs.addTab(self.tab_comparativo, "📊 Análisis Comparativo")
+
+        # Pestaña Motor Discreto
+        self.tab_motor = DiscreteMotorTab()
+        self.tabs.addTab(self.tab_motor, "🧠 Coordenadas Discretas")
 
         main_layout.addWidget(self.tabs)
 

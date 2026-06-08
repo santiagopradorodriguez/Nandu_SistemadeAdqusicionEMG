@@ -585,6 +585,7 @@ class ReaperStyleHub(QMainWindow):
     self.analysis_panel.tab_procesamiento.btn_run_rapido.clicked.connect(lambda: self._run_analysis(interactivo=False))
     self.analysis_panel.tab_comparativo.btn_run_comparativo.clicked.connect(self.run_analisis_comparativo_nativo)
     self.analysis_panel.tab_comparativo.btn_run_sesion.clicked.connect(self.run_analisis_sesion_nativo)
+    self.analysis_panel.tab_motor.btn_run_motor.clicked.connect(self._run_discrete_motor)
     lyt_analysis.addWidget(self.analysis_panel, stretch=1)
     
     # Visor de Imágenes Integrado
@@ -817,10 +818,122 @@ class ReaperStyleHub(QMainWindow):
       sys.path.append(root_dir)
       
     from analysis.correlaciondeseñales import main as run_correlacion
-    
-    print(f" Abriendo configuración de Correlación para {len(selected_paths)} mediciones...")
+    print(f"🔗 Abriendo configuración de Correlación para {len(selected_paths)} mediciones...")
     run_correlacion(mediciones_dirs=selected_paths)
-    print(" Correlación Finalizada.")
+    print("✅ Correlación Finalizada.")
+
+  def _run_discrete_motor(self):
+      """Ejecuta el script de coordenadas discretas (Assaneo et al. 2013)"""
+      import os
+      import sys
+      from PySide6.QtWidgets import QMessageBox, QDialog, QVBoxLayout, QListWidget, QListWidgetItem, QPushButton, QAbstractItemView
+      from PySide6.QtGui import QPixmap
+      from PySide6.QtCore import Qt
+      
+      selected_paths = self.explorer_widget.get_selected_paths()
+      if not selected_paths:
+          QMessageBox.warning(self, "Atención", "Selecciona al menos una medición en el Gestor de Sesiones.")
+          return
+          
+      root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+      if root_dir not in sys.path:
+          sys.path.append(root_dir)
+          
+      try:
+          from analysis.discrete_motor import calcular_coordenadas_discretas
+          
+          # 1. Encontrar canales comunes
+          common_channels = None
+          for path in selected_paths:
+              chans = set(d for d in os.listdir(path) if d.startswith("canal_") and os.path.isdir(os.path.join(path, d)))
+              if common_channels is None:
+                  common_channels = chans
+              else:
+                  common_channels &= chans
+                  
+          if not common_channels:
+              QMessageBox.warning(self, "Aviso", "No hay canales comunes procesados en las mediciones seleccionadas.")
+              return
+              
+          # 2. Mapear nombres de canales
+          try:
+              from utils.config_manager import ConfigManager
+              cm = ConfigManager()
+              c_config = cm.get("canales") or {}
+          except:
+              c_config = {}
+              
+          mapped_names = {}
+          for c in common_channels:
+              idx = c.replace('canal_', '')
+              name = c_config.get(f"Canal {idx}", {}).get("musculo", c)
+              mapped_names[c] = f"{name} ({c})"
+              
+          # 3. Dialogo de selección
+          dlg = QDialog(self)
+          dlg.setWindowTitle("Seleccionar Canales a Comparar")
+          lyt = QVBoxLayout(dlg)
+          lst = QListWidget()
+          lst.setSelectionMode(QAbstractItemView.MultiSelection)
+          for c in sorted(list(common_channels)):
+              item = QListWidgetItem(mapped_names[c])
+              item.setData(Qt.UserRole, c)
+              lst.addItem(item)
+              item.setSelected(True) # Seleccionados por defecto
+          lyt.addWidget(lst)
+          
+          btn = QPushButton("Aceptar")
+          btn.clicked.connect(dlg.accept)
+          lyt.addWidget(btn)
+          
+          if dlg.exec() != QDialog.Accepted:
+              return
+              
+          selected_chans = [item.data(Qt.UserRole) for item in lst.selectedItems()]
+          if len(selected_chans) < 1:
+              QMessageBox.warning(self, "Aviso", "Debes seleccionar al menos un canal.")
+              return
+          
+          # 4. Obtener configuración de modo y vocales
+          tab_m = self.analysis_panel.tab_motor
+          modo_idx = tab_m.method_tabs.currentIndex()
+          mode = 'estadistico' if modo_idx == 0 else 'manual'
+          
+          thresh_stats = tab_m.inp_std_multiplier.value()
+          thresh_manual = {c: sp.value() for c, sp in tab_m.manual_thresholds.items()}
+          
+          vocales_config = {
+              'enabled': tab_m.g_voc.isChecked(),
+              'secuencia': 'normal' if tab_m.cmb_vocal_orden.currentIndex() == 0 else 'inverso',
+              'primera': tab_m.cmb_vocal_inicio.currentText()
+          }
+          
+          self.log_console.append(f"\n> 🧠 Calculando Coordenadas Discretas (Modo={mode}) para {len(selected_paths)} mediciones...")
+          
+          calcular_coordenadas_discretas(
+              selected_paths, 
+              canales_seleccionados=selected_chans, 
+              mapped_names=mapped_names, 
+              mode=mode,
+              thresh_stats=thresh_stats,
+              thresh_manual=thresh_manual,
+              vocales_config=vocales_config
+          )
+          
+          # Actualizar el visor de imágenes integrado con la última medición analizada
+          sufijo = "estadistico" if mode == "estadistico" else "manual"
+          last_med = selected_paths[-1]
+          img_path = os.path.join(last_med, f"discrete_motor_{sufijo}_{os.path.basename(last_med)}.png")
+          if os.path.exists(img_path):
+              pix = QPixmap(img_path)
+              pix = pix.scaled(self.img_viewer.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+              self.img_viewer.setPixmap(pix)
+          
+          self.log_console.append("✅ Coordenadas Discretas exportadas correctamente en las carpetas de las mediciones.")
+          QMessageBox.information(self, "Éxito", "El análisis de Coordenadas Discretas ha finalizado con éxito.\nRevisa las gráficas guardadas en las carpetas de las mediciones.")
+          
+      except Exception as e:
+          QMessageBox.critical(self, "Error", f"Fallo al ejecutar el análisis: {e}")
 
   def run_analisis_comparativo_nativo(self):
     """
@@ -996,7 +1109,7 @@ finally:
     self.comparative_thread.finished_signal.connect(on_comparative_finished)
     self.comparative_thread.start()
     
-    self.log_console.append(f"> Tarea enviada exitosamente. Abriendo terminal CMD nativa...")
+    self.log_console.append(f"> Tarea enviada exitosamente. Abriendo proceso analítico externo...")
 
   def run_analisis_sesion_nativo(self):
     rutas = self.explorer_widget.get_selected_paths()
@@ -1171,7 +1284,7 @@ finally:
     self.sesion_thread.finished_signal.connect(on_sesion_finished)
     self.sesion_thread.start()
     
-    self.log_console.append(f"> Tarea enviada exitosamente. Abriendo terminal CMD nativa...")
+    self.log_console.append(f"> Tarea enviada exitosamente. Abriendo proceso analítico externo...")
 
   def _sync_electrode_viewer(self):
     """Sincroniza el visor de electrodos con las mediciones seleccionadas en el gestor."""
@@ -1295,7 +1408,9 @@ except Exception as e:
   print("="*50)
   traceback.print_exc()
 finally:
-  input("\\nPresione ENTER para cerrar esta ventana...")
+  import sys
+  if sys.platform == "win32":
+      input("\\nPresione ENTER para cerrar esta ventana...")
 """
     script_path = os.path.join(emg_root, "gui_app", "temp_procesar.py")
     with open(script_path, "w", encoding="utf-8") as f:
@@ -1333,8 +1448,12 @@ finally:
           Any: Resultado de la ejecución de la función.
         """
         import subprocess
+        import sys
         # Run in new console!
-        p = subprocess.run([sys.executable, self.spath], creationflags=subprocess.CREATE_NEW_CONSOLE)
+        if sys.platform == "win32":
+            p = subprocess.run([sys.executable, self.spath], creationflags=subprocess.CREATE_NEW_CONSOLE)
+        else:
+            p = subprocess.run([sys.executable, self.spath])
         self.finished_signal.emit(p.returncode)
         
     self.procesador_thread = ProcessRunner(script_path)
@@ -1368,7 +1487,7 @@ finally:
     self.procesador_thread.finished_signal.connect(on_procesador_finished)
     self.procesador_thread.start()
     
-    self.log_console.append(f"> Tarea enviada exitosamente. Abriendo terminal CMD nativa...")
+    self.log_console.append(f"> Tarea enviada exitosamente. Abriendo proceso analítico externo...")
 
   def _on_analysis_result(self, result):
     """
