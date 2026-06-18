@@ -229,9 +229,20 @@ class CsvViewerWidget(QWidget):
         self.grp_filters = QGroupBox("Filtros")
         self.grp_filters.setStyleSheet("font-weight: bold; color: #aaa;")
         lyt_filt = QVBoxLayout(self.grp_filters)
+        row_notch = QHBoxLayout()
         self.chk_notch = QCheckBox("Notch 50Hz")
         self.chk_notch.stateChanged.connect(self.update_plot)
-        lyt_filt.addWidget(self.chk_notch)
+        row_notch.addWidget(self.chk_notch)
+        
+        row_notch.addWidget(QLabel("Q:"))
+        self.spin_notch_q = QDoubleSpinBox()
+        self.spin_notch_q.setRange(0.1, 100.0)
+        self.spin_notch_q.setValue(2.0)
+        self.spin_notch_q.setSingleStep(1.0)
+        self.spin_notch_q.editingFinished.connect(self.update_plot)
+        row_notch.addWidget(self.spin_notch_q)
+        
+        lyt_filt.addLayout(row_notch)
         
         self.chk_bandpass = QCheckBox("Pasa-Banda")
         self.chk_bandpass.setChecked(True)
@@ -450,7 +461,8 @@ class CsvViewerWidget(QWidget):
                 
                 # Filtros
                 if notch and fs > 110:
-                    b, a = signal.iirnotch(50.0, 30.0, fs)
+                    notch_q = self.spin_notch_q.value()
+                    b, a = signal.iirnotch(50.0, notch_q, fs)
                     y_data = signal.filtfilt(b, a, y_data)
                 
                 if self.chk_bandpass.isChecked():
@@ -463,14 +475,13 @@ class CsvViewerWidget(QWidget):
                 
                 # Envolvente
                 if tipo_env != "ninguna":
+                    from scipy.ndimage import uniform_filter1d
                     if tipo_env == "rms":
                         y_data_sq = y_data**2
-                        kernel = np.ones(env_window) / env_window
-                        y_data = np.sqrt(np.convolve(y_data_sq, kernel, mode='same'))
+                        y_data = np.sqrt(uniform_filter1d(y_data_sq, size=env_window))
                     else: # media_movil
                         y_data = np.abs(y_data)
-                        kernel = np.ones(env_window) / env_window
-                        y_data = np.convolve(y_data, kernel, mode='same')
+                        y_data = uniform_filter1d(y_data, size=env_window)
                         
                     if self.chk_env_offset.isChecked():
                         y_data = y_data - np.min(y_data)
@@ -565,6 +576,7 @@ class CsvViewerWidget(QWidget):
 
     def _on_config_changed(self):
         config_mgr.set("csv_viewer", "notch", self.chk_notch.isChecked())
+        config_mgr.set("csv_viewer", "notch_q", self.spin_notch_q.value())
         config_mgr.set("csv_viewer", "bandpass", self.chk_bandpass.isChecked())
         config_mgr.set("csv_viewer", "lp", self.spin_lp.value())
         config_mgr.set("csv_viewer", "hp", self.spin_hp.value())
@@ -576,6 +588,7 @@ class CsvViewerWidget(QWidget):
     def _load_config_state(self):
         saved = config_mgr.get("csv_viewer") or {}
         self.chk_notch.setChecked(saved.get("notch", False))
+        self.spin_notch_q.setValue(saved.get("notch_q", 2.0))
         self.chk_bandpass.setChecked(saved.get("bandpass", True))
         self.spin_lp.setValue(saved.get("lp", 500.0))
         self.spin_hp.setValue(saved.get("hp", 20.0))

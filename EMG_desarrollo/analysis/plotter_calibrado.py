@@ -63,7 +63,7 @@ config_mgr = ConfigManager()
 
 # Parámetros Fijos
 FREQ_NOTCH = 50.0            
-Q_FACTOR_NOTCH = 30.0        
+Q_FACTOR_NOTCH = 2.0        
 FREQ_PASABANDA = [20, 1000]  
 ORDEN_PASABANDA = 4          
 RMS_WINDOW_MS = 75           

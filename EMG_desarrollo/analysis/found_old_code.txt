@@ -1,0 +1,27 @@
+
+
+--- FOUND IN: 2026-06-11T20:51:00Z ---
+Created At: 2026-06-11T20:51:00Z
+Completed At: 2026-06-11T20:51:01Z
+File Path: `file:///C:/Users/MSI/OneDrive/Documentos/DOCUMENTOS%20SANTIAGO/santiago-prado-repositorio/EMG_desarrollo/analysis/extractor_features.py`
+Total Lines: 460
+Total Bytes: 25146
+Showing lines 1 to 200
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+1: import os
+2: import json
+3: import csv
+4: import numpy as np
+5: import re
+6: from collections import defaultdict
+7: import tkinter as tk
+8: from tkinter import ttk, messagebox
+9: import threading
+10: import subprocess
+11: import soundfile as sf
+12: from scipy.signal import stft, resample
+13: from dl_data_pipeline import apply_bandpass_filter, apply_notch_filter
+14: 
+15: # Agregamos la ruta del paquete actual para importar analisis_trevisan
+16: import sys
+17: current_dir = os...

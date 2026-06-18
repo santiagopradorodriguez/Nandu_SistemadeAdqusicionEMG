@@ -790,6 +790,42 @@ def _plot_muscle_overlay(measure_name, channels_dict, out_dir, master_name=None,
             # Dibujar línea exactamente en 0
             plt.axvline(x=0, color='gray', linestyle='--', alpha=0.8, label="Pico señal de micrófono")
             
+            # Recopilar picos para anotaciones
+            peak_texts = []
+            for ch in sorted_chans:
+                if fname in channels_dict[ch]:
+                    data = channels_dict[ch][fname]
+                    t_arr = np.array(data['pulse_time']) - time_shift
+                    y_arr = np.array(data['mean_pulse'])
+                    
+                    # Replicar offset y normalización para el cálculo exacto del pico en pantalla
+                    y_min = np.min(y_arr)
+                    y_arr = y_arr - y_min
+                    if normalize_all and np.max(y_arr) > 0:
+                        y_arr = y_arr / np.max(y_arr)
+                    elif ch == master_name and scale_factor != 1.0:
+                        y_arr = y_arr * scale_factor
+                        
+                    p_idx = np.argmax(y_arr)
+                    t_p = t_arr[p_idx]
+                    y_p = y_arr[p_idx]
+                    
+                    ch_idx_str = ch.replace('canal_', '')
+                    conf_key = f"Canal {ch_idx_str}"
+                    ch_conf = canales_config.get(conf_key, {})
+                    lbl = ch_conf.get("musculo", f"Canal {ch_idx_str}")
+                    
+                    # Añadir un punto en el pico
+                    plt.plot(t_p, y_p, marker='o', markersize=6, alpha=0.8)
+                    peak_texts.append(f"{lbl}: Pico a {t_p*1000:.1f} ms, Amp: {y_p:.2f}")
+
+            # Agregar caja de texto con distancias temporales y de amplitud
+            if peak_texts:
+                info_text = "Distancias y Amplitudes de Picos:\n" + "\n".join(peak_texts)
+                props = dict(boxstyle='round', facecolor='black', alpha=0.7, edgecolor='white')
+                plt.gca().text(0.02, 0.95, info_text, transform=plt.gca().transAxes, fontsize=9,
+                               verticalalignment='top', bbox=props, color='white')
+
             plt.legend(loc='upper right', fontsize=8)
             plt.grid(True, alpha=0.5)
             plt.ylim(bottom=0, top=max_y_overlay * 1.2 if max_y_overlay > 0 else 1.0)
@@ -1008,7 +1044,7 @@ def procesar_wavs_promedio(
         # Filtro Notch
         if apply_notch_filter:
             try:
-                b, a = iirnotch(50.0, 30.0, fs=samplerate)
+                b, a = iirnotch(50.0, 2.0, fs=samplerate)
                 signal = filtfilt(b, a, signal)
             except Exception: pass
 

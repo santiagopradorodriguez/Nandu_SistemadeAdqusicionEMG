@@ -1,4 +1,6 @@
 import os
+import sys
+import io
 import json
 import re
 import numpy as np
@@ -7,9 +9,12 @@ import matplotlib.pyplot as plt
 import tkinter as tk
 from tkinter import ttk, messagebox
 from scipy.signal import resample, find_peaks
+import seaborn as sns
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
-from sklearn.metrics import silhouette_score, pairwise_distances
+from sklearn.metrics import silhouette_score, pairwise_distances, accuracy_score
+from sklearn.cluster import KMeans
+from scipy.optimize import linear_sum_assignment
 import umap
 
 # Importamos las utilidades de analisis_trevisan
@@ -37,17 +42,42 @@ def procesar_mediciones(base_dir):
                         
     return mediciones_list
 
-def extraer_features_concatenadas(base_dir, mediciones):
+def get_interpulse_noise(processed_segment, initial_noise):
+    if len(processed_segment) < 10:
+        return initial_noise
+        
+    abs_noise = np.abs(processed_segment)
+    q1 = np.percentile(abs_noise, 25)
+    q3 = np.percentile(abs_noise, 75)
+    iqr = q3 - q1
+    upper_bound = q3 + 1.5 * iqr
+    
+    valid_noise = abs_noise[abs_noise <= upper_bound]
+    if len(valid_noise) < 3:
+        valid_noise = abs_noise
+        
+    curr_mean = np.mean(valid_noise)
+    if initial_noise > 0 and (curr_mean / initial_noise) > 5.0:
+        return initial_noise
+        
+    return curr_mean
+
+def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_ms=250, notch_q=30.0, target_len=100):
     """
     Extrae y alinea las ventanas de los canales 0, 1 y 2.
-    Devuelve X (matriz de features) e Y (labels/vocales).
+    Devuelve X (matriz de features), Y (labels/vocales) y Tomas (nombres de las mediciones).
     """
     X = []
     Y = []
+    Tomas = []
+    SNRs = []
     
     canales_features = ["canal_0", "canal_1", "canal_2"]
     canales_procesar = ["canal_0", "canal_1", "canal_2", "canal_3"]
-    for rel_path in mediciones:
+    
+    total_mediciones = len(mediciones)
+    
+    for idx, rel_path in enumerate(mediciones):
         med_path = os.path.join(base_dir, rel_path)
         med_name = os.path.basename(rel_path)
         partes = med_name.split('_')
@@ -58,7 +88,8 @@ def extraer_features_concatenadas(base_dir, mediciones):
         if vocal not in ['A', 'E', 'I', 'O', 'U']:
             continue
             
-        print(f"\nProcesando: {med_name} (Vocal: {vocal})")
+        progreso = (idx / total_mediciones) * 100
+        print(f"\n[{progreso:.1f}%] Procesando: {med_name} (Vocal: {vocal})")
         
         # Leemos archivo manual de exclusiones si existe
         excluded_windows = []
@@ -87,15 +118,21 @@ def extraer_features_concatenadas(base_dir, mediciones):
                         pulsos_u = meta.get('pulse_count', pulsos_u)
             except: pass
             
-            # Usar la función original para procesar
-            res_final = at.procesar_wavs_promedio(
-                carpeta=carpeta, output_root=carpeta,
-                bpm=bpm_u, mostrar_recortes=False,
-                noise_seconds=noise_u, n_pulsos_manual=pulsos_u,
-                excluded_windows=excluded_windows,
-                show_interactive_plot=False,
-                tipo_envolvente="rms", smooth_ms=250
-            )
+            # Usar la función original para procesar, silenciando sus prints excesivos
+            old_stdout = sys.stdout
+            sys.stdout = io.StringIO()
+            try:
+                res_final = at.procesar_wavs_promedio(
+                    carpeta=carpeta, output_root=carpeta,
+                    bpm=bpm_u, mostrar_recortes=False,
+                    noise_seconds=noise_u, n_pulsos_manual=pulsos_u,
+                    excluded_windows=excluded_windows,
+                    show_interactive_plot=False,
+                    notch_q_factor=notch_q,
+                    tipo_envolvente="rms", smooth_ms=smooth_ms
+                )
+            finally:
+                sys.stdout = old_stdout
             
             if res_final:
                 fname = list(res_final.keys())[0]
@@ -117,9 +154,9 @@ def extraer_features_concatenadas(base_dir, mediciones):
         
         picos_mic, _ = find_peaks(env_mic_raw, distance=dist_samples, height=min_height)
         
-        TARGET_LEN = 100
+        TARGET_LEN = target_len
         
-        for pico in picos_mic:
+        for win_idx, pico in enumerate(picos_mic):
             # Definir ventana física simétrica basada en el pico del micrófono
             pre_samples = int(muestras_pulso * 0.4)
             post_samples = int(muestras_pulso * 0.6)
@@ -134,6 +171,7 @@ def extraer_features_concatenadas(base_dir, mediciones):
             valido = True
             segs_brutos = []
             max_supremo = 1e-9
+            ruido_acumulado_window = 0.0
             
             # 1. Extraer los 3 canales y buscar el máximo supremo
             for ch in canales_features:
@@ -145,10 +183,31 @@ def extraer_features_concatenadas(base_dir, mediciones):
                     
                 segmento_ch = env_ch_raw[real_cut_start:real_cut_end].copy()
                 
-                # Restar ruido específico aproximado
-                # Como no iteramos sobre 'i', tomamos el ruido promedio o del primer bloque
-                ruido_ch = canales_data[ch].get('noise_levels', [0])[0] if len(canales_data[ch].get('noise_levels', [])) > 0 else 0
-                segmento_ch = np.maximum(segmento_ch - ruido_ch, 0)
+                # Cálculo de ruido inter-pulso dinámico (Pre y Post)
+                initial_noise = canales_data[ch].get('noise_levels', [0])[0] if len(canales_data[ch].get('noise_levels', [])) > 0 else 0
+                noise_win_samples = max(3, int(muestras_pulso / 4.0))
+                
+                # Ruido PRE-pulso
+                noise_start_pre = max(0, int(pico - 0.5 * muestras_pulso - noise_win_samples))
+                noise_end_pre = min(len(env_ch_raw), noise_start_pre + noise_win_samples)
+                ruido_pre = initial_noise
+                if noise_end_pre > noise_start_pre:
+                    ruido_pre = get_interpulse_noise(env_ch_raw[noise_start_pre:noise_end_pre], initial_noise)
+                    
+                # Ruido POST-pulso
+                noise_start_post = min(len(env_ch_raw), int(pico + 0.5 * muestras_pulso))
+                noise_end_post = min(len(env_ch_raw), noise_start_post + noise_win_samples)
+                ruido_post = ruido_pre # default
+                if noise_end_post > noise_start_post:
+                    ruido_post = get_interpulse_noise(env_ch_raw[noise_start_post:noise_end_post], initial_noise)
+                    
+                # Promedio y atenuación
+                ruido_promedio = (ruido_pre + ruido_post) / 2.0
+                ruido_acumulado_window += ruido_promedio
+                agresividad = alpha_ruido
+                ruido_a_restar = ruido_promedio * agresividad
+                
+                segmento_ch = np.maximum(segmento_ch - ruido_a_restar, 0)
                 
                 m_val = np.max(segmento_ch)
                 if m_val > max_supremo:
@@ -175,10 +234,58 @@ def extraer_features_concatenadas(base_dir, mediciones):
                 vector_concatenado = np.concatenate(vector_concatenado)
                 X.append(vector_concatenado)
                 Y.append(vocal)
+                Tomas.append(f"{med_name}_Win{win_idx}")
+                ruido_promedio_total = ruido_acumulado_window / 3.0
+                snr = max_supremo / (ruido_promedio_total + 1e-9)
+                SNRs.append(snr)
                 
-    return np.array(X), np.array(Y)
+    return np.array(X), np.array(Y), np.array(Tomas), np.array(SNRs)
 
-def plot_scatter(X_proj, Y, title, output_path, is_3d=False):
+def evaluate_classifier(X_proj, Y, name):
+    from sklearn.model_selection import StratifiedKFold
+    from sklearn.svm import SVC
+    from sklearn.metrics import accuracy_score
+    
+    kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    scores = []
+    for train_idx, test_idx in kf.split(X_proj, Y):
+        clf = SVC(kernel='rbf')
+        clf.fit(X_proj[train_idx], Y[train_idx])
+        scores.append(accuracy_score(Y[test_idx], clf.predict(X_proj[test_idx])))
+    print(f"Accuracy {name} (5-fold): {np.mean(scores):.4f} (+/- {np.std(scores):.4f})")
+
+def evaluar_clustering_no_supervisado(X, Y, nombre):
+    # Encontrar K-Means ciego
+    kmeans = KMeans(n_clusters=5, random_state=42, n_init=10)
+    y_pred_kmeans = kmeans.fit_predict(X)
+    
+    # Obtener etiquetas reales
+    vocales_unicas = sorted(list(set(Y)))
+    y_true_int = np.array([vocales_unicas.index(v) for v in Y])
+    
+    # Armar matriz de contingencia/confusión entre reales y falsas
+    from sklearn.metrics import confusion_matrix
+    cm = confusion_matrix(y_true_int, y_pred_kmeans)
+    
+    # Algoritmo Húngaro (linear_sum_assignment maximiza coincidencia si pasamos -cm)
+    row_ind, col_ind = linear_sum_assignment(-cm)
+    
+    # Calcular accuracy final basado en el mapeo óptimo
+    total_correctos = cm[row_ind, col_ind].sum()
+    accuracy = (total_correctos / len(Y)) * 100
+    
+    # --- INFO DETALLADA POR VOCAL ---
+    # Reordenar las columnas de la matriz de confusión usando el mapeo del Húngaro
+    cm_optima = cm[:, col_ind]
+    acc_por_vocal = cm_optima.diagonal() / cm_optima.sum(axis=1) * 100
+    
+    print(f"\n>> Desglose K-Means para {nombre}:")
+    for i, vocal in enumerate(vocales_unicas):
+        print(f"   Vocal {vocal}: {acc_por_vocal[i]:.1f}%")
+        
+    return accuracy, acc_por_vocal, vocales_unicas
+
+def plot_scatter(X_proj, Y, title, output_path, is_3d=False, variance_ratios=None):
     fig = plt.figure(figsize=(10, 8))
     
     if is_3d:
@@ -187,23 +294,36 @@ def plot_scatter(X_proj, Y, title, output_path, is_3d=False):
         ax = fig.add_subplot(111)
         
     vocales = sorted(list(set(Y)))
-    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
+    palette = sns.color_palette("Set1", n_colors=len(vocales))
     
     for i, vocal in enumerate(vocales):
         idx = Y == vocal
+        # Para cuando dibujamos solo los centroides (1 solo punto por vocal)
+        if type(idx) == np.bool_ and idx == False:
+            idx = np.array([True if y == vocal else False for y in Y])
+            
+        # Fix for direct arrays
+        if isinstance(idx, bool):
+            idx = Y == vocal
+            
         if is_3d:
-            ax.scatter(X_proj[idx, 0], X_proj[idx, 1], X_proj[idx, 2], label=vocal, c=colors[i%len(colors)], alpha=0.7, s=50)
+            ax.scatter(X_proj[idx, 0], X_proj[idx, 1], X_proj[idx, 2], label=vocal, color=palette[i], alpha=0.9, s=80)
         else:
-            ax.scatter(X_proj[idx, 0], X_proj[idx, 1], label=vocal, c=colors[i%len(colors)], alpha=0.7, s=50)
+            ax.scatter(X_proj[idx, 0], X_proj[idx, 1], label=vocal, color=palette[i], alpha=0.9, s=80)
             
     ax.set_title(title)
     if is_3d:
-        ax.set_xlabel('Componente 1')
-        ax.set_ylabel('Componente 2')
-        ax.set_zlabel('Componente 3')
+        x_label = f'Componente 1 ({variance_ratios[0]*100:.1f}%)' if variance_ratios is not None else 'Componente 1'
+        y_label = f'Componente 2 ({variance_ratios[1]*100:.1f}%)' if variance_ratios is not None else 'Componente 2'
+        z_label = f'Componente 3 ({variance_ratios[2]*100:.1f}%)' if variance_ratios is not None else 'Componente 3'
+        ax.set_xlabel(x_label)
+        ax.set_ylabel(y_label)
+        ax.set_zlabel(z_label)
     else:
-        ax.set_xlabel('Componente 1')
-        ax.set_ylabel('Componente 2')
+        x_label = f'Componente 1 ({variance_ratios[0]*100:.1f}%)' if variance_ratios is not None else 'Componente 1'
+        y_label = f'Componente 2 ({variance_ratios[1]*100:.1f}%)' if variance_ratios is not None else 'Componente 2'
+        ax.set_xlabel(x_label)
+        ax.set_ylabel(y_label)
         
     ax.legend()
     plt.tight_layout()
@@ -225,14 +345,25 @@ def calcular_centroides_y_distancias(X_proj, Y):
             
     return centroides, dist_matrix, vocales
 
-def ejecutar_procesamiento(mediciones):
+def ejecutar_procesamiento(
+    mediciones, 
+    base_dir, 
+    alpha_ruido, 
+    snr_threshold, 
+    outlier_contamination, 
+    smooth_ms, 
+    target_length, 
+    notch_q,
+    umap_n_neighbors,
+    umap_min_dist,
+    umap_metric
+):
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    base_dir = os.path.join(os.path.dirname(script_dir), "base_de_datos_electrodos")
     out_dir = os.path.join(script_dir, "resultados_pca_umap")
     os.makedirs(out_dir, exist_ok=True)
     
     print(f"\n2. Extracción y concatenación de características de {len(mediciones)} mediciones...")
-    X, Y = extraer_features_concatenadas(base_dir, mediciones)
+    X, Y, Tomas, SNRs = extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=alpha_ruido, smooth_ms=smooth_ms, notch_q=notch_q, target_len=target_length)
     
     if len(X) == 0:
         print("Error: No se obtuvieron datos válidos para procesar.")
@@ -240,6 +371,66 @@ def ejecutar_procesamiento(mediciones):
         
     print(f"\nDatos recolectados: {X.shape[0]} repeticiones (pulsos), Dimensión de cada feature: {X.shape[1]}")
     X = np.array(X)
+    
+    # Guardamos los originales SIN FILTRAR para exportarlos al final
+    X_orig = X.copy()
+    Y_orig = np.array(Y).copy()
+    Tomas_orig = np.array(Tomas).copy()
+    
+    # ------------------ Filtro de Outliers ------------------
+    print("\n3. Aplicando filtro de Outliers (Isolation Forest)...")
+    from sklearn.ensemble import IsolationForest
+    
+    X_clean = []
+    Y_clean = []
+    Tomas_clean = []
+    outliers_detectados = 0
+    
+    # Filtramos por clase (vocal) para no eliminar varianza válida inter-clase
+    for vocal in np.unique(Y):
+        mask = Y == vocal
+        X_vocal = X[mask]
+        Tomas_vocal = Tomas[mask]
+        SNRs_vocal = SNRs[mask]
+        
+        # 1. Filtro duro por SNR
+        valid_snr_mask = SNRs_vocal >= snr_threshold
+        for i, is_valid in enumerate(valid_snr_mask):
+            if not is_valid:
+                outliers_detectados += 1
+                print(f"  [!] Descartado por SNR muy bajo (<{snr_threshold}): {Tomas_vocal[i]} (Vocal {vocal}) | SNR: {SNRs_vocal[i]:.2f}")
+                
+        # Quedarse solo con los que pasaron el filtro SNR
+        X_vocal_snr = X_vocal[valid_snr_mask]
+        Tomas_vocal_snr = Tomas_vocal[valid_snr_mask]
+        SNRs_vocal_snr = SNRs_vocal[valid_snr_mask]
+        
+        # 2. Filtro estadístico (Isolation Forest)
+        # Necesitamos un mínimo de muestras para aislar
+        if len(X_vocal_snr) > 5 and outlier_contamination > 0:
+            # Porcentaje de contaminación esperada (outliers)
+            iso = IsolationForest(contamination=outlier_contamination, random_state=42)
+            preds = iso.fit_predict(X_vocal_snr)
+            
+            for i, is_inlier in enumerate(preds):
+                if is_inlier == 1:
+                    X_clean.append(X_vocal_snr[i])
+                    Y_clean.append(vocal)
+                    Tomas_clean.append(Tomas_vocal_snr[i])
+                else:
+                    outliers_detectados += 1
+                    print(f"  [!] Outlier estadístico removido: {Tomas_vocal_snr[i]} (Vocal {vocal}) | SNR: {SNRs_vocal_snr[i]:.2f}")
+        else:
+            for i in range(len(X_vocal_snr)):
+                X_clean.append(X_vocal_snr[i])
+                Y_clean.append(vocal)
+                Tomas_clean.append(Tomas_vocal_snr[i])
+                
+    X = np.array(X_clean)
+    Y = np.array(Y_clean)
+    Tomas = np.array(Tomas_clean)
+    print(f"  -> Total outliers removidos: {outliers_detectados}")
+    print(f"  -> Repeticiones finales válidas: {len(X)}")
     Y = np.array(Y)
     
     # La normalización por pulso ya se aplicó dentro del bucle
@@ -259,15 +450,33 @@ def ejecutar_procesamiento(mediciones):
     var_exp = np.sum(pca_3d.explained_variance_ratio_)
     print(f"Varianza explicada por PCA 3D: {var_exp*100:.2f}%")
     
-    plot_scatter(X_pca_2d, Y, "PCA 2D - Vocales EMG", os.path.join(out_dir, "PCA_2D.png"), is_3d=False)
-    plot_scatter(X_pca_3d, Y, "PCA 3D - Vocales EMG", os.path.join(out_dir, "PCA_3D.png"), is_3d=True)
+    plot_scatter(X_pca_2d, Y, "PCA 2D - Vocales EMG", os.path.join(out_dir, "PCA_2D.png"), is_3d=False, variance_ratios=pca_2d.explained_variance_ratio_)
+    plot_scatter(X_pca_3d, Y, "PCA 3D - Vocales EMG", os.path.join(out_dir, "PCA_3D.png"), is_3d=True, variance_ratios=pca_3d.explained_variance_ratio_)
+    
+    # --- PCA 2D Centroides ---
+    cent_pca_2d, _, vocales_pca_2d = calcular_centroides_y_distancias(X_pca_2d, Y)
+    X_cent_2d = np.array([cent_pca_2d[v] for v in vocales_pca_2d])
+    Y_cent_2d = np.array(vocales_pca_2d)
+    plot_scatter(X_cent_2d, Y_cent_2d, "PCA 2D - Promedio de Vocales", os.path.join(out_dir, "PCA_2D_Centroides.png"), is_3d=False, variance_ratios=pca_2d.explained_variance_ratio_)
+    
+    # --- PCA 3D Centroides ---
+    cent_pca, _, vocales_pca = calcular_centroides_y_distancias(X_pca_3d, Y)
+    X_cent = np.array([cent_pca[v] for v in vocales_pca])
+    Y_cent = np.array(vocales_pca)
+    plot_scatter(X_cent, Y_cent, "PCA 3D - Promedio de Vocales", os.path.join(out_dir, "PCA_3D_Centroides.png"), is_3d=True, variance_ratios=pca_3d.explained_variance_ratio_)
     
     # ------------------ UMAP ------------------
-    print("\n5. Aplicando UMAP...")
-    umap_2d = umap.UMAP(n_components=2, random_state=42)
+    print(f"\n5. Aplicando UMAP (n_neighbors={umap_n_neighbors}, min_dist={umap_min_dist}, metric={umap_metric})...")
+    
+    # Asegurar que n_neighbors no sea mayor que el número de muestras
+    if umap_n_neighbors >= len(X):
+        umap_n_neighbors = max(2, len(X) - 1)
+        print(f"  [Aviso] n_neighbors ajustado a {umap_n_neighbors} por falta de muestras.")
+        
+    umap_2d = umap.UMAP(n_neighbors=umap_n_neighbors, min_dist=umap_min_dist, metric=umap_metric, n_components=2, random_state=42)
     X_umap_2d = umap_2d.fit_transform(X_scaled)
     
-    umap_3d = umap.UMAP(n_components=3, random_state=42)
+    umap_3d = umap.UMAP(n_neighbors=umap_n_neighbors, min_dist=umap_min_dist, metric=umap_metric, n_components=3, random_state=42)
     X_umap_3d = umap_3d.fit_transform(X_scaled)
     
     plot_scatter(X_umap_2d, Y, "UMAP 2D - Vocales EMG", os.path.join(out_dir, "UMAP_2D.png"), is_3d=False)
@@ -286,18 +495,63 @@ def ejecutar_procesamiento(mediciones):
     print(f"Silhouette Score (UMAP 2D): {sil_umap_2d:.4f}")
     print(f"Silhouette Score (UMAP 3D): {sil_umap_3d:.4f}")
     
+    print("\n--- Distancias entre centroides (PCA 3D) ---")
+    cent_pca, dist_mat_pca, vocales_pca = calcular_centroides_y_distancias(X_pca_3d, Y)
+    df_dist_pca = pd.DataFrame(dist_mat_pca, index=vocales_pca, columns=vocales_pca)
+    print(df_dist_pca.to_string())
+    
     print("\n--- Distancias entre centroides (UMAP 3D) ---")
     cent, dist_mat, vocales = calcular_centroides_y_distancias(X_umap_3d, Y)
     
     df_dist = pd.DataFrame(dist_mat, index=vocales, columns=vocales)
     print(df_dist.to_string())
     
+    # ------------------ CLUSTERING NO SUPERVISADO ------------------
+    print("\n--- Evaluando Clustering No Supervisado (K-Means + Húngaro) ---")
+    
+    acc_pca_3d, _, _ = evaluar_clustering_no_supervisado(X_pca_3d, Y, "PCA 3D")
+    acc_umap_3d, _, _ = evaluar_clustering_no_supervisado(X_umap_3d, Y, "UMAP 3D")
+    
+    print(f"\n=> TOTAL Accuracy Clustering No Supervisado (PCA 3D) : {acc_pca_3d:.2f}%")
+    print(f"=> TOTAL Accuracy Clustering No Supervisado (UMAP 3D): {acc_umap_3d:.2f}%")
+    
     # Guardar métricas
     with open(os.path.join(out_dir, "metricas.txt"), "w") as f:
-        f.write(f"Silhouette Score (PCA 3D): {sil_pca:.4f}\n")
-        f.write(f"Silhouette Score (UMAP 3D): {sil_umap:.4f}\n\n")
+        f.write(f"Silhouette Score (PCA 3D): {sil_pca_3d:.4f}\n")
+        f.write(f"Silhouette Score (UMAP 3D): {sil_umap_3d:.4f}\n\n")
+        f.write(f"Accuracy No Supervisado (PCA 3D): {acc_pca_3d:.2f}%\n")
+        f.write(f"Accuracy No Supervisado (UMAP 3D): {acc_umap_3d:.2f}%\n\n")
+        f.write("Matriz de Distancias (PCA 3D):\n")
+        f.write(df_dist_pca.to_string() + "\n\n")
         f.write("Matriz de Distancias (UMAP 3D):\n")
         f.write(df_dist.to_string())
+        
+    # Exportar DataFrame de características para visor_features.py
+    print("\n6. Exportando características (SIN FILTRAR) a CSV para auditoría visual...")
+    n_features = X_orig.shape[1]
+    cols = []
+    # Asumimos que los features están en orden: Ch0 (100 pts), Ch1 (100 pts), Ch2 (100 pts)
+    puntos_por_canal = n_features // 3
+    for ch in range(3):
+        for t in range(puntos_por_canal):
+            cols.append(f"Ch{ch}_T{t}")
+            
+    # Exportamos las limpias (después de SNR y Outliers) para que el autoencoder no entrene con basura
+    df_export = pd.DataFrame(X, columns=cols)
+    df_export.insert(0, 'Toma', Tomas)
+    df_export.insert(0, 'Vocal', Y)
+    
+    csv_out_path = os.path.join(out_dir, "caracteristicas_exportadas.csv")
+    df_export.to_csv(csv_out_path, index=False)
+    print(f"Dataset LIMPIO exportado exitosamente a: {csv_out_path}")
+    
+    # Exportamos también las sin filtrar
+    df_sucio = pd.DataFrame(X_orig, columns=cols)
+    df_sucio.insert(0, 'Toma', Tomas_orig)
+    df_sucio.insert(0, 'Vocal', Y_orig)
+    
+    csv_sucio_path = os.path.join(out_dir, "caracteristicas_sin_filtrar.csv")
+    df_sucio.to_csv(csv_sucio_path, index=False)
         
     print(f"\nProceso completado. Resultados guardados en {out_dir}")
 
@@ -305,7 +559,7 @@ class GeneradorPCAGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Generador PCA/UMAP")
-        self.root.geometry("500x400")
+        self.root.geometry("600x850")
         
         script_dir = os.path.dirname(os.path.abspath(__file__))
         self.base_dir = os.path.join(os.path.dirname(script_dir), "base_de_datos_electrodos")
@@ -313,8 +567,9 @@ class GeneradorPCAGUI:
         main_frame = tk.Frame(root, padx=15, pady=15, bg="#0B0C10")
         main_frame.pack(fill="both", expand=True)
         
+        # --- Listado de Mediciones ---
         meas_frame = tk.LabelFrame(main_frame, text="Seleccionar Mediciones para PCA/UMAP", padx=10, pady=10, bg="#1F2833", fg="#66FCF1")
-        meas_frame.pack(fill="both", expand=True, pady=(0,15))
+        meas_frame.pack(fill="both", expand=True, pady=(0,10))
         
         self.listbox_mediciones = tk.Listbox(meas_frame, selectmode=tk.EXTENDED, bg="#0B0C10", fg="#66FCF1")
         self.listbox_mediciones.pack(side="left", fill="both", expand=True)
@@ -323,14 +578,89 @@ class GeneradorPCAGUI:
         sb.pack(side="right", fill="y")
         self.listbox_mediciones.config(yscrollcommand=sb.set)
         
-        self.listbox_mediciones.bind("<<ListboxSelect>>", self.on_selection_change)
+        # --- Parámetros Configurables ---
+        params_frame = tk.LabelFrame(main_frame, text="Parámetros DSP y Limpieza", padx=10, pady=10, bg="#1F2833", fg="#66FCF1")
+        params_frame.pack(fill="x", pady=(0,15))
         
-        act_frame = tk.Frame(main_frame, pady=10, bg="#0B0C10")
-        act_frame.pack(fill="x", side="bottom")
+        # 1. Alpha Ruido
+        f1 = tk.Frame(params_frame, bg="#1F2833")
+        f1.pack(fill="x", pady=2)
+        tk.Label(f1, text="Agresividad Resta de Ruido (Alpha):", width=35, anchor="w", bg="#1F2833", fg="white").pack(side="left")
+        self.ent_alpha = tk.Entry(f1, width=10, bg="#0B0C10", fg="white", insertbackground="white")
+        self.ent_alpha.pack(side="left")
+        self.ent_alpha.insert(0, "1.0")
         
-        self.btn_procesar = tk.Button(act_frame, text="EJECUTAR PCA/UMAP...", command=self.iniciar_procesamiento,
-                                      state="disabled", bg="#111111", fg="#00FF00")
-        self.btn_procesar.pack(fill="x", ipady=5, pady=(0,10))
+        # 2. SNR Threshold
+        f2 = tk.Frame(params_frame, bg="#1F2833")
+        f2.pack(fill="x", pady=2)
+        tk.Label(f2, text="Filtro Duro SNR Mínimo (ej: 0.5):", width=35, anchor="w", bg="#1F2833", fg="white").pack(side="left")
+        self.ent_snr = tk.Entry(f2, width=10, bg="#0B0C10", fg="white", insertbackground="white")
+        self.ent_snr.pack(side="left")
+        self.ent_snr.insert(0, "0.5")
+        
+        # 3. Contaminacion IsolationForest
+        f3 = tk.Frame(params_frame, bg="#1F2833")
+        f3.pack(fill="x", pady=2)
+        tk.Label(f3, text="Tasa de Outliers Estadísticos (0.05=5%):", width=35, anchor="w", bg="#1F2833", fg="white").pack(side="left")
+        self.ent_outliers = tk.Entry(f3, width=10, bg="#0B0C10", fg="white", insertbackground="white")
+        self.ent_outliers.pack(side="left")
+        self.ent_outliers.insert(0, "0.05")
+        
+        # 4. Envolvente (smooth_ms)
+        f4 = tk.Frame(params_frame, bg="#1F2833")
+        f4.pack(fill="x", pady=2)
+        tk.Label(f4, text="Suavizado Envolvente RMS (ms):", width=35, anchor="w", bg="#1F2833", fg="white").pack(side="left")
+        self.ent_smooth = tk.Entry(f4, width=10, bg="#0B0C10", fg="white", insertbackground="white")
+        self.ent_smooth.pack(side="left")
+        self.ent_smooth.insert(0, "250")
+        
+        # 6. Target Length
+        f6 = tk.Frame(params_frame, bg="#1F2833")
+        f6.pack(fill="x", pady=2)
+        tk.Label(f6, text="Puntos de Remuestreo (TARGET_LEN):", width=35, anchor="w", bg="#1F2833", fg="white").pack(side="left")
+        self.ent_target_len = tk.Entry(f6, width=10, bg="#0B0C10", fg="white", insertbackground="white")
+        self.ent_target_len.pack(side="left")
+        self.ent_target_len.insert(0, "100")
+        
+        # 5. Notch Q Factor
+        f5 = tk.Frame(params_frame, bg="#1F2833")
+        f5.pack(fill="x", pady=2)
+        tk.Label(f5, text="Filtro Notch Q Factor:", width=35, anchor="w", bg="#1F2833", fg="white").pack(side="left")
+        self.ent_notch = tk.Entry(f5, width=10, bg="#0B0C10", fg="white", insertbackground="white")
+        self.ent_notch.pack(side="left")
+        self.ent_notch.insert(0, "30.0")
+        
+        # --- Parámetros UMAP ---
+        umap_frame = tk.LabelFrame(main_frame, text="Parámetros de Proyección UMAP", padx=10, pady=10, bg="#1F2833", fg="#66FCF1")
+        umap_frame.pack(fill="x", pady=(0,15))
+        
+        # UMAP n_neighbors
+        fu1 = tk.Frame(umap_frame, bg="#1F2833")
+        fu1.pack(fill="x", pady=2)
+        tk.Label(fu1, text="n_neighbors (Local vs Global):", width=35, anchor="w", bg="#1F2833", fg="white").pack(side="left")
+        self.ent_umap_nn = tk.Entry(fu1, width=10, bg="#0B0C10", fg="white", insertbackground="white")
+        self.ent_umap_nn.pack(side="left")
+        self.ent_umap_nn.insert(0, "15")
+        
+        # UMAP min_dist
+        fu2 = tk.Frame(umap_frame, bg="#1F2833")
+        fu2.pack(fill="x", pady=2)
+        tk.Label(fu2, text="min_dist (Densidad de clúster):", width=35, anchor="w", bg="#1F2833", fg="white").pack(side="left")
+        self.ent_umap_md = tk.Entry(fu2, width=10, bg="#0B0C10", fg="white", insertbackground="white")
+        self.ent_umap_md.pack(side="left")
+        self.ent_umap_md.insert(0, "0.1")
+        
+        # UMAP metric
+        fu3 = tk.Frame(umap_frame, bg="#1F2833")
+        fu3.pack(fill="x", pady=2)
+        tk.Label(fu3, text="Métrica de distancia:", width=35, anchor="w", bg="#1F2833", fg="white").pack(side="left")
+        self.combo_metric = ttk.Combobox(fu3, values=["euclidean", "cosine", "manhattan", "correlation"], width=15)
+        self.combo_metric.pack(side="left")
+        self.combo_metric.set("euclidean")
+        
+        # --- Botón Procesar ---
+        self.btn_procesar = tk.Button(main_frame, text="Generar Dataset y Visualizar", command=self.iniciar_procesamiento, bg="#45A29E", fg="white", font=("Arial", 12, "bold"))
+        self.btn_procesar.pack(fill="x", pady=10)
         
         self.cargar_mediciones()
 
@@ -340,20 +670,42 @@ class GeneradorPCAGUI:
         for med in mediciones:
             self.listbox_mediciones.insert(tk.END, med)
 
-    def on_selection_change(self, event=None):
-        if len(self.listbox_mediciones.curselection()) > 0:
-            self.btn_procesar.config(state="normal")
-        else:
-            self.btn_procesar.config(state="disabled")
-
     def iniciar_procesamiento(self):
         seleccionadas = [self.listbox_mediciones.get(i) for i in self.listbox_mediciones.curselection()]
         if not seleccionadas:
             messagebox.showwarning("Advertencia", "Debe seleccionar al menos una medición.")
             return
             
+        try:
+            val_alpha = float(self.ent_alpha.get())
+            val_snr = float(self.ent_snr.get())
+            val_outliers = float(self.ent_outliers.get())
+            val_smooth = int(self.ent_smooth.get())
+            val_target_len = int(self.ent_target_len.get())
+            val_notch_q = float(self.ent_notch.get())
+            
+            val_umap_nn = int(self.ent_umap_nn.get())
+            val_umap_md = float(self.ent_umap_md.get())
+            val_umap_metric = self.combo_metric.get()
+            
+        except ValueError:
+            messagebox.showerror("Error", "Parámetros numéricos inválidos")
+            return
+            
         self.root.destroy()
-        ejecutar_procesamiento(seleccionadas)
+        ejecutar_procesamiento(
+            seleccionadas, 
+            self.base_dir, 
+            val_alpha, 
+            val_snr, 
+            val_outliers, 
+            val_smooth, 
+            val_target_len, 
+            notch_q=val_notch_q,
+            umap_n_neighbors=val_umap_nn,
+            umap_min_dist=val_umap_md,
+            umap_metric=val_umap_metric
+        )
 
 def main():
     root = tk.Tk()

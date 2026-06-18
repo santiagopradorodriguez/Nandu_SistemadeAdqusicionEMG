@@ -52,13 +52,29 @@ class ProcessingTab(QWidget):
         self.chk_cyberpunk.setChecked(True)
         l_ind.addWidget(self.chk_cyberpunk)
 
-        self.chk_espectrograma = QCheckBox("Generar Espectrograma Señal Completa (Estilo Praat)")
+        row_spec = QHBoxLayout()
+        self.chk_espectrograma = QCheckBox("Generar Espectrograma Crudo (Praat)")
         self.chk_espectrograma.setChecked(False)
-        l_ind.addWidget(self.chk_espectrograma)
+        row_spec.addWidget(self.chk_espectrograma)
+        
+        row_spec.addWidget(QLabel("Freq. Máx (Hz):"))
+        self.inp_spec_fmax = QLineEdit("5000")
+        self.inp_spec_fmax.setFixedWidth(60)
+        row_spec.addWidget(self.inp_spec_fmax)
+        row_spec.addStretch()
+        l_ind.addLayout(row_spec)
 
-        self.chk_notch = QCheckBox("Aplicar filtro Notch 50 Hz (ruido de línea)")
-        self.chk_notch.setChecked(True) # En original el var dice value=False pero el chk dice por defecto activado en sus comentarios? Original decia value=False
-        l_ind.addWidget(self.chk_notch)
+        row_notch = QHBoxLayout()
+        self.chk_notch = QCheckBox("Aplicar filtro Notch 50 Hz")
+        self.chk_notch.setChecked(True)
+        row_notch.addWidget(self.chk_notch)
+        
+        row_notch.addWidget(QLabel("Factor Q:"))
+        self.inp_notch_q = QLineEdit("2.0")
+        self.inp_notch_q.setFixedWidth(60)
+        row_notch.addWidget(self.inp_notch_q)
+        row_notch.addStretch()
+        l_ind.addLayout(row_notch)
 
         # Evolucion temporal
         row_evol = QHBoxLayout()
@@ -307,17 +323,25 @@ class AnalysisPanel(QWidget):
         try: ev_end = float(self.tab_procesamiento.inp_evol_end.text())
         except ValueError: ev_end = 1000.0
         
+        try: spec_fmax = float(self.tab_procesamiento.inp_spec_fmax.text())
+        except ValueError: spec_fmax = 5000.0
+        
+        try: notch_q = float(self.tab_procesamiento.inp_notch_q.text())
+        except ValueError: notch_q = 2.0
+        
         tipo_env = self.tab_procesamiento.cmb_tipo_env.currentText()
 
         return {
             'smooth_ms': smooth,
             'tipo_envolvente': tipo_env,
             'apply_notch_filter': self.tab_procesamiento.chk_notch.isChecked(),
+            'notch_q_factor': notch_q,
             'highpass_cutoff_hz': hp,
             'lowpass_cutoff_hz': lp,
             'mostrar_recortes': self.tab_procesamiento.chk_recortes.isChecked(),
             'mostrar_senal_cruda': self.tab_procesamiento.chk_cruda.isChecked(),
             'mostrar_espectrograma': self.tab_procesamiento.chk_espectrograma.isChecked(),
+            'frecuenciamaxima': spec_fmax,
             'mostrar_evolucion': self.tab_procesamiento.chk_evolucion.isChecked(),
             'evol_t_start': ev_start,
             'evol_t_end': ev_end,

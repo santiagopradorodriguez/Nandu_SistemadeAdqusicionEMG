@@ -2981,7 +2981,9 @@ class RealTimePlotter(QtWidgets.QWidget):
                 target_total = total_words * self.autoforge_target_reps
                 
                 if current_beat >= target_total:
-                  self.estado_guardar_secuencia_continua()
+                  if not getattr(self, 'is_finishing_sequence', False):
+                    self.is_finishing_sequence = True
+                    self.estado_guardar_secuencia_continua()
                 else:
                   palabra = self.autoforge_words[current_beat % total_words]
                   try:
@@ -3459,8 +3461,7 @@ class RealTimePlotter(QtWidgets.QWidget):
           self.word_window_process = None
         return
         
-        self.stop_native_metronome()
-        self.chk_use_metronome.setChecked(False)
+      self.stop_native_metronome()
 
       if not self.is_acquiring:
         QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
@@ -3649,18 +3650,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.word_window_process.stdin.flush()
     except: pass
     
-    import subprocess, sys, os
-    python_executable = sys.executable
-    if getattr(sys, 'frozen', False):
-      script_path = 'metronomo_visual.py'
-    else:
-      script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'metronomo_visual.py')
-    # Posicionar en la esquina superior derecha, pero debajo del panel de configuración
-    pos = self.mapToGlobal(QtCore.QPoint(self.width(), 0))
-    metro_x = pos.x() - 250
-    metro_y = pos.y() + self.config_stack.height() + 10
-    
-    self.start_native_metronome(count_in=self.spin_trig_reps.value(), force_start=True)
+    self.start_native_metronome(count_in=4, force_start=True)
     
     self.autoforge_overlay.hide()
     
@@ -3747,7 +3737,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         "letra": "SecuenciaContinua",
         "prueba": self.autoforge_prueba,
         "comentario": "Grabado mediante AutoForge Secuencia Continua",
-        "words_sequence": full_word_sequence
+        "valid_words": full_word_sequence
       }
       
       for i in range(self.NUM_CANALES):

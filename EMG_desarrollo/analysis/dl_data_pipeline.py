@@ -36,7 +36,7 @@ def apply_bandpass_filter(data, lowcut=20.0, highcut=500.0, fs=FS, order=4):
     b, a = butter(order, [low, high], btype='band')
     return filtfilt(b, a, data)
 
-def apply_notch_filter(data, w0=50.0, Q=30.0, fs=FS):
+def apply_notch_filter(data, w0=50.0, Q=2.0, fs=FS):
     """ Filtro Notch para eliminar ruido de línea de 50Hz """
     b, a = iirnotch(w0, Q, fs)
     return filtfilt(b, a, data)

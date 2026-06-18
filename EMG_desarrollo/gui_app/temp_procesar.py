@@ -7,7 +7,7 @@ matplotlib.use('TkAgg')
 sys.path.append(r"c:\Users\MSI\OneDrive\Documentos\DOCUMENTOS SANTIAGO\santiago-prado-repositorio\EMG_desarrollo")
 import analysis.analisis_por_track_integrado as api
 
-mediciones = ['2026-06-03/A_Prueba1_Lucas']
+mediciones = ['2026-07-10/O_Prueba1_Sujeto1']
 base_dir = r"c:\Users\MSI\OneDrive\Documentos\DOCUMENTOS SANTIAGO\santiago-prado-repositorio\EMG_desarrollo\base_de_datos_electrodos"
 
 try:
@@ -22,11 +22,13 @@ try:
     var.set(canal_key in canales_elegidos)
 
   # Inyectar los parámetros de nuestra GUI PySide6 a su GUI Tkinter
-  dialog.var_mostrar_recortes.set(False)
+  dialog.var_mostrar_recortes.set(True)
   dialog.var_mostrar_senal_cruda.set(False)
   dialog.var_mostrar_espectrograma.set(True)
+  dialog.var_frecuenciamaxima.set("500.0")
   dialog.var_notch_filter.set(True)
-  dialog.var_mostrar_evolucion.set(False)
+  dialog.var_notch_q_factor.set("30.0")
+  dialog.var_mostrar_evolucion.set(True)
   dialog.var_evol_t_start.set("10.0")
   dialog.var_evol_t_end.set("1000.0")
   dialog.var_smooth_ms.set("50.0")

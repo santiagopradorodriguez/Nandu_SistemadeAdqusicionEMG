@@ -2284,7 +2284,6 @@ class RealTimePlotter(QtWidgets.QWidget):
                     self.metronome_process.kill()
                 except: pass
                 self.metronome_process = None
-                self.chk_use_metronome.setChecked(False) # Reflejar en UI
 
             if not self.is_acquiring:
                 # Disparar automáticamente la adquisición pero sin metrónomo doble

@@ -48,6 +48,51 @@ Anatomía de la interpretación:
 
 ---
 
+---
+
+## 4. Métricas de Sinergia Espaciotemporal: Correlación Cruzada EMG
+
+Para comprender la coordinación intermuscular y el retardo de activación (delay) entre diferentes grupos musculares, se emplea la Correlación Cruzada (Cross-Correlation) sobre las envolventes temporales de la señal EMG. Esta métrica es fundamental para identificar la **Sinergia Espaciotemporal**, proporcionando dos características clave para el modelo: el coeficiente de correlación (similitud morfológica) y el desfase temporal (Lag).
+
+### 4.1. Correlación Cruzada Discreta
+
+Dadas dos envolventes musculares $x[n]$ e $y[n]$ de longitud $N$, la función de correlación cruzada discreta lineal se define matemáticamente como:
+
+$$ R_{xy}[m] = \sum_{n=-\infty}^{\infty} x[n] y[n-m] $$
+
+Donde:
+*   $m$ representa el retardo temporal (lag) en número de muestras.
+*   En la práctica, como las señales son finitas, la suma se computa para la superposición válida entre ambas señales cuando una se desplaza respecto a la otra.
+
+### 4.2. Desfase Temporal (Lag) en Milisegundos
+
+El retardo temporal óptimo donde las envolventes de los dos músculos alcanzan su máxima alineación morfológica se encuentra calculando el índice que maximiza la función de correlación cruzada (el $\text{argmax}$).
+
+$$ m_{\text{best}} = \arg\max_{m} (R_{xy}[m]) $$
+
+El **Lag** (Desfase) expresa la asimetría temporal de activación. En el código, se extrae el Lag directamente del arreglo provisto por `scipy.signal.correlation_lags`.
+
+### 4.3. Normalización del Coeficiente de Correlación
+
+El valor bruto máximo $R_{xy}[m_{\text{best}}]$ depende de las amplitudes absolutas de las señales $x[n]$ e $y[n]$. Para Machine Learning, necesitamos un valor puro que represente solo similitud. Esto se logra dividiéndolo por el producto de las normas $L_2$ (raíz cuadrada de las energías) de ambas señales:
+
+$$ \rho_{xy} = \frac{\max(R_{xy})}{\|x\|_2 \|y\|_2} = \frac{\max(R_{xy})}{\sqrt{\sum_{n} x[n]^2} \sqrt{\sum_{n} y[n]^2}} $$
+
+Así obtenemos un coeficiente $\rho_{xy} \in [0, 1]$ que cuantifica la similitud de forma entre las envolventes ($1$ indica sincronía perfecta y $0$ ortogonalidad/ausencia de correlación).
+
+### 4.4. Permutaciones Completas y Antisimetría del Lag
+
+El algoritmo computa las permutaciones completas (`itertools.permutations`) en lugar de combinaciones para todos los pares de canales (ej. procesa 0 $\rightarrow$ 1 y 1 $\rightarrow$ 0). 
+
+Matemáticamente, la correlación cruzada cumple la propiedad de simetría con inversión temporal:
+$$ R_{xy}[m] = R_{yx}[-m] $$
+
+Esto significa que:
+1.  El coeficiente de correlación normalizado máximo es idéntico independientemente del orden: $\rho_{xy} = \rho_{yx}$.
+2.  El Lag presenta una relación antisimétrica: $\text{Lag}_{xy} = -\text{Lag}_{yx}$.
+
+Al proveer al modelo de Machine Learning con el vector de características completo (Lag antisimétrico y Correlación simétrica), se evita que la red neuronal o los algoritmos de reducción de dimensionalidad (como PCA o UMAP) tengan que inferir estas relaciones espaciales subyacentes, otorgando representaciones direccionales explícitas de qué músculo es líder y cuál seguidor.
+
 ## Referencias y Fuentes Científicas
 
 Las decisiones arquitectónicas tomadas para la extracción de características y el diseño estadístico están respaldadas por la literatura fundamental del procesamiento mioeléctrico:

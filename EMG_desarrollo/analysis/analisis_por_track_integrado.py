@@ -419,12 +419,12 @@ def _plot_full_spectrogram(signal, samplerate, espectrograma_db, frecuenciamaxim
     try:
         from scipy.signal import spectrogram
         
-        # Para evitar MemoryError en señales largas (ej. 2 min = 1.2M samples)
-        # Usamos una ventana de 50 ms (nperseg) con 80% overlap
-        nperseg = int(samplerate * 1.0)   # 1s = 2000 muestras -> resolucion de 1 Hz
-        noverlap = int(nperseg * 0.95)    # 95% overlap
-        nfft = 8192                        # zero-padding para suavidad visual
-        signal = _compute_env_full(np.abs(signal), True, smooth_ms, samplerate, tipo_envolvente)
+        # Ventana de 50 ms para mejor resolución temporal de formantes (típico en habla/audio)
+        nperseg = int(samplerate * 0.05)
+        noverlap = int(nperseg * 0.90)    # 90% overlap
+        nfft = 2048                        # zero-padding para suavidad visual
+        
+        # YA NO CALCULAMOS LA ENVOLVENTE: Queremos ver el espectro crudo para buscar formantes
         f_s, t_s, Sxx = spectrogram(signal, fs=samplerate, window='hann', nperseg=nperseg, noverlap=noverlap, nfft=nfft)
         
         if espectrograma_db:
@@ -432,15 +432,16 @@ def _plot_full_spectrogram(signal, samplerate, espectrograma_db, frecuenciamaxim
         else:
             Sdisp = Sxx
 
-        fmax_plot = 5
-        fmin_plot = 0.0
+        fmax_plot = frecuenciamaxima if (frecuenciamaxima is not None and frecuenciamaxima > 0) else 500.0
+        fmin_plot = frecuenciaminima if (frecuenciaminima is not None and frecuenciaminima > 0) else 20.0
 
         fig, ax = plt.subplots(figsize=(16, 6))
         im = ax.pcolormesh(t_s, f_s, Sdisp, shading='gouraud', cmap='magma')
         ax.set_ylabel('Frecuencia [Hz]', fontsize=12)
         ax.set_xlabel('Tiempo [s]', fontsize=12)
-        ax.set_title(f"Espectrograma de Señal Completa (De la envolvente) - {filename}", fontsize=14)
+        ax.set_title(f"Espectrograma Crudo (Sin Lowpass 500Hz) - {filename}", fontsize=14)
         ax.set_ylim(fmin_plot, fmax_plot)
+        ax.set_xlim(5, min(20.0, t_s[-1] if len(t_s) > 0 else 20.0))
         fig.colorbar(im, ax=ax, label='dB' if espectrograma_db else 'Power')
 
         plt.tight_layout()
@@ -1250,7 +1251,7 @@ def procesar_wavs_promedio(
     mostrar_individuales=True,
     mostrar_recortes=True,
     mostrar_espectrograma=True,
-    frecuenciamaxima=1000,
+    frecuenciamaxima=500,
     frecuenciaminima=0,
     colores_aleatorios=False,
     seed=None,
@@ -1289,6 +1290,7 @@ def procesar_wavs_promedio(
     show_interactive_plot=False, # <-- para mostrar el gráfico de recortes
     show_average_plot=False,     # <-- NUEVO: para mostrar el gráfico de pulso promedio
     apply_notch_filter=False,    # <-- NUEVO: para controlar el filtro notch
+    notch_q_factor=2.0,          # <-- NUEVO: para controlar el Q factor del notch
     mostrar_evolucion=False,
     evol_t_start=25.0,
     evol_t_end=100.0,
@@ -1388,10 +1390,10 @@ def procesar_wavs_promedio(
         if apply_notch_filter:
             try:
                 f0 = 50.0  # Frecuencia a remover
-                Q = 2.0    # Factor de calidad (Quality factor)
+                Q = notch_q_factor    # Factor de calidad (Quality factor)
                 b, a = iirnotch(f0, Q, samplerate)
                 signal = filtfilt(b, a, signal) # Aplicar filtro sin desfase
-                print(f"[Filtro] Aplicado filtro notch a {f0} Hz.")
+                print(f"[Filtro] Aplicado filtro notch a {f0} Hz con Q={Q}.")
             except Exception as e:
                 print(f"ADVERTENCIA: No se pudo aplicar el filtro notch. Error: {e}")
         else:
@@ -1799,7 +1801,7 @@ def procesar_wavs_promedio(
 
         # --- BLOQUE: Espectrograma de la señal completa (Estilo Praat) ---
         if mostrar_espectrograma:
-            _plot_full_spectrogram(signal_recortada, samplerate,
+            _plot_full_spectrogram(signal_unfiltered[mask], samplerate,
                        espectrograma_db, frecuenciamaxima, frecuenciaminima, out_spec, final_plot_title,
                        smooth_ms=smooth_ms, tipo_envolvente=tipo_envolvente)
             
@@ -1938,6 +1940,8 @@ class ProcessingOptionsDialog(tk.Toplevel):
         self.var_highpass_cutoff = tk.StringVar(value="20") # Valor por defecto para pasa-altos
         # --- NUEVO: Opción para filtro notch ---
         self.var_notch_filter = tk.BooleanVar(value=False) # Por defecto activado
+        self.var_notch_q_factor = tk.StringVar(value="2.0")
+        self.var_frecuenciamaxima = tk.StringVar(value="5000")
         # --- NUEVO: Parámetro de suavizado de envolvente ---
         self.var_smooth_ms = tk.StringVar(value="50")
         self.var_tipo_env = tk.StringVar(value="media_movil") # Puede ser "media_movil" o "rms"
@@ -2056,6 +2060,12 @@ class ProcessingOptionsDialog(tk.Toplevel):
             
         # --- NUEVO: Obtener el estado del checkbox del filtro notch ---
         apply_notch = self.var_notch_filter.get()
+        try:
+            notch_q = float(self.var_notch_q_factor.get())
+            fmax = float(self.var_frecuenciamaxima.get())
+        except ValueError:
+            notch_q = 2.0
+            fmax = 5000.0
 
         if not tk.messagebox.askyesno("Confirmar", f"Se procesarán {len(canales_a_procesar)} canales. Esto puede tardar. ¿Continuar?", parent=self):
             return
@@ -2132,6 +2142,8 @@ class ProcessingOptionsDialog(tk.Toplevel):
                     noise_seconds=noise_seconds_a_usar, n_pulsos_manual=pulsos_a_usar, excluded_windows=initial_excluded_windows,
                     show_interactive_plot=True, # <-- Mostrar el gráfico
                     apply_notch_filter=apply_notch, # <-- Pasar estado del filtro
+                    notch_q_factor=notch_q,
+                    frecuenciamaxima=fmax,
                     lowpass_cutoff_hz=lowpass_freq,
                     highpass_cutoff_hz=highpass_freq,
                     smooth_ms=smooth_val, # <-- NUEVO
@@ -2226,6 +2238,8 @@ class ProcessingOptionsDialog(tk.Toplevel):
                     show_interactive_plot=False, # <-- El análisis final no necesita ser mostrado
                     excluded_windows=final_excluded_windows, # Usar la lista final de exclusión
                     apply_notch_filter=apply_notch, # <-- Pasar estado del filtro
+                    notch_q_factor=notch_q,
+                    frecuenciamaxima=fmax,
                     smooth_ms=smooth_val, # <-- NUEVO
                     tipo_envolvente=self.var_tipo_env.get(),
                     mostrar_evolucion=self.var_mostrar_evolucion.get(),
@@ -2699,13 +2713,21 @@ def _comparative_session_plots(mediciones_data, nombre_salida_base):
         if len(data_snr) > 0:
             bp_snr = ax_hsnr.boxplot(data_snr, labels=labels_snr, patch_artist=True)
             for i, patch in enumerate(bp_snr['boxes']):
-                letra_pura = labels_snr[i].split('\n')[0]
+                letra_pura = labels_snr[i].split('\n')[0].strip().upper()
                 patch.set_facecolor(letter_colors.get(letra_pura, 'gray'))
                 patch.set_alpha(0.6)
                 
             ax_hsnr.set_title(f"Distribución de SNR (MAV) - {labels[ch_idx]}")
             ax_hsnr.set_xlabel("Vocal")
             ax_hsnr.set_ylabel("SNR (MAV / Ruido)")
+            
+            import matplotlib.patches as mpatches
+            import matplotlib.lines as mlines
+            caja_patch = mpatches.Patch(color='gray', alpha=0.6, label='Caja: Rango Intercuartílico (IQR)')
+            mediana_line = mlines.Line2D([], [], color='orange', label='Línea: Mediana')
+            bigote_line = mlines.Line2D([], [], color='black', label='Bigotes: 1.5 × IQR')
+            outlier_point = mlines.Line2D([], [], color='none', marker='o', markeredgecolor='black', markerfacecolor='none', label='Puntos: Valores Atípicos')
+            ax_hsnr.legend(handles=[caja_patch, mediana_line, bigote_line, outlier_point], loc='best', fontsize='small')
             
             import scipy.stats as stats
             if len(data_snr) > 1:
@@ -2733,7 +2755,7 @@ def _comparative_session_plots(mediciones_data, nombre_salida_base):
         if len(data_to_plot) > 0:
             bp = ax_hamp.boxplot(data_to_plot, labels=labels_plot, patch_artist=True)
             for i, patch in enumerate(bp['boxes']):
-                letra_pura = labels_plot[i].split('\n')[0]
+                letra_pura = labels_plot[i].split('\n')[0].strip().upper()
                 patch.set_facecolor(letter_colors.get(letra_pura, 'gray'))
                 patch.set_alpha(0.6)
                 
@@ -2743,11 +2765,11 @@ def _comparative_session_plots(mediciones_data, nombre_salida_base):
             
             import matplotlib.patches as mpatches
             import matplotlib.lines as mlines
-            caja_patch = mpatches.Patch(color='gray', alpha=0.6, label='Caja: IQR (25%-75%)')
+            caja_patch = mpatches.Patch(color='gray', alpha=0.6, label='Caja: Rango Intercuartílico (IQR)')
             mediana_line = mlines.Line2D([], [], color='orange', label='Línea: Mediana')
-            bigote_line = mlines.Line2D([], [], color='black', label='Límites: 1.5x IQR')
-            outlier_point = mlines.Line2D([], [], color='none', marker='o', markeredgecolor='black', markerfacecolor='none', label='Puntos: Outliers')
-            ax_hamp.legend(handles=[caja_patch, mediana_line, bigote_line, outlier_point], loc='upper right', fontsize='small')
+            bigote_line = mlines.Line2D([], [], color='black', label='Bigotes: 1.5 × IQR')
+            outlier_point = mlines.Line2D([], [], color='none', marker='o', markeredgecolor='black', markerfacecolor='none', label='Puntos: Valores Atípicos')
+            ax_hamp.legend(handles=[caja_patch, mediana_line, bigote_line, outlier_point], loc='best', fontsize='small')
             
             if len(data_to_plot) > 1:
                 try:
