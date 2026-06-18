@@ -36,11 +36,42 @@ else:
     SWEEP_UMAP_MD = [0.1, 0.3, 0.5, 0.8]
     SWEEP_UMAP_METRIC = ['euclidean', 'cosine', 'manhattan', 'correlation']
 
-# Parámetros fijos
+# Parámetros fijos (idénticos a los defaults de la GUI)
 ALPHA_RUIDO = 1.0
 NOTCH_Q = 2.0  # Elegido por el usuario
+SNR_THRESHOLD = 0.5
+OUTLIER_CONTAMINATION = 0.05
 BEST_SMOOTH = 150 # Default seguro
 BEST_TARGET_LEN = 100
+
+def limpiar_datos(X, Y, Tomas, SNRs):
+    """Aplica filtro SNR + IsolationForest, idéntico a ejecutar_procesamiento de la GUI."""
+    from sklearn.ensemble import IsolationForest
+    X_clean, Y_clean, Tomas_clean = [], [], []
+    for vocal in np.unique(Y):
+        mask = Y == vocal
+        X_v = X[mask]
+        Tomas_v = Tomas[mask]
+        SNRs_v = SNRs[mask]
+        # 1. Filtro SNR
+        valid = SNRs_v >= SNR_THRESHOLD
+        X_v = X_v[valid]
+        Tomas_v = Tomas_v[valid]
+        # 2. IsolationForest
+        if len(X_v) > 5 and OUTLIER_CONTAMINATION > 0:
+            iso = IsolationForest(contamination=OUTLIER_CONTAMINATION, random_state=42)
+            preds = iso.fit_predict(X_v)
+            for j, p in enumerate(preds):
+                if p == 1:
+                    X_clean.append(X_v[j])
+                    Y_clean.append(vocal)
+                    Tomas_clean.append(Tomas_v[j])
+        else:
+            for j in range(len(X_v)):
+                X_clean.append(X_v[j])
+                Y_clean.append(vocal)
+                Tomas_clean.append(Tomas_v[j])
+    return np.array(X_clean), np.array(Y_clean), np.array(Tomas_clean)
 
 def print_progress_bar(iteration, total, start_time, prefix='', length=40):
     percent = ("{0:.1f}").format(100 * (iteration / float(total)))
@@ -101,11 +132,13 @@ def main():
         print_progress_bar(i, len(SWEEP_SMOOTH), start_time, prefix=f'Evaluando smooth={s_ms}ms')
         
         # 1. Extracción DSP (Se mostrarán los prints de cada toma)
-        X, Y, _, _ = extraer_features_concatenadas(
+        X, Y, Tomas_tmp, SNRs_tmp = extraer_features_concatenadas(
             base_dir, mediciones, alpha_ruido=ALPHA_RUIDO, 
             smooth_ms=s_ms, notch_q=NOTCH_Q, target_len=BEST_TARGET_LEN
         )
         
+        if len(X) < 5: continue
+        X, Y, _ = limpiar_datos(X, Y, Tomas_tmp, SNRs_tmp)
         if len(X) < 5: continue
         
         pca_3d = PCA(n_components=3)
@@ -179,12 +212,15 @@ def main():
     print("\n  [Cache] Leyendo segmentos crudos con smooth_ms=%d..." % BEST_SMOOTH)
     cache_start = time.time()
     sys.stdout = io.StringIO()
-    raw_segs_list, Y_cache, Tomas_cache, _ = extraer_features_concatenadas(
+    raw_segs_list, Y_cache, Tomas_cache, SNRs_cache = extraer_features_concatenadas(
         base_dir, mediciones, alpha_ruido=ALPHA_RUIDO,
         smooth_ms=BEST_SMOOTH, notch_q=NOTCH_Q, target_len=BEST_TARGET_LEN,
         return_raw_cache=True
     )
     sys.stdout = old_stdout
+    Y_cache = np.array(Y_cache)
+    Tomas_cache = np.array(Tomas_cache)
+    SNRs_cache = np.array(SNRs_cache)
     print(f"  [Cache] {len(raw_segs_list)} ventanas cargadas en {time.time()-cache_start:.1f}s")
     
     start_time = time.time()
@@ -206,8 +242,9 @@ def main():
             X_resampled.append(np.concatenate(vector_concatenado))
         
         X = np.array(X_resampled)
-        Y = np.array(Y_cache)
+        Y = Y_cache.copy()
         
+        X, Y, _ = limpiar_datos(X, Y, Tomas_cache, SNRs_cache)
         if len(X) < 5: continue
         
         pca_3d = PCA(n_components=3)
@@ -272,13 +309,19 @@ def main():
     print(f" -> Fijos (Default): notch_q={NOTCH_Q}, alpha={ALPHA_RUIDO}")
     print("="*50)
     
-    X_best, Y_best, _, _ = extraer_features_concatenadas(
+    X_best, Y_best, Tomas_best, SNRs_best = extraer_features_concatenadas(
         base_dir, mediciones, alpha_ruido=ALPHA_RUIDO, 
         smooth_ms=BEST_SMOOTH, notch_q=NOTCH_Q, target_len=BEST_TARGET_LEN
     )
     
     if len(X_best) < 5:
         print("Error: No se obtuvieron datos suficientes con la mejor configuración.")
+        return
+    
+    X_best, Y_best, _ = limpiar_datos(X_best, Y_best, Tomas_best, SNRs_best)
+    
+    if len(X_best) < 5:
+        print("Error: No quedaron datos suficientes tras filtrar outliers.")
         return
         
     umap_results = []
