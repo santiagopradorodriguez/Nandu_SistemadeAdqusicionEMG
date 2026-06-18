@@ -411,6 +411,7 @@ def ejecutar_procesamiento(
     Y_clean = []
     Tomas_clean = []
     outliers_detectados = 0
+    descartados = []
     
     # Filtramos por clase (vocal) para no eliminar varianza válida inter-clase
     for vocal in np.unique(Y):
@@ -424,7 +425,9 @@ def ejecutar_procesamiento(
         for i, is_valid in enumerate(valid_snr_mask):
             if not is_valid:
                 outliers_detectados += 1
-                print(f"  [!] Descartado por SNR muy bajo (<{snr_threshold}): {Tomas_vocal[i]} (Vocal {vocal}) | SNR: {SNRs_vocal[i]:.2f}")
+                razon = f"SNR muy bajo (<{snr_threshold})"
+                print(f"  [!] Descartado por {razon}: {Tomas_vocal[i]} (Vocal {vocal}) | SNR: {SNRs_vocal[i]:.2f}")
+                descartados.append({"Toma": Tomas_vocal[i], "Vocal": vocal, "SNR": SNRs_vocal[i], "Motivo": razon})
                 
         # Quedarse solo con los que pasaron el filtro SNR
         X_vocal_snr = X_vocal[valid_snr_mask]
@@ -445,7 +448,9 @@ def ejecutar_procesamiento(
                     Tomas_clean.append(Tomas_vocal_snr[i])
                 else:
                     outliers_detectados += 1
-                    print(f"  [!] Outlier estadístico removido: {Tomas_vocal_snr[i]} (Vocal {vocal}) | SNR: {SNRs_vocal_snr[i]:.2f}")
+                    razon = "Outlier estadístico (IsolationForest)"
+                    print(f"  [!] {razon} removido: {Tomas_vocal_snr[i]} (Vocal {vocal}) | SNR: {SNRs_vocal_snr[i]:.2f}")
+                    descartados.append({"Toma": Tomas_vocal_snr[i], "Vocal": vocal, "SNR": SNRs_vocal_snr[i], "Motivo": razon})
         else:
             for i in range(len(X_vocal_snr)):
                 X_clean.append(X_vocal_snr[i])
@@ -535,8 +540,8 @@ def ejecutar_procesamiento(
     # ------------------ CLUSTERING NO SUPERVISADO ------------------
     print("\n--- Evaluando Clustering No Supervisado (K-Means + Húngaro) ---")
     
-    acc_pca_3d, _, _ = evaluar_clustering_no_supervisado(X_pca_3d, Y, "PCA 3D")
-    acc_umap_3d, _, _ = evaluar_clustering_no_supervisado(X_umap_3d, Y, "UMAP 3D")
+    acc_pca_3d, acc_vocales_pca, voc_pca = evaluar_clustering_no_supervisado(X_pca_3d, Y, "PCA 3D")
+    acc_umap_3d, acc_vocales_umap, voc_umap = evaluar_clustering_no_supervisado(X_umap_3d, Y, "UMAP 3D")
     
     print(f"\n=> TOTAL Accuracy Clustering No Supervisado (PCA 3D) : {acc_pca_3d:.2f}%")
     print(f"=> TOTAL Accuracy Clustering No Supervisado (UMAP 3D): {acc_umap_3d:.2f}%")
@@ -546,11 +551,22 @@ def ejecutar_procesamiento(
         f.write(f"Silhouette Score (PCA 3D): {sil_pca_3d:.4f}\n")
         f.write(f"Silhouette Score (UMAP 3D): {sil_umap_3d:.4f}\n\n")
         f.write(f"Accuracy No Supervisado (PCA 3D): {acc_pca_3d:.2f}%\n")
-        f.write(f"Accuracy No Supervisado (UMAP 3D): {acc_umap_3d:.2f}%\n\n")
-        f.write("Matriz de Distancias (PCA 3D):\n")
+        for i, v in enumerate(voc_pca):
+            f.write(f"  - Vocal {v}: {acc_vocales_pca[i]:.2f}%\n")
+        f.write(f"\nAccuracy No Supervisado (UMAP 3D): {acc_umap_3d:.2f}%\n")
+        for i, v in enumerate(voc_umap):
+            f.write(f"  - Vocal {v}: {acc_vocales_umap[i]:.2f}%\n")
+        f.write("\nMatriz de Distancias (PCA 3D):\n")
         f.write(df_dist_pca.to_string() + "\n\n")
         f.write("Matriz de Distancias (UMAP 3D):\n")
         f.write(df_dist.to_string())
+        
+    # Guardar reporte de mediciones descartadas
+    if descartados:
+        df_desc = pd.DataFrame(descartados)
+        desc_path = os.path.join(out_dir, "reporte_mediciones_descartadas.csv")
+        df_desc.to_csv(desc_path, index=False)
+        print(f"\n[!] Guardado reporte de {len(descartados)} mediciones descartadas en {desc_path}")
         
     # Exportar DataFrame de características para visor_features.py
     print("\n6. Exportando características (SIN FILTRAR) a CSV para auditoría visual...")
@@ -563,9 +579,9 @@ def ejecutar_procesamiento(
             cols.append(f"Ch{ch}_T{t}")
             
     # Exportamos las limpias (después de SNR y Outliers) para que el autoencoder no entrene con basura
-    df_export = pd.DataFrame(X, columns=cols)
-    df_export.insert(0, 'Toma', Tomas)
-    df_export.insert(0, 'Vocal', Y)
+    df_export = pd.DataFrame(X_clean, columns=cols)
+    df_export.insert(0, 'Toma', Tomas_clean)
+    df_export.insert(0, 'Vocal', Y_clean)
     
     csv_out_path = os.path.join(out_dir, "caracteristicas_exportadas.csv")
     df_export.to_csv(csv_out_path, index=False)
