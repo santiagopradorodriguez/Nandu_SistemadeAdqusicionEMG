@@ -95,7 +95,6 @@ def plot_latent_space(csv_path, model_path, latent_dim=16):
     plot_path = os.path.join(out_dir, "latent_space_umap_3d.png")
     plt.savefig(plot_path)
     print(f"Gráfico guardado en {plot_path}")
-    plt.close()
     
     # --- GRÁFICOS DE PRECISIÓN (Accuracy por Vocal) ---
     print("\nGenerando gráficos de precisión...")

@@ -58,7 +58,7 @@ def get_interpulse_noise(processed_segment, initial_noise):
         
     return curr_mean
 
-def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_ms=250, notch_q=30.0):
+def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_ms=120, notch_q=2.0):
     """
     Extrae y alinea las ventanas de los canales 0, 1 y 2.
     Devuelve X (matriz de features), Y (labels/vocales) y Tomas (nombres de las mediciones).
@@ -288,7 +288,7 @@ def calcular_centroides_y_distancias(X_proj, Y):
             
     return centroides, dist_matrix, vocales
 
-def ejecutar_procesamiento(mediciones, alpha_ruido=1.0, snr_threshold=0.5, outlier_contamination=0.05, smooth_ms=250, notch_q=30.0):
+def ejecutar_procesamiento(mediciones, alpha_ruido=1.0, snr_threshold=0.5, outlier_contamination=0.05, smooth_ms=120, notch_q=2.0):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     base_dir = os.path.join(os.path.dirname(script_dir), "base_de_datos_electrodos")
     out_dir = os.path.join(script_dir, "resultados_pca_umap")
@@ -553,7 +553,7 @@ class GeneradorPCAGUI:
         tk.Label(f4, text="Suavizado Envolvente RMS (ms):", width=35, anchor="w", bg="#1F2833", fg="white").pack(side="left")
         self.ent_smooth = tk.Entry(f4, width=10, bg="#0B0C10", fg="white", insertbackground="white")
         self.ent_smooth.pack(side="left")
-        self.ent_smooth.insert(0, "250")
+        self.ent_smooth.insert(0, "120")
         
         # 5. Notch Q Factor
         f5 = tk.Frame(params_frame, bg="#1F2833")
@@ -561,7 +561,7 @@ class GeneradorPCAGUI:
         tk.Label(f5, text="Filtro Notch Q Factor:", width=35, anchor="w", bg="#1F2833", fg="white").pack(side="left")
         self.ent_notch_q = tk.Entry(f5, width=10, bg="#0B0C10", fg="white", insertbackground="white")
         self.ent_notch_q.pack(side="left")
-        self.ent_notch_q.insert(0, "30.0")
+        self.ent_notch_q.insert(0, "2.0")
         
         # --- Botón Procesar ---
         act_frame = tk.Frame(main_frame, pady=10, bg="#0B0C10")
