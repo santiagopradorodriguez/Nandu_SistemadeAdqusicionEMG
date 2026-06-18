@@ -296,7 +296,7 @@ def evaluar_clustering_no_supervisado(X, Y, nombre):
         
     return accuracy, acc_por_vocal, vocales_unicas
 
-def plot_scatter(X_proj, Y, title, output_path, is_3d=False, variance_ratios=None):
+def plot_scatter(X_proj, Y, title, output_path, is_3d=False, variance_ratios=None, connect_points=False):
     fig = plt.figure(figsize=(10, 8))
     
     if is_3d:
@@ -306,6 +306,8 @@ def plot_scatter(X_proj, Y, title, output_path, is_3d=False, variance_ratios=Non
         
     vocales = sorted(list(set(Y)))
     palette = sns.color_palette("Set1", n_colors=len(vocales))
+    
+    plot_points = []
     
     for i, vocal in enumerate(vocales):
         idx = Y == vocal
@@ -319,8 +321,21 @@ def plot_scatter(X_proj, Y, title, output_path, is_3d=False, variance_ratios=Non
             
         if is_3d:
             ax.scatter(X_proj[idx, 0], X_proj[idx, 1], X_proj[idx, 2], label=vocal, color=palette[i], alpha=0.9, s=80)
+            if connect_points and len(X_proj[idx]) > 0:
+                plot_points.append(X_proj[idx][0])
         else:
             ax.scatter(X_proj[idx, 0], X_proj[idx, 1], label=vocal, color=palette[i], alpha=0.9, s=80)
+            if connect_points and len(X_proj[idx]) > 0:
+                plot_points.append(X_proj[idx][0])
+                
+    if connect_points and len(plot_points) > 1:
+        # Cerrar el polígono
+        plot_points.append(plot_points[0])
+        pts = np.array(plot_points)
+        if is_3d:
+            ax.plot(pts[:, 0], pts[:, 1], pts[:, 2], color='gray', linestyle='--', alpha=0.7)
+        else:
+            ax.plot(pts[:, 0], pts[:, 1], color='gray', linestyle='--', alpha=0.7)
             
     ax.set_title(title)
     if is_3d:
@@ -468,13 +483,13 @@ def ejecutar_procesamiento(
     cent_pca_2d, _, vocales_pca_2d = calcular_centroides_y_distancias(X_pca_2d, Y)
     X_cent_2d = np.array([cent_pca_2d[v] for v in vocales_pca_2d])
     Y_cent_2d = np.array(vocales_pca_2d)
-    plot_scatter(X_cent_2d, Y_cent_2d, "PCA 2D - Promedio de Vocales", os.path.join(out_dir, "PCA_2D_Centroides.png"), is_3d=False, variance_ratios=pca_2d.explained_variance_ratio_)
+    plot_scatter(X_cent_2d, Y_cent_2d, "PCA 2D - Promedio de Vocales", os.path.join(out_dir, "PCA_2D_Centroides.png"), is_3d=False, variance_ratios=pca_2d.explained_variance_ratio_, connect_points=True)
     
     # --- PCA 3D Centroides ---
     cent_pca, _, vocales_pca = calcular_centroides_y_distancias(X_pca_3d, Y)
     X_cent = np.array([cent_pca[v] for v in vocales_pca])
     Y_cent = np.array(vocales_pca)
-    plot_scatter(X_cent, Y_cent, "PCA 3D - Promedio de Vocales", os.path.join(out_dir, "PCA_3D_Centroides.png"), is_3d=True, variance_ratios=pca_3d.explained_variance_ratio_)
+    plot_scatter(X_cent, Y_cent, "PCA 3D - Promedio de Vocales", os.path.join(out_dir, "PCA_3D_Centroides.png"), is_3d=True, variance_ratios=pca_3d.explained_variance_ratio_, connect_points=True)
     
     # ------------------ UMAP ------------------
     print(f"\n5. Aplicando UMAP (n_neighbors={umap_n_neighbors}, min_dist={umap_min_dist}, metric={umap_metric})...")
