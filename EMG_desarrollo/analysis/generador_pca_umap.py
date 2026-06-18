@@ -62,7 +62,7 @@ def get_interpulse_noise(processed_segment, initial_noise):
         
     return curr_mean
 
-def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_ms=250, notch_q=30.0, target_len=100):
+def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_ms=250, notch_q=30.0, target_len=100, return_raw_cache=False):
     """
     Extrae y alinea las ventanas de los canales 0, 1 y 2.
     Devuelve X (matriz de features), Y (labels/vocales) y Tomas (nombres de las mediciones).
@@ -217,6 +217,15 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_
                 
             if not valido:
                 continue
+            if return_raw_cache:
+                if valido:
+                    X.append(segs_brutos)
+                    Y.append(vocal)
+                    Tomas.append(f"{med_name}_Win{win_idx}")
+                    ruido_promedio_total = ruido_acumulado_window / 3.0
+                    snr = max_supremo / (ruido_promedio_total + 1e-9)
+                    SNRs.append(snr)
+                continue
                 
             # 2. Normalizar, remuestrear y concatenar
             vector_concatenado = []
@@ -239,6 +248,8 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_
                 snr = max_supremo / (ruido_promedio_total + 1e-9)
                 SNRs.append(snr)
                 
+    if return_raw_cache:
+        return X, Y, Tomas, SNRs
     return np.array(X), np.array(Y), np.array(Tomas), np.array(SNRs)
 
 def evaluate_classifier(X_proj, Y, name):

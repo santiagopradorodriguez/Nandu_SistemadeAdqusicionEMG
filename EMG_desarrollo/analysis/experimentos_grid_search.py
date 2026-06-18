@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.decomposition import PCA
 from sklearn.metrics import silhouette_score
+from scipy.signal import resample
 import umap
 import warnings
 warnings.filterwarnings("ignore")
@@ -29,7 +30,7 @@ if TEST_MODE:
     SWEEP_UMAP_METRIC = ['euclidean', 'cosine']
 else:
     print("=== MODO PRODUCCIÓN ACTIVADO ===")
-    SWEEP_SMOOTH = [30, 60, 90, 120, 150, 180, 210, 240]
+    SWEEP_SMOOTH = [30, 60, 90, 120, 150, 180, 210, 240, 250]
     SWEEP_TARGET_LEN = [20, 50, 100, 150, 200]
     SWEEP_UMAP_NN = [2, 5, 10, 15, 20]
     SWEEP_UMAP_MD = [0.1, 0.3, 0.5, 0.8]
@@ -174,15 +175,38 @@ def main():
     res_len_sil = []
     res_len_acc_vocales = []
     
+    # --- Caché inteligente: leer WAVs UNA sola vez con el mejor smooth ---
+    print("\n  [Cache] Leyendo segmentos crudos con smooth_ms=%d..." % BEST_SMOOTH)
+    cache_start = time.time()
+    sys.stdout = io.StringIO()
+    raw_segs_list, Y_cache, Tomas_cache, _ = extraer_features_concatenadas(
+        base_dir, mediciones, alpha_ruido=ALPHA_RUIDO,
+        smooth_ms=BEST_SMOOTH, notch_q=NOTCH_Q, target_len=BEST_TARGET_LEN,
+        return_raw_cache=True
+    )
+    sys.stdout = old_stdout
+    print(f"  [Cache] {len(raw_segs_list)} ventanas cargadas en {time.time()-cache_start:.1f}s")
+    
     start_time = time.time()
     for i, t_len in enumerate(SWEEP_TARGET_LEN):
         print_progress_bar(i, len(SWEEP_TARGET_LEN), start_time, prefix=f'Evaluando target_len={t_len}')
         
-        # Se mostrarán los prints de cada toma
-        X, Y, _, _ = extraer_features_concatenadas(
-            base_dir, mediciones, alpha_ruido=ALPHA_RUIDO, 
-            smooth_ms=BEST_SMOOTH, notch_q=NOTCH_Q, target_len=t_len
-        )
+        # Resamplear desde el caché en RAM (misma matemática que generador_pca_umap)
+        X_resampled = []
+        for segs_brutos in raw_segs_list:
+            max_supremo = max(np.max(s) for s in segs_brutos) if segs_brutos else 1e-9
+            if max_supremo < 1e-9:
+                max_supremo = 1e-9
+            vector_concatenado = []
+            for seg in segs_brutos:
+                seg_norm = seg / max_supremo
+                seg_rs = resample(seg_norm, t_len)
+                seg_rs[seg_rs < 0] = 0.0
+                vector_concatenado.append(seg_rs)
+            X_resampled.append(np.concatenate(vector_concatenado))
+        
+        X = np.array(X_resampled)
+        Y = np.array(Y_cache)
         
         if len(X) < 5: continue
         
