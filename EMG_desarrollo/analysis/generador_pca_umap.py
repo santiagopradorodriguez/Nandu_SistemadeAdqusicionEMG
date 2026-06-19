@@ -644,6 +644,21 @@ def ejecutar_procesamiento(
         df_resumen['Total'] = df_resumen['Cant. Procesada'] + df_resumen['Cant. Descartada']
         
         guardar_tabla_imagen(df_resumen, "Resumen de Mediciones por Vocal", os.path.join(out_dir, "tabla_resumen_mediciones.png"))
+        
+        # --- TABLAS DE PARÁMETROS ---
+        df_params_dsp = pd.DataFrame({
+            "Parámetro": ["Filtro Notch (Q)", "Envolvente (Smooth ms)", "Remuestreo (Longitud)", "Filtro de SNR", "Filtro Isolation Forest"],
+            "Valor": [str(notch_q), f"{smooth_ms} ms", f"{target_length} pts", f">= {snr_threshold}", f"{outlier_contamination*100}% outliers"]
+        }).set_index("Parámetro")
+        
+        df_params_umap = pd.DataFrame({
+            "Parámetro": ["Nº Vecinos (n_neighbors)", "Distancia Mín. (min_dist)", "Métrica de Distancia", "Dimensiones UMAP"],
+            "Valor": [str(umap_n_neighbors), str(umap_min_dist), str(umap_metric).capitalize(), "3D"]
+        }).set_index("Parámetro")
+        
+        guardar_tabla_imagen(df_params_dsp, "Parámetros de Filtrado y DSP", os.path.join(out_dir, "tabla_parametros_dsp.png"), col_width=4.0)
+        guardar_tabla_imagen(df_params_umap, "Hiperparámetros UMAP Topológico", os.path.join(out_dir, "tabla_parametros_umap.png"), col_width=4.0)
+        
         print("  -> ¡Tablas en imagen guardadas exitosamente!")
     except Exception as e:
         print(f"  -> Error al generar imágenes de tablas: {e}")
