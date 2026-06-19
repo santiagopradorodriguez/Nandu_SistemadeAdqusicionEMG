@@ -24,9 +24,9 @@ class CalibratedViewerWidget(QWidget):
         self.lbl_status.setStyleSheet("color: #888; font-family: monospace;")
         top_bar.addWidget(self.lbl_status)
         
-        self.btn_zoom_in = QPushButton("🔍 +")
-        self.btn_zoom_out = QPushButton("🔍 -")
-        self.btn_zoom_reset = QPushButton("🔍 1:1")
+        self.btn_zoom_in = QPushButton(" +")
+        self.btn_zoom_out = QPushButton(" -")
+        self.btn_zoom_reset = QPushButton(" 1:1")
         
         self.btn_zoom_in.clicked.connect(self.zoom_in)
         self.btn_zoom_out.clicked.connect(self.zoom_out)

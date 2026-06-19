@@ -117,7 +117,7 @@ class ElectrodeViewerWidget(QWidget):
         self.toolbar = QHBoxLayout()
         self.lbl_info = QLabel("Mostrando 0 electrodos seleccionados.")
         self.lbl_info.setStyleSheet("color: #00ffaa; font-family: 'Courier New', monospace; font-size: 14px; font-weight: bold;")
-        self.btn_refresh = QPushButton("🔄 Sincronizar con Sesiones Marcadas")
+        self.btn_refresh = QPushButton(" Sincronizar con Sesiones Marcadas")
         self.btn_refresh.setStyleSheet("""
             QPushButton {
                 background-color: #880000; 
@@ -326,15 +326,15 @@ class ElectrodeViewerWidget(QWidget):
                         lbl_meta.setStyleSheet("color: #00ff00; background-color: #0c0c0c; border: 1px solid #333; padding: 15px; font-family: monospace; font-size: 13px;")
                         lbl_meta.setAlignment(Qt.AlignTop | Qt.AlignLeft)
                         scroll_meta.setWidget(lbl_meta)
-                        canal_tab.addTab(scroll_meta, "📝 Metadata")
+                        canal_tab.addTab(scroll_meta, " Metadata")
                     except: pass
                     
             # Nombres bonitos para subpestañas
             img_tabs = {
-                "avg.png": "⚡ Promedio",
-                "pulses.png": "✂️ Recortes",
-                "spec.png": "🌈 Espectrograma",
-                "evolucion.png": "📈 Evolución"
+                "avg.png": " Promedio",
+                "pulses.png": "️ Recortes",
+                "spec.png": " Espectrograma",
+                "evolucion.png": " Evolución"
             }
             
             # Load images into sub-tabs
@@ -346,7 +346,7 @@ class ElectrodeViewerWidget(QWidget):
                     scroll_img.setAlignment(Qt.AlignCenter)
                     
                     # Hint label
-                    lbl_hint = QLabel("🔍 Haz clic en la imagen para ampliar")
+                    lbl_hint = QLabel(" Haz clic en la imagen para ampliar")
                     lbl_hint.setStyleSheet("color: #888; margin-bottom: 5px;")
                     lbl_hint.setAlignment(Qt.AlignCenter)
                     

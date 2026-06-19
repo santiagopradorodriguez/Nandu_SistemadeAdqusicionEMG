@@ -133,7 +133,7 @@ class ProcessingTab(QWidget):
 
         # Botones Lanzar
         btn_layout = QHBoxLayout()
-        self.btn_run_procesar = QPushButton("🧠 PROCESAR Y CURAR INDIVIDUALES")
+        self.btn_run_procesar = QPushButton(" PROCESAR Y CURAR INDIVIDUALES")
         self.btn_run_procesar.setFixedHeight(50)
         self.btn_run_procesar.setCursor(Qt.PointingHandCursor)
         self.btn_run_procesar.setStyleSheet("""
@@ -145,7 +145,7 @@ class ProcessingTab(QWidget):
             QPushButton:disabled { border: 2px solid #555; color: #555; }
         """)
         
-        self.btn_run_rapido = QPushButton("⚡ REPROCESAR RÁPIDO")
+        self.btn_run_rapido = QPushButton(" REPROCESAR RÁPIDO")
         self.btn_run_rapido.setFixedHeight(50)
         self.btn_run_rapido.setCursor(Qt.PointingHandCursor)
         self.btn_run_rapido.setStyleSheet("""
@@ -227,7 +227,7 @@ class ComparativeTab(QWidget):
         # Botones Lanzar
         btn_layout = QHBoxLayout()
         
-        self.btn_run_comparativo = QPushButton("📊 LANZAR ANÁLISIS COMPARATIVO")
+        self.btn_run_comparativo = QPushButton(" LANZAR ANÁLISIS COMPARATIVO")
         self.btn_run_comparativo.setFixedHeight(50)
         self.btn_run_comparativo.setCursor(Qt.PointingHandCursor)
         self.btn_run_comparativo.setStyleSheet("""
@@ -240,7 +240,7 @@ class ComparativeTab(QWidget):
         """)
         btn_layout.addWidget(self.btn_run_comparativo)
 
-        self.btn_run_sesion = QPushButton("📈 LANZAR EVOLUCIÓN DE SESIÓN")
+        self.btn_run_sesion = QPushButton(" LANZAR EVOLUCIÓN DE SESIÓN")
         self.btn_run_sesion.setFixedHeight(50)
         self.btn_run_sesion.setCursor(Qt.PointingHandCursor)
         self.btn_run_sesion.setStyleSheet("""
@@ -290,11 +290,11 @@ class AnalysisPanel(QWidget):
         
         # Pestaña Individual
         self.tab_procesamiento = ProcessingTab()
-        self.tabs.addTab(self.tab_procesamiento, "⚙️ Procesamiento Individual")
+        self.tabs.addTab(self.tab_procesamiento, "️ Procesamiento Individual")
         
         # Pestaña Comparativa
         self.tab_comparativo = ComparativeTab()
-        self.tabs.addTab(self.tab_comparativo, "📊 Análisis Comparativo")
+        self.tabs.addTab(self.tab_comparativo, " Análisis Comparativo")
 
         main_layout.addWidget(self.tabs)
 

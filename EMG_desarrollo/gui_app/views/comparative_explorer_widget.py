@@ -81,10 +81,10 @@ class ComparativeViewerWidget(QWidget):
         
         # Toolbar
         self.toolbar = QHBoxLayout()
-        lbl_title = QLabel("📊 Explorador de Análisis Comparativos")
+        lbl_title = QLabel(" Explorador de Análisis Comparativos")
         lbl_title.setStyleSheet("font-size: 18px; font-weight: bold; color: #FF4444;")
         
-        btn_refresh = QPushButton("🔄 Actualizar Directorio")
+        btn_refresh = QPushButton(" Actualizar Directorio")
         btn_refresh.setStyleSheet("""
             QPushButton {
                 background-color: #880000; color: white; padding: 5px 15px; font-weight: bold; border-radius: 4px; border: 1px solid #ff4444;
@@ -151,7 +151,7 @@ class ComparativeViewerWidget(QWidget):
         
         for fecha in fechas:
             fecha_path = os.path.join(self.root_path, fecha)
-            fecha_item = QTreeWidgetItem(self.tree, [f"📅 {fecha}"])
+            fecha_item = QTreeWidgetItem(self.tree, [f" {fecha}"])
             fecha_item.setData(0, Qt.UserRole, fecha_path)
             fecha_item.setData(0, Qt.UserRole + 1, "fecha")
             fecha_item.setExpanded(True)
@@ -159,7 +159,7 @@ class ComparativeViewerWidget(QWidget):
             experimentos = sorted([d for d in os.listdir(fecha_path) if os.path.isdir(os.path.join(fecha_path, d))])
             for exp in experimentos:
                 exp_path = os.path.join(fecha_path, exp)
-                exp_item = QTreeWidgetItem(fecha_item, [f"📂 {exp}"])
+                exp_item = QTreeWidgetItem(fecha_item, [f" {exp}"])
                 exp_item.setData(0, Qt.UserRole, exp_path)
                 exp_item.setData(0, Qt.UserRole + 1, "experimento")
                 exp_item.setExpanded(True)
@@ -168,7 +168,7 @@ class ComparativeViewerWidget(QWidget):
                 sub_items = sorted([d for d in os.listdir(exp_path) if os.path.isdir(os.path.join(exp_path, d))])
                 for sub in sub_items:
                      sub_path = os.path.join(exp_path, sub)
-                     sub_item = QTreeWidgetItem(exp_item, [f"📁 {sub}"])
+                     sub_item = QTreeWidgetItem(exp_item, [f" {sub}"])
                      sub_item.setData(0, Qt.UserRole, sub_path)
                      sub_item.setData(0, Qt.UserRole + 1, "experimento")
 
@@ -208,12 +208,12 @@ class ComparativeViewerWidget(QWidget):
             for img_name in sorted(imagenes):
                 img_path = os.path.join(path, img_name)
                 
-                lbl_title = QLabel(f"📄 {img_name}")
+                lbl_title = QLabel(f" {img_name}")
                 lbl_title.setStyleSheet("color: #ffaa00; font-weight: bold; margin-top: 15px; font-size: 14px;")
                 lbl_title.setAlignment(Qt.AlignCenter)
                 lyt_container.addWidget(lbl_title)
                 
-                lbl_hint = QLabel("🔍 Haz clic en la imagen para ampliar")
+                lbl_hint = QLabel(" Haz clic en la imagen para ampliar")
                 lbl_hint.setStyleSheet("color: #888; margin-bottom: 5px;")
                 lbl_hint.setAlignment(Qt.AlignCenter)
                 lyt_container.addWidget(lbl_hint)
@@ -225,7 +225,7 @@ class ComparativeViewerWidget(QWidget):
             scroll_imgs.setWidget(container_imgs)
             lyt_imgs.addWidget(scroll_imgs)
             
-            self.tabs_graficos.addTab(tab_imgs, "📈 Gráficos Generados")
+            self.tabs_graficos.addTab(tab_imgs, " Gráficos Generados")
             
         if textos:
             tab_txt = QWidget()
@@ -242,7 +242,7 @@ class ComparativeViewerWidget(QWidget):
             for txt_name in sorted(textos):
                 txt_path = os.path.join(path, txt_name)
                 
-                lbl_title = QLabel(f"📄 {txt_name}")
+                lbl_title = QLabel(f" {txt_name}")
                 lbl_title.setStyleSheet("color: #00ffaa; font-weight: bold; margin-top: 15px; font-size: 14px;")
                 lyt_container_txt.addWidget(lbl_title)
                 
@@ -266,4 +266,4 @@ class ComparativeViewerWidget(QWidget):
             scroll_txt.setWidget(container_txt)
             lyt_txt.addWidget(scroll_txt)
             
-            self.tabs_graficos.addTab(tab_txt, "📝 Datos (CSV/Tex)")
+            self.tabs_graficos.addTab(tab_txt, " Datos (CSV/Tex)")

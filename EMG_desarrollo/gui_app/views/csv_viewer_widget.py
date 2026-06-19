@@ -303,7 +303,7 @@ class CsvViewerWidget(QWidget):
         grp_opts = QGroupBox("Extras")
         grp_opts.setStyleSheet("font-weight: bold; color: #aaa;")
         lyt_opts = QVBoxLayout(grp_opts)
-        self.btn_export = QPushButton("📸 Exportar PNG")
+        self.btn_export = QPushButton(" Exportar PNG")
         self.btn_export.clicked.connect(self.export_png)
         lyt_opts.addWidget(self.btn_export)
         self.slayout.addWidget(grp_opts)

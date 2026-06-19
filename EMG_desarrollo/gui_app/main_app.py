@@ -340,33 +340,33 @@ class ReaperStyleHub(QMainWindow):
         btn.setMenu(menu)
         toolbar.addWidget(btn)
         
-    create_menu_button("⚙ Configuración & Ayuda", [
-        ("⚙ Configuración General", "_internal_config"),
+    create_menu_button(" Configuración & Ayuda", [
+        (" Configuración General", "_internal_config"),
         ("Instrucciones y Créditos", "instrucciones_uso.py")
     ])
     
-    create_menu_button("🎙 Adquisición", [
+    create_menu_button(" Adquisición", [
         ("Metrónomo", "acquisition/metronomo_visual.py"),
         ("Entrenamiento AutoForge", "acquisition/modulo_de_entrenamiento.py")
     ])
     
-    create_menu_button("📊 Análisis", [
+    create_menu_button(" Análisis", [
         ("Graficador", "analysis/plotter_calibrado.py"),
         ("Análisis Correlación", "analysis/correlaciondeseñales.py")
     ])
     
-    create_menu_button("🛠 Utilidades Dataset", [
+    create_menu_button(" Utilidades Dataset", [
         ("Segmentador de Secuencias Continuas", "analysis/segmentador_secuencias.py"),
         ("Extractor Letras (Fase 3)", "analysis/extractor_de_datos_letras.py"),
         ("Editar Medición", "utils/editor_mediciones.py")
     ])
     
-    create_menu_button("🧠 Machine Learning", [
+    create_menu_button(" Machine Learning", [
         ("Pipeline ML (Fase 4)", "machine_learning/dl_data_pipeline.py"),
         ("Extraer Datos ML", "analysis/feature_extractor.py")
     ])
     
-    create_menu_button("🎵 Audio", [
+    create_menu_button(" Audio", [
         ("Reproductor de Audios", "analysis/reproductor_canal3.py")
     ])
 
@@ -441,24 +441,26 @@ class ReaperStyleHub(QMainWindow):
     
     html_intro = f"""
     <div style='padding: 20px;'>
-      <h2 style='color:#00ffff;'> Plataforma de Investigación EMG v4.0</h2>
+      <h2 style='color:#00ffff;'>Plataforma de Investigación EMG v5.0</h2>
       <p>Bienvenido al hub centralizado para adquisición en tiempo real, curación y análisis comparativo de señales electromiográficas.</p>
       
-      <h3 style='color:#00ffaa;'>Novedades Actualización v4.0 (Secuencia Continua & AutoForge):</h3>
+      <h3 style='color:#00ffaa;'>Novedades Actualización v5.0 (Machine Learning & Deep Learning):</h3>
       <ul>
+        <li><b>Integración de Deep Learning:</b> Nueva pestaña con módulos de Análisis XGBoost, Autoencoders, Clustering (PCA y UMAP) y binarización avanzada (Trevisan).</li>
         <li><b>AutoForge Secuencia Continua:</b> Captura el diccionario entero de forma cíclica en un solo click, autogenerando las etiquetas correctas de Machine Learning (valid_words) para cada pulso en los metadatos.</li>
         <li><b>Cálculo de Ruido y SNR Dinámico:</b> Análisis automático del ruido de fondo previo a cada estímulo, con offset centrado en base al primer octavo del pulso promedio para lograr gráficos de overlay precisos.</li>
         <li><b>Sincronización Perfecta:</b> La geometría de búsqueda de pulsos se centra dinámicamente usando como referencia la ventana exacta del beat del metrónomo.</li>
         <li><b>Framework Moderno PySide6:</b> Estabilidad extrema, estética Cyberpunk, colores persistentes y prevención de caídas de UI frente a errores internos.</li>
       </ul>
 
-      <h3 style='color:#ffaa00;'> Instrucciones Rápidas:</h3>
+      <h3 style='color:#ffaa00;'>Instrucciones Rápidas:</h3>
       <ul>
         <li><b>Adquisición:</b> Haz clic en el botón rojo de la derecha para grabar nuevas mediciones o correr el simulador.</li>
         <li><b>Curación Individual:</b> Selecciona mediciones en el árbol izquierdo, marca los canales deseados, configura los filtros Notch/Pasabanda y haz clic en Procesar en la pestaña 'Análisis'. Las gráficas aparecerán automáticamente.</li>
+        <li><b>Deep Learning:</b> Selecciona mediciones y lanza los scripts de Machine Learning directamente desde la pestaña 6.</li>
       </ul>
       
-      <h3 style='color:#00ff00;'> Fundamento Teórico:</h3>
+      <h3 style='color:#00ff00;'>Fundamento Teórico:</h3>
       <p>Para revisar las ecuaciones utilizadas en la extracción de ruido (RMS, P-P) y las justificaciones del procesamiento, haz clic en el siguiente enlace:</p>
       <p> <a href='{file_url}' style='color:#00aaff; font-size: 14px;'><b>Abrir documentacion_matematica.md</b></a></p>
     </div>
@@ -640,6 +642,46 @@ class ReaperStyleHub(QMainWindow):
         os.makedirs(session_path)
     self.session_viewer = ComparativeViewerWidget(root_path=session_path)
     self.tabs.addTab(self.session_viewer, "5. HISTORIAL DE SESIÓN")
+
+    # --- TAB 6: DEEP LEARNING & MACHINE LEARNING ---
+    self.tab_dl_ml = QWidget()
+    lyt_dl_ml = QVBoxLayout(self.tab_dl_ml)
+    
+    lbl_dl_ml = QLabel("MÓDULOS DE DEEP LEARNING Y MACHINE LEARNING")
+    lbl_dl_ml.setStyleSheet("font-size: 18px; font-weight: bold; color: #00ffff;")
+    lbl_dl_ml.setAlignment(Qt.AlignCenter)
+    lyt_dl_ml.addWidget(lbl_dl_ml)
+    
+    grid_dl_ml = QGridLayout()
+    
+    # 1. PCA UMAP
+    btn_pca = QPushButton("Generar PCA y UMAP (Clustering)")
+    btn_pca.setStyleSheet("padding: 15px; font-size: 14px; background-color: #1a0033; color: #ff00ff; border: 1px solid #ff00ff;")
+    btn_pca.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/pca_umap_clustering/generador_pca_umap.py"))
+    grid_dl_ml.addWidget(btn_pca, 0, 0)
+    
+    # 2. Trevisan
+    btn_trevisan = QPushButton("Análisis de Binarización (Trevisan)")
+    btn_trevisan.setStyleSheet("padding: 15px; font-size: 14px; background-color: #001a33; color: #00ffff; border: 1px solid #00ffff;")
+    btn_trevisan.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/binarizacion/analisis_trevisan.py"))
+    grid_dl_ml.addWidget(btn_trevisan, 0, 1)
+    
+    # 3. XGBoost
+    btn_xgboost = QPushButton("Machine Learning: XGBoost")
+    btn_xgboost.setStyleSheet("padding: 15px; font-size: 14px; background-color: #331a00; color: #ff8800; border: 1px solid #ff8800;")
+    btn_xgboost.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/machine_learning/analisis_xgboost.py"))
+    grid_dl_ml.addWidget(btn_xgboost, 1, 0)
+    
+    # 4. Autoencoder
+    btn_autoencoder = QPushButton("Entrenar Autoencoder")
+    btn_autoencoder.setStyleSheet("padding: 15px; font-size: 14px; background-color: #00331a; color: #00ffaa; border: 1px solid #00ffaa;")
+    btn_autoencoder.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/train_autoencoder.py"))
+    grid_dl_ml.addWidget(btn_autoencoder, 1, 1)
+    
+    lyt_dl_ml.addLayout(grid_dl_ml)
+    lyt_dl_ml.addStretch()
+    
+    self.tabs.addTab(self.tab_dl_ml, "6. DEEP LEARNING & MACHINE LEARNING")
 
   def _create_dock_explorer(self):
     """Panel tipo 'Media Explorer' o 'Gestor de Sesiones'"""
@@ -1474,6 +1516,33 @@ finally:
         background-color: transparent;
       }
     """)
+
+  def _launch_dl_ml_script(self, script_rel_path):
+    rutas = self.explorer_widget.get_selected_paths()
+    if not rutas:
+      self.log_console.append(f"> ERROR: Selecciona al menos una medición para lanzar {script_rel_path}\n")
+      return
+    
+    import os
+    import sys
+    import subprocess
+    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    script_abs_path = os.path.join(root_dir, script_rel_path.replace("/", os.sep))
+    
+    if not os.path.exists(script_abs_path):
+      self.log_console.append(f"> ERROR: Script no encontrado: {script_abs_path}\n")
+      return
+      
+    self.log_console.append(f"> INICIANDO SCRIPT: {script_rel_path}")
+    for r in rutas:
+      self.log_console.append(f"  - {r}")
+      
+    cmd = [sys.executable, script_abs_path] + rutas
+    try:
+      subprocess.Popen(cmd)
+      self.log_console.append("> Script lanzado exitosamente en segundo plano.\n")
+    except Exception as e:
+      self.log_console.append(f"> ERROR al lanzar script: {e}\n")
 
 def main():
   from PySide6.QtWidgets import QSplashScreen
