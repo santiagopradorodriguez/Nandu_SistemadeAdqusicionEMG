@@ -231,7 +231,7 @@ def main():
                 except: sil = 0.0
                 
                 sys.stdout = io.StringIO()
-                acc, acc_voc, vocs_unicas = evaluar_clustering_no_supervisado(X_umap, Y_best, f"UMAP_{metric}_{nn}_{md}")
+                acc, acc_voc, vocs_unicas, _, _ = evaluar_clustering_no_supervisado(X_umap, Y_best, f"UMAP_{metric}_{nn}_{md}")
                 sys.stdout = old_stdout
                 
                 row = {
