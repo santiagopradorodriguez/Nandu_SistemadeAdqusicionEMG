@@ -783,7 +783,7 @@ class GeneradorPCAGUI:
         tk.Label(f4, text="Suavizado Envolvente RMS (ms):", width=35, anchor="w", bg="#1F2833", fg="white").pack(side="left")
         self.ent_smooth = tk.Entry(f4, width=10, bg="#0B0C10", fg="white", insertbackground="white")
         self.ent_smooth.pack(side="left")
-        self.ent_smooth.insert(0, "250")
+        self.ent_smooth.insert(0, "90")
         
         # 6. Target Length
         f6 = tk.Frame(params_frame, bg="#1F2833")
@@ -791,7 +791,7 @@ class GeneradorPCAGUI:
         tk.Label(f6, text="Puntos de Remuestreo (TARGET_LEN):", width=35, anchor="w", bg="#1F2833", fg="white").pack(side="left")
         self.ent_target_len = tk.Entry(f6, width=10, bg="#0B0C10", fg="white", insertbackground="white")
         self.ent_target_len.pack(side="left")
-        self.ent_target_len.insert(0, "100")
+        self.ent_target_len.insert(0, "20")
         
         # 5. Notch Q Factor
         f5 = tk.Frame(params_frame, bg="#1F2833")
@@ -799,7 +799,7 @@ class GeneradorPCAGUI:
         tk.Label(f5, text="Filtro Notch Q Factor:", width=35, anchor="w", bg="#1F2833", fg="white").pack(side="left")
         self.ent_notch = tk.Entry(f5, width=10, bg="#0B0C10", fg="white", insertbackground="white")
         self.ent_notch.pack(side="left")
-        self.ent_notch.insert(0, "30.0")
+        self.ent_notch.insert(0, "2.0")
         
         # --- Parámetros UMAP ---
         umap_frame = tk.LabelFrame(main_frame, text="Parámetros de Proyección UMAP", padx=10, pady=10, bg="#1F2833", fg="#66FCF1")
