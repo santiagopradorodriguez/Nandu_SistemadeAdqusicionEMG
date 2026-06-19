@@ -217,9 +217,7 @@ python gui_app/main_app.py
 El proyecto está en desarrollo activo. Consulta `ROADMAP.md` para más detalles o `CONTRIBUTING.md` si quieres ayudar con:
 
 - [ ] **Visualización Anatómica:** Permitir mostrar fotos (ej. `configuracion.jpg`) automáticamente en la interfaz para documentar la disposición física de los electrodos en el sujeto.
-- [ ] **Distribución y Empaquetado:** Crear un archivo ejecutable `.exe` independiente para facilitar la instalación en computadoras de laboratorio.
-- [ ] **Módulos de Deep Learning:** Empezar a crear scripts base usando **PyTorch** para el entrenamiento de redes neuronales a futuro con los datos extraídos.
-- [ ] **Metrónomo Nativo:** Incrustar el metrónomo visual (actualmente en un proceso Tkinter independiente en `metronomo_visual.py`) de forma nativa dentro de la interfaz PySide6 de AutoForge, eliminando el proceso externo para mejorar la sincronización del DAQ.
+
 
 ### Trabajo a futuro
 
