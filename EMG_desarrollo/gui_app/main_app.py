@@ -674,9 +674,9 @@ class ReaperStyleHub(QMainWindow):
     grid_dl_ml.addWidget(btn_xgboost, 1, 0)
     
     # 4. Autoencoder
-    btn_autoencoder = QPushButton("Entrenar Autoencoder")
+    btn_autoencoder = QPushButton("Pipeline Maestro: Autoencoder")
     btn_autoencoder.setStyleSheet("padding: 15px; font-size: 14px; background-color: #00331a; color: #00ffaa; border: 1px solid #00ffaa;")
-    btn_autoencoder.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/train_autoencoder.py"))
+    btn_autoencoder.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/pipeline_autoencoder_gui.py"))
     grid_dl_ml.addWidget(btn_autoencoder, 1, 1)
     
     lyt_dl_ml.addLayout(grid_dl_ml)

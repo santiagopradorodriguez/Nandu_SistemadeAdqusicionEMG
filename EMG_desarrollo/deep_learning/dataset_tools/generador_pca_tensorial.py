@@ -13,9 +13,6 @@ from sklearn.decomposition import PCA
 from sklearn.metrics import silhouette_score, pairwise_distances
 import umap
 
-# Importamos las utilidades de analisis_trevisan
-import analisis_trevisan as at
-
 import sys
 import os
 script_dir_abs = os.path.dirname(os.path.abspath(__file__))
@@ -25,6 +22,9 @@ if os.path.basename(deep_learning_dir) == "deep_learning":
     sys.path.append(os.path.join(deep_learning_dir, "dataset_tools"))
     sys.path.append(os.path.join(deep_learning_dir, "binarizacion"))
     sys.path.append(os.path.dirname(deep_learning_dir)) # EMG_desarrollo root
+
+# Importamos las utilidades de analisis_trevisan
+import analisis_trevisan as at
 
 
 def procesar_mediciones(base_dir):
@@ -385,7 +385,8 @@ def ejecutar_procesamiento(mediciones, alpha_ruido=1.0, snr_threshold=0.5, outli
     from tensorly.decomposition import tucker
     print(f"\nAplicando Multilinear PCA (Tucker Tensor) y UMAP...")
     
-    out_dir = os.path.join(script_dir, "resultados_pca_tensorial")
+    base_repo_dir = os.path.abspath(os.path.join(script_dir, "..", ".."))
+    out_dir = os.path.join(base_repo_dir, "resultados", "resultados_pca_tensorial")
     os.makedirs(out_dir, exist_ok=True)
     
     # ------------------ MPCA (Multilinear PCA) ------------------

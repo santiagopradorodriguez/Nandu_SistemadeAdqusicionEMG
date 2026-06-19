@@ -91,8 +91,10 @@ def plot_latent_space(csv_path, model_path, latent_dim=16):
     ax.set_zlabel("UMAP 3")
     plt.legend()
     
-    out_dir = os.path.dirname(os.path.abspath(__file__))
-    plot_path = os.path.join(out_dir, "latent_space_umap_3d.png")
+    base_repo_dir = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    out_dir = os.path.join(base_repo_dir, "resultados", "resultados_autoencoder")
+    os.makedirs(out_dir, exist_ok=True)
+    plot_path = os.path.join(out_dir, f"latent_space_umap_3d_{latent_dim}d.png")
     plt.savefig(plot_path)
     print(f"Gráfico guardado en {plot_path}")
     
@@ -126,13 +128,13 @@ def plot_latent_space(csv_path, model_path, latent_dim=16):
                 f'{height:.1f}%',
                 ha='center', va='bottom', fontweight='bold')
                 
-    acc_path = os.path.join(out_dir, "accuracy_por_vocal.png")
     plt.tight_layout()
-    plt.savefig(acc_path)
-    print(f"Gráfico de precisión guardado en {acc_path}")
+    acc_plot_path = os.path.join(out_dir, f"accuracy_por_vocal_{latent_dim}d.png")
+    plt.savefig(acc_plot_path)
+    print(f"Gráficos de precisión guardados.")
     
-    # Mostrar todos los gráficos juntos
-    plt.show()
+    # Cerrar gráficos para evitar bloquear el thread
+    plt.close('all')
     
 if __name__ == "__main__":
     base_dir = os.path.dirname(os.path.abspath(__file__))

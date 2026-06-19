@@ -45,11 +45,18 @@ class FeatureViewerApp:
         btn_load = tk.Button(left_panel, text="Cargar CSV de Features", command=self.load_csv, bg=self.bg_panel, fg=self.cyan_neon, font=("Arial", 10, "bold"))
         btn_load.pack(fill="x", pady=(0, 5))
         
-        # Selector de Datasets
+        # Selector de Fuente de Datos
+        self.fuente_var = tk.StringVar(value="PCA/UMAP")
+        self.fuente_selector = ttk.Combobox(left_panel, textvariable=self.fuente_var, values=["PCA/UMAP", "Tensorial (Autoencoder)"], state="readonly")
+        self.fuente_selector.pack(fill="x", pady=(0, 10))
+        self.fuente_selector.bind("<<ComboboxSelected>>", self.on_fuente_selected)
+        
+        # Ocultamos el selector de Datasets que venía por defecto si solo usamos los exports
+        # (Si se prefiere mantener el load manual, lo dejamos)
         self.dataset_var = tk.StringVar()
-        self.dataset_selector = ttk.Combobox(left_panel, textvariable=self.dataset_var, state="readonly")
-        self.dataset_selector.pack(fill="x", pady=(0, 10))
-        self.dataset_selector.bind("<<ComboboxSelected>>", self.on_dataset_selected)
+        # No mostramos el dataset_selector antiguo
+        # self.dataset_selector = ttk.Combobox(left_panel, textvariable=self.dataset_var, state="readonly")
+        # self.dataset_selector.pack(fill="x", pady=(0, 10))
         
         self.lbl_info = tk.Label(left_panel, text="No hay archivo cargado", bg=self.bg_dark, fg=self.fg_text, wraplength=280)
         self.lbl_info.pack(fill="x", pady=(0, 10))
@@ -98,35 +105,27 @@ class FeatureViewerApp:
         self.ax.set_title("Selecciona una toma de la lista para visualizar las 300 variables")
 
     def auto_load_default(self):
-        # Busca cualquier archivo dataset_features*.csv en la carpeta
-        self.base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "base_de_datos_letras"))
-        if not os.path.exists(self.base_dir):
-            return
-            
-        import glob
-        pattern = os.path.join(self.base_dir, "dataset_features*.csv")
-        files = glob.glob(pattern)
-        
-        if not files:
-            return
-            
-        # Ordenar por fecha de modificación (el más reciente primero)
-        files.sort(key=os.path.getmtime, reverse=True)
-        
-        # Llenar el combobox con los nombres de archivo
-        filenames = [os.path.basename(f) for f in files]
-        self.dataset_selector['values'] = filenames
-        self.dataset_selector.current(0) # Seleccionar el más reciente
-        
-        # Cargar el archivo seleccionado
-        self.process_csv(files[0])
+        self.on_fuente_selected(None)
 
-    def on_dataset_selected(self, event):
-        filename = self.dataset_var.get()
-        if filename:
-            path = os.path.join(self.base_dir, filename)
-            if os.path.exists(path):
-                self.process_csv(path)
+    def on_fuente_selected(self, event):
+        fuente = self.fuente_var.get()
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        base_repo_dir = os.path.abspath(os.path.join(script_dir, "..", ".."))
+        
+        if fuente == "PCA/UMAP":
+            path = os.path.join(base_repo_dir, "resultados", "resultados_pca_umap", "caracteristicas_exportadas.csv")
+        else:
+            path = os.path.join(base_repo_dir, "resultados", "resultados_pca_tensorial", "caracteristicas_exportadas.csv")
+            
+        if os.path.exists(path):
+            self.process_csv(path)
+        else:
+            self.data = []
+            self.tomas = []
+            self.listbox.delete(0, tk.END)
+            self.lbl_info.config(text=f"No se encontró:\n{os.path.basename(os.path.dirname(path))}/caracteristicas_exportadas.csv")
+            self.ax.clear()
+            self.canvas.draw()
 
     def load_csv(self):
         file_path = filedialog.askopenfilename(
