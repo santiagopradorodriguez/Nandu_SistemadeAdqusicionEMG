@@ -285,16 +285,32 @@ def evaluar_clustering_no_supervisado(X, Y, nombre):
     total_correctos = cm[row_ind, col_ind].sum()
     accuracy = (total_correctos / len(Y)) * 100
     
+    # --- INFO OCULTA PARA EL PROFESOR ---
+    import pandas as pd
+    df_cm_bruta = pd.DataFrame(cm, index=vocales_unicas, columns=[f"Clúster {i}" for i in range(5)])
+    
+    mapeo_str = []
+    for real_idx, kmeans_idx in zip(row_ind, col_ind):
+        vocal = vocales_unicas[real_idx]
+        mapeo_str.append(f"Clúster {kmeans_idx} -> Vocal {vocal}")
+        
+    print(f"\n=== INFO OCULTA K-MEANS ({nombre}) ===")
+    print("Matriz bruta (Sin etiquetas):")
+    print(df_cm_bruta.to_string())
+    print("\nMapeo óptimo descubierto por el Algoritmo Húngaro:")
+    print(" | ".join(mapeo_str))
+    print("=======================================")
+    
     # --- INFO DETALLADA POR VOCAL ---
     # Reordenar las columnas de la matriz de confusión usando el mapeo del Húngaro
     cm_optima = cm[:, col_ind]
     acc_por_vocal = cm_optima.diagonal() / cm_optima.sum(axis=1) * 100
     
-    print(f"\n>> Desglose K-Means para {nombre}:")
+    print(f"\n>> Desglose Accuracy Final para {nombre}:")
     for i, vocal in enumerate(vocales_unicas):
         print(f"   Vocal {vocal}: {acc_por_vocal[i]:.1f}%")
         
-    return accuracy, acc_por_vocal, vocales_unicas
+    return accuracy, acc_por_vocal, vocales_unicas, df_cm_bruta, mapeo_str
 
 def plot_scatter(X_proj, Y, title, output_path, is_3d=False, variance_ratios=None, connect_points=False):
     fig = plt.figure(figsize=(10, 8))
@@ -540,14 +556,26 @@ def ejecutar_procesamiento(
     # ------------------ CLUSTERING NO SUPERVISADO ------------------
     print("\n--- Evaluando Clustering No Supervisado (K-Means + Húngaro) ---")
     
-    acc_pca_3d, acc_vocales_pca, voc_pca = evaluar_clustering_no_supervisado(X_pca_3d, Y, "PCA 3D")
-    acc_umap_3d, acc_vocales_umap, voc_umap = evaluar_clustering_no_supervisado(X_umap_3d, Y, "UMAP 3D")
+    acc_pca_3d, acc_vocales_pca, voc_pca, df_cm_pca, mapeo_pca = evaluar_clustering_no_supervisado(X_pca_3d, Y, "PCA 3D")
+    acc_umap_3d, acc_vocales_umap, voc_umap, df_cm_umap, mapeo_umap = evaluar_clustering_no_supervisado(X_umap_3d, Y, "UMAP 3D")
     
     print(f"\n=> TOTAL Accuracy Clustering No Supervisado (PCA 3D) : {acc_pca_3d:.2f}%")
     print(f"=> TOTAL Accuracy Clustering No Supervisado (UMAP 3D): {acc_umap_3d:.2f}%")
     
     # Guardar métricas
     with open(os.path.join(out_dir, "metricas.txt"), "w") as f:
+        f.write("========================================================\n")
+        f.write("      INFO OCULTA DE CLUSTERING (PARA EL PROFESOR)\n")
+        f.write("========================================================\n\n")
+        f.write("--- MATRIZ BRUTA PCA 3D ---\n")
+        f.write(df_cm_pca.to_string() + "\n")
+        f.write("Mapeo Húngaro: " + " | ".join(mapeo_pca) + "\n\n")
+        
+        f.write("--- MATRIZ BRUTA UMAP 3D ---\n")
+        f.write(df_cm_umap.to_string() + "\n")
+        f.write("Mapeo Húngaro: " + " | ".join(mapeo_umap) + "\n\n")
+        f.write("========================================================\n\n")
+        
         f.write(f"Silhouette Score (PCA 3D): {sil_pca_3d:.4f}\n")
         f.write(f"Silhouette Score (UMAP 3D): {sil_umap_3d:.4f}\n\n")
         f.write(f"Accuracy No Supervisado (PCA 3D): {acc_pca_3d:.2f}%\n")
