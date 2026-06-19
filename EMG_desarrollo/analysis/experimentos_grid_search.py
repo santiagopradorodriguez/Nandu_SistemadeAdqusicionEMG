@@ -138,12 +138,10 @@ def main():
             print_progress_bar(count_fase1, total_fase1, start_time, prefix=f'Fase 1: {s_ms}ms | {t_len}pts')
             
             # 1. Extracción DSP
-            sys.stdout = io.StringIO() # Silenciar prints de la extracción
             X, Y, Tomas_tmp, SNRs_tmp = extraer_features_concatenadas(
                 base_dir, mediciones, alpha_ruido=ALPHA_RUIDO, 
                 smooth_ms=s_ms, notch_q=NOTCH_Q, target_len=t_len
             )
-            sys.stdout = old_stdout
             
             if len(X) < 5:
                 count_fase1 += 1
@@ -162,9 +160,7 @@ def main():
             try: sil_3d = silhouette_score(X_pca_3d, Y_clean, metric='euclidean')
             except: sil_3d = 0.0
                 
-            sys.stdout = io.StringIO()
-            acc_3d, _, _ = evaluar_clustering_no_supervisado(X_pca_3d, Y_clean, f"PCA_2D_{s_ms}_{t_len}")
-            sys.stdout = old_stdout
+            acc_3d, _, _, _, _ = evaluar_clustering_no_supervisado(X_pca_3d, Y_clean, f"PCA_2D_{s_ms}_{t_len}")
             
             resultados_2d_acc[i, j] = acc_3d
             resultados_2d_sil[i, j] = sil_3d
