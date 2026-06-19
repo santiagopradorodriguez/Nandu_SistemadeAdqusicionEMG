@@ -53,10 +53,10 @@ if getattr(sys, 'frozen', False) and len(sys.argv) > 1 and sys.argv[1].endswith(
       import utils.migrar_mediciones_por_fecha as module
     elif module_name == 'analysis.segmentador_secuencias':
       import analysis.segmentador_secuencias as module
-    elif module_name == 'analysis.extractor_de_datos_letras':
-      import analysis.extractor_de_datos_letras as module
-    elif module_name == 'machine_learning.dl_data_pipeline':
-      import machine_learning.dl_data_pipeline as module
+    elif module_name == 'deep_learning.pca_umap_clustering.generador_pca_umap':
+      import deep_learning.pca_umap_clustering.generador_pca_umap as module
+    elif module_name == 'deep_learning.binarizacion.analisis_trevisan':
+      import deep_learning.binarizacion.analisis_trevisan as module
     else:
       import importlib
       module = importlib.import_module(module_name)
@@ -357,13 +357,14 @@ class ReaperStyleHub(QMainWindow):
     
     create_menu_button(" Utilidades Dataset", [
         ("Segmentador de Secuencias Continuas", "analysis/segmentador_secuencias.py"),
-        ("Extractor Letras (Fase 3)", "analysis/extractor_de_datos_letras.py"),
         ("Editar Medición", "utils/editor_mediciones.py")
     ])
     
     create_menu_button(" Machine Learning", [
-        ("Pipeline ML (Fase 4)", "machine_learning/dl_data_pipeline.py"),
-        ("Extraer Datos ML", "analysis/feature_extractor.py")
+        ("Generador PCA/UMAP", "deep_learning/pca_umap_clustering/generador_pca_umap.py"),
+        ("Binarización (Trevisan)", "deep_learning/binarizacion/analisis_trevisan.py"),
+        ("Clasificador XGBoost", "deep_learning/machine_learning/analisis_xgboost.py"),
+        ("Entrenar Autoencoder", "deep_learning/train_autoencoder.py")
     ])
     
     create_menu_button(" Audio", [
