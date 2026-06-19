@@ -115,7 +115,11 @@ def train_autoencoder(csv_path, epochs=150, batch_size=32, lr=1e-3, latent_dim=1
             print(f"Epoch [{epoch:3d}/{epochs}] - Loss: {epoch_loss:.4f} | Val Loss: {epoch_val_loss:.4f} | Train Acc: {train_acc:.1f}% | Val Acc: {val_acc:.1f}%")
             
     # 4. Guardar resultados
-    out_dir = os.path.dirname(os.path.abspath(__file__))
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    base_repo_dir = os.path.abspath(os.path.join(current_dir, ".."))
+    out_dir = os.path.join(base_repo_dir, "resultados", "resultados_autoencoder")
+    os.makedirs(out_dir, exist_ok=True)
+    
     model_path = os.path.join(out_dir, f"autoencoder_emg_{latent_dim}d.pth")
     torch.save(model.state_dict(), model_path)
     print(f"Modelo guardado en {model_path}")
@@ -145,9 +149,9 @@ def train_autoencoder(csv_path, epochs=150, batch_size=32, lr=1e-3, latent_dim=1
     plt.close() # Prevenir memory leaks
     
 if __name__ == "__main__":
-    # Ajustar esta ruta al CSV exportado por generador_pca_tensorial.py usando rutas absolutas
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    csv_file = os.path.join(base_dir, "..", "analysis", "resultados_pca_tensorial", "caracteristicas_exportadas.csv")
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    base_repo_dir = os.path.abspath(os.path.join(current_dir, ".."))
+    csv_file = os.path.join(base_repo_dir, "resultados", "resultados_pca_tensorial", "caracteristicas_exportadas.csv")
     
     if not os.path.exists(csv_file):
         print(f"Error: No se encontró el dataset en {csv_file}")

@@ -13,21 +13,15 @@ def main():
     print("--- INICIANDO OPCION NUCLEAR: CLASIFICADOR XGBOOST ---")
     
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    data_dir = os.path.abspath(os.path.join(current_dir, "..", "base_de_datos_letras"))
+    base_repo_dir = os.path.abspath(os.path.join(current_dir, "..", ".."))
     
     # Argumentos
-    method = "env"
+    method = "pca_tensorial"
     if len(sys.argv) > 1:
         method = sys.argv[1]
         
-    if method == "env":
-        csv_path = os.path.join(data_dir, "dataset_features_env.csv")
-    elif method == "env_plus":
-        csv_path = os.path.join(data_dir, "dataset_features_env_plus.csv")
-    elif method == "hierro":
-        csv_path = os.path.join(data_dir, "dataset_features_hierro.csv")
-    else:
-        csv_path = os.path.join(data_dir, f"dataset_features_{method}.csv")
+    out_dir = os.path.join(base_repo_dir, "resultados", f"resultados_{method}")
+    csv_path = os.path.join(out_dir, "caracteristicas_exportadas.csv")
         
     if not os.path.exists(csv_path):
         print(f"❌ Error: No se encontró {csv_path}. ¡Extrae las features primero!")
@@ -88,7 +82,7 @@ def main():
     plt.xlabel('Vocal Predicha')
     plt.tight_layout()
     
-    out_img = os.path.join(data_dir, f"xgboost_confusion_{method}.png")
+    out_img = os.path.join(out_dir, f"xgboost_confusion_{method}.png")
     plt.savefig(out_img, dpi=300)
     print(f"Grafico guardado en: {out_img}")
     plt.show()
