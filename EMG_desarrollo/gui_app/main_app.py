@@ -85,7 +85,7 @@ import subprocess
 import matplotlib
 matplotlib.use('TkAgg') # Forzar TkAgg para que las ventanas de curación de Matplotlib pausen el script correctamente en PySide6
 from PySide6.QtWidgets import (
-  QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+  QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
   QDockWidget, QTextEdit, QLabel, QTreeView, QTabWidget,
   QToolBar, QPushButton, QSizePolicy, QMessageBox
 )
