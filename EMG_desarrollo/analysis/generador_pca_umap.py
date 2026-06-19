@@ -679,6 +679,20 @@ def ejecutar_procesamiento(
         guardar_tabla_imagen(df_params_dsp, "Parámetros de Filtrado y DSP", os.path.join(out_dir, "tabla_parametros_dsp.png"), col_width=4.0)
         guardar_tabla_imagen(df_params_umap, "Hiperparámetros UMAP Topológico", os.path.join(out_dir, "tabla_parametros_umap.png"), col_width=4.0)
         
+        # --- TABLA DE ACCURACY COMPARATIVA ---
+        metricas_nombres = ["Silhouette Score", "Accuracy Global"] + [f"Accuracy Vocal {v}" for v in voc_pca]
+        
+        pca_vals = [f"{sil_pca_3d:.4f}", f"{acc_pca_3d:.2f}%"] + [f"{acc:.2f}%" for acc in acc_vocales_pca]
+        umap_vals = [f"{sil_umap_3d:.4f}", f"{acc_umap_3d:.2f}%"] + [f"{acc:.2f}%" for acc in acc_vocales_umap]
+        
+        df_accuracy = pd.DataFrame({
+            "Métrica": metricas_nombres,
+            "PCA 3D": pca_vals,
+            "UMAP 3D": umap_vals
+        }).set_index("Métrica")
+        
+        guardar_tabla_imagen(df_accuracy, "Comparativa de Precisión (Accuracy) y Silhouette", os.path.join(out_dir, "tabla_accuracy_comparativa.png"), col_width=3.5, row_height=0.45)
+        
         print("  -> ¡Tablas en imagen guardadas exitosamente!")
     except Exception as e:
         print(f"  -> Error al generar imágenes de tablas: {e}")
