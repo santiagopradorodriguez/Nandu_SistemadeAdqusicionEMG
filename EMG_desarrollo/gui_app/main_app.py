@@ -360,11 +360,13 @@ class ReaperStyleHub(QMainWindow):
         ("Editar Medición", "utils/editor_mediciones.py")
     ])
     
-    create_menu_button(" Machine Learning", [
+    create_menu_button(" Deep Learning", [
         ("Generador PCA/UMAP", "deep_learning/pca_umap_clustering/generador_pca_umap.py"),
         ("Binarización (Trevisan)", "deep_learning/binarizacion/analisis_trevisan.py"),
         ("Clasificador XGBoost", "deep_learning/machine_learning/analisis_xgboost.py"),
-        ("Entrenar Autoencoder", "deep_learning/train_autoencoder.py")
+        ("Autoencoder", "deep_learning/pipeline_autoencoder_gui.py"),
+        ("Visualizador de Features", "deep_learning/dataset_tools/visor_features.py"),
+        ("Plot 3 Músculos (Paper)", "deep_learning/dataset_tools/plot_3_musculos_standalone.py")
     ])
     
     create_menu_button(" Audio", [

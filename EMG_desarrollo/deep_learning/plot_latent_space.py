@@ -133,8 +133,8 @@ def plot_latent_space(csv_path, model_path, latent_dim=16):
     plt.savefig(acc_plot_path)
     print(f"Gráficos de precisión guardados.")
     
-    # Cerrar gráficos para evitar bloquear el thread
-    plt.close('all')
+    # Mostrar todos los gráficos juntos de forma interactiva
+    plt.show()
     
 if __name__ == "__main__":
     base_dir = os.path.dirname(os.path.abspath(__file__))

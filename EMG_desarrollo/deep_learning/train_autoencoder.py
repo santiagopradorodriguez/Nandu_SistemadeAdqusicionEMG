@@ -14,18 +14,51 @@ def train_autoencoder(csv_path, epochs=150, batch_size=32, lr=1e-3, latent_dim=1
     print(f"Usando archivo de entrenamiento: {os.path.abspath(csv_path)}")
     print(f"==================================================")
     
-    # 1. Preparar Dataset
-    # Evitamos data leakage: instanciamos dos objetos distintos para train y val
     dataset_train = EMGDataset(csv_path, target_length=100, apply_augmentation=True)
     dataset_val = EMGDataset(csv_path, target_length=100, apply_augmentation=False)
     
-    train_size = int(0.8 * len(dataset_train))
-    val_size = len(dataset_train) - train_size
+    # ---------------------------------------------------------
+    # FIX DATA LEAKAGE: Split por 'Toma' en lugar de ventanas
+    # ---------------------------------------------------------
+    import numpy as np
     
-    # Fijamos semilla para reproducibilidad en el split
-    indices = torch.randperm(len(dataset_train)).tolist()
-    train_dataset = torch.utils.data.Subset(dataset_train, indices[:train_size])
-    val_dataset = torch.utils.data.Subset(dataset_val, indices[train_size:])
+    todas_las_tomas = dataset_train.tomas
+    # Extraer el identificador físico de la sesión (ej. 'T1_Lucas' de 'A_T1_Lucas_Win0')
+    # El formato es {Vocal}_{Toma}_{Paciente}_Win{X}
+    def get_session_id(toma_str):
+        parts = toma_str.split('_')
+        if len(parts) >= 3:
+            return f"{parts[1]}_{parts[2]}" # Ej: T1_Lucas
+        return toma_str.split('_Win')[0]
+        
+    sesiones_base = [get_session_id(toma) for toma in todas_las_tomas]
+    sesiones_unicas = list(set(sesiones_base))
+    
+    # Ordenar y fijar semilla para reproducibilidad
+    sesiones_unicas.sort()
+    np.random.seed(42)
+    np.random.shuffle(sesiones_unicas)
+    
+    # 80% Sesiones para Train, 20% Sesiones para Validación
+    train_sesiones_size = int(0.8 * len(sesiones_unicas))
+    train_sesiones = set(sesiones_unicas[:train_sesiones_size])
+    val_sesiones = set(sesiones_unicas[train_sesiones_size:])
+    
+    train_indices = [i for i, sesion in enumerate(sesiones_base) if sesion in train_sesiones]
+    val_indices = [i for i, sesion in enumerate(sesiones_base) if sesion in val_sesiones]
+    
+    print(f"Total de Sesiones Físicas: {len(sesiones_unicas)} | Sesiones Train: {len(train_sesiones)} | Sesiones Val: {len(val_sesiones)}")
+    print(f"--- SESIONES FÍSICAS EN ENTRENAMIENTO ---")
+    for t in sorted(list(train_sesiones)):
+        print(f"  - {t}")
+    print(f"--- SESIONES FÍSICAS EN VALIDACIÓN ---")
+    for t in sorted(list(val_sesiones)):
+        print(f"  - {t}")
+    print(f"--------------------------------------------------")
+    print(f"Ventanas Train: {len(train_indices)} | Ventanas Val: {len(val_indices)}")
+    
+    train_dataset = torch.utils.data.Subset(dataset_train, train_indices)
+    val_dataset = torch.utils.data.Subset(dataset_val, val_indices)
     
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
@@ -145,8 +178,8 @@ def train_autoencoder(csv_path, epochs=150, batch_size=32, lr=1e-3, latent_dim=1
     
     plot_path = os.path.join(out_dir, "loss_curve.png")
     plt.savefig(plot_path)
-    print(f"Gráfico de entrenamiento guardado en {plot_path}")
-    plt.close() # Prevenir memory leaks
+    # Mostrar curva de entrenamiento
+    plt.show()
     
 if __name__ == "__main__":
     current_dir = os.path.dirname(os.path.abspath(__file__))

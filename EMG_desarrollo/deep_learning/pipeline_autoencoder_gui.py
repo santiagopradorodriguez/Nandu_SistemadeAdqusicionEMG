@@ -22,7 +22,7 @@ import plot_latent_space as pls
 class PipelineAutoencoderGUI:
     def __init__(self, root, rutas_preseleccionadas=None):
         self.root = root
-        self.root.title("Pipeline Maestro de Autoencoder & Deep Learning")
+        self.root.title("Autoencoder")
         self.root.geometry("800x850")
         self.root.configure(bg="#0B0C10")
         
@@ -50,7 +50,7 @@ class PipelineAutoencoderGUI:
         main_frame = tk.Frame(self.root, bg=self.bg_dark, padx=20, pady=20)
         main_frame.pack(fill="both", expand=True)
         
-        lbl_title = tk.Label(main_frame, text="PIPELINE MAESTRO: AUTOENCODER 1D", bg=self.bg_dark, fg=self.cyan_neon, font=("Arial", 16, "bold"))
+        lbl_title = tk.Label(main_frame, text="AUTOENCODER 1D", bg=self.bg_dark, fg=self.cyan_neon, font=("Arial", 16, "bold"))
         lbl_title.pack(pady=(0, 15))
         
         # --- PANEL DE MEDICIONES ---
@@ -65,18 +65,18 @@ class PipelineAutoencoderGUI:
         scrollbar.config(command=self.listbox_med.yview)
         
         # --- PANEL DE EXTRACCIÓN TENSORIAL ---
-        frame_dsp = tk.LabelFrame(main_frame, text=" 2. Hiperparámetros de Extracción DSP (Tensorial) ", bg=self.bg_panel, fg=self.cyan_neon, font=("Arial", 11, "bold"), padx=10, pady=10)
+        frame_dsp = tk.LabelFrame(main_frame, text=" 2. Parámetros de Extracción DSP (Tensorial) ", bg=self.bg_panel, fg=self.cyan_neon, font=("Arial", 11, "bold"), padx=10, pady=10)
         frame_dsp.pack(fill="x", pady=5)
         
         grid_dsp = tk.Frame(frame_dsp, bg=self.bg_panel)
         grid_dsp.pack(fill="x")
         
         params_dsp = [
-            ("Alpha Ruido:", "0.4", "ent_alpha"),
-            ("SNR Min:", "2.0", "ent_snr"),
+            ("Alpha Ruido:", "1.0", "ent_alpha"),
+            ("SNR Min:", "0.5", "ent_snr"),
             ("Outliers (%):", "0.05", "ent_outliers"),
-            ("Smooth (ms):", "50", "ent_smooth"),
-            ("Notch Q:", "30", "ent_notch_q")
+            ("Smooth (ms):", "150", "ent_smooth"),
+            ("Notch Q:", "2.0", "ent_notch_q")
         ]
         
         for i, (label_text, default_val, attr_name) in enumerate(params_dsp):
@@ -89,7 +89,7 @@ class PipelineAutoencoderGUI:
             setattr(self, attr_name, ent)
             
         # --- PANEL DE AUTOENCODER ---
-        frame_nn = tk.LabelFrame(main_frame, text=" 3. Hiperparámetros de Red Neuronal ", bg=self.bg_panel, fg=self.cyan_neon, font=("Arial", 11, "bold"), padx=10, pady=10)
+        frame_nn = tk.LabelFrame(main_frame, text=" 3. Parámetros de Red Neuronal ", bg=self.bg_panel, fg=self.cyan_neon, font=("Arial", 11, "bold"), padx=10, pady=10)
         frame_nn.pack(fill="x", pady=5)
         
         grid_nn = tk.Frame(frame_nn, bg=self.bg_panel)
@@ -108,9 +108,18 @@ class PipelineAutoencoderGUI:
             ent.grid(row=0, column=i*2+1, sticky="w", padx=5, pady=5)
             setattr(self, attr_name, ent)
             
-        # --- BOTON DE EJECUCION ---
-        self.btn_ejecutar = tk.Button(main_frame, text="EJECUTAR PIPELINE COMPLETO", font=("Arial", 14, "bold"), bg=self.green_neon, fg="black", command=self.ejecutar_pipeline)
-        self.btn_ejecutar.pack(fill="x", pady=15, ipady=10)
+        # --- BOTONES DE EJECUCION ---
+        frame_btns = tk.Frame(main_frame, bg=self.bg_dark)
+        frame_btns.pack(fill="x", pady=15)
+        
+        self.btn_extraer = tk.Button(frame_btns, text="EXTRAER DATASET", font=("Arial", 11, "bold"), bg=self.cyan_dim, fg="black", command=self.ejecutar_extraccion)
+        self.btn_extraer.pack(side="left", fill="x", expand=True, padx=2, ipady=8)
+        
+        self.btn_entrenar = tk.Button(frame_btns, text="ENTRENAR AUTOENCODER", font=("Arial", 11, "bold"), bg=self.cyan_dim, fg="black", command=self.ejecutar_entrenamiento)
+        self.btn_entrenar.pack(side="left", fill="x", expand=True, padx=2, ipady=8)
+        
+        self.btn_plotear = tk.Button(frame_btns, text="PLOTEAR ESPACIO LATENTE", font=("Arial", 11, "bold"), bg=self.green_neon, fg="black", command=self.ejecutar_ploteo)
+        self.btn_plotear.pack(side="left", fill="x", expand=True, padx=2, ipady=8)
         
         # --- LOG CONSOLE ---
         self.log_text = tk.Text(main_frame, height=8, bg="#111111", fg="#00FF00", font=("Consolas", 9), state="disabled")
@@ -118,10 +127,10 @@ class PipelineAutoencoderGUI:
         
         # --- HERRAMIENTAS ADICIONALES ---
         frame_tools = tk.Frame(main_frame, bg=self.bg_dark)
-        frame_tools.pack(fill="x", pady=5)
+        frame_tools.pack(fill="x", pady=15)
         
-        tk.Button(frame_tools, text="Visualizador de Features", bg="#333333", fg="white", command=self.lanzar_visor).pack(side="left", fill="x", expand=True, padx=2)
-        tk.Button(frame_tools, text="Plot 3 Músculos (Paper)", bg="#333333", fg="white", command=self.lanzar_plot_musculos).pack(side="right", fill="x", expand=True, padx=2)
+        tk.Button(frame_tools, text="VISUALIZADOR DE FEATURES", bg="#333333", fg="white", font=("Arial", 10, "bold"), command=self.lanzar_visor).pack(fill="x", expand=True, padx=2, pady=2, ipady=5)
+        tk.Button(frame_tools, text="DECODIFICAR SECUENCIA CONTINUA", bg="#333333", fg="#00FFFF", font=("Arial", 10, "bold"), command=self.lanzar_decodificador_continuo).pack(fill="x", expand=True, padx=2, pady=2, ipady=5)
         
         self.cargar_mediciones()
 
@@ -145,49 +154,56 @@ class PipelineAutoencoderGUI:
             # Seleccionar todas por defecto
             self.listbox_med.select_set(0, tk.END)
 
-    def ejecutar_pipeline(self):
+    def get_params_dsp(self):
+        return (
+            float(self.ent_alpha.get()),
+            float(self.ent_snr.get()),
+            float(self.ent_outliers.get()),
+            int(self.ent_smooth.get()),
+            float(self.ent_notch_q.get())
+        )
+        
+    def get_params_nn(self):
+        return (
+            int(self.ent_epochs.get()),
+            int(self.ent_batch.get()),
+            int(self.ent_latent.get())
+        )
+        
+    def toggle_buttons(self, state):
+        self.btn_extraer.config(state=state)
+        self.btn_entrenar.config(state=state)
+        self.btn_plotear.config(state=state)
+
+    def ejecutar_extraccion(self):
         seleccionadas = [self.listbox_med.get(i) for i in self.listbox_med.curselection()]
         if not seleccionadas:
             messagebox.showwarning("Advertencia", "Seleccione al menos una medición.")
             return
             
         try:
-            val_alpha = float(self.ent_alpha.get())
-            val_snr = float(self.ent_snr.get())
-            val_out = float(self.ent_outliers.get())
-            val_smooth = int(self.ent_smooth.get())
-            val_notch_q = float(self.ent_notch_q.get())
-            
-            v_epochs = int(self.ent_epochs.get())
-            v_batch = int(self.ent_batch.get())
-            v_latent = int(self.ent_latent.get())
+            params = self.get_params_dsp()
         except ValueError:
-            messagebox.showerror("Error", "Parámetros numéricos inválidos.")
+            messagebox.showerror("Error", "Parámetros numéricos inválidos en DSP.")
             return
             
-        self.btn_ejecutar.config(state="disabled")
+        self.toggle_buttons("disabled")
         self.log("=========================================")
-        self.log("INICIANDO PIPELINE DE AUTOENCODER")
+        self.log("INICIANDO EXTRACCIÓN DE DATASET")
         self.log("=========================================")
-        
-        # Ejecutamos en un thread para no bloquear la GUI
-        threading.Thread(target=self._pipeline_thread, args=(seleccionadas, val_alpha, val_snr, val_out, val_smooth, val_notch_q, v_epochs, v_batch, v_latent)).start()
+        threading.Thread(target=self._extraccion_thread, args=(seleccionadas, *params)).start()
 
-    def _pipeline_thread(self, seleccionadas, val_alpha, val_snr, val_out, val_smooth, val_notch_q, v_epochs, v_batch, v_latent):
+    def _extraccion_thread(self, seleccionadas, val_alpha, val_snr, val_out, val_smooth, val_notch_q):
         import traceback
         try:
-            self.log("[1/3] Extracción Tensorial de Features...")
-            # Sobrescribimos el print temporalmente para que salga en la consola
             old_stdout = sys.stdout
             class LogWriter:
                 def __init__(self, log_func): self.log_func = log_func
                 def write(self, t): 
                     if t.strip(): self.log_func(t.strip())
                 def flush(self): pass
-            
             sys.stdout = LogWriter(self.log)
             
-            # 1. Extracción Tensorial
             gpt.ejecutar_procesamiento(
                 seleccionadas,
                 alpha_ruido=val_alpha,
@@ -197,44 +213,163 @@ class PipelineAutoencoderGUI:
                 notch_q=val_notch_q
             )
             
-            # 2. Entrenamiento
-            self.log("\n[2/3] Entrenando Autoencoder Conv1D...")
+            sys.stdout = old_stdout
+            self.log("\n>>> EXTRACCIÓN COMPLETADA <<<")
+        except Exception as e:
+            sys.stdout = old_stdout
+            self.log(f"\n[ERROR] El proceso falló: {e}")
+            self.log(traceback.format_exc())
+            messagebox.showerror("Error", f"Ocurrió un error:\n{e}")
+        finally:
+            self.toggle_buttons("normal")
+
+    def ejecutar_entrenamiento(self):
+        try:
+            v_epochs, v_batch, v_latent = self.get_params_nn()
+        except ValueError:
+            messagebox.showerror("Error", "Parámetros numéricos inválidos en Red Neuronal.")
+            return
+            
+        self.toggle_buttons("disabled")
+        self.log("=========================================")
+        self.log("INICIANDO ENTRENAMIENTO AUTOENCODER")
+        self.log("=========================================")
+        threading.Thread(target=self._entrenamiento_thread, args=(v_epochs, v_batch, v_latent)).start()
+
+    def _entrenamiento_thread(self, v_epochs, v_batch, v_latent):
+        import traceback
+        try:
+            old_stdout = sys.stdout
+            class LogWriter:
+                def __init__(self, log_func): self.log_func = log_func
+                def write(self, t): 
+                    if t.strip(): self.log_func(t.strip())
+                def flush(self): pass
+            sys.stdout = LogWriter(self.log)
+            
             script_dir = os.path.dirname(os.path.abspath(__file__))
             base_repo_dir = os.path.abspath(os.path.join(script_dir, ".."))
             csv_file = os.path.join(base_repo_dir, "resultados", "resultados_pca_tensorial", "caracteristicas_exportadas.csv")
             
             if not os.path.exists(csv_file):
-                raise Exception(f"No se encontró el dataset en {csv_file}")
+                raise Exception(f"No se encontró el dataset en {csv_file}\nDebes extraer el dataset primero.")
                 
             ta.train_autoencoder(csv_file, epochs=v_epochs, batch_size=v_batch, latent_dim=v_latent)
             
-            # 3. Ploteo de Espacio Latente
-            self.log("\n[3/3] Generando mapa UMAP 3D del espacio latente...")
+            sys.stdout = old_stdout
+            self.log("\n>>> ENTRENAMIENTO COMPLETADO <<<")
+        except Exception as e:
+            sys.stdout = old_stdout
+            self.log(f"\n[ERROR] El proceso falló: {e}")
+            self.log(traceback.format_exc())
+            messagebox.showerror("Error", f"Ocurrió un error:\n{e}")
+        finally:
+            self.toggle_buttons("normal")
+
+    def ejecutar_ploteo(self):
+        try:
+            _, _, v_latent = self.get_params_nn()
+        except ValueError:
+            messagebox.showerror("Error", "Latent Dim inválido.")
+            return
+            
+        self.toggle_buttons("disabled")
+        self.log("=========================================")
+        self.log("INICIANDO PLOTEO ESPACIO LATENTE")
+        self.log("=========================================")
+        threading.Thread(target=self._ploteo_thread, args=(v_latent,)).start()
+
+    def _ploteo_thread(self, v_latent):
+        import traceback
+        try:
+            old_stdout = sys.stdout
+            class LogWriter:
+                def __init__(self, log_func): self.log_func = log_func
+                def write(self, t): 
+                    if t.strip(): self.log_func(t.strip())
+                def flush(self): pass
+            sys.stdout = LogWriter(self.log)
+            
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            base_repo_dir = os.path.abspath(os.path.join(script_dir, ".."))
+            csv_file = os.path.join(base_repo_dir, "resultados", "resultados_pca_tensorial", "caracteristicas_exportadas.csv")
             model_path = os.path.join(base_repo_dir, "resultados", "resultados_autoencoder", f"autoencoder_emg_{v_latent}d.pth")
-            if not os.path.exists(model_path):
-                raise Exception(f"No se encontró el modelo entrenado en {model_path}")
+            
+            if not os.path.exists(csv_file) or not os.path.exists(model_path):
+                raise Exception("Faltan archivos.\nDebes extraer el dataset y entrenar el modelo primero.")
                 
             pls.plot_latent_space(csv_file, model_path, latent_dim=v_latent)
             
             sys.stdout = old_stdout
-            self.log("\n>>> PIPELINE COMPLETADO EXITOSAMENTE <<<")
-            messagebox.showinfo("Éxito", "El Pipeline del Autoencoder se ejecutó correctamente.")
+            self.log("\n>>> PLOTEO COMPLETADO <<<")
         except Exception as e:
             sys.stdout = old_stdout
-            self.log(f"\n[ERROR] El pipeline falló: {e}")
+            self.log(f"\n[ERROR] El proceso falló: {e}")
             self.log(traceback.format_exc())
-            messagebox.showerror("Error de Pipeline", f"Ocurrió un error:\n{e}")
+            messagebox.showerror("Error", f"Ocurrió un error:\n{e}")
         finally:
-            self.btn_ejecutar.config(state="normal")
+            self.toggle_buttons("normal")
             
+    def lanzar_decodificador_continuo(self):
+        from tkinter import filedialog
+        carpeta = filedialog.askdirectory(initialdir=self.base_dir, title="Seleccione la carpeta de Secuencia Continua")
+        if not carpeta:
+            return
+            
+        script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "decodificador_continuo.py")
+        if not os.path.exists(script_path):
+            messagebox.showerror("Error", f"No se encontró {script_path}")
+            return
+            
+        self.log(f"Lanzando Decodificador Continuo para: {os.path.basename(carpeta)}...")
+        self.toggle_buttons("disabled")
+        
+        # Ejecutar en un hilo para mostrar prints en el log de la GUI
+        threading.Thread(target=self._decodificador_thread, args=(carpeta,)).start()
+
+    def _decodificador_thread(self, carpeta):
+        import traceback
+        try:
+            old_stdout = sys.stdout
+            class LogWriter:
+                def __init__(self, log_func): self.log_func = log_func
+                def write(self, t): 
+                    if t.strip(): self.log_func(t.strip())
+                def flush(self): pass
+            sys.stdout = LogWriter(self.log)
+            
+            # Importar e invocar la funcion directamente en lugar de subproceso
+            import deep_learning.decodificador_continuo as dc
+            modelo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "resultados", "resultados_autoencoder", "autoencoder_emg_16d.pth")
+            
+            # Traer parametros de ruido/notch actuales de la GUI si se quiere
+            val_alpha, _, _, val_smooth, val_notch_q = self.get_params_dsp()
+            
+            dc.decodificar_secuencia(carpeta, modelo_path, alpha_ruido=val_alpha, smooth_ms=val_smooth, notch_q=val_notch_q)
+            
+            sys.stdout = old_stdout
+            self.log("\n>>> DECODIFICACIÓN COMPLETADA <<<")
+        except Exception as e:
+            sys.stdout = old_stdout
+            self.log(f"\n[ERROR] El decodificador falló: {e}")
+            self.log(traceback.format_exc())
+            messagebox.showerror("Error", f"Ocurrió un error:\n{e}")
+        finally:
+            self.toggle_buttons("normal")
+
     def lanzar_visor(self):
         script_dir = os.path.dirname(os.path.abspath(__file__))
         visor_path = os.path.join(script_dir, "dataset_tools", "visor_features.py")
-        subprocess.Popen([sys.executable, visor_path])
-        
+        if os.path.exists(visor_path):
+            import subprocess
+            subprocess.Popen([sys.executable, visor_path])
+        else:
+            messagebox.showerror("Error", f"No se encontró {visor_path}")
+            
     def lanzar_plot_musculos(self):
         script_dir = os.path.dirname(os.path.abspath(__file__))
         plot_path = os.path.join(script_dir, "dataset_tools", "plot_3_musculos_standalone.py")
+        import subprocess
         subprocess.Popen([sys.executable, plot_path])
 
 if __name__ == "__main__":
