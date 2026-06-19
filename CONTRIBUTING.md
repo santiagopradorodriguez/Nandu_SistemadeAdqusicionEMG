@@ -40,7 +40,8 @@ Actualmente, necesitamos colaboración urgente en las siguientes áreas:
 - [ ] **Integración Nativa del Metrónomo:** Incrustar el metrónomo visual (actualmente en un proceso Tkinter independiente usando `metronomo_visual.py`) de forma nativa dentro de la interfaz PySide6 de AutoForge. Esta mejora arquitectónica busca eliminar el proceso externo para mejorar drásticamente la sincronización del DAQ.
 
 ### Trabajo a futuro
-Se tiene planeado implementar un botón de pausa en la interfaz principal para permitir la interrupción temporal y reanudación de las adquisiciones de forma segura.
+- **Botón de Pausa:** Se tiene planeado implementar un botón de pausa en la interfaz principal para permitir la interrupción temporal y reanudación de las adquisiciones de forma segura.
+- **Decodificador de Voz:** Implementar un módulo decodificador de voz basado en la adquisición principal (DAQ), utilizando los datos procesados por el Autoencoder o PCA.
 
 ---
 

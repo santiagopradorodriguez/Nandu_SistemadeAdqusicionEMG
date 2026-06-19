@@ -221,8 +221,8 @@ El proyecto está en desarrollo activo. Consulta `ROADMAP.md` para más detalles
 
 ### Trabajo a futuro
 
-La idea es implementar un **botón de pausa** en la interfaz principal para permitir la interrupción temporal y reanudación de las adquisiciones de forma segura.
-
+- **Botón de Pausa:** Implementar un botón en la interfaz principal para permitir la interrupción temporal y reanudación de las adquisiciones de forma segura.
+- **Decodificador de Voz:** Implementar un módulo decodificador de voz basado en la adquisición principal (DAQ), utilizando los datos procesados por el Autoencoder o PCA.
 ---
 
 ## Errores Conocidos y Soluciones Históricas
