@@ -645,6 +645,26 @@ def ejecutar_procesamiento(
         
         guardar_tabla_imagen(df_resumen, "Resumen de Mediciones por Vocal", os.path.join(out_dir, "tabla_resumen_mediciones.png"))
         
+        # --- TABLA DETALLADA DE MEDICIONES ---
+        detalle_procesadas = df_procesadas.copy()
+        detalle_procesadas['Estado'] = 'Procesada'
+        detalle_procesadas['Motivo / SNR'] = '-'
+        
+        if descartados:
+            detalle_descartadas = df_desc.copy()
+            detalle_descartadas['Estado'] = 'Descartada'
+            detalle_descartadas['Motivo / SNR'] = detalle_descartadas['Motivo'] + " (SNR: " + detalle_descartadas['SNR'].round(2).astype(str) + ")"
+            detalle_descartadas = detalle_descartadas[['Toma', 'Vocal', 'Estado', 'Motivo / SNR']]
+        else:
+            detalle_descartadas = pd.DataFrame(columns=['Toma', 'Vocal', 'Estado', 'Motivo / SNR'])
+            
+        df_detalle = pd.concat([detalle_procesadas, detalle_descartadas], ignore_index=True)
+        # Ordenar alfabéticamente por Toma para que queden A_T1, A_T2...
+        df_detalle = df_detalle.sort_values(by=['Vocal', 'Toma']).set_index('Toma')
+        
+        # Al ser una tabla larga (35 filas), achicamos un poco la altura de fila para que entre en la imagen sin que sea gigante
+        guardar_tabla_imagen(df_detalle, "Detalle Exacto por Toma", os.path.join(out_dir, "tabla_detalle_mediciones.png"), col_width=3.0, row_height=0.35, font_size=9)
+        
         # --- TABLAS DE PARÁMETROS ---
         df_params_dsp = pd.DataFrame({
             "Parámetro": ["Filtro Notch (Q)", "Envolvente (Smooth ms)", "Remuestreo (Longitud)", "Filtro de SNR", "Filtro Isolation Forest"],
