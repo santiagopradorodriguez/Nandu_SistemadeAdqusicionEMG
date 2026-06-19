@@ -648,7 +648,8 @@ def ejecutar_procesamiento(
         if descartados:
             df_resumen_desc = df_desc.groupby('Vocal').size().to_frame('Cant. Descartada')
         else:
-            df_resumen_desc = pd.DataFrame({'Cant. Descartada': [0]*len(vocales_unicas)}, index=vocales_unicas)
+            vocales_presentes = sorted(list(set(Y_orig)))
+            df_resumen_desc = pd.DataFrame({'Cant. Descartada': [0]*len(vocales_presentes)}, index=vocales_presentes)
             
         df_resumen_proc = df_procesadas.groupby('Vocal').size().to_frame('Cant. Procesada')
         df_resumen = df_resumen_proc.join(df_resumen_desc, how='outer').fillna(0).astype(int)
