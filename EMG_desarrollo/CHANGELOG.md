@@ -1,5 +1,9 @@
 # CHANGELOG
 
+## [Unreleased]
+### Modificado
+- Reestructuración de las carpetas 'resultados' y 'deep_learning'.
+
 ## [v5.1.0] - 2026-06-05
 ### Agregado (Added)
 - **Desarrollo IA**: Integración profunda del flujo de trabajo con Agentes Autónomos (Ecosistema Antigravity).

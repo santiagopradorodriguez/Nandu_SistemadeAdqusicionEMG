@@ -39,13 +39,16 @@ Actualmente, necesitamos colaboración urgente en las siguientes áreas:
 - [ ] **Empaquetado EXE:** Depurar la compilación de PyInstaller para evitar pesos excesivos e inclusión de librerías innecesarias (ignorar carpetas de base de datos grandes en el `.spec`).
 - [ ] **Integración Nativa del Metrónomo:** Incrustar el metrónomo visual (actualmente en un proceso Tkinter independiente usando `metronomo_visual.py`) de forma nativa dentro de la interfaz PySide6 de AutoForge. Esta mejora arquitectónica busca eliminar el proceso externo para mejorar drásticamente la sincronización del DAQ.
 
+### Trabajo a futuro
+Se tiene planeado implementar un botón de pausa en la interfaz principal para permitir la interrupción temporal y reanudación de las adquisiciones de forma segura.
+
 ---
 
-## Ecosistema de Agentes Autónomos
-Este repositorio es pionero en el desarrollo asistido por Inteligencia Artificial Estructurada. El proyecto es co-desarrollado por un "Enjambre de Agentes Autónomos" liderado por el meta-agente principal **Antigravity**.
-Al contribuir, ten en cuenta el flujo de trabajo Multi-Agente:
-- **Especialización**: Tareas complejas son delegadas a agentes específicos (Frontend Expert, DSP Auditor, Backend Optimizer).
-- **Consistencia Matemática**: Todo cambio en el procesamiento de señales debe ser validado por los agentes DSP para asegurar la fidelidad de los datos.
+## Asistencia por Inteligencia Artificial
+Este repositorio utiliza herramientas de Inteligencia Artificial para asistir en el desarrollo y estructuración del código.
+Al contribuir, ten en cuenta el flujo de trabajo asistido:
+- **Especialización**: Se utilizan asistentes especializados para tareas complejas de desarrollo.
+- **Consistencia Matemática**: Todo cambio en el procesamiento de señales es revisado exhaustivamente para asegurar la fidelidad de los datos.
 
 ## 🛠️ Configuración del Entorno de Desarrollo
 

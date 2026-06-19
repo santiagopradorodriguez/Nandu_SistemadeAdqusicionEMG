@@ -3,7 +3,7 @@
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python)
 ![Estado](https://img.shields.io/badge/Estado-En_Desarrollo-yellow?style=for-the-badge)
 ![Licencia](https://img.shields.io/badge/Licencia-Open_Source-green?style=for-the-badge)
-[![Descargas](https://img.shields.io/badge/📥_Descargas_Windows-Click_Aquí-0078D6?style=for-the-badge)](./DESCARGAS.md)
+[![Descargas](https://img.shields.io/badge/Descargas_Windows-Click_Aquí-0078D6?style=for-the-badge)](./DESCARGAS.md)
 
 > **"HECHO PARA Y POR LA COMUNIDAD"**
 
@@ -21,7 +21,7 @@ Desarrollado por la comunidad para el **Laboratorio de Sistemas Dinámicos**.
 
 ---
 
-## 🚀 Características del Sistema (Beta 5.1 - PySide6 & AutoForge)
+## Características del Sistema (Beta 5.1 - PySide6 & AutoForge)
 
 El proyecto se gestiona desde el **Lanzador Principal** (`gui_app/main_app.py`) que integra estética Cyberpunk, aceleración de hardware y múltiples módulos independientes:
 
@@ -48,7 +48,7 @@ El proyecto se gestiona desde el **Lanzador Principal** (`gui_app/main_app.py`) 
 
 ---
 
-## 🤖 Módulo de Autograbación Inteligente (AutoForge)
+## Módulo de Autograbación Inteligente (AutoForge)
 AutoForge es la nueva máquina de estados central del proyecto, diseñada para capturar datasets de forma masiva y estructurada sin intervención manual constante. Su flujo de trabajo automatizado incluye:
 
 - **Lectura Automática de Diccionarios:** Lee un archivo `palabras.txt` para guiar al sujeto secuencialmente por todos los gestos.
@@ -59,7 +59,7 @@ AutoForge es la nueva máquina de estados central del proyecto, diseñada para c
 - **Auto-Guardado:** Guarda las grabaciones crudas, procesadas y metadatos con la nomenclatura perfecta para su posterior entrenamiento en Machine Learning.
 
 ---
-### 🛠️ Herramientas y Módulos (Nueva Arquitectura Beta 5.0 PySide6)
+### Herramientas y Módulos (Nueva Arquitectura Beta 5.0 PySide6)
 El proyecto ha sido completamente refactorizado en una arquitectura modular usando **PySide6** para interfaces gráficas modernas y fluidas:
 
 #### 1. Módulo `acquisition/` (Adquisición de Hardware)
@@ -79,7 +79,7 @@ El proyecto ha sido completamente refactorizado en una arquitectura modular usan
 
 ---
 
-## 🧠 Pipeline de Deep Learning (PyTorch)
+## Pipeline de Deep Learning (PyTorch)
 El proyecto incluye un pipeline estructurado enfocado en transformar señales crudas a tensores normalizados para el entrenamiento de arquitecturas de Deep Learning (como Autoencoders).
 
 *   **`dl_data_pipeline.py`**: Script encargado de procesar en "Batch" las bases de datos de electrodos. 
@@ -90,7 +90,7 @@ El proyecto incluye un pipeline estructurado enfocado en transformar señales cr
     5. **Dataloader**: Genera archivos `.npy` y crea la clase `EMGDataset` compatible con `torch.utils.data.Dataset`.
 
 ---
-## 💾 Arquitectura y Protocolo de Datos
+## Arquitectura y Protocolo de Datos
 
 ### Diagrama de Flujo de Datos
 ```mermaid
@@ -154,7 +154,7 @@ graph TD
 
 ---
 
-## 💻 Instalación y Requisitos
+## Instalación y Requisitos
 
 ### 1. Prerrequisitos de Hardware
 - Tarjeta de adquisición compatible con **NI-DAQmx** (National Instruments).
@@ -188,7 +188,7 @@ Para comunicar con la tarjeta de adquisición, **debes** instalar el driver **NI
 
 ---
 
-## 🏃 Guía de Uso Rápida
+## Guía de Uso Rápida
 
 Ejecuta el lanzador principal desde la carpeta `Emg` (si usas VSCode, asegúrate de abrir la terminal en ese directorio):
 
@@ -212,7 +212,7 @@ python gui_app/main_app.py
 
 ---
 
-## 🗺️ Roadmap y Tareas Pendientes (Beta 5.0+)
+## Roadmap y Tareas Pendientes (Beta 5.0+)
 
 El proyecto está en desarrollo activo. Consulta `ROADMAP.md` para más detalles o `CONTRIBUTING.md` si quieres ayudar con:
 
@@ -221,9 +221,13 @@ El proyecto está en desarrollo activo. Consulta `ROADMAP.md` para más detalles
 - [ ] **Módulos de Deep Learning:** Empezar a crear scripts base usando **PyTorch** para el entrenamiento de redes neuronales a futuro con los datos extraídos.
 - [ ] **Metrónomo Nativo:** Incrustar el metrónomo visual (actualmente en un proceso Tkinter independiente en `metronomo_visual.py`) de forma nativa dentro de la interfaz PySide6 de AutoForge, eliminando el proceso externo para mejorar la sincronización del DAQ.
 
+### Trabajo a futuro
+
+La idea es implementar un **botón de pausa** en la interfaz principal para permitir la interrupción temporal y reanudación de las adquisiciones de forma segura.
+
 ---
 
-## 🐛 Errores Conocidos y Soluciones Históricas
+## Errores Conocidos y Soluciones Históricas
 
 Durante el desarrollo de la versión Beta 5.0, nos enfrentamos a problemas de "scoping" en Python al migrar componentes de la UI. 
 - **El Problema:** Al instanciar colores (`bg_panel`) en métodos `__init__`, otras funciones internas de la clase perdían la referencia en tiempo de ejecución, provocando caídas completas del programa (`NameError`).
