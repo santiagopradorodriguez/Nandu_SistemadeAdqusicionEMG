@@ -596,6 +596,58 @@ def ejecutar_procesamiento(
         df_desc.to_csv(desc_path, index=False)
         print(f"\n[!] Guardado reporte de {len(descartados)} mediciones descartadas en {desc_path}")
         
+    # Guardar reporte de mediciones PROCESADAS exitosamente
+    if Tomas_clean:
+        df_procesadas = pd.DataFrame({'Toma': Tomas_clean, 'Vocal': Y_clean})
+        proc_path = os.path.join(out_dir, "reporte_mediciones_procesadas.csv")
+        df_procesadas.to_csv(proc_path, index=False)
+        print(f"[!] Guardado reporte de {len(Tomas_clean)} mediciones exitosamente procesadas en {proc_path}")
+        
+    # --- NUEVO: GUARDAR TABLAS COMO IMAGEN ---
+    print("\n[INFO] Generando tablas en formato Imagen (.png) para el cuaderno...")
+    def guardar_tabla_imagen(df, title, filepath, col_width=2.5, row_height=0.625, font_size=12):
+        # Crear figura
+        fig, ax = plt.subplots(figsize=(df.shape[1]*col_width, (df.shape[0]+1)*row_height))
+        ax.axis('off')
+        ax.axis('tight')
+        
+        # Redondear si son floats
+        df_str = df.round(2) if df.dtypes.apply(lambda x: np.issubdtype(x, np.number)).any() else df
+        
+        table = ax.table(cellText=df_str.values, colLabels=df_str.columns, rowLabels=df_str.index, loc='center', cellLoc='center')
+        table.auto_set_font_size(False)
+        table.set_fontsize(font_size)
+        table.scale(1, 1.5)
+        
+        plt.title(title, pad=20, fontsize=font_size+2, fontweight='bold')
+        plt.tight_layout()
+        plt.savefig(filepath, dpi=300, bbox_inches='tight')
+        plt.close()
+
+    try:
+        # Guardar Tablas de Distancia
+        guardar_tabla_imagen(df_dist_pca, "Matriz de Distancias - PCA 3D", os.path.join(out_dir, "tabla_distancias_pca.png"))
+        guardar_tabla_imagen(df_dist, "Matriz de Distancias - UMAP 3D", os.path.join(out_dir, "tabla_distancias_umap.png"))
+        
+        # Guardar Tablas de Confusión (Mapeo Húngaro)
+        guardar_tabla_imagen(df_cm_pca, "Matriz de Clustering (K-Means vs Real) - PCA 3D", os.path.join(out_dir, "tabla_clustering_pca.png"))
+        guardar_tabla_imagen(df_cm_umap, "Matriz de Clustering (K-Means vs Real) - UMAP 3D", os.path.join(out_dir, "tabla_clustering_umap.png"))
+        
+        # Guardar Resumen de Procesamiento
+        if descartados:
+            df_resumen_desc = df_desc.groupby('Vocal').size().to_frame('Cant. Descartada')
+        else:
+            df_resumen_desc = pd.DataFrame({'Cant. Descartada': [0]*len(vocales_unicas)}, index=vocales_unicas)
+            
+        df_resumen_proc = df_procesadas.groupby('Vocal').size().to_frame('Cant. Procesada')
+        df_resumen = df_resumen_proc.join(df_resumen_desc, how='outer').fillna(0).astype(int)
+        df_resumen['Total'] = df_resumen['Cant. Procesada'] + df_resumen['Cant. Descartada']
+        
+        guardar_tabla_imagen(df_resumen, "Resumen de Mediciones por Vocal", os.path.join(out_dir, "tabla_resumen_mediciones.png"))
+        print("  -> ¡Tablas en imagen guardadas exitosamente!")
+    except Exception as e:
+        print(f"  -> Error al generar imágenes de tablas: {e}")
+
     # Exportar DataFrame de características para visor_features.py
     print("\n6. Exportando características (SIN FILTRAR) a CSV para auditoría visual...")
     n_features = X_orig.shape[1]
