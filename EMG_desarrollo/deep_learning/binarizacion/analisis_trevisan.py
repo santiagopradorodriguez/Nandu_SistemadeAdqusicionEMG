@@ -23,6 +23,17 @@ from tkinter import simpledialog, messagebox
 from collections import defaultdict, Counter
 from itertools import product, combinations
 
+import sys
+import os
+script_dir_abs = os.path.dirname(os.path.abspath(__file__))
+deep_learning_dir = os.path.dirname(script_dir_abs)
+if os.path.basename(deep_learning_dir) == "deep_learning":
+    sys.path.append(os.path.join(deep_learning_dir, "pca_umap_clustering"))
+    sys.path.append(os.path.join(deep_learning_dir, "dataset_tools"))
+    sys.path.append(os.path.join(deep_learning_dir, "binarizacion"))
+    sys.path.append(os.path.dirname(deep_learning_dir)) # EMG_desarrollo root
+
+
 __version__ = "Trevisan-1.0"
 
 plt.rcParams.update({
@@ -1509,7 +1520,7 @@ class AnalysisGUI:
         self.root.title(f"Análisis Trevisan v{__version__}")
         self.root.geometry("500x400")
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        self.BASE_DIR = os.path.join(os.path.dirname(script_dir), "base_de_datos_electrodos")
+        self.BASE_DIR = os.path.join(os.path.dirname(os.path.dirname(script_dir)), "base_de_datos_electrodos")
         main_frame = tk.Frame(root, padx=15, pady=15, bg="#0B0C10")
         main_frame.pack(fill="both", expand=True)
         meas_frame = tk.LabelFrame(main_frame, text="1. Seleccionar Mediciones", padx=10, pady=10, bg="#1F2833", fg="#66FCF1")

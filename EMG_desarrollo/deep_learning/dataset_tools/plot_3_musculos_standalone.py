@@ -8,6 +8,17 @@ import matplotlib.pyplot as plt
 import json
 from scipy.signal import find_peaks, butter, filtfilt, iirnotch
 
+import sys
+import os
+script_dir_abs = os.path.dirname(os.path.abspath(__file__))
+deep_learning_dir = os.path.dirname(script_dir_abs)
+if os.path.basename(deep_learning_dir) == "deep_learning":
+    sys.path.append(os.path.join(deep_learning_dir, "pca_umap_clustering"))
+    sys.path.append(os.path.join(deep_learning_dir, "dataset_tools"))
+    sys.path.append(os.path.join(deep_learning_dir, "binarizacion"))
+    sys.path.append(os.path.dirname(deep_learning_dir)) # EMG_desarrollo root
+
+
 def apply_dsp_pipeline(sig, sr, noise_seconds, smooth_ms=250.0):
     # 1. Filtro Pasa-Altos (20 Hz)
     nyq = 0.5 * sr

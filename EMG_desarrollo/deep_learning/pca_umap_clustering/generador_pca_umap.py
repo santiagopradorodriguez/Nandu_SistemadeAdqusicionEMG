@@ -20,6 +20,17 @@ import umap
 # Importamos las utilidades de analisis_trevisan
 import analisis_trevisan as at
 
+import sys
+import os
+script_dir_abs = os.path.dirname(os.path.abspath(__file__))
+deep_learning_dir = os.path.dirname(script_dir_abs)
+if os.path.basename(deep_learning_dir) == "deep_learning":
+    sys.path.append(os.path.join(deep_learning_dir, "pca_umap_clustering"))
+    sys.path.append(os.path.join(deep_learning_dir, "dataset_tools"))
+    sys.path.append(os.path.join(deep_learning_dir, "binarizacion"))
+    sys.path.append(os.path.dirname(deep_learning_dir)) # EMG_desarrollo root
+
+
 def procesar_mediciones(base_dir):
     date_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}$")
     
@@ -733,7 +744,7 @@ class GeneradorPCAGUI:
         self.root.geometry("600x850")
         
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        self.base_dir = os.path.join(os.path.dirname(script_dir), "base_de_datos_electrodos")
+        self.base_dir = os.path.join(os.path.dirname(os.path.dirname(script_dir)), "base_de_datos_electrodos")
         
         main_frame = tk.Frame(root, padx=15, pady=15, bg="#0B0C10")
         main_frame.pack(fill="both", expand=True)

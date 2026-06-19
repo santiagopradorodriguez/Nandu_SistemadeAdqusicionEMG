@@ -13,7 +13,14 @@ import warnings
 warnings.filterwarnings("ignore")
 
 # Añadimos el directorio base al path temporal para importar fácilmente
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+script_dir_abs = os.path.dirname(os.path.abspath(__file__))
+deep_learning_dir = os.path.dirname(script_dir_abs)
+if os.path.basename(deep_learning_dir) != "deep_learning":
+    deep_learning_dir = script_dir_abs # fallback
+sys.path.append(os.path.join(deep_learning_dir, "pca_umap_clustering"))
+sys.path.append(os.path.join(deep_learning_dir, "dataset_tools"))
+sys.path.append(os.path.join(deep_learning_dir, "binarizacion"))
+sys.path.append(script_dir_abs)
 
 from generador_pca_umap import procesar_mediciones, extraer_features_concatenadas, evaluar_clustering_no_supervisado
 
@@ -93,7 +100,7 @@ def print_progress_bar(iteration, total, start_time, prefix='', length=40):
 def main():
     global BEST_SMOOTH, BEST_TARGET_LEN
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    base_dir = os.path.join(os.path.dirname(script_dir), "base_de_datos_electrodos")
+    base_dir = os.path.join(os.path.dirname(os.path.dirname(script_dir)), "base_de_datos_electrodos")
     out_dir = os.path.join(script_dir, "resultados_experimentos")
     os.makedirs(out_dir, exist_ok=True)
     

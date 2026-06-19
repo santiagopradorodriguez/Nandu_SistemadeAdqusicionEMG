@@ -22,6 +22,17 @@ from scipy.signal import butter, filtfilt, iirnotch
 import torch
 from torch.utils.data import Dataset
 
+import sys
+import os
+script_dir_abs = os.path.dirname(os.path.abspath(__file__))
+deep_learning_dir = os.path.dirname(script_dir_abs)
+if os.path.basename(deep_learning_dir) == "deep_learning":
+    sys.path.append(os.path.join(deep_learning_dir, "pca_umap_clustering"))
+    sys.path.append(os.path.join(deep_learning_dir, "dataset_tools"))
+    sys.path.append(os.path.join(deep_learning_dir, "binarizacion"))
+    sys.path.append(os.path.dirname(deep_learning_dir)) # EMG_desarrollo root
+
+
 # ------------------------------------------------------------------
 # CONFIGURACIÓN DSP (Heredada de analisis_por_track_integrado.py)
 # ------------------------------------------------------------------

@@ -6,6 +6,17 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import numpy as np
 import os
 
+import sys
+import os
+script_dir_abs = os.path.dirname(os.path.abspath(__file__))
+deep_learning_dir = os.path.dirname(script_dir_abs)
+if os.path.basename(deep_learning_dir) == "deep_learning":
+    sys.path.append(os.path.join(deep_learning_dir, "pca_umap_clustering"))
+    sys.path.append(os.path.join(deep_learning_dir, "dataset_tools"))
+    sys.path.append(os.path.join(deep_learning_dir, "binarizacion"))
+    sys.path.append(os.path.dirname(deep_learning_dir)) # EMG_desarrollo root
+
+
 class FeatureViewerApp:
     def __init__(self, root):
         self.root = root
