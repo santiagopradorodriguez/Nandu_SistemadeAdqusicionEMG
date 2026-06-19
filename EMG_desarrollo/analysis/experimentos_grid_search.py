@@ -154,17 +154,16 @@ def main():
                 count_fase1 += 1
                 continue
             
-            # 2. Escalar y Reducir (UMAP Default Seguro)
-            X_scaled = StandardScaler().fit_transform(X_clean)
-            reducer = umap.UMAP(n_neighbors=15, min_dist=0.1, n_components=3, metric='manhattan', random_state=42)
-            X_umap_3d = reducer.fit_transform(X_scaled)
+            # 2. Reducir con PCA (a pedido del usuario)
+            pca_3d = PCA(n_components=3)
+            X_pca_3d = pca_3d.fit_transform(X_clean)
             
             # 3. Métricas
-            try: sil_3d = silhouette_score(X_umap_3d, Y_clean, metric='euclidean')
+            try: sil_3d = silhouette_score(X_pca_3d, Y_clean, metric='euclidean')
             except: sil_3d = 0.0
                 
             sys.stdout = io.StringIO()
-            acc_3d, _, _ = evaluar_clustering_no_supervisado(X_umap_3d, Y_clean, f"UMAP_2D_{s_ms}_{t_len}")
+            acc_3d, _, _ = evaluar_clustering_no_supervisado(X_pca_3d, Y_clean, f"PCA_2D_{s_ms}_{t_len}")
             sys.stdout = old_stdout
             
             resultados_2d_acc[i, j] = acc_3d
@@ -185,8 +184,8 @@ def main():
     df_acc_2d.to_csv(os.path.join(out_dir, "exp1_grid_2d_accuracy.csv"))
     
     plt.figure(figsize=(10, 8))
-    sns.heatmap(df_acc_2d, annot=True, fmt=".1f", cmap="magma", cbar_kws={'label': 'Accuracy UMAP (%)'})
-    plt.title("Grid Search 2D Acoplado: Accuracy Topológica\nEnvolvente (Y) vs Puntos de Remuestreo (X)")
+    sns.heatmap(df_acc_2d, annot=True, fmt=".1f", cmap="magma", cbar_kws={'label': 'Accuracy PCA (%)'})
+    plt.title("Grid Search 2D Acoplado: Accuracy Topológica (PCA 3D)\nEnvolvente (Y) vs Puntos de Remuestreo (X)")
     plt.ylabel("Envolvente (smooth_ms)")
     plt.xlabel("Puntos de Remuestreo (target_length)")
     plt.tight_layout()
