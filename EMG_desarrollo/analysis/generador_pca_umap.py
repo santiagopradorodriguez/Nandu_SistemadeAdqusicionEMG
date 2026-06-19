@@ -827,7 +827,7 @@ class GeneradorPCAGUI:
         tk.Label(fu3, text="Métrica de distancia:", width=35, anchor="w", bg="#1F2833", fg="white").pack(side="left")
         self.combo_metric = ttk.Combobox(fu3, values=["euclidean", "cosine", "manhattan", "correlation"], width=15)
         self.combo_metric.pack(side="left")
-        self.combo_metric.set("euclidean")
+        self.combo_metric.set("correlation")
         
         # --- Botón Procesar ---
         self.btn_procesar = tk.Button(main_frame, text="Generar Dataset y Visualizar", command=self.iniciar_procesamiento, bg="#45A29E", fg="white", font=("Arial", 12, "bold"))
