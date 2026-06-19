@@ -113,191 +113,85 @@ def main():
     old_stdout = sys.stdout
     
     # =================================================================
-    # FASE 1A: Sweep de Smooth MS (Envolvente)
+    # FASE 1: Barrido Fino 2D (smooth_ms vs target_len)
     # =================================================================
     print("\n" + "="*50)
-    print("FASE 1A: Barrido de Envolvente (smooth_ms)")
+    print("FASE 1: Barrido Fino 2D (smooth_ms vs target_len)")
     print(f" -> Variando: smooth_ms en {SWEEP_SMOOTH}")
-    print(f" -> Fijos (Default): target_len={BEST_TARGET_LEN}, notch_q={NOTCH_Q}, alpha={ALPHA_RUIDO}")
-    print("="*50)
-    
-    res_smooth_ms = []
-    res_smooth_acc = []
-    res_smooth_sil = []
-    res_smooth_acc_vocales = []
-    vocs_unicas = []
-    
-    start_time = time.time()
-    for i, s_ms in enumerate(SWEEP_SMOOTH):
-        print_progress_bar(i, len(SWEEP_SMOOTH), start_time, prefix=f'Evaluando smooth={s_ms}ms')
-        
-        # 1. Extracción DSP (Se mostrarán los prints de cada toma)
-        X, Y, Tomas_tmp, SNRs_tmp = extraer_features_concatenadas(
-            base_dir, mediciones, alpha_ruido=ALPHA_RUIDO, 
-            smooth_ms=s_ms, notch_q=NOTCH_Q, target_len=BEST_TARGET_LEN
-        )
-        
-        if len(X) < 5: continue
-        X, Y, _ = limpiar_datos(X, Y, Tomas_tmp, SNRs_tmp)
-        if len(X) < 5: continue
-        
-        pca_3d = PCA(n_components=3)
-        X_pca_3d = pca_3d.fit_transform(X)
-        
-        try: sil_3d = silhouette_score(X_pca_3d, Y, metric='euclidean')
-        except: sil_3d = 0.0
-            
-        sys.stdout = io.StringIO()
-        acc_3d, acc_voc, vocs_unicas = evaluar_clustering_no_supervisado(X_pca_3d, Y, f"PCA_smooth_{s_ms}")
-        sys.stdout = old_stdout
-        
-        res_smooth_ms.append(s_ms)
-        res_smooth_acc.append(acc_3d)
-        res_smooth_sil.append(sil_3d)
-        res_smooth_acc_vocales.append(acc_voc)
-        
-    print_progress_bar(len(SWEEP_SMOOTH), len(SWEEP_SMOOTH), start_time, prefix='Fase 1A Finalizada')
-    
-    if res_smooth_ms:
-        best_idx = np.argmax(res_smooth_acc)
-        BEST_SMOOTH = res_smooth_ms[best_idx]
-        print(f"\n=> MEJOR smooth_ms ENCONTRADO: {BEST_SMOOTH}ms (Acc: {res_smooth_acc[best_idx]:.2f}%)")
-        
-        # Graficar Fase 1A
-        fig, ax1 = plt.subplots(figsize=(10, 6))
-        ax2 = ax1.twinx()
-        
-        ax1.plot(res_smooth_ms, res_smooth_acc, 'g-o', label='Accuracy (%)')
-        ax2.plot(res_smooth_ms, res_smooth_sil, 'b-s', label='Silhouette Score')
-        
-        ax1.set_xlabel('Envolvente (smooth_ms)')
-        ax1.set_ylabel('Accuracy (%)', color='g')
-        ax2.set_ylabel('Silhouette Score', color='b')
-        plt.title('Impacto de la Envolvente en el Clustering (PCA 3D)')
-        
-        fig.legend(loc="upper right", bbox_to_anchor=(1,1), bbox_transform=ax1.transAxes)
-        plt.grid(True)
-        plt.savefig(os.path.join(out_dir, "exp1a_smooth_vs_metrics.png"))
-        plt.close()
-        
-        # Graficar Accuracy por Vocal
-        fig, ax = plt.subplots(figsize=(10, 6))
-        acc_voc_array = np.array(res_smooth_acc_vocales)
-        for i, v in enumerate(vocs_unicas):
-            ax.plot(res_smooth_ms, acc_voc_array[:, i], marker='o', label=f'Vocal {v}')
-        ax.set_xlabel('Envolvente (smooth_ms)')
-        ax.set_ylabel('Accuracy por Vocal (%)')
-        plt.title('Accuracy por Vocal vs Envolvente (PCA 3D)')
-        plt.legend()
-        plt.grid(True)
-        plt.savefig(os.path.join(out_dir, "exp1a_smooth_vs_vowels.png"))
-        plt.close()
-
-    # =================================================================
-    # FASE 1B: Sweep de Target Length (Remuestreo)
-    # =================================================================
-    print("\n" + "="*50)
-    print("FASE 1B: Barrido de Remuestreo (target_len)")
     print(f" -> Variando: target_len en {SWEEP_TARGET_LEN}")
-    print(f" -> Fijos (Ganador Fase 1A): smooth_ms={BEST_SMOOTH}ms")
     print(f" -> Fijos (Default): notch_q={NOTCH_Q}, alpha={ALPHA_RUIDO}")
     print("="*50)
     
-    res_len_val = []
-    res_len_acc = []
-    res_len_sil = []
-    res_len_acc_vocales = []
+    resultados_2d_acc = np.zeros((len(SWEEP_SMOOTH), len(SWEEP_TARGET_LEN)))
+    resultados_2d_sil = np.zeros((len(SWEEP_SMOOTH), len(SWEEP_TARGET_LEN)))
     
-    # --- Caché inteligente: leer WAVs UNA sola vez con el mejor smooth ---
-    print("\n  [Cache] Leyendo segmentos crudos con smooth_ms=%d..." % BEST_SMOOTH)
-    cache_start = time.time()
-    sys.stdout = io.StringIO()
-    raw_segs_list, Y_cache, Tomas_cache, SNRs_cache = extraer_features_concatenadas(
-        base_dir, mediciones, alpha_ruido=ALPHA_RUIDO,
-        smooth_ms=BEST_SMOOTH, notch_q=NOTCH_Q, target_len=BEST_TARGET_LEN,
-        return_raw_cache=True
-    )
-    sys.stdout = old_stdout
-    Y_cache = np.array(Y_cache)
-    Tomas_cache = np.array(Tomas_cache)
-    SNRs_cache = np.array(SNRs_cache)
-    print(f"  [Cache] {len(raw_segs_list)} ventanas cargadas en {time.time()-cache_start:.1f}s")
-    
+    total_fase1 = len(SWEEP_SMOOTH) * len(SWEEP_TARGET_LEN)
+    count_fase1 = 0
     start_time = time.time()
-    for i, t_len in enumerate(SWEEP_TARGET_LEN):
-        print_progress_bar(i, len(SWEEP_TARGET_LEN), start_time, prefix=f'Evaluando target_len={t_len}')
-        
-        # Resamplear desde el caché en RAM (misma matemática que generador_pca_umap)
-        X_resampled = []
-        for segs_brutos in raw_segs_list:
-            max_supremo = max(np.max(s) for s in segs_brutos) if segs_brutos else 1e-9
-            if max_supremo < 1e-9:
-                max_supremo = 1e-9
-            vector_concatenado = []
-            for seg in segs_brutos:
-                seg_norm = seg / max_supremo
-                seg_rs = resample(seg_norm, t_len)
-                seg_rs[seg_rs < 0] = 0.0
-                vector_concatenado.append(seg_rs)
-            X_resampled.append(np.concatenate(vector_concatenado))
-        
-        X = np.array(X_resampled)
-        Y = Y_cache.copy()
-        
-        X, Y, _ = limpiar_datos(X, Y, Tomas_cache, SNRs_cache)
-        if len(X) < 5: continue
-        
-        pca_3d = PCA(n_components=3)
-        X_pca_3d = pca_3d.fit_transform(X)
-        
-        try: sil_3d = silhouette_score(X_pca_3d, Y, metric='euclidean')
-        except: sil_3d = 0.0
+    
+    # IMPORTANTE: UMAP es estocástico, PCA es determinista. 
+    # Usaremos UMAP para esta evaluación fina 2D ya que es nuestro clasificador final.
+    from sklearn.preprocessing import StandardScaler
+    
+    for i, s_ms in enumerate(SWEEP_SMOOTH):
+        for j, t_len in enumerate(SWEEP_TARGET_LEN):
+            print_progress_bar(count_fase1, total_fase1, start_time, prefix=f'Fase 1: {s_ms}ms | {t_len}pts')
             
-        sys.stdout = io.StringIO()
-        acc_3d, acc_voc, vocs_unicas = evaluar_clustering_no_supervisado(X_pca_3d, Y, f"PCA_targetlen_{t_len}")
-        sys.stdout = old_stdout
-        
-        res_len_val.append(t_len)
-        res_len_acc.append(acc_3d)
-        res_len_sil.append(sil_3d)
-        res_len_acc_vocales.append(acc_voc)
-        
-    print_progress_bar(len(SWEEP_TARGET_LEN), len(SWEEP_TARGET_LEN), start_time, prefix='Fase 1B Finalizada')
-
-    if res_len_val:
-        best_idx = np.argmax(res_len_acc)
-        BEST_TARGET_LEN = res_len_val[best_idx]
-        print(f"\n=> MEJOR target_len ENCONTRADO: {BEST_TARGET_LEN} pts (Acc: {res_len_acc[best_idx]:.2f}%)")
-        
-        # Graficar Fase 1B
-        fig, ax1 = plt.subplots(figsize=(10, 6))
-        ax2 = ax1.twinx()
-        
-        ax1.plot(res_len_val, res_len_acc, 'g-o', label='Accuracy (%)')
-        ax2.plot(res_len_val, res_len_sil, 'b-s', label='Silhouette Score')
-        
-        ax1.set_xlabel('Puntos de Remuestreo (target_len)')
-        ax1.set_ylabel('Accuracy (%)', color='g')
-        ax2.set_ylabel('Silhouette Score', color='b')
-        plt.title('Impacto del Remuestreo en el Clustering (PCA 3D)')
-        
-        fig.legend(loc="upper right", bbox_to_anchor=(1,1), bbox_transform=ax1.transAxes)
-        plt.grid(True)
-        plt.savefig(os.path.join(out_dir, "exp1b_targetlen_vs_metrics.png"))
-        plt.close()
-
-        # Graficar Accuracy por Vocal
-        fig, ax = plt.subplots(figsize=(10, 6))
-        acc_voc_array = np.array(res_len_acc_vocales)
-        for i, v in enumerate(vocs_unicas):
-            ax.plot(res_len_val, acc_voc_array[:, i], marker='o', label=f'Vocal {v}')
-        ax.set_xlabel('Puntos de Remuestreo (target_len)')
-        ax.set_ylabel('Accuracy por Vocal (%)')
-        plt.title('Accuracy por Vocal vs Remuestreo (PCA 3D)')
-        plt.legend()
-        plt.grid(True)
-        plt.savefig(os.path.join(out_dir, "exp1b_targetlen_vs_vowels.png"))
-        plt.close()
+            # 1. Extracción DSP
+            sys.stdout = io.StringIO() # Silenciar prints de la extracción
+            X, Y, Tomas_tmp, SNRs_tmp = extraer_features_concatenadas(
+                base_dir, mediciones, alpha_ruido=ALPHA_RUIDO, 
+                smooth_ms=s_ms, notch_q=NOTCH_Q, target_len=t_len
+            )
+            sys.stdout = old_stdout
+            
+            if len(X) < 5:
+                count_fase1 += 1
+                continue
+                
+            X_clean, Y_clean, _ = limpiar_datos(X, Y, Tomas_tmp, SNRs_tmp)
+            if len(X_clean) < 10:
+                count_fase1 += 1
+                continue
+            
+            # 2. Escalar y Reducir (UMAP Default Seguro)
+            X_scaled = StandardScaler().fit_transform(X_clean)
+            reducer = umap.UMAP(n_neighbors=15, min_dist=0.1, n_components=3, metric='manhattan', random_state=42)
+            X_umap_3d = reducer.fit_transform(X_scaled)
+            
+            # 3. Métricas
+            try: sil_3d = silhouette_score(X_umap_3d, Y_clean, metric='euclidean')
+            except: sil_3d = 0.0
+                
+            sys.stdout = io.StringIO()
+            acc_3d, _, _ = evaluar_clustering_no_supervisado(X_umap_3d, Y_clean, f"UMAP_2D_{s_ms}_{t_len}")
+            sys.stdout = old_stdout
+            
+            resultados_2d_acc[i, j] = acc_3d
+            resultados_2d_sil[i, j] = sil_3d
+            count_fase1 += 1
+            
+    print_progress_bar(total_fase1, total_fase1, start_time, prefix='Fase 1 Finalizada')
+    
+    # Encontrar el mejor valor global
+    best_idx = np.unravel_index(np.argmax(resultados_2d_acc), resultados_2d_acc.shape)
+    BEST_SMOOTH = SWEEP_SMOOTH[best_idx[0]]
+    BEST_TARGET_LEN = SWEEP_TARGET_LEN[best_idx[1]]
+    
+    print(f"\n=> MEJOR COMBINACIÓN ENCONTRADA: smooth_ms={BEST_SMOOTH}ms | target_len={BEST_TARGET_LEN}pts (Acc: {resultados_2d_acc[best_idx]:.2f}%)")
+    
+    # Guardar CSV y Plot
+    df_acc_2d = pd.DataFrame(resultados_2d_acc, index=[f"{ms}ms" for ms in SWEEP_SMOOTH], columns=[f"{pt}pts" for pt in SWEEP_TARGET_LEN])
+    df_acc_2d.to_csv(os.path.join(out_dir, "exp1_grid_2d_accuracy.csv"))
+    
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(df_acc_2d, annot=True, fmt=".1f", cmap="magma", cbar_kws={'label': 'Accuracy UMAP (%)'})
+    plt.title("Grid Search 2D Acoplado: Accuracy Topológica\nEnvolvente (Y) vs Puntos de Remuestreo (X)")
+    plt.ylabel("Envolvente (smooth_ms)")
+    plt.xlabel("Puntos de Remuestreo (target_length)")
+    plt.tight_layout()
+    plt.savefig(os.path.join(out_dir, "exp1_heatmap_smooth_vs_target.png"))
+    plt.close()
 
     # =================================================================
     # FASE 2: Sweep UMAP (Matemática pura en Memoria)
