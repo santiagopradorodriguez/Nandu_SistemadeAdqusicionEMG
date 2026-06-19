@@ -667,8 +667,8 @@ def ejecutar_procesamiento(
         
         # --- TABLAS DE PARÁMETROS ---
         df_params_dsp = pd.DataFrame({
-            "Parámetro": ["Filtro Notch (Q)", "Envolvente (Smooth ms)", "Remuestreo (Longitud)", "Filtro de SNR", "Filtro Isolation Forest"],
-            "Valor": [str(notch_q), f"{smooth_ms} ms", f"{target_length} pts", f">= {snr_threshold}", f"{outlier_contamination*100}% outliers"]
+            "Parámetro": ["Agresividad Resta Ruido (Alpha)", "Filtro Notch (Q)", "Envolvente (Smooth ms)", "Remuestreo (Longitud)", "Filtro de SNR", "Filtro Isolation Forest"],
+            "Valor": [str(alpha_ruido), str(notch_q), f"{smooth_ms} ms", f"{target_length} pts", f">= {snr_threshold}", f"{outlier_contamination*100}% outliers"]
         }).set_index("Parámetro")
         
         df_params_umap = pd.DataFrame({
