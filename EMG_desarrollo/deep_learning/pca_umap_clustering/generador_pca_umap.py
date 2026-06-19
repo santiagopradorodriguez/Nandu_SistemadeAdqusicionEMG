@@ -17,9 +17,6 @@ from sklearn.cluster import KMeans
 from scipy.optimize import linear_sum_assignment
 import umap
 
-# Importamos las utilidades de analisis_trevisan
-import analisis_trevisan as at
-
 import sys
 import os
 script_dir_abs = os.path.dirname(os.path.abspath(__file__))
@@ -29,6 +26,9 @@ if os.path.basename(deep_learning_dir) == "deep_learning":
     sys.path.append(os.path.join(deep_learning_dir, "dataset_tools"))
     sys.path.append(os.path.join(deep_learning_dir, "binarizacion"))
     sys.path.append(os.path.dirname(deep_learning_dir)) # EMG_desarrollo root
+
+# Importamos las utilidades de analisis_trevisan
+import analisis_trevisan as at
 
 
 def procesar_mediciones(base_dir):
