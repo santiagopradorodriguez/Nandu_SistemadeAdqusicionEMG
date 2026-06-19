@@ -21,7 +21,7 @@ Desarrollado por la comunidad para el **Laboratorio de Sistemas Dinámicos**.
 
 ---
 
-## Características del Sistema (Beta 5.1 - PySide6 & AutoForge)
+## Características del Sistema (Beta 6.0 - Deep Learning Integration)
 
 El proyecto se gestiona desde el **Lanzador Principal** (`gui_app/main_app.py`) que integra estética Cyberpunk, aceleración de hardware y múltiples módulos independientes:
 
@@ -59,7 +59,7 @@ AutoForge es la nueva máquina de estados central del proyecto, diseñada para c
 - **Auto-Guardado:** Guarda las grabaciones crudas, procesadas y metadatos con la nomenclatura perfecta para su posterior entrenamiento en Machine Learning.
 
 ---
-### Herramientas y Módulos (Nueva Arquitectura Beta 5.0 PySide6)
+### Herramientas y Módulos (Nueva Arquitectura Beta 6.0 PySide6)
 El proyecto ha sido completamente refactorizado en una arquitectura modular usando **PySide6** para interfaces gráficas modernas y fluidas:
 
 #### 1. Módulo `acquisition/` (Adquisición de Hardware)
@@ -212,7 +212,7 @@ python gui_app/main_app.py
 
 ---
 
-## Roadmap y Tareas Pendientes (Beta 5.0+)
+## Roadmap y Tareas Pendientes (Beta 6.0+)
 
 El proyecto está en desarrollo activo. Consulta `ROADMAP.md` para más detalles o `CONTRIBUTING.md` si quieres ayudar con:
 

@@ -442,10 +442,10 @@ class ReaperStyleHub(QMainWindow):
     
     html_intro = f"""
     <div style='padding: 20px;'>
-      <h2 style='color:#00ffff;'>Plataforma de Investigación EMG v5.0</h2>
+      <h2 style='color:#00ffff;'>Plataforma de Investigación EMG v6.0</h2>
       <p>Bienvenido al hub centralizado para adquisición en tiempo real, curación y análisis comparativo de señales electromiográficas.</p>
       
-      <h3 style='color:#00ffaa;'>Novedades Actualización v5.0 (Machine Learning & Deep Learning):</h3>
+      <h3 style='color:#00ffaa;'>Novedades Actualización v6.0 (Machine Learning & Deep Learning):</h3>
       <ul>
         <li><b>Integración de Deep Learning:</b> Nueva pestaña con módulos de Análisis XGBoost, Autoencoders, Clustering (PCA y UMAP) y binarización avanzada (Trevisan).</li>
         <li><b>AutoForge Secuencia Continua:</b> Captura el diccionario entero de forma cíclica en un solo click, autogenerando las etiquetas correctas de Machine Learning (valid_words) para cada pulso en los metadatos.</li>
