@@ -49,7 +49,7 @@ class ProcessingTab(QWidget):
         l_ind.addWidget(self.chk_cruda)
 
         self.chk_cyberpunk = QCheckBox("Tema Cyberpunk (Gráficos oscuros y neón)")
-        self.chk_cyberpunk.setChecked(True)
+        self.chk_cyberpunk.setChecked(False) # Por defecto apagado para usar estética normal
         l_ind.addWidget(self.chk_cyberpunk)
 
         self.chk_espectrograma = QCheckBox("Generar Espectrograma Señal Completa (Estilo Praat)")
@@ -321,6 +321,157 @@ class DiscreteMotorTab(QWidget):
         
         self.layout.addLayout(btn_layout)
 
+class TrainingMotorTab(QWidget):
+    """Pestaña para Entrenamiento de Umbrales Óptimos (Barrido de Colisiones)"""
+    def __init__(self):
+        super().__init__()
+        self.layout = QVBoxLayout(self)
+        
+        # 1. Opciones de Filtro y Pre-procesamiento
+        g_filtro = QGroupBox("1. Limpieza de Datos (Pre-procesamiento)")
+        l_filtro = QFormLayout()
+        
+        self.chk_snr = QCheckBox("Descartar si el SNR es menor a:")
+        self.chk_snr.setChecked(True)
+        
+        self.inp_snr_limit = QDoubleSpinBox()
+        self.inp_snr_limit.setRange(0.1, 50.0)
+        self.inp_snr_limit.setSingleStep(0.5)
+        self.inp_snr_limit.setValue(4.0)
+        
+        self.cmb_snr_tipo = QComboBox()
+        self.cmb_snr_tipo.addItems(["Por Ventana (Individual)", "Global (Toda la medición)", "Ambos (Global + Ventana)"])
+        
+        row_lyt = QHBoxLayout()
+        row_lyt.addWidget(self.chk_snr)
+        row_lyt.addWidget(self.inp_snr_limit)
+        row_lyt.addWidget(self.cmb_snr_tipo)
+        row_lyt.addStretch()
+        
+        l_filtro.addRow(row_lyt)
+        g_filtro.setLayout(l_filtro)
+        self.layout.addWidget(g_filtro)
+        
+        # 2. Metodología de Discretización
+        g_metodo = QGroupBox("2. Metodología de Discretización")
+        l_metodo = QFormLayout()
+        
+        self.cmb_tipo_barrido = QComboBox()
+        self.cmb_tipo_barrido.addItems([
+            "Umbral Común (Único para todos los canales)",
+            "Umbral por Canal (Búsqueda de Intervalos Óptimos)"
+        ])
+        
+        self.inp_paso_barrido = QDoubleSpinBox()
+        self.inp_paso_barrido.setRange(0.01, 0.20)
+        self.inp_paso_barrido.setSingleStep(0.01)
+        self.inp_paso_barrido.setValue(0.05)
+        self.inp_paso_barrido.setToolTip("Paso de iteración para buscar intervalos.")
+        
+        l_metodo.addRow(QLabel("Tipo de Búsqueda:"), self.cmb_tipo_barrido)
+        l_metodo.addRow(QLabel("Resolución del Barrido:"), self.inp_paso_barrido)
+        
+        g_metodo.setLayout(l_metodo)
+        self.layout.addWidget(g_metodo)
+        
+        # --- BOTON DE EJECUCION ---
+        btn_layout = QHBoxLayout()
+        self.btn_run_training = QPushButton("🏋️ ENTRENAR UMBRALES (TRAIN)")
+        self.btn_run_training.setFixedHeight(50)
+        self.btn_run_training.setCursor(Qt.PointingHandCursor)
+        self.btn_run_training.setStyleSheet("""
+            QPushButton {
+                font-weight: bold; font-size: 14px;
+                background-color: transparent; color: #00ffcc; border: 2px solid #00ffcc; border-radius: 5px;
+            }
+            QPushButton:hover { background-color: #00ffcc; color: #000; }
+            QPushButton:disabled { border: 2px solid #555; color: #555; }
+        """)
+        btn_layout.addWidget(self.btn_run_training)
+        
+        self.layout.addLayout(btn_layout)
+
+class UmapMotorTab(QWidget):
+    """Pestaña para Análisis de Clustering con UMAP/SUMAP"""
+    def __init__(self):
+        super().__init__()
+        self.layout = QVBoxLayout(self)
+        
+        # 1. Configuración de Vectorización
+        g_vector = QGroupBox("1. Modo de Vectorización")
+        l_vector = QFormLayout()
+        
+        self.cmb_vector_mode = QComboBox()
+        self.cmb_vector_mode.addItems(["Completa", "Picos"])
+        l_vector.addRow("Características (Features):", self.cmb_vector_mode)
+        
+        g_vector.setLayout(l_vector)
+        self.layout.addWidget(g_vector)
+        
+        # 2. Configuración del Modelo UMAP
+        g_umap = QGroupBox("2. Hiperparámetros UMAP")
+        l_umap = QFormLayout()
+        
+        self.chk_supervised = QCheckBox("Forzar Separación por Vocales (SUMAP)")
+        self.chk_supervised.setChecked(False)
+        l_umap.addRow(self.chk_supervised)
+        
+        self.inp_n_neighbors = QSpinBox()
+        self.inp_n_neighbors.setRange(2, 500)
+        self.inp_n_neighbors.setValue(15)
+        l_umap.addRow("Vecinos (n_neighbors):", self.inp_n_neighbors)
+        
+        self.inp_min_dist = QDoubleSpinBox()
+        self.inp_min_dist.setRange(0.0, 1.0)
+        self.inp_min_dist.setSingleStep(0.1)
+        self.inp_min_dist.setValue(0.1)
+        l_umap.addRow("Distancia Mínima (min_dist):", self.inp_min_dist)
+        
+        g_umap.setLayout(l_umap)
+        self.layout.addWidget(g_umap)
+        
+        # 3. Opciones de Filtro (Igual que Training)
+        g_filtro = QGroupBox("3. Limpieza de Datos (SNR)")
+        l_filtro = QFormLayout()
+        
+        self.chk_snr = QCheckBox("Descartar pulsos con SNR menor a:")
+        self.chk_snr.setChecked(True)
+        
+        self.inp_snr_limit = QDoubleSpinBox()
+        self.inp_snr_limit.setRange(0.1, 50.0)
+        self.inp_snr_limit.setSingleStep(0.5)
+        self.inp_snr_limit.setValue(4.0)
+        
+        self.cmb_snr_tipo = QComboBox()
+        self.cmb_snr_tipo.addItems(["Por Ventana (Individual)", "Global (Toda la medición)", "Ambos (Global + Ventana)"])
+        
+        row_lyt = QHBoxLayout()
+        row_lyt.addWidget(self.chk_snr)
+        row_lyt.addWidget(self.inp_snr_limit)
+        row_lyt.addWidget(self.cmb_snr_tipo)
+        row_lyt.addStretch()
+        
+        l_filtro.addRow(row_lyt)
+        g_filtro.setLayout(l_filtro)
+        self.layout.addWidget(g_filtro)
+        
+        # Botón Lanzar
+        btn_layout = QHBoxLayout()
+        self.btn_run_umap = QPushButton("🌌 LANZAR CLUSTERING UMAP")
+        self.btn_run_umap.setFixedHeight(50)
+        self.btn_run_umap.setCursor(Qt.PointingHandCursor)
+        self.btn_run_umap.setStyleSheet("""
+            QPushButton {
+                font-weight: bold; font-size: 14px;
+                background-color: transparent; color: #ff00ff; border: 2px solid #ff00ff; border-radius: 5px;
+            }
+            QPushButton:hover { background-color: #ff00ff; color: #000; }
+            QPushButton:disabled { border: 2px solid #555; color: #555; }
+        """)
+        btn_layout.addWidget(self.btn_run_umap)
+        
+        self.layout.addLayout(btn_layout)
+
 class AnalysisPanel(QWidget):
     """Contenedor Principal que alberga las Pestañas de Análisis y emite los kwargs"""
     def __init__(self):
@@ -364,6 +515,14 @@ class AnalysisPanel(QWidget):
         # Pestaña Motor Discreto
         self.tab_motor = DiscreteMotorTab()
         self.tabs.addTab(self.tab_motor, "🧠 Coordenadas Discretas")
+
+        # Pestaña Entrenamiento de Umbrales
+        self.tab_training = TrainingMotorTab()
+        self.tabs.addTab(self.tab_training, "🎯 Entrenamiento de Umbrales")
+
+        # Pestaña UMAP
+        self.tab_umap = UmapMotorTab()
+        self.tabs.addTab(self.tab_umap, "🌌 Clustering UMAP")
 
         main_layout.addWidget(self.tabs)
 

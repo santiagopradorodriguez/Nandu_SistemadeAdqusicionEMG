@@ -1,0 +1,128 @@
+\documentclass[12pt, a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath, amssymb}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc, babel}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+
+\begin{document}
+
+\title{Metodología de Análisis Topológico y Clustering con UMAP}
+\author{}
+\date{\today}
+\maketitle
+
+\section{Diagrama de Flujo del Algoritmo UMAP}
+
+El siguiente diagrama detalla el proceso de acondicionamiento de señales y transformación a espacios de alta dimensionalidad para su posterior reducción topológica en un plano bidimensional.
+
+\vspace{1cm}
+\begin{center}
+\begin{tikzpicture}[
+    scale=0.7, transform shape,
+    node distance=2.5cm,
+    startstop/.style={rectangle, rounded corners, minimum width=3cm, minimum height=1cm, text centered, draw=black, fill=red!30},
+    io/.style={trapezium, trapezium left angle=70, trapezium right angle=110, minimum width=3cm, minimum height=1cm, text centered, draw=black, fill=blue!30},
+    process/.style={rectangle, minimum width=4cm, minimum height=1cm, text centered, text width=5cm, draw=black, fill=orange!30},
+    decision/.style={diamond, aspect=1.5, minimum width=4cm, minimum height=1cm, text centered, text width=3cm, draw=black, fill=green!30},
+    arrow/.style={thick,->,>=stealth}
+]
+
+% Nodos
+\node (start) [startstop] {Inicio};
+\node (in1) [io, below of=start, yshift=0.5cm] {Cargar Json de Ventanas (Envolventes)};
+\node (pro1) [process, below of=in1, yshift=0.5cm] {Filtrado SNR y Normalización Basal};
+\node (dec1) [decision, below of=pro1, yshift=0cm] {¿Modo de Vectorización?};
+\node (pro2) [process, left of=dec1, xshift=-4cm] {Vector $3D$:\\ Picos Máximos};
+\node (pro3) [process, right of=dec1, xshift=4cm] {Vector $HD$:\\ Concatenar Onda Completa};
+\node (pro4) [process, below of=dec1, yshift=-1.5cm] {Construcción de Matriz de Características $X_{N \times D}$ y Etiquetas $Y_{N}$};
+\node (pro5) [process, below of=pro4, yshift=0.5cm] {Aproximación de Variedad Local (Fuzzy Simplicial Set)};
+\node (pro6) [process, below of=pro5, yshift=0.5cm] {Optimización de Entropía Cruzada (Proyección $2D$)};
+\node (out1) [io, below of=pro6, yshift=0.5cm] {Exportar Gráfico de Dispersión (Scatter) y PDF};
+\node (stop) [startstop, below of=out1, yshift=0.5cm] {Fin};
+
+% Flechas
+\draw [arrow] (start) -- (in1);
+\draw [arrow] (in1) -- (pro1);
+\draw [arrow] (pro1) -- (dec1);
+\draw [arrow] (dec1) -- node[anchor=south] {Picos} (pro2);
+\draw [arrow] (dec1) -- node[anchor=south] {Completa} (pro3);
+\draw [arrow] (pro2) |- (pro4);
+\draw [arrow] (pro3) |- (pro4);
+\draw [arrow] (pro4) -- (pro5);
+\draw [arrow] (pro5) -- (pro6);
+\draw [arrow] (pro6) -- (out1);
+\draw [arrow] (out1) -- (stop);
+
+\end{tikzpicture}
+\end{center}
+
+\newpage
+
+\section{Explicación Detallada de la Metodología}
+
+\subsection{1. Construcción del Espacio de Características}
+Para que el algoritmo de agrupamiento pueda clasificar los pulsos electromiográficos, primero es necesario traducir cada evento temporal a un vector numérico $X_i \in \mathbb{R}^D$, donde $D$ es el número de dimensiones. El algoritmo provee dos métodos:
+\begin{itemize}
+    \item \textbf{Modo Picos (Baja Dimensión, $D=3$):} Solo se extrae el valor máximo normalizado de cada canal. Es un modelo robusto pero descarta la morfología de contracción.
+    \item \textbf{Modo Forma de Onda (Alta Dimensión, $D \gg 3$):} Se toma la totalidad de muestras del pulso de cada canal y se concatenan en serie (\textit{flatten}). Si un pulso tiene $M$ muestras por canal y existen $C$ canales, la dimensión del vector será $D = M \times C$. Esto preserva asimetrías y tiempos de rampa vitales para detectar diferencias sutiles entre vocales.
+\end{itemize}
+El resultado de procesar todos los pulsos válidos es una matriz $X \in \mathbb{R}^{N \times D}$, junto con un vector de etiquetas $Y \in \mathbb{R}^N$ que contiene la vocal asociada a cada pulso.
+
+\subsection{2. Matemática de UMAP}
+Uniform Manifold Approximation and Projection (UMAP) es un algoritmo de reducción de dimensionalidad no lineal fundado en la topología algebraica y la geometría Riemanniana. Consta de dos fases principales:
+
+\subsubsection{a) Construcción del Grafo Topológico Local}
+UMAP asume que los datos se distribuyen uniformemente sobre una variedad de Riemann local. Calcula la distancia a los $k$ vecinos más cercanos (\textit{n\_neighbors}) para cada punto $X_i$, y construye un \textit{Fuzzy Simplicial Set} (un grafo difuso). El peso de la arista entre dos puntos se basa en una distribución exponencial decreciente de la distancia:
+\[
+p_{i|j} = \exp\left(-\frac{\max(0, d(x_i, x_j) - \rho_i)}{\sigma_i}\right)
+\]
+Donde $\rho_i$ es la distancia al vecino más cercano (garantizando conectividad local) y $\sigma_i$ es un factor de escala normalizado empíricamente.
+
+\subsubsection{b) Optimización Dimensional (Proyección)}
+Una vez construido el grafo en alta dimensionalidad, UMAP inicializa un grafo equivalente en un espacio de baja dimensión (2D) $Y_i \in \mathbb{R}^2$. Luego minimiza la Entropía Cruzada difusa (\textit{Fuzzy Cross Entropy}) entre la estructura del grafo de alta dimensión ($p_{ij}$) y el de baja dimensión ($q_{ij}$) mediante descenso de gradiente estocástico:
+\[
+C_E(X, Y) = \sum_{i \neq j} \left( p_{ij} \log\left(\frac{p_{ij}}{q_{ij}}\right) + (1 - p_{ij}) \log\left(\frac{1 - p_{ij}}{1 - q_{ij}}\right) \right)
+\]
+Esto fuerza a que los puntos cercanos en el espacio de características EMG se atraigan en el plano 2D, y los puntos lejanos se repelan, revelando clústeres intrínsecos de cada vocal.
+
+\subsection{3. Sintonización de Hiperparámetros}
+La topología generada por UMAP es altamente sensible a dos parámetros matemáticos principales que determinan el equilibrio entre la micro-estructura local y la macro-estructura global de los pulsos:
+
+\begin{itemize}
+    \item \textbf{Vecinos (\textit{n\_neighbors}):} Determina la cantidad de puntos cercanos que UMAP considera al construir el grafo difuso (radio de conectividad local).
+    \begin{itemize}
+        \item \textit{Valores bajos (5 - 15):} UMAP se concentra de forma miope en la estructura local. Es ideal para descubrir si existen micro-variaciones o subclústeres (por ejemplo, si un sujeto pronunció la misma vocal con dos intensidades musculares diferentes). Sin embargo, puede fragmentar clústeres grandes.
+        \item \textit{Valores altos (30 - 50+):} Empuja a UMAP a mirar la imagen global, forzando a que pulsos de la misma clase topológica se comporten como una sola masa. Es el valor recomendado para separar las 5 vocales principales de forma robusta frente al ruido.
+    \end{itemize}
+    \item \textbf{Distancia Mínima (\textit{min\_dist}):} Controla la cercanía mínima permitida entre puntos en la proyección final (2D/3D). Actúa como una fuerza de repulsión en el espacio reducido.
+    \begin{itemize}
+        \item \textit{Valores cercanos a 0.0:} Los puntos colapsan unos sobre otros si son topológicamente idénticos. Es excelente para lograr clústeres compactos y densos que facilitan la clasificación por fronteras duras.
+        \item \textit{Valores altos (ej. 0.5):} Permite que los puntos "respiren", esparciendo el clúster. Es útil si se busca interpretar la varianza natural y la distribución interna de una misma vocal en lugar de solo separarla.
+    \end{itemize}
+\end{itemize}
+
+\subsection{4. UMAP No Supervisado vs. Supervisado (SUMAP)}
+\begin{itemize}
+    \item \textbf{No Supervisado:} La métrica topológica ignora las etiquetas $Y$. Si el algoritmo agrupa puntos de la misma vocal, demuestra que hay separabilidad natural en la señal física sin forzarla algorítmicamente.
+    \item \textbf{Supervisado (SUMAP):} La métrica de distancia de alta dimensionalidad se penaliza usando el vector $Y$. Si dos puntos pertenecen a vocales distintas, su distancia se considera infinitamente grande. Esto fuerza al \textit{manifold} a romperse entre clases, generando mapas visuales con separabilidad de clases extrema, ideal para auditar la pureza del subespacio inter-clase de cara a modelos de Machine Learning.
+\end{itemize}
+\subsection{5. Métrica de Calidad: Silhouette Score}
+Para no depender exclusivamente de la apreciación visual subjetiva del gráfico, el motor computa el \textbf{Coeficiente de Silueta} (\textit{Silhouette Score}) sobre la proyección 2D final. Esta métrica matemática evalúa la consistencia intrínseca de los clústeres generados, arrojando un valor entre -1 y 1:
+\begin{itemize}
+    \item \textbf{Cercano a 1.0:} Indica que los pulsos están estrechamente unidos a los de su misma vocal y muy alejados de las otras vocales. Es el escenario ideal de separabilidad pura.
+    \item \textbf{Cercano a 0.0:} Denota superposición de fronteras. UMAP no logra decidir con claridad y las nubes de puntos se tocan.
+    \item \textbf{Negativo (-1.0):} Representa un fallo total, donde pulsos de una vocal quedaron atrapados topológicamente dentro del clúster de otra vocal.
+\end{itemize}
+
+\subsection{6. Exportación y Auditoría de Datos}
+El sistema garantiza la trazabilidad del proceso aislando los resultados en la misma carpeta de la sesión original (bajo el subdirectorio \texttt{/UMAP/}). El pipeline genera automáticamente:
+\begin{itemize}
+    \item \textbf{Imágenes 2D y 3D:} Representaciones visuales coloreadas usando la paleta estándar de alto contraste de Matplotlib (\texttt{tab10}).
+    \item \textbf{Reporte PDF:} Este mismo formato en LaTeX autogenerado con la ficha técnica del experimento, separando claramente qué mediciones entraron al algoritmo (con su eficiencia en el filtro SNR) y cuáles fueron descartadas.
+    \item \textbf{Matriz CSV Cruda:} Un archivo tabular que contiene la matriz de características exacta que el algoritmo UMAP digirió (luego del preprocesamiento y limpieza de ruido), permitiendo auditar pulso por pulso.
+\end{itemize}
+
+\end{document}

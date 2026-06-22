@@ -659,17 +659,29 @@ def export_results_for_file(out_dir, filename, resultados_entry):
     for k in keys:
         export[k] = resultados_entry.get(k, None)
     export['file'] = filename
-    json_path = os.path.join(out_dir, 'results.json')
+    # --- NUEVO: Guardar tamaño de ventana en json ---
+    export['smooth_ms'] = resultados_entry.get('smooth_ms', 0)
+    
+    # Archivos JSON principales:
+    smooth_ms_val = resultados_entry.get('smooth_ms', 0)
+    smooth_ms_str = str(smooth_ms_val).replace('.', '_')
+    json_path = os.path.join(out_dir, f'results_env{smooth_ms_str}ms.json')
     with open(json_path, 'w') as fh:
         json.dump(export, fh, indent=2, default=lambda x: 'Array omitido' if (isinstance(x, np.ndarray)) else x)
     
-    # --- NUEVO: Guardar todos los resultados en un único archivo JSON ---
-    # Esto simplifica la carga posterior para comparaciones.
-    full_results_path = os.path.join(out_dir, 'analisis_results.json')
+    # --- NUEVO: Guardar todos los resultados en un único archivo JSON con sufijo ---
+    full_results_path = os.path.join(out_dir, f'analisis_results_env{smooth_ms_str}ms.json')
+    
+    # Tambien mantenemos el nombre original como un acceso rápido (simlink conceptual) o backup
+    full_results_path_latest = os.path.join(out_dir, 'analisis_results.json')
+    
     try:
         with open(full_results_path, 'w') as f:
-            # Usamos un default para convertir arrays de numpy a listas para que sea serializable
             json.dump(resultados_entry, f, indent=4, default=lambda o: o.tolist() if isinstance(o, np.ndarray) else o)
+            
+        with open(full_results_path_latest, 'w') as f:
+            json.dump(resultados_entry, f, indent=4, default=lambda o: o.tolist() if isinstance(o, np.ndarray) else o)
+            
     except Exception as e:
         print(f"Error guardando arrays para {filename}: {e}")
     print(f"Exportados resultados en {out_dir}")
@@ -1765,11 +1777,19 @@ def procesar_wavs_promedio(
         # Usar el output_root directamente como directorio de salida para los archivos de este canal.
         out_dir = output_root
 
-        # nombres de archivo simplificados para que tu otro programa los lea fácilmente
-        out_prom = os.path.join(out_dir, "avg.png")       # pulso promedio
-        out_spec = os.path.join(out_dir, "spec.png")      # espectro/espectrograma
-        out_rec = os.path.join(out_dir, "pulses.png")       # recortes / señal original
-        out_evol = os.path.join(out_dir, "evolucion.png")   # evolucion temporal
+        # nombres de archivo simplificados y enriquecidos con estetica/envolvente
+        smooth_ms_str = str(smooth_ms).replace('.', '_')
+        is_dark = plt.rcParams.get('axes.facecolor', '') == 'black'
+        estetica_str = "cyberpunk" if is_dark else "normal"
+        env_str = tipo_envolvente.replace('_', '')
+        
+        # Ejemplo: avg_mediamovil_env150_0ms_normal.png
+        sufijo = f"{env_str}_env{smooth_ms_str}ms_{estetica_str}.png"
+        
+        out_prom = os.path.join(out_dir, f"avg_{sufijo}")       # pulso promedio
+        out_spec = os.path.join(out_dir, f"spec_{sufijo}")      # espectro/espectrograma
+        out_rec = os.path.join(out_dir, f"pulses_{sufijo}")       # recortes / señal original
+        out_evol = os.path.join(out_dir, f"evolucion_{sufijo}")   # evolucion temporal
 
         # --- GRAFICO: pulsos individuales y promedio (restaurado completo) ---
         _plot_pulse_full(
@@ -1856,6 +1876,7 @@ def procesar_wavs_promedio(
             'out_evol': out_evol,
             'pulse_time': t_pulso,
             # --- NUEVO: Añadir datos para poder regenerar el gráfico de recortes ---
+            'smooth_ms': smooth_ms,
             't_recortada': t_recortada,
             'signal_recortada': signal_recortada,
             'env_recortada': env_recortada,
@@ -2056,9 +2077,9 @@ class ProcessingOptionsDialog(tk.Toplevel):
             
         # --- NUEVO: Obtener el estado del checkbox del filtro notch ---
         apply_notch = self.var_notch_filter.get()
-
-        if not tk.messagebox.askyesno("Confirmar", f"Se procesarán {len(canales_a_procesar)} canales. Esto puede tardar. ¿Continuar?", parent=self):
-            return
+        if interactivo:
+            if not tk.messagebox.askyesno("Confirmar", f"Se procesarán {len(canales_a_procesar)} canales. Esto puede tardar. ¿Continuar?", parent=self):
+                return
 
         # --- NUEVO: Cerrar la ventana de opciones al iniciar el procesamiento ---
         self.destroy()

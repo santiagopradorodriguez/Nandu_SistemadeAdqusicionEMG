@@ -323,12 +323,28 @@ class CsvViewerWidget(QWidget):
         medicion_name = os.path.basename(os.path.dirname(filepath))
         self.lbl_filename.setText(f"Medición: {medicion_name}")
         self.lbl_status.setText(f"Cargando medición: {medicion_name} ...")
+        
+        # Guardar hilos antiguos para evitar garbage collection prematuro
+        if not hasattr(self, '_active_threads'):
+            self._active_threads = []
+        self._active_threads = [t for t in self._active_threads if t.isRunning()]
+        
         self.loader = DataLoaderThread(filepath)
-        self.loader.finished_loading.connect(self._on_csv_loaded)
-        self.loader.error_loading.connect(lambda err: self.lbl_status.setText(f"Error: {err}"))
+        self._active_threads.append(self.loader)
+        
+        # Usar lambda para inyectar el loader actual y compararlo al terminar
+        self.loader.finished_loading.connect(lambda df, c, t, m, loader=self.loader: self._on_csv_loaded(df, c, t, m, loader))
+        self.loader.error_loading.connect(lambda err, loader=self.loader: self._on_csv_error(err, loader))
         self.loader.start()
+        
+    def _on_csv_error(self, err, loader):
+        if loader is self.loader:
+            self.lbl_status.setText(f"Error: {err}")
 
-    def _on_csv_loaded(self, df, canales, time_col, max_y):
+    def _on_csv_loaded(self, df, canales, time_col, max_y, loader=None):
+        if loader is not None and loader is not getattr(self, 'loader', None):
+            return # Ignorar hilos viejos que terminaron tarde
+            
         self.df = df
         self.time_data = self.df[time_col].values
         self.current_file_max_y = max_y

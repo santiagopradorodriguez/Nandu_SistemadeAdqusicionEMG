@@ -1,0 +1,127 @@
+\documentclass[12pt, a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath, amssymb}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc, babel}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+
+\begin{document}
+
+\title{Metodología de Entrenamiento y Optimización de Umbrales para Señales EMG}
+\author{}
+\date{\today}
+\maketitle
+
+\section{Diagrama de Flujo del Algoritmo}
+
+A continuación se presenta el diagrama de flujo que ilustra el proceso iterativo y lógico utilizado para hallar el umbral (o los intervalos de umbrales) óptimos capaces de discretizar señales electromiográficas en vectores lógicos para la clasificación de vocales.
+
+\begin{center}
+\begin{tikzpicture}[
+    scale=0.6, transform shape,
+    node distance=2cm,
+    startstop/.style={rectangle, rounded corners, minimum width=3cm, minimum height=1cm, text centered, draw=black, fill=red!30},
+    io/.style={trapezium, trapezium left angle=70, trapezium right angle=110, minimum width=3cm, minimum height=1cm, text centered, draw=black, fill=blue!30},
+    process/.style={rectangle, minimum width=4cm, minimum height=1cm, text centered, text width=4.5cm, draw=black, fill=orange!30},
+    decision/.style={diamond, aspect=1.5, minimum width=4cm, minimum height=1.5cm, text centered, text width=3cm, draw=black, fill=green!30},
+    arrow/.style={thick,->,>=stealth}
+]
+
+% Nodos
+\node (start) [startstop] {Inicio};
+\node (in1) [io, below of=start, yshift=-0.2cm] {Cargar Json de Ventanas (Envolvente)};
+\node (pro1) [process, below of=in1, yshift=-0.5cm] {Extraer 15\% de bordes\\ Calcular $\mu_{basal}$ y $\sigma_{ruido}$};
+\node (dec1) [decision, below of=pro1, yshift=-2cm] {¿SNR global y de pulso $\ge$ Filtro?};
+\node (pro2) [process, right of=dec1, xshift=4cm] {Descartar Medición o Pulso};
+\node (pro3) [process, below of=dec1, yshift=-2cm] {Restar $\mu_{basal}$ y Normalizar respecto a $Max_{global}$};
+\node (pro4) [process, below of=pro3, yshift=-0.5cm] {Generar Gráficos Normalizados de Debug};
+\node (loop) [process, below of=pro4, yshift=-0.5cm] {Bucle: Probar combinación de umbrales $Th \in [0.1, 0.9]$};
+\node (pro5) [process, below of=loop, yshift=-0.5cm] {Vectorización:\\ $C_i = 1$ si $Max(Pulso_i) \ge Th_i$ sino $0$};
+\node (pro6) [process, below of=pro5, yshift=-0.5cm] {Calcular Moda Global y Frecuencia Relativa por Vocal};
+\node (dec2) [decision, below of=pro6, yshift=-2.5cm, text width=3.5cm] {¿Menos colisiones y mayor Score promedio?};
+\node (pro7) [process, right of=dec2, xshift=5cm] {Actualizar Umbrales Óptimos Temporales};
+\node (dec3) [decision, below of=dec2, yshift=-2.5cm] {¿Fin de combinaciones?};
+\node (out1) [io, below of=dec3, yshift=-2cm] {Exportar Tabla y Gráficos Verificación};
+\node (stop) [startstop, below of=out1, yshift=-0.5cm] {Fin};
+
+% Flechas
+\draw [arrow] (start) -- (in1);
+\draw [arrow] (in1) -- (pro1);
+\draw [arrow] (pro1) -- (dec1);
+\draw [arrow] (dec1) -- node[anchor=south] {No} (pro2);
+\draw [arrow] (dec1) -- node[anchor=east] {Sí} (pro3);
+\draw [arrow] (pro3) -- (pro4);
+\draw [arrow] (pro4) -- (loop);
+\draw [arrow] (loop) -- (pro5);
+\draw [arrow] (pro5) -- (pro6);
+\draw [arrow] (pro6) -- (dec2);
+
+\draw [arrow] (dec2) -- node[anchor=south] {Sí} (pro7);
+\draw [arrow] (dec2) -- node[anchor=east] {No} (dec3);
+
+% Retorno de pro7 a dec3
+\draw [arrow] (pro7) |- (dec3);
+
+% Bucle de dec3 al inicio del loop
+\draw [arrow] (dec3.west) -- ++(-2.5,0) node[anchor=south] {No} |- (loop.west);
+
+% Salida final
+\draw [arrow] (dec3) -- node[anchor=east] {Sí} (out1);
+\draw [arrow] (out1) -- (stop);
+
+\end{tikzpicture}
+\end{center}
+
+\newpage
+
+\section{Explicación Detallada Paso a Paso}
+
+\subsection{1. Acondicionamiento y Filtrado de Señal}
+El primer paso consiste en aislar los pulsos musculares útiles y estandarizar sus amplitudes. Para cada ventana de tiempo (pulso) contenida en los registros JSON extraídos previamente:
+\begin{itemize}
+    \item \textbf{Ruido Basal:} Se toma el 15\% inicial y el 15\% final de cada ventana para calcular la media del ruido $\mu_{basal}$ y la desviación estándar del ruido $\sigma_{ruido}$.
+    \item \textbf{Normalización:} A todo el pulso se le sustrae $\mu_{basal}$ para llevar la línea base a cero. Luego, se divide el pulso completo por el valor absoluto máximo global ($Max_{global}$) encontrado en ese canal para llevar la amplitud a una escala de $[0, 1]$.
+    \item \textbf{Filtrado SNR (Relación Señal/Ruido):} La Relación Señal a Ruido de amplitud se calcula como $SNR = \frac{Max_{global}}{\sigma_{ruido}}$. Dependiendo de la configuración seleccionada (Filtro Global, por Ventana, o Ambos), si el SNR no supera el umbral límite exigido (e.g. 4.0), el pulso o la medición entera son descartados para no introducir falsos positivos.
+\end{itemize}
+
+\subsection{2. Vectorización y Codificación Digital}
+Una vez normalizado el pulso, se requiere transformarlo a lógica digital (1 o 0) respecto a un conjunto de umbrales $Th = \{Th_{canal_0}, Th_{canal_1}, Th_{canal_2}\}$.
+La asignación para cada canal $i$ se da mediante:
+\[
+C_i = 
+\begin{cases} 
+1 & \text{si } Max(Pulso_i) \ge Th_i \\
+0 & \text{en caso contrario}
+\end{cases}
+\]
+De esta manera, cada ventana en el tiempo queda definida por una tupla o vector binario (por ejemplo, $[1, 0, 1]$).
+
+\subsection{3. Espacio de Búsqueda (Barrido)}
+Como los umbrales ideales varían por medición y montaje de electrodos, el sistema realiza una optimización basada en fuerza bruta sobre un espacio discreto. Se iteran todas las posibles combinaciones de umbrales desde $0.1$ hasta $0.9$ en pasos de $0.05$. El barrido puede configurarse para usar un mismo umbral común para todos los canales, o un barrido exhaustivo con umbrales independientes por canal.
+
+\subsection{4. Optimización Matricial y \textit{Broadcasting}}
+Para evaluar exhaustivamente miles de combinaciones sin penalizaciones de tiempo causadas por bucles anidados, la comparación de los pulsos con el umbral se vectoriza matemáticamente.
+En lugar de iterar pulso por pulso, se construye una matriz de picos $P \in \mathbb{R}^{N \times C}$, donde $N$ es la cantidad de pulsos válidos totales de la vocal y $C$ la cantidad de canales. Cada combinación de umbrales a evaluar se define como un vector fila $T = [Th_1, Th_2, \dots, Th_C] \in \mathbb{R}^{1 \times C}$.
+
+La discretización de todos los pulsos en simultáneo se expresa algebraicamente como:
+\[
+V = P \ge T
+\]
+Esta operación se resuelve mediante el concepto computacional de \textbf{\textit{Broadcasting}}. El \textit{broadcasting} es un mecanismo de las librerías de álgebra lineal (como NumPy) que permite realizar operaciones entre matrices de distintas dimensiones. Al intentar comparar la matriz $P$ ($N \times C$) con el vector $T$ ($1 \times C$), el motor matemático replica "virtualmente" el vector $T$ a lo largo de $N$ filas en la memoria de bajo nivel. 
+Esto permite que la inecuación se compute elemento a elemento ($P_{i,j} \ge T_j$) mediante instrucciones optimizadas en C, evitando los costosos ciclos condicionales iterativos del lenguaje de alto nivel. El resultado es una nueva matriz booleana $V \in \mathbb{B}^{N \times C}$, donde cada fila ya representa el vector binario final del pulso, lista para la etapa de conteo estadístico.
+
+\subsection{5. Función Objetivo y Optimización}
+Para cada combinación de umbrales testeada en el espacio de búsqueda, se analiza el conjunto de vectores binarios resultantes para cada vocal. 
+\begin{itemize}
+    \item \textbf{Moda Global:} Se calcula cuál es el vector binario más frecuente (Moda) para una vocal específica.
+    \item \textbf{Frecuencia Modal (Score):} Es el porcentaje de veces que aparece la Moda Global sobre el total de pulsos válidos. El "Score" del umbral testeado es el promedio de estas frecuencias modales.
+    \item \textbf{Colisiones:} Se verifica si dos vocales diferentes terminan teniendo el mismo vector binario como Moda Global. Esto se denomina "Colisión" e invalida la capacidad discriminatoria del sistema.
+\end{itemize}
+El algoritmo busca minimizar estrictamente el número de colisiones, y en caso de empate, maximiza el Score (frecuencia de acierto promedio). 
+
+\subsection{6. Resultados Finales}
+Al finalizar la búsqueda, si se usó barrido por canales, en lugar de retornar un solo valor óptimo aislado, el algoritmo consolida un "Intervalo Óptimo" para cada canal tomando todos aquellos umbrales que resultaron en el máximo puntaje posible (con cero colisiones). Luego exporta una tabla comparativa en formato \LaTeX, genera gráficos normalizados de \textit{debug} para cada medición y superpone el umbral definitivo sobre gráficos verificadores de entrenamiento para auditoría visual directa.
+
+\end{document}

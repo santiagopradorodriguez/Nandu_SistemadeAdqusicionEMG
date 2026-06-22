@@ -7,7 +7,7 @@ matplotlib.use('TkAgg')
 sys.path.append(r"/home/lbraun/Repos/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo")
 import analysis.analisis_por_track_integrado as api
 
-mediciones = ['2026-06-03/SC_VOCALESAUTK2_Lucas', '2026-06-03/SC_VOCALESAUTK3_Lucas', '2026-06-03/SC_VOCALESAUTK4_Lucas', '2026-06-03/SC_VOCALESAUTK5_Lucas']
+mediciones = ['2026-06-10/A_Prueba1_Sujeto1', '2026-06-10/A_Prueba2_Sujeto1', '2026-06-10/A_Prueba3_Sujeto1', '2026-06-10/A_Prueba4_Sujeto1', '2026-06-10/E_Prueba1_Sujeto1', '2026-06-10/E_Prueba2_Sujeto1', '2026-06-10/E_Prueba3_Sujeto1', '2026-06-10/E_Prueba4_Sujeto1', '2026-06-10/I_Prueba1_Sujeto1', '2026-06-10/I_Prueba2_Sujeto1', '2026-06-10/I_Prueba3_Sujeto1', '2026-06-10/I_Prueba4_Sujeto1', '2026-06-10/O_Prueba1_Sujeto1', '2026-06-10/O_Prueba2_Sujeto1', '2026-06-10/O_Prueba3_Sujeto1', '2026-06-10/O_Prueba4_Sujeto1', '2026-06-10/U_Prueba1_Sujeto1', '2026-06-10/U_Prueba2_Sujeto1', '2026-06-10/U_Prueba3_Sujeto1', '2026-06-10/U_Prueba4_Sujeto1']
 base_dir = r"/home/lbraun/Repos/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos"
 
 try:
@@ -17,7 +17,7 @@ try:
   dialog.populate_channels(base_dir, mediciones)
 
   # Trasplantar la selección de canales de PySide6 a Tkinter
-  canales_elegidos = ['canal_0', 'canal_1', 'canal_2', 'canal_3']
+  canales_elegidos = ['canal_0', 'canal_1', 'canal_2']
   for canal_key, var in dialog.canales_seleccionados.items():
     var.set(canal_key in canales_elegidos)
 
@@ -29,7 +29,7 @@ try:
   dialog.var_mostrar_evolucion.set(True)
   dialog.var_evol_t_start.set("10.0")
   dialog.var_evol_t_end.set("1000.0")
-  dialog.var_smooth_ms.set("50.0")
+  dialog.var_smooth_ms.set("150.0")
   dialog.var_tipo_env.set("media_movil")
   dialog.var_highpass_cutoff.set("20.0")
   dialog.var_lowpass_cutoff.set("500.0")

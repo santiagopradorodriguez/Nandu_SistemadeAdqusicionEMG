@@ -340,34 +340,38 @@ class ReaperStyleHub(QMainWindow):
         btn.setMenu(menu)
         toolbar.addWidget(btn)
         
-    create_menu_button("⚙ Configuración & Ayuda", [
+    create_menu_button("Configuración & Ayuda", [
         ("⚙ Configuración General", "_internal_config"),
         ("Instrucciones y Créditos", "instrucciones_uso.py")
     ])
     
-    create_menu_button("🎙 Adquisición", [
+    create_menu_button("Adquisición", [
         ("Metrónomo", "acquisition/metronomo_visual.py"),
         ("Entrenamiento AutoForge", "acquisition/modulo_de_entrenamiento.py")
     ])
     
-    create_menu_button("📊 Análisis", [
+    create_menu_button("Análisis", [
         ("Graficador", "analysis/plotter_calibrado.py"),
         ("Análisis Correlación", "analysis/correlaciondeseñales.py")
     ])
     
-    create_menu_button("🛠 Utilidades Dataset", [
+    create_menu_button("Utilidades Dataset", [
         ("Segmentador de Secuencias Continuas", "analysis/segmentador_secuencias.py"),
         ("Extractor Letras (Fase 3)", "analysis/extractor_de_datos_letras.py"),
         ("Editar Medición", "utils/editor_mediciones.py")
     ])
     
-    create_menu_button("🧠 Machine Learning", [
+    create_menu_button("Machine Learning", [
         ("Pipeline ML (Fase 4)", "machine_learning/dl_data_pipeline.py"),
         ("Extraer Datos ML", "analysis/feature_extractor.py")
     ])
     
-    create_menu_button("🎵 Audio", [
+    create_menu_button("Audio", [
         ("Reproductor de Audios", "analysis/reproductor_canal3.py")
+    ])
+    
+    create_menu_button("Auditor UMAP", [
+        ("Auditar Matriz (CSV)", "analysis/auditor_umap.py")
     ])
 
   def _open_config_dialog(self):
@@ -586,6 +590,8 @@ class ReaperStyleHub(QMainWindow):
     self.analysis_panel.tab_comparativo.btn_run_comparativo.clicked.connect(self.run_analisis_comparativo_nativo)
     self.analysis_panel.tab_comparativo.btn_run_sesion.clicked.connect(self.run_analisis_sesion_nativo)
     self.analysis_panel.tab_motor.btn_run_motor.clicked.connect(self._run_discrete_motor)
+    self.analysis_panel.tab_training.btn_run_training.clicked.connect(self._run_training_motor)
+    self.analysis_panel.tab_umap.btn_run_umap.clicked.connect(self._run_umap_motor)
     lyt_analysis.addWidget(self.analysis_panel, stretch=1)
     
     # Visor de Imágenes Integrado
@@ -821,6 +827,242 @@ class ReaperStyleHub(QMainWindow):
     print(f"🔗 Abriendo configuración de Correlación para {len(selected_paths)} mediciones...")
     run_correlacion(mediciones_dirs=selected_paths)
     print("✅ Correlación Finalizada.")
+
+  def _run_training_motor(self):
+      """Diálogo para configurar el Entrenamiento de Umbrales y lanzar el script"""
+      from PySide6.QtWidgets import QMessageBox, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton, QScrollArea, QWidget, QListWidget, QListWidgetItem, QAbstractItemView
+      from PySide6.QtCore import Qt
+      import os
+      
+      selected_paths = self.explorer_widget.get_selected_paths()
+      if not selected_paths:
+          QMessageBox.warning(self, "Atención", "Selecciona al menos una medición en el Gestor de Sesiones.")
+          return
+          
+      from utils.config_manager import ConfigManager
+      cm = ConfigManager()
+      c_config = cm.get("canales") or {}
+      mapped_names = {f"canal_{i}": c_config.get(f"Canal {i}", {}).get("musculo", f"canal_{i}") for i in range(8)}
+      
+      # Buscar canales comunes
+      common_channels = set(os.listdir(selected_paths[0]))
+      for p in selected_paths[1:]:
+          common_channels &= set(os.listdir(p))
+      common_channels = {c for c in common_channels if c.startswith('canal_')}
+      
+      dlg = QDialog(self)
+      dlg.setWindowTitle("Configuración de Training")
+      dlg.resize(400, 500)
+      lyt = QVBoxLayout(dlg)
+      
+      # --- SELECCION DE CANALES ---
+      lyt.addWidget(QLabel("1. Selecciona los canales musculares (ignorar micrófono):"))
+      lst_chans = QListWidget()
+      lst_chans.setSelectionMode(QAbstractItemView.MultiSelection)
+      for c in sorted(list(common_channels)):
+          item = QListWidgetItem(mapped_names.get(c, c))
+          item.setData(Qt.UserRole, c)
+          lst_chans.addItem(item)
+          item.setSelected(True) # Seleccionados por defecto
+      lyt.addWidget(lst_chans)
+      
+      # --- ASIGNACION DE VOCALES ---
+      lyt.addWidget(QLabel("2. Asigna la vocal correspondiente:"))
+      scroll = QScrollArea()
+      scroll.setWidgetResizable(True)
+      scroll_widget = QWidget()
+      scroll_layout = QVBoxLayout(scroll_widget)
+      
+      combos = {}
+      for path in selected_paths:
+          row = QHBoxLayout()
+          name = os.path.basename(path)
+          lbl = QLabel(name)
+          cmb = QComboBox()
+          # Intentar autodetectar la vocal del nombre
+          cmb.addItems(['A', 'E', 'I', 'O', 'U', 'Ignorar'])
+          name_lower = name.lower()
+          for i, v in enumerate(['a', 'e', 'i', 'o', 'u']):
+              if v in name_lower.split('_') or v in name_lower.split('-'): 
+                  cmb.setCurrentIndex(i)
+          row.addWidget(lbl)
+          row.addWidget(cmb)
+          scroll_layout.addLayout(row)
+          combos[path] = cmb
+          
+      scroll.setWidget(scroll_widget)
+      lyt.addWidget(scroll)
+      
+      btn = QPushButton("Aceptar e Iniciar Training")
+      btn.clicked.connect(dlg.accept)
+      lyt.addWidget(btn)
+      
+      if dlg.exec() != QDialog.Accepted:
+          return
+          
+      selected_chans = [item.data(Qt.UserRole) for item in lst_chans.selectedItems()]
+      if not selected_chans:
+          QMessageBox.warning(self, "Atención", "Debes seleccionar al menos un canal.")
+          return
+          
+      asignaciones = {p: c.currentText() for p, c in combos.items() if c.currentText() != 'Ignorar'}
+      if not asignaciones:
+          QMessageBox.warning(self, "Atención", "No asignaste ninguna vocal.")
+          return
+          
+      tab_t = self.analysis_panel.tab_training
+      filtro_snr_activo = tab_t.chk_snr.isChecked()
+      filtro_snr_limite = tab_t.inp_snr_limit.value()
+      filtro_snr_tipo = tab_t.cmb_snr_tipo.currentText()
+      
+      tipo_barrido = tab_t.cmb_tipo_barrido.currentText()
+      paso_barrido = tab_t.inp_paso_barrido.value()
+      
+      self.log_console.append(f"\n> 🎯 Iniciando Entrenamiento de Umbrales con {len(asignaciones)} mediciones...")
+      
+      # Función logger para que imprima en la consola de la UI y mantenga la UI responsiva
+      from PySide6.QtWidgets import QApplication
+      def gui_logger(msg):
+          self.log_console.append(str(msg))
+          QApplication.processEvents()
+      
+      try:
+          import analysis.training_motor as tm
+          tm.ejecutar_entrenamiento(
+              asignaciones_vocales=asignaciones,
+              canales_seleccionados=selected_chans,
+              mapped_names=mapped_names,
+              filtro_snr_activo=filtro_snr_activo,
+              filtro_snr_limite=filtro_snr_limite,
+              filtro_snr_tipo=filtro_snr_tipo,
+              tipo_barrido=tipo_barrido,
+              paso_barrido=paso_barrido,
+              logger=gui_logger
+          )
+          self.log_console.append("✅ Entrenamiento completado. Revisa la consola y los gráficos generados.")
+          QMessageBox.information(self, "Éxito", "El entrenamiento de umbrales finalizó correctamente.")
+      except Exception as e:
+          QMessageBox.critical(self, "Error de Entrenamiento", f"Fallo al ejecutar el algoritmo:\n{e}")
+
+  def _run_umap_motor(self):
+      """Diálogo para configurar UMAP y lanzar el script"""
+      from PySide6.QtWidgets import QMessageBox, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton, QScrollArea, QWidget, QListWidget, QListWidgetItem, QAbstractItemView
+      from PySide6.QtCore import Qt
+      import os
+      
+      selected_paths = self.explorer_widget.get_selected_paths()
+      if not selected_paths:
+          QMessageBox.warning(self, "Atención", "Selecciona al menos una medición en el Gestor de Sesiones.")
+          return
+          
+      from utils.config_manager import ConfigManager
+      cm = ConfigManager()
+      c_config = cm.get("canales") or {}
+      mapped_names = {f"canal_{i}": c_config.get(f"Canal {i}", {}).get("musculo", f"canal_{i}") for i in range(8)}
+      
+      # Buscar canales comunes
+      common_channels = set(os.listdir(selected_paths[0]))
+      for p in selected_paths[1:]:
+          common_channels &= set(os.listdir(p))
+      common_channels = {c for c in common_channels if c.startswith('canal_')}
+      
+      dlg = QDialog(self)
+      dlg.setWindowTitle("Configuración de UMAP")
+      dlg.resize(400, 500)
+      lyt = QVBoxLayout(dlg)
+      
+      # --- SELECCION DE CANALES ---
+      lyt.addWidget(QLabel("1. Selecciona los canales musculares (ignorar micrófono):"))
+      lst_chans = QListWidget()
+      lst_chans.setSelectionMode(QAbstractItemView.MultiSelection)
+      for c in sorted(list(common_channels)):
+          item = QListWidgetItem(mapped_names.get(c, c))
+          item.setData(Qt.UserRole, c)
+          lst_chans.addItem(item)
+          item.setSelected(True) # Seleccionados por defecto
+      lyt.addWidget(lst_chans)
+      
+      # --- ASIGNACION DE VOCALES ---
+      lyt.addWidget(QLabel("2. Asigna la vocal correspondiente:"))
+      scroll = QScrollArea()
+      scroll.setWidgetResizable(True)
+      scroll_widget = QWidget()
+      scroll_layout = QVBoxLayout(scroll_widget)
+      
+      combos = {}
+      for path in selected_paths:
+          row = QHBoxLayout()
+          name = os.path.basename(path)
+          lbl = QLabel(name)
+          cmb = QComboBox()
+          # Intentar autodetectar la vocal del nombre
+          cmb.addItems(['A', 'E', 'I', 'O', 'U', 'Ignorar'])
+          name_lower = name.lower()
+          for i, v in enumerate(['a', 'e', 'i', 'o', 'u']):
+              if v in name_lower.split('_') or v in name_lower.split('-'): 
+                  cmb.setCurrentIndex(i)
+          row.addWidget(lbl)
+          row.addWidget(cmb)
+          scroll_layout.addLayout(row)
+          combos[path] = cmb
+          
+      scroll.setWidget(scroll_widget)
+      lyt.addWidget(scroll)
+      
+      btn = QPushButton("Aceptar e Iniciar UMAP")
+      btn.clicked.connect(dlg.accept)
+      lyt.addWidget(btn)
+      
+      if dlg.exec() != QDialog.Accepted:
+          return
+          
+      selected_chans = [item.data(Qt.UserRole) for item in lst_chans.selectedItems()]
+      if not selected_chans:
+          QMessageBox.warning(self, "Atención", "Debes seleccionar al menos un canal.")
+          return
+          
+      asignaciones = {p: c.currentText() for p, c in combos.items() if c.currentText() != 'Ignorar'}
+      if not asignaciones:
+          QMessageBox.warning(self, "Atención", "No asignaste ninguna vocal.")
+          return
+          
+      tab_u = self.analysis_panel.tab_umap
+      filtro_snr_activo = tab_u.chk_snr.isChecked()
+      filtro_snr_limite = tab_u.inp_snr_limit.value()
+      filtro_snr_tipo = tab_u.cmb_snr_tipo.currentText()
+      
+      vector_mode = tab_u.cmb_vector_mode.currentText()
+      n_neighbors = tab_u.inp_n_neighbors.value()
+      min_dist = tab_u.inp_min_dist.value()
+      is_supervised = tab_u.chk_supervised.isChecked()
+      
+      self.log_console.append(f"\n> 🌌 Iniciando UMAP con {len(asignaciones)} mediciones...")
+      
+      # Función logger para mantener la UI responsiva
+      from PySide6.QtWidgets import QApplication
+      def gui_logger(msg):
+          self.log_console.append(str(msg))
+          QApplication.processEvents()
+      
+      try:
+          import analysis.umap_motor as um
+          um.ejecutar_umap(
+              asignaciones_vocales=asignaciones,
+              canales_seleccionados=selected_chans,
+              mapped_names=mapped_names,
+              filtro_snr_activo=filtro_snr_activo,
+              filtro_snr_limite=filtro_snr_limite,
+              filtro_snr_tipo=filtro_snr_tipo,
+              vector_mode=vector_mode,
+              n_neighbors=n_neighbors,
+              min_dist=min_dist,
+              is_supervised=is_supervised,
+              logger=gui_logger
+          )
+          self.log_console.append("✅ UMAP completado. Revisa la consola y los gráficos generados.")
+          QMessageBox.information(self, "Éxito", "El clustering UMAP finalizó correctamente.")
+      except Exception as e:
+          QMessageBox.critical(self, "Error en UMAP", f"Fallo al ejecutar el algoritmo:\n{e}")
 
   def _run_discrete_motor(self):
       """Ejecuta el script de coordenadas discretas (Assaneo et al. 2013)"""
@@ -1423,10 +1665,10 @@ finally:
     class ProcessRunner(QThread):
       """
       Clase ProcessRunner.
-
       Representa y gestiona las operaciones relacionadas con ProcessRunner.
       """
       finished_signal = Signal(object)
+      log_signal = Signal(str)
       def __init__(self, spath):
         """
         Ejecuta la funcionalidad de __init__.
@@ -1449,14 +1691,33 @@ finally:
         """
         import subprocess
         import sys
-        # Run in new console!
+        
+        # Ocultar consola en Windows si es posible y capturar todo el output
+        creationflags = 0
         if sys.platform == "win32":
-            p = subprocess.run([sys.executable, self.spath], creationflags=subprocess.CREATE_NEW_CONSOLE)
-        else:
-            p = subprocess.run([sys.executable, self.spath])
-        self.finished_signal.emit(p.returncode)
+            creationflags = subprocess.CREATE_NO_WINDOW
+            
+        process = subprocess.Popen(
+            [sys.executable, self.spath],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            creationflags=creationflags,
+            bufsize=1 # Line buffered
+        )
+        
+        for line in process.stdout:
+            self.log_signal.emit(line.strip())
+            
+        process.wait()
+        self.finished_signal.emit(process.returncode)
         
     self.procesador_thread = ProcessRunner(script_path)
+    
+    def on_procesador_log(text):
+        self.log_console.append(text)
+        
+    self.procesador_thread.log_signal.connect(on_procesador_log)
     
     def on_procesador_finished(exit_code):
       """

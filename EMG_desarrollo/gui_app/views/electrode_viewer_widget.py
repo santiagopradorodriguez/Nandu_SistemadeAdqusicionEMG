@@ -17,7 +17,7 @@ import json
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QSplitter, 
     QListWidget, QListWidgetItem, QTabWidget, QScrollArea,
-    QPushButton, QHBoxLayout
+    QPushButton, QHBoxLayout, QComboBox
 )
 from PySide6.QtCore import Qt, QThread, Signal, QSize
 from PySide6.QtGui import QIcon, QPixmap, QImage, QCursor
@@ -91,7 +91,11 @@ class ThumbnailLoader(QThread):
                 # search in canal_0
                 c0 = os.path.join(path, "canal_0")
                 if os.path.exists(c0):
-                    avg = os.path.join(c0, "avg.png")
+                    if hasattr(self, 'suffix') and self.suffix and self.suffix != "Antiguo":
+                        avg = os.path.join(c0, f"avg_{self.suffix}.png")
+                    else:
+                        avg = os.path.join(c0, "avg.png")
+                        
                     if os.path.exists(avg):
                         thumb_path = avg
             
@@ -108,10 +112,114 @@ class ThumbnailLoader(QThread):
 
             self.finished.emit(path, name, pixmap)
 
+class ChannelViewerWidget(QWidget):
+    def __init__(self, canal_path, parent=None):
+        super().__init__(parent)
+        self.canal_path = canal_path
+        self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.current_suffix = None
+        
+        # Tabs
+        self.tabs = QTabWidget()
+        self.tabs.setStyleSheet("""
+            QTabBar::tab { font-size: 12px; padding: 5px 15px; background: #111; color: #888; border: 1px solid #222; }
+            QTabBar::tab:selected { background: #333; color: #fff; border-color: #555; font-weight: bold; }
+            QTabBar::tab:hover { background: #222; color: #aaa; }
+            QTabWidget::pane { border: 1px solid #333; background: #0a0a0a; }
+        """)
+        self.layout.addWidget(self.tabs)
+        
+        self.image_labels = {}
+        self._setup_ui()
+        self._scan_configs()
+
+    def _setup_ui(self):
+        # Metadata
+        meta_path = os.path.join(self.canal_path, "metadata.json")
+        if os.path.exists(meta_path):
+            with open(meta_path, 'r', encoding='utf-8') as f:
+                try:
+                    md = json.load(f)
+                    scroll_meta = QScrollArea()
+                    scroll_meta.setWidgetResizable(True)
+                    lbl_meta = QLabel(json.dumps(md, indent=2))
+                    lbl_meta.setStyleSheet("color: #00ff00; background-color: #0c0c0c; border: 1px solid #333; padding: 15px; font-family: monospace; font-size: 13px;")
+                    lbl_meta.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+                    scroll_meta.setWidget(lbl_meta)
+                    self.tabs.addTab(scroll_meta, "📝 Metadata")
+                except: pass
+
+        # Prefix -> Tab Name
+        self.img_categories = {
+            "avg": "⚡ Promedio",
+            "pulses": "✂️ Recortes",
+            "spec": "🌈 Espectrograma",
+            "evolucion": "📈 Evolución"
+        }
+        
+        for prefix, tab_name in self.img_categories.items():
+            scroll_img = QScrollArea()
+            scroll_img.setWidgetResizable(True)
+            scroll_img.setAlignment(Qt.AlignCenter)
+            
+            container = QWidget()
+            lyt_container = QVBoxLayout(container)
+            lyt_container.setAlignment(Qt.AlignCenter)
+            
+            lbl_hint = QLabel("🔍 Haz clic en la imagen para ampliar")
+            lbl_hint.setStyleSheet("color: #888; margin-bottom: 5px;")
+            lbl_hint.setAlignment(Qt.AlignCenter)
+            
+            # Place holder for clickable image
+            clickable_img = ClickableImage("", max_width=500)
+            self.image_labels[prefix] = clickable_img
+            
+            lyt_container.addStretch()
+            lyt_container.addWidget(lbl_hint)
+            lyt_container.addWidget(clickable_img)
+            lyt_container.addStretch()
+            
+            scroll_img.setWidget(container)
+            self.tabs.addTab(scroll_img, tab_name)
+
+    def _scan_configs(self):
+        pass # Movido a nivel global en ElectrodeViewerWidget
+
+    def set_suffix(self, suffix):
+        self.current_suffix = suffix
+        for prefix, img_label in self.image_labels.items():
+            if suffix == "Antiguo" or suffix is None:
+                filename = f"{prefix}.png"
+            else:
+                filename = f"{prefix}_{suffix}.png"
+                
+            img_path = os.path.join(self.canal_path, filename)
+            if os.path.exists(img_path):
+                img_label.img_path = img_path
+                img_label.pix = QPixmap(img_path)
+                if img_label.pix.width() > 500:
+                    img_label.setPixmap(img_label.pix.scaledToWidth(500, Qt.SmoothTransformation))
+                else:
+                    img_label.setPixmap(img_label.pix)
+                img_label.show()
+            else:
+                # No se encontró esta imagen para esta configuración
+                img_label.hide()
+
+    def set_sub_tab(self, tab_text):
+        for j in range(self.tabs.count()):
+            if self.tabs.tabText(j) == tab_text:
+                self.tabs.setCurrentIndex(j)
+                break
+
+
 class ElectrodeViewerWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(0, 0, 0, 0)
         
         # Header toolbar
         self.toolbar = QHBoxLayout()
@@ -135,8 +243,26 @@ class ElectrodeViewerWidget(QWidget):
             }
         """)
         self.toolbar.addWidget(self.btn_refresh)
+        
+        self.lbl_info = QLabel("Mostrando 0 electrodos seleccionados.")
+        self.lbl_info.setStyleSheet("color: #00ffaa; font-family: 'Courier New', monospace; font-size: 14px; font-weight: bold;")
         self.toolbar.addWidget(self.lbl_info)
+        
         self.toolbar.addStretch()
+        
+        self.lbl_global_config = QLabel("Configuración de Procesamiento:")
+        self.lbl_global_config.setStyleSheet("color: #888; font-weight: bold;")
+        self.cmb_global_config = QComboBox()
+        self.cmb_global_config.setStyleSheet("""
+            QComboBox { background-color: #1a1a1a; color: #fff; border: 1px solid #444; border-radius: 4px; padding: 2px 10px; }
+            QComboBox::drop-down { border-left: 1px solid #444; }
+            QComboBox QAbstractItemView { background-color: #1a1a1a; color: #fff; selection-background-color: #880000; }
+        """)
+        self.cmb_global_config.currentIndexChanged.connect(self._on_global_config_changed)
+        
+        self.toolbar.addWidget(self.lbl_global_config)
+        self.toolbar.addWidget(self.cmb_global_config)
+        
         self.layout.addLayout(self.toolbar)
 
         self.splitter = QSplitter(Qt.Horizontal)
@@ -198,6 +324,7 @@ class ElectrodeViewerWidget(QWidget):
         # Detail Pane
         self.detail_widget = QWidget()
         self.detail_layout = QVBoxLayout(self.detail_widget)
+        self.detail_layout.setContentsMargins(0, 0, 0, 0)
         self.lbl_detail_title = QLabel("Haz clic en una miniatura para ver los detalles.")
         self.lbl_detail_title.setStyleSheet("font-size: 18px; font-weight: bold; color: #FF4444; padding: 5px; background-color: #111; border-radius: 4px; border: 1px solid #333;")
         self.detail_layout.addWidget(self.lbl_detail_title)
@@ -236,24 +363,81 @@ class ElectrodeViewerWidget(QWidget):
         self.splitter.addWidget(self.detail_widget)
         self.splitter.setSizes([500, 700])
         
-        self.layout.addWidget(self.splitter)
+        self.layout.addWidget(self.splitter, 1) # STRETCH=1 para evitar espacio vacío arriba
         
         self.current_loader = None
+        self.current_paths = []
+        self._is_updating_configs = False
+
+    def _update_global_configs(self, paths):
+        if not paths: return
+        # Escanear el primer path para buscar configuraciones
+        self._is_updating_configs = True
+        self.cmb_global_config.clear()
+        
+        path = paths[0]
+        c0 = os.path.join(path, "canal_0")
+        suffixes = set()
+        if os.path.exists(c0):
+            for f in os.listdir(c0):
+                for prefix in ["avg", "pulses", "spec", "evolucion"]:
+                    if f.startswith(prefix + "_") and f.endswith(".png"):
+                        suffix = f[len(prefix)+1:-4]
+                        suffixes.add(suffix)
+                    elif f == prefix + ".png":
+                        suffixes.add("Antiguo")
+                        
+        for s in sorted(list(suffixes)):
+            display_name = s.replace('_', ' ').title() if s != "Antiguo" else "Por Defecto (Antiguo)"
+            self.cmb_global_config.addItem(display_name, s)
+            
+        self._is_updating_configs = False
+        
+    def _on_global_config_changed(self, index):
+        if self._is_updating_configs or index < 0: return
+        suffix = self.cmb_global_config.itemData(index)
+        
+        # 1. Update thumbnails
+        if hasattr(self, 'current_paths') and self.current_paths:
+            self._reload_thumbnails(self.current_paths, suffix)
+            
+        # 2. Update all active ChannelViewerWidgets in tabs
+        for i in range(self.tabs_channels.count()):
+            widget = self.tabs_channels.widget(i)
+            if isinstance(widget, ChannelViewerWidget):
+                widget.set_suffix(suffix)
+
+    def _reload_thumbnails(self, paths, suffix):
+        self.list_widget.clear()
+        
+        if not hasattr(self, '_active_threads'):
+            self._active_threads = []
+        self._active_threads = [t for t in self._active_threads if t.isRunning()]
+            
+        self.current_loader = ThumbnailLoader(paths)
+        self.current_loader.suffix = suffix
+        self._active_threads.append(self.current_loader)
+        
+        self.current_loader.finished.connect(lambda p, n, px, loader=self.current_loader: self._add_thumbnail(p, n, px, loader))
+        self.current_loader.start()
 
     def load_measurements(self, paths):
         self.list_widget.clear()
         self.tabs_channels.clear()
+        self.current_paths = paths
         self.lbl_info.setText(f"Mostrando {len(paths)} electrodos seleccionados.")
         self.lbl_detail_title.setText("Haz clic en una miniatura para ver los detalles.")
         
-        if self.current_loader and self.current_loader.isRunning():
-            self.current_loader.terminate()
-            
-        self.current_loader = ThumbnailLoader(paths)
-        self.current_loader.finished.connect(self._add_thumbnail)
-        self.current_loader.start()
+        self._update_global_configs(paths)
+        
+        # Load thumbnails with current suffix
+        suffix = self.cmb_global_config.itemData(self.cmb_global_config.currentIndex()) if self.cmb_global_config.count() > 0 else None
+        self._reload_thumbnails(paths, suffix)
 
-    def _add_thumbnail(self, path, name, pixmap):
+    def _add_thumbnail(self, path, name, pixmap, loader=None):
+        if loader is not None and loader is not getattr(self, 'current_loader', None):
+            return # Ignorar hilos viejos que terminaron tarde
+            
         item = QListWidgetItem()
         item.setIcon(QIcon(pixmap))
         item.setText(name)
@@ -306,74 +490,16 @@ class ElectrodeViewerWidget(QWidget):
         canales = sorted([d for d in os.listdir(path) if d.startswith("canal_") and os.path.isdir(os.path.join(path, d))])
         for canal in canales:
             canal_path = os.path.join(path, canal)
-            canal_tab = QTabWidget()
-            canal_tab.setStyleSheet("""
-                QTabBar::tab { font-size: 12px; padding: 5px 15px; background: #111; color: #888; border: 1px solid #222; }
-                QTabBar::tab:selected { background: #333; color: #fff; border-color: #555; font-weight: bold; }
-                QTabBar::tab:hover { background: #222; color: #aaa; }
-                QTabWidget::pane { border: 1px solid #333; background: #0a0a0a; }
-            """)
+            viewer_widget = ChannelViewerWidget(canal_path)
+            # Aplicar sufijo global
+            global_suffix = self.cmb_global_config.itemData(self.cmb_global_config.currentIndex())
+            if global_suffix:
+                viewer_widget.set_suffix(global_suffix)
             
-            # Read metadata
-            meta_path = os.path.join(canal_path, "metadata.json")
-            if os.path.exists(meta_path):
-                with open(meta_path, 'r', encoding='utf-8') as f:
-                    try:
-                        md = json.load(f)
-                        scroll_meta = QScrollArea()
-                        scroll_meta.setWidgetResizable(True)
-                        lbl_meta = QLabel(json.dumps(md, indent=2))
-                        lbl_meta.setStyleSheet("color: #00ff00; background-color: #0c0c0c; border: 1px solid #333; padding: 15px; font-family: monospace; font-size: 13px;")
-                        lbl_meta.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-                        scroll_meta.setWidget(lbl_meta)
-                        canal_tab.addTab(scroll_meta, "📝 Metadata")
-                    except: pass
-                    
-            # Nombres bonitos para subpestañas
-            img_tabs = {
-                "avg.png": "⚡ Promedio",
-                "pulses.png": "✂️ Recortes",
-                "spec.png": "🌈 Espectrograma",
-                "evolucion.png": "📈 Evolución"
-            }
-            
-            # Load images into sub-tabs
-            for img_name, tab_name in img_tabs.items():
-                img_path = os.path.join(canal_path, img_name)
-                if os.path.exists(img_path):
-                    scroll_img = QScrollArea()
-                    scroll_img.setWidgetResizable(True)
-                    scroll_img.setAlignment(Qt.AlignCenter)
-                    
-                    # Hint label
-                    lbl_hint = QLabel("🔍 Haz clic en la imagen para ampliar")
-                    lbl_hint.setStyleSheet("color: #888; margin-bottom: 5px;")
-                    lbl_hint.setAlignment(Qt.AlignCenter)
-                    
-                    # Contenedor centralizado
-                    container = QWidget()
-                    lyt_container = QVBoxLayout(container)
-                    lyt_container.setAlignment(Qt.AlignCenter)
-                    
-                    # Custom Clickable Image (max_width 500 para hacerla chica inicialmente)
-                    clickable_img = ClickableImage(img_path, max_width=500)
-                    
-                    lyt_container.addStretch()
-                    lyt_container.addWidget(lbl_hint)
-                    lyt_container.addWidget(clickable_img)
-                    lyt_container.addStretch()
-                    
-                    scroll_img.setWidget(container)
-                    canal_tab.addTab(scroll_img, tab_name)
-                    
-            # Forzar sub-pestaña si se había guardado el estado
             if current_sub_tab_text:
-                for j in range(canal_tab.count()):
-                    if canal_tab.tabText(j) == current_sub_tab_text:
-                        canal_tab.setCurrentIndex(j)
-                        break
-                        
-            self.tabs_channels.addTab(canal_tab, canal.upper())
+                viewer_widget.set_sub_tab(current_sub_tab_text)
+                
+            self.tabs_channels.addTab(viewer_widget, canal.upper())
             
         # Restaurar la pestaña principal
         if current_main_tab_text:
