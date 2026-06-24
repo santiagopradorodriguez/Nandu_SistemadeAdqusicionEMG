@@ -8,7 +8,9 @@ from collections import defaultdict
 from scipy.signal import resample, find_peaks, correlate, correlation_lags
 import pandas as pd
 from sklearn.decomposition import PCA
-from sklearn.metrics import silhouette_score, pairwise_distances
+from sklearn.metrics import silhouette_score, pairwise_distances, confusion_matrix
+from sklearn.cluster import KMeans
+import seaborn as sns
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -51,8 +53,16 @@ def build_pca_features(asignaciones_vocales, canales_seleccionados, mapped_names
     
     TARGET_LEN = 100 # Resolucion estandar por canal
     
-    for path, vocal in asignaciones_vocales.items():
-        vocal = vocal.upper()
+    Roles = []
+    
+    for path, vocal_data in asignaciones_vocales.items():
+        if isinstance(vocal_data, dict):
+            vocal = vocal_data.get('vocal', '').upper()
+            rol = vocal_data.get('rol', 'train').lower()
+        else:
+            vocal = vocal_data.upper()
+            rol = 'train'
+            
         if vocal == 'IGNORAR': continue
         
         # Cargar todos los canales (incluido mic si existe)
@@ -205,6 +215,7 @@ def build_pca_features(asignaciones_vocales, canales_seleccionados, mapped_names
             flat_vector = np.concatenate(vector_concatenado)
             X.append(flat_vector)
             Y.append(vocal)
+            Roles.append(rol)
             Tomas.append(f"{os.path.basename(path)}_W{win_idx}")
             pulsos_validos += 1
             resultantes += 1
@@ -220,18 +231,26 @@ def build_pca_features(asignaciones_vocales, canales_seleccionados, mapped_names
         'resultantes': resultantes
     }
             
-    return np.array(X), np.array(Y), Tomas, mediciones_aceptadas, mediciones_rechazadas, info_pulsos
+    return np.array(X), np.array(Y), np.array(Roles), Tomas, mediciones_aceptadas, mediciones_rechazadas, info_pulsos
 
-def plot_pca_results(embedding_2d, embedding_3d, labels, out_dir, sufijo, variance_ratio, n_components):
+def plot_pca_results(embedding_2d, embedding_3d, labels, roles, out_dir, sufijo, variance_ratio, n_components, sil_score_2d=float('nan'), sil_score_3d=float('nan')):
     unique_labels = sorted(list(set(labels)))
     custom_colors = ['tab:red', 'tab:green', 'tab:blue', 'tab:purple', 'tab:orange']
     
     # 2D Plot
     fig_2d, ax_2d = plt.subplots(figsize=(10, 8))
     for i, vocal in enumerate(unique_labels):
-        idx = np.array(labels) == vocal
         c = custom_colors[i % len(custom_colors)]
-        ax_2d.scatter(embedding_2d[idx, 0], embedding_2d[idx, 1], label=f'Vocal {vocal}', color=c, alpha=0.8, edgecolors='k', linewidth=0.5, s=60)
+        
+        # Train points
+        idx_train = (np.array(labels) == vocal) & (np.array(roles) == 'train')
+        if np.any(idx_train):
+            ax_2d.scatter(embedding_2d[idx_train, 0], embedding_2d[idx_train, 1], label=f'Vocal {vocal} (Train)', color=c, alpha=0.8, edgecolors='k', linewidth=0.5, s=60, marker='o')
+            
+        # Test points
+        idx_test = (np.array(labels) == vocal) & (np.array(roles) == 'test')
+        if np.any(idx_test):
+            ax_2d.scatter(embedding_2d[idx_test, 0], embedding_2d[idx_test, 1], label=f'Vocal {vocal} (Test)', color=c, alpha=0.9, edgecolors='k', linewidth=1.5, s=150, marker='*')
         
     ax_2d.set_title(f"PCA 2D (Retención Varianza: {np.sum(variance_ratio[:2])*100:.1f}%)", fontweight='bold', pad=15)
     ax_2d.set_xlabel(f"PC1 ({variance_ratio[0]*100:.1f}%)")
@@ -247,9 +266,17 @@ def plot_pca_results(embedding_2d, embedding_3d, labels, out_dir, sufijo, varian
         fig_3d = plt.figure(figsize=(10, 8))
         ax_3d = fig_3d.add_subplot(111, projection='3d')
         for i, vocal in enumerate(unique_labels):
-            idx = np.array(labels) == vocal
             c = custom_colors[i % len(custom_colors)]
-            ax_3d.scatter(embedding_3d[idx, 0], embedding_3d[idx, 1], embedding_3d[idx, 2], label=f'Vocal {vocal}', color=c, alpha=0.8, edgecolors='k', linewidth=0.5, s=60)
+            
+            # Train points
+            idx_train = (np.array(labels) == vocal) & (np.array(roles) == 'train')
+            if np.any(idx_train):
+                ax_3d.scatter(embedding_3d[idx_train, 0], embedding_3d[idx_train, 1], embedding_3d[idx_train, 2], label=f'Vocal {vocal} (Train)', color=c, alpha=0.8, edgecolors='k', linewidth=0.5, s=60, marker='o')
+                
+            # Test points
+            idx_test = (np.array(labels) == vocal) & (np.array(roles) == 'test')
+            if np.any(idx_test):
+                ax_3d.scatter(embedding_3d[idx_test, 0], embedding_3d[idx_test, 1], embedding_3d[idx_test, 2], label=f'Vocal {vocal} (Test)', color=c, alpha=0.9, edgecolors='k', linewidth=1.5, s=150, marker='*')
             
         ax_3d.set_title(f"PCA 3D (Retención Varianza: {np.sum(variance_ratio[:3])*100:.1f}%)", fontweight='bold', pad=15)
         ax_3d.set_xlabel(f"PC1 ({variance_ratio[0]*100:.1f}%)")
@@ -260,7 +287,7 @@ def plot_pca_results(embedding_2d, embedding_3d, labels, out_dir, sufijo, varian
         fig_3d.savefig(os.path.join(out_dir, f"PCA_Scatter_3D_{sufijo}.png"), dpi=300, bbox_inches='tight')
         plt.close(fig_3d)
 
-def ejecutar_pca(asignaciones_vocales, canales_seleccionados, mapped_names, filtro_snr_activo, filtro_snr_limite, filtro_snr_tipo, is_supervised, use_umap, n_components, logger):
+def ejecutar_pca(asignaciones_vocales, canales_seleccionados, mapped_names, filtro_snr_activo, filtro_snr_limite, filtro_snr_tipo, is_supervised, use_umap, n_components, run_kmeans, logger):
     logger("🧩 Iniciando construcción del DataFrame PCA y reducción de dimensiones...")
     
     base_dir = os.path.dirname(list(asignaciones_vocales.keys())[0]) # 2026-06-10 directory
@@ -301,7 +328,7 @@ def ejecutar_pca(asignaciones_vocales, canales_seleccionados, mapped_names, filt
     # Check if mediciones.json exists and we can skip building?
     # Para ser robustos, siempre extraemos y validamos por si cambió algún canal seleccionado
     logger("Construyendo matriz estricta 100 muestras/canal (Alineación por Micrófono)")
-    X, Y, Tomas, med_acc, med_rej, info_pulsos = build_pca_features(
+    X, Y, Roles, Tomas, med_acc, med_rej, info_pulsos = build_pca_features(
         asignaciones_vocales, canales_seleccionados, mapped_names, logger,
         filtro_snr_activo, filtro_snr_limite, filtro_snr_tipo
     )
@@ -313,8 +340,14 @@ def ejecutar_pca(asignaciones_vocales, canales_seleccionados, mapped_names, filt
     logger(f"Vector Maestro generado: {X.shape[0]} repeticiones de {X.shape[1]} features.")
     
     # PCA Calculation
-    pca = PCA(n_components=min(n_components, X.shape[0], X.shape[1]))
-    X_pca = pca.fit_transform(X)
+    X_train = X[Roles == 'train']
+    if len(X_train) < 2:
+        logger("❌ Error: No hay suficientes pulsos de 'Entrenamiento' para hacer PCA.")
+        return
+        
+    pca = PCA(n_components=min(n_components, X_train.shape[0], X_train.shape[1]))
+    pca.fit(X_train)
+    X_pca = pca.transform(X)
     variance_ratios = pca.explained_variance_ratio_
     
     X_pca_2d = X_pca[:, :2]
@@ -327,7 +360,8 @@ def ejecutar_pca(asignaciones_vocales, canales_seleccionados, mapped_names, filt
     
     df_full = pd.DataFrame(X, columns=cols)
     df_full.insert(0, 'Toma', Tomas)
-    df_full.insert(0, 'Vocal', Y)
+    df_full.insert(1, 'Rol', Roles)
+    df_full.insert(2, 'Vocal', Y)
     csv_path = os.path.join(out_dir, "vector_maestro_300d.csv")
     df_full.to_csv(csv_path, index=False)
     logger(f"CSV de alta dimensionalidad exportado a: {csv_path}")
@@ -336,10 +370,64 @@ def ejecutar_pca(asignaciones_vocales, canales_seleccionados, mapped_names, filt
         # Exportar CSV de PCA reducida para consumo de UMAP
         df_reduced = pd.DataFrame(X_pca, columns=[f"PC{i+1}" for i in range(X_pca.shape[1])])
         df_reduced.insert(0, 'Toma', Tomas)
-        df_reduced.insert(0, 'Vocal', Y)
+        df_reduced.insert(1, 'Rol', Roles)
+        df_reduced.insert(2, 'Vocal', Y)
         reduced_csv = os.path.join(out_dir, f"pca_reduced_{n_components}comp.csv")
         df_reduced.to_csv(reduced_csv, index=False)
         logger(f"CSV Reducido (PCA->UMAP) exportado a: {reduced_csv}")
+        
+    if run_kmeans and 'test' in Roles:
+        logger("Ejecutando K-Means en el espacio PCA y construyendo Matriz de Confusión...")
+        unique_vocales = sorted(list(set(Y)))
+        k = len(unique_vocales)
+        kmeans = KMeans(n_clusters=k, random_state=42)
+        
+        # Fit kmeans on Train
+        kmeans.fit(X_pca_2d[Roles == 'train'])
+        
+        # Predict on Test
+        test_preds = kmeans.predict(X_pca_2d[Roles == 'test'])
+        y_test_true = Y[Roles == 'test']
+        y_train_true = Y[Roles == 'train']
+        train_preds = kmeans.labels_
+        
+        # Bautizar clusters usando Train
+        cluster_to_vocal = {}
+        for cluster_id in range(k):
+            vocales_in_cluster = y_train_true[train_preds == cluster_id]
+            if len(vocales_in_cluster) > 0:
+                vocal_mayoritaria = pd.Series(vocales_in_cluster).mode()[0]
+                cluster_to_vocal[cluster_id] = vocal_mayoritaria
+            else:
+                cluster_to_vocal[cluster_id] = "Desconocido"
+                
+        # Traducir predicciones de test
+        test_preds_vocales = [cluster_to_vocal.get(c, "Desconocido") for c in test_preds]
+        
+        # Generar Matriz
+        cm = confusion_matrix(y_test_true, test_preds_vocales, labels=unique_vocales)
+        
+        # Calculate percentages
+        cm_pct = np.zeros_like(cm, dtype=float)
+        row_sums = cm.sum(axis=1)
+        for i in range(cm.shape[0]):
+            if row_sums[i] > 0:
+                cm_pct[i] = (cm[i] / row_sums[i]) * 100
+                
+        annot_data = np.empty_like(cm, dtype=object)
+        for i in range(cm.shape[0]):
+            for j in range(cm.shape[1]):
+                annot_data[i, j] = f"{cm_pct[i, j]:.1f}%\n({cm[i, j]})"
+                
+        plt.figure(figsize=(8,6))
+        sns.heatmap(cm, annot=annot_data, fmt='', cmap='Blues', xticklabels=unique_vocales, yticklabels=unique_vocales)
+        plt.title('Matriz de Confusión (Test Data) - K-Means sobre PCA 2D')
+        plt.ylabel('Verdadero')
+        plt.xlabel('Predicción (K-Means)')
+        cm_path = os.path.join(out_dir, "matriz_confusion_pca.png")
+        plt.savefig(cm_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        logger(f"Matriz de Confusión generada: {cm_path}")
     
     # Calcular metricas si hay múltiples vocales
     sil_score_2d = float('nan')
@@ -349,7 +437,7 @@ def ejecutar_pca(asignaciones_vocales, canales_seleccionados, mapped_names, filt
         sil_score_full = silhouette_score(X, Y, metric='euclidean')
         
     logger(f"Generando gráficos PCA (Varianza retenida 2D: {np.sum(variance_ratios[:2])*100:.1f}%)")
-    plot_pca_results(X_pca_2d, X_pca_3d, Y, out_dir, sufijo, variance_ratios, n_components)
+    plot_pca_results(X_pca_2d, X_pca_3d, Y, Roles, out_dir, sufijo, variance_ratios, n_components)
     
     # Metricas .txt
     with open(os.path.join(out_dir, "metricas.txt"), "w") as f:

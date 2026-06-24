@@ -1,0 +1,78 @@
+\documentclass[12pt, a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath, amssymb}
+\usepackage{tikz}
+\usepackage{graphicx}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc, babel}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+
+\begin{document}
+
+\title{Metodología de Entrenamiento y Evaluación: División Train/Test y Clasificación K-Means en Espacios Reducidos}
+\author{}
+\date{\today}
+\maketitle
+
+\section{Introducción y Justificación}
+
+El análisis exploratorio mediante Análisis de Componentes Principales (PCA) y Aproximación y Proyección de Múltiples Variedades Uniformes (UMAP) nos permite entender la estructura intrínseca de los patrones mioeléctricos. Sin embargo, para medir el valor real de estos patrones como predictores fonéticos, se requiere un esquema de evaluación objetivo. 
+
+Este documento describe la arquitectura implementada para la partición de datos en subconjuntos de \textbf{Entrenamiento (Train)} y \textbf{Prueba (Test)}, así como la estrategia de evaluación "zero-shot" mediante \textbf{K-Means} en el espacio topológico resultante.
+
+\section{Estrategia de Partición: Prevención de Fuga de Información}
+
+Al proyectar datos de alta dimensionalidad (300D) hacia 2D o 3D, existe el riesgo del \textit{Data Leakage} (Fuga de Información) si los datos de prueba moldean el espacio de reducción. Para evitar esto, se aplica una metodología matemática estricta:
+
+\begin{itemize}
+    \item \textbf{PCA (Fit-Transform asimétrico):} El cálculo de la matriz de covarianza y la extracción de autovectores se realiza \textbf{exclusivamente} utilizando la porción de la señal marcada como \texttt{Train}. Luego, la matriz entera (incluyendo \texttt{Test}) se proyecta utilizando estos ejes fijos.
+    \item \textbf{UMAP (Supervisión y Topología fáctica):} Similar a PCA, UMAP esculpe el múltiple topológico inicial y sus fuerzas de atracción/repulsión utilizando únicamente \texttt{Train}. En modo \textit{Supervisado (SUMAP)}, utiliza activamente las etiquetas de \texttt{Train} para forzar la cohesión. Los datos \texttt{Test} son simplemente injertados en las vecindades más similares de la topología ya cristalizada.
+\end{itemize}
+
+\section{Clasificación y Matriz de Confusión ("Matriz de Difusión")}
+
+Ya que PCA y UMAP son algoritmos de \textit{Manifold Learning} y no clasificadores de inferencia directa, se acopla \textbf{K-Means} como clasificador \textit{post-hoc}:
+
+\vspace{0.5cm}
+\begin{center}
+\begin{tikzpicture}[
+    scale=0.75, transform shape,
+    node distance=2.5cm,
+    startstop/.style={rectangle, rounded corners, minimum width=3cm, minimum height=1cm, text centered, draw=black, fill=red!30},
+    process/.style={rectangle, minimum width=3cm, minimum height=1cm, text centered, text width=4cm, draw=black, fill=orange!30},
+    decision/.style={diamond, aspect=1.5, minimum width=3cm, minimum height=1cm, text centered, text width=2.5cm, draw=black, fill=green!30},
+    arrow/.style={thick,->,>=stealth}
+]
+
+\node (in) [startstop] {Señales EMG (300D)};
+\node (split) [decision, below of=in, yshift=-0.5cm] {Rol?};
+\node (train) [process, left of=split, xshift=-2.5cm] {X\_train, Y\_train};
+\node (test) [process, right of=split, xshift=2.5cm] {X\_test, Y\_test};
+
+\node (reductor) [process, below of=train, yshift=-1cm] {Fit Reductor\\(PCA o UMAP)};
+\node (proj) [process, right of=reductor, xshift=4.5cm] {Transform(X\_test)};
+
+\node (kmeans) [process, below of=reductor, yshift=-0.5cm] {K-Means Fit\\(sobre Train Proyectado)};
+\node (pred) [process, below of=proj, yshift=-0.5cm] {Predicción\\y Matriz Confusión};
+
+\draw [arrow] (in) -- (split);
+\draw [arrow] (split) -- node[anchor=south] {Train} (train);
+\draw [arrow] (split) -- node[anchor=south] {Test} (test);
+
+\draw [arrow] (train) -- (reductor);
+\draw [arrow] (reductor) -- (proj);
+\draw [arrow] (test) -- (proj);
+
+\draw [arrow] (reductor) -- (kmeans);
+\draw [arrow] (kmeans) -- (pred);
+\draw [arrow] (proj) -- (pred);
+
+\end{tikzpicture}
+\end{center}
+\vspace{0.5cm}
+
+\subsection*{Bautismo de Clusters y Evaluación}
+El algoritmo de K-Means (con $k$ igual al número de vocales analizadas) descubre clústeres no etiquetados matemáticamente. La asignación de la "identidad fonética" de cada clúster se realiza por mayoría democrática: el clúster adquiere la etiqueta de la vocal \texttt{Train} que posea mayor prevalencia en él. Posteriormente, se evalúan las proyecciones \texttt{Test} midiendo en qué clúster cayeron, construyendo la \textbf{Matriz de Confusión} que expone cuantitativamente los Aciertos, Falsos Positivos y Falsos Negativos generalizados a datos jamás vistos por el motor de reducción.
+
+\end{document}

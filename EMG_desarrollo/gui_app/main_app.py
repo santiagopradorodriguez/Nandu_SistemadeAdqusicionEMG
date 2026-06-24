@@ -771,6 +771,20 @@ class ReaperStyleHub(QMainWindow):
       lbl = QLabel("Selecciona mediciones en el Gestor para ver los canales...")
       lbl.setStyleSheet("color: #FFA500;")
       tab_proc.lyt_canales_procesar.addWidget(lbl)
+      
+    # 4. Actualizar lista de resultados PCA en pestaña UMAP
+    tab_u = self.analysis_panel.tab_umap
+    tab_u.cmb_pca_results.clear()
+    if n > 0:
+      base_dir = os.path.dirname(rutas[0])
+      pca_dir = os.path.join(base_dir, "PCA")
+      
+      if os.path.exists(pca_dir):
+          for d in os.listdir(pca_dir):
+              if d.startswith("PCA_") and os.path.isdir(os.path.join(pca_dir, d)):
+                  csv_files = [f for f in os.listdir(os.path.join(pca_dir, d)) if f.startswith('pca_reduced_') and f.endswith('.csv')]
+                  if csv_files:
+                      tab_u.cmb_pca_results.addItem(f"{d} ({csv_files[0]})", os.path.join(pca_dir, d, csv_files[0]))
 
   def _run_plotter_calibrado(self, *args):
     """Ejecuta el plotter calibrado con la medición seleccionada"""
@@ -996,16 +1010,28 @@ class ReaperStyleHub(QMainWindow):
           name = os.path.basename(path)
           lbl = QLabel(name)
           cmb = QComboBox()
-          # Intentar autodetectar la vocal del nombre
           cmb.addItems(['A', 'E', 'I', 'O', 'U', 'Ignorar'])
           name_lower = name.lower()
-          for i, v in enumerate(['a', 'e', 'i', 'o', 'u']):
-              if v in name_lower.split('_') or v in name_lower.split('-'): 
-                  cmb.setCurrentIndex(i)
+          if not hasattr(self, 'session_memory'):
+              self.session_memory = {}
+              
+          if path in self.session_memory:
+              cmb.setCurrentText(self.session_memory[path][0])
+          else:
+              for i, v in enumerate(['a', 'e', 'i', 'o', 'u']):
+                  if v in name_lower.split('_') or v in name_lower.split('-'): 
+                      cmb.setCurrentIndex(i)
+                  
+          cmb_rol = QComboBox()
+          cmb_rol.addItems(['Train', 'Test'])
+          if path in self.session_memory:
+              cmb_rol.setCurrentText(self.session_memory[path][1])
+          
           row.addWidget(lbl)
           row.addWidget(cmb)
+          row.addWidget(cmb_rol)
           scroll_layout.addLayout(row)
-          combos[path] = cmb
+          combos[path] = (cmb, cmb_rol)
           
       scroll.setWidget(scroll_widget)
       lyt.addWidget(scroll)
@@ -1022,7 +1048,17 @@ class ReaperStyleHub(QMainWindow):
           QMessageBox.warning(self, "Atención", "Debes seleccionar al menos un canal.")
           return
           
-      asignaciones = {p: c.currentText() for p, c in combos.items() if c.currentText() != 'Ignorar'}
+      if not hasattr(self, 'session_memory'):
+          self.session_memory = {}
+          
+      asignaciones = {}
+      for p, c in combos.items():
+          vocal_txt = c[0].currentText()
+          rol_txt = c[1].currentText()
+          self.session_memory[p] = (vocal_txt, rol_txt)
+          if vocal_txt != 'Ignorar':
+              asignaciones[p] = {'vocal': vocal_txt, 'rol': rol_txt.lower()}
+              
       if not asignaciones:
           QMessageBox.warning(self, "Atención", "No asignaste ninguna vocal.")
           return
@@ -1035,6 +1071,7 @@ class ReaperStyleHub(QMainWindow):
       is_supervised = tab_p.chk_supervised.isChecked()
       use_umap = tab_p.chk_use_umap.isChecked()
       n_components = tab_p.inp_n_components.value()
+      run_kmeans = tab_p.chk_kmeans.isChecked()
       
       self.log_console.append(f"\n> 🧩 Iniciando PCA con {len(asignaciones)} mediciones...")
       
@@ -1056,6 +1093,7 @@ class ReaperStyleHub(QMainWindow):
               is_supervised=is_supervised,
               use_umap=use_umap,
               n_components=n_components,
+              run_kmeans=run_kmeans,
               logger=gui_logger
           )
           self.log_console.append("✅ PCA completado. Revisa la consola y los gráficos generados.")
@@ -1084,6 +1122,8 @@ class ReaperStyleHub(QMainWindow):
       for p in selected_paths[1:]:
           common_channels &= set(os.listdir(p))
       common_channels = {c for c in common_channels if c.startswith('canal_')}
+      
+      tab_u = self.analysis_panel.tab_umap
       
       dlg = QDialog(self)
       dlg.setWindowTitle("Configuración de UMAP")
@@ -1114,16 +1154,28 @@ class ReaperStyleHub(QMainWindow):
           name = os.path.basename(path)
           lbl = QLabel(name)
           cmb = QComboBox()
-          # Intentar autodetectar la vocal del nombre
           cmb.addItems(['A', 'E', 'I', 'O', 'U', 'Ignorar'])
           name_lower = name.lower()
-          for i, v in enumerate(['a', 'e', 'i', 'o', 'u']):
-              if v in name_lower.split('_') or v in name_lower.split('-'): 
-                  cmb.setCurrentIndex(i)
+          if not hasattr(self, 'session_memory'):
+              self.session_memory = {}
+              
+          if path in self.session_memory:
+              cmb.setCurrentText(self.session_memory[path][0])
+          else:
+              for i, v in enumerate(['a', 'e', 'i', 'o', 'u']):
+                  if v in name_lower.split('_') or v in name_lower.split('-'): 
+                      cmb.setCurrentIndex(i)
+                  
+          cmb_rol = QComboBox()
+          cmb_rol.addItems(['Train', 'Test'])
+          if path in self.session_memory:
+              cmb_rol.setCurrentText(self.session_memory[path][1])
+          
           row.addWidget(lbl)
           row.addWidget(cmb)
+          row.addWidget(cmb_rol)
           scroll_layout.addLayout(row)
-          combos[path] = cmb
+          combos[path] = (cmb, cmb_rol)
           
       scroll.setWidget(scroll_widget)
       lyt.addWidget(scroll)
@@ -1140,7 +1192,17 @@ class ReaperStyleHub(QMainWindow):
           QMessageBox.warning(self, "Atención", "Debes seleccionar al menos un canal.")
           return
           
-      asignaciones = {p: c.currentText() for p, c in combos.items() if c.currentText() != 'Ignorar'}
+      if not hasattr(self, 'session_memory'):
+          self.session_memory = {}
+          
+      asignaciones = {}
+      for p, c in combos.items():
+          vocal_txt = c[0].currentText()
+          rol_txt = c[1].currentText()
+          self.session_memory[p] = (vocal_txt, rol_txt)
+          if vocal_txt != 'Ignorar':
+              asignaciones[p] = {'vocal': vocal_txt, 'rol': rol_txt.lower()}
+              
       if not asignaciones:
           QMessageBox.warning(self, "Atención", "No asignaste ninguna vocal.")
           return
@@ -1154,6 +1216,9 @@ class ReaperStyleHub(QMainWindow):
       n_neighbors = tab_u.inp_n_neighbors.value()
       min_dist = tab_u.inp_min_dist.value()
       is_supervised = tab_u.chk_supervised.isChecked()
+      run_kmeans = tab_u.chk_kmeans.isChecked()
+      import_pca = tab_u.chk_import_pca.isChecked()
+      pca_csv_path = tab_u.cmb_pca_results.currentData() if import_pca else None
       
       self.log_console.append(f"\n> 🌌 Iniciando UMAP con {len(asignaciones)} mediciones...")
       
@@ -1176,6 +1241,9 @@ class ReaperStyleHub(QMainWindow):
               n_neighbors=n_neighbors,
               min_dist=min_dist,
               is_supervised=is_supervised,
+              run_kmeans=run_kmeans,
+              import_pca=import_pca,
+              pca_csv_path=pca_csv_path,
               logger=gui_logger
           )
           self.log_console.append("✅ UMAP completado. Revisa la consola y los gráficos generados.")

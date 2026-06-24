@@ -417,6 +417,10 @@ class PcaMotorTab(QWidget):
         self.inp_n_components.setToolTip("Número de componentes a retener para UMAP (ej: 15)")
         l_pca.addRow("N° Componentes Intermedias:", self.inp_n_components)
         
+        self.chk_kmeans = QCheckBox("Ejecutar Clustering K-Means (Evaluación y Matriz de Confusión)")
+        self.chk_kmeans.setChecked(False)
+        l_pca.addRow(self.chk_kmeans)
+        
         g_pca.setLayout(l_pca)
         self.layout.addWidget(g_pca)
         
@@ -479,6 +483,16 @@ class UmapMotorTab(QWidget):
         self.cmb_vector_mode.addItems(["Completa", "Picos"])
         l_vector.addRow("Características (Features):", self.cmb_vector_mode)
         
+        self.chk_import_pca = QCheckBox("Importar desde resultado PCA")
+        self.chk_import_pca.setChecked(False)
+        
+        self.cmb_pca_results = QComboBox()
+        self.cmb_pca_results.setEnabled(False)
+        self.chk_import_pca.toggled.connect(self.cmb_pca_results.setEnabled)
+        
+        l_vector.addRow(self.chk_import_pca)
+        l_vector.addRow("Resultados PCA:", self.cmb_pca_results)
+        
         g_vector.setLayout(l_vector)
         self.layout.addWidget(g_vector)
         
@@ -486,9 +500,13 @@ class UmapMotorTab(QWidget):
         g_umap = QGroupBox("2. Hiperparámetros UMAP")
         l_umap = QFormLayout()
         
-        self.chk_supervised = QCheckBox("Forzar Separación por Vocales (SUMAP)")
+        self.chk_supervised = QCheckBox("Forzar Separación por Vocales (SUMAP Supervisado)")
         self.chk_supervised.setChecked(False)
         l_umap.addRow(self.chk_supervised)
+        
+        self.chk_kmeans = QCheckBox("Ejecutar Clustering K-Means (Evaluación y Matriz de Confusión)")
+        self.chk_kmeans.setChecked(False)
+        l_umap.addRow(self.chk_kmeans)
         
         self.inp_n_neighbors = QSpinBox()
         self.inp_n_neighbors.setRange(2, 500)
