@@ -1,0 +1,71 @@
+\documentclass[12pt, a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath, amssymb}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc, babel}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+
+\begin{document}
+
+\title{Metodología de Análisis de Componentes Principales (PCA) en Señales EMG}
+\author{}
+\date{\today}
+\maketitle
+
+\section{Fundamentos y Flujo de Trabajo}
+
+El Análisis de Componentes Principales (PCA) es un algoritmo de reducción de dimensiones que busca proyectar vectores de alta dimensionalidad (espacio de activaciones musculares) hacia un plano 2D o 3D maximizando la varianza explicada.
+
+A diferencia de algoritmos topológicos como UMAP, PCA es una transformación estrictamente lineal y ortogonal, lo que garantiza que las distancias proyectadas conservan una correlación directa con la distancia euclidiana en el espacio original. Si dos puntos colapsan en el mismo cluster, implica una altísima similitud morfológica y temporal en la activación fisiológica subyacente.
+
+\vspace{1cm}
+\begin{center}
+\begin{tikzpicture}[
+    scale=0.7, transform shape,
+    node distance=2.5cm,
+    startstop/.style={rectangle, rounded corners, minimum width=3cm, minimum height=1cm, text centered, draw=black, fill=red!30},
+    io/.style={trapezium, trapezium left angle=70, trapezium right angle=110, minimum width=3cm, minimum height=1cm, text centered, draw=black, fill=blue!30},
+    process/.style={rectangle, minimum width=4cm, minimum height=1cm, text centered, text width=5cm, draw=black, fill=orange!30},
+    decision/.style={diamond, aspect=1.5, minimum width=4cm, minimum height=1cm, text centered, text width=3cm, draw=black, fill=green!30},
+    arrow/.style={thick,->,>=stealth}
+]
+
+\node (mic) [startstop] {Detección Ancla (Micrófono)};
+\node (cut) [process, below of=mic] {Recorte Físico (Mylohyoid, Depressor, Orbicularis)};
+\node (snr) [decision, below of=cut, yshift=-1cm] {SNR > Límite?};
+\node (rej) [process, right of=snr, xshift=4cm] {Rechazo de Ventana};
+\node (flatten) [process, below of=snr, yshift=-1cm] {Aplanamiento (1D Vector: 300 muestras)};
+\node (pca) [process, below of=flatten] {Cálculo Matriz Covarianza y Autovectores};
+\node (out) [io, below of=pca] {Proyección PCA (2D/3D)};
+
+\draw [arrow] (mic) -- (cut);
+\draw [arrow] (cut) -- (snr);
+\draw [arrow] (snr) -- node[anchor=south] {No} (rej);
+\draw [arrow] (snr) -- node[anchor=east] {Sí} (flatten);
+\draw [arrow] (flatten) -- (pca);
+\draw [arrow] (pca) -- (out);
+
+\end{tikzpicture}
+\end{center}
+\vspace{1cm}
+
+\section{Modo Supervisado vs No Supervisado}
+
+PCA es por naturaleza un algoritmo \textbf{no supervisado}. Matemáticamente ignora cualquier etiqueta asociada a los pulsos (como la vocal pronunciada) y se enfoca exclusivamente en la varianza estructural de los vectores mioeléctricos. 
+
+En nuestro pipeline, la designación de PCA como \textit{"Supervisado"} (mediante el flag \texttt{\_Sup}) no altera la transformación algebraica. Su propósito es netamente organizativo y visual:
+\begin{itemize}
+    \item \textbf{Coloración:} Utiliza las etiquetas reales para pintar las nubes de dispersión, permitiendo la auditoría cruzada entre los clusters naturales del músculo y la vocal real fonada.
+    \item \textbf{Exportación Orientada a Clasificadores:} Garantiza que el vector resultante es resguardado como conjunto de entrenamiento con etiquetas explícitas (Dataset etiquetado) para futuros modelos de Machine Learning.
+\end{itemize}
+
+\section{Interpretación Geométrica: 2D frente a 3D}
+
+\begin{itemize}
+    \item \textbf{Proyección 2D (PC1 vs PC2):} Extrae las dos direcciones de mayor divergencia estadística en el dataset. Su simplicidad lo hace ideal para reportes y estimaciones de fronteras de decisión estáticas.
+    \item \textbf{Proyección 3D (PC1 vs PC2 vs PC3):} Agrega profundidad matemática. Fenómenos que aparentan colisionar (solapamiento) en el espacio 2D debido al efecto de la "sombra de proyección", se revelan como clusters independientes al rotar el tercer eje. El hiperplano de separación se vuelve mucho más representativo de la realidad de alta dimensionalidad.
+\end{itemize}
+
+\end{document}

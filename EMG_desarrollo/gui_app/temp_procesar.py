@@ -7,7 +7,7 @@ matplotlib.use('TkAgg')
 sys.path.append(r"/home/lbraun/Repos/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo")
 import analysis.analisis_por_track_integrado as api
 
-mediciones = ['2026-06-10/A_Prueba1_Sujeto1', '2026-06-10/A_Prueba2_Sujeto1', '2026-06-10/A_Prueba3_Sujeto1', '2026-06-10/A_Prueba4_Sujeto1', '2026-06-10/E_Prueba1_Sujeto1', '2026-06-10/E_Prueba2_Sujeto1', '2026-06-10/E_Prueba3_Sujeto1', '2026-06-10/E_Prueba4_Sujeto1', '2026-06-10/I_Prueba1_Sujeto1', '2026-06-10/I_Prueba2_Sujeto1', '2026-06-10/I_Prueba3_Sujeto1', '2026-06-10/I_Prueba4_Sujeto1', '2026-06-10/O_Prueba1_Sujeto1', '2026-06-10/O_Prueba2_Sujeto1', '2026-06-10/O_Prueba3_Sujeto1', '2026-06-10/O_Prueba4_Sujeto1', '2026-06-10/U_Prueba1_Sujeto1', '2026-06-10/U_Prueba2_Sujeto1', '2026-06-10/U_Prueba3_Sujeto1', '2026-06-10/U_Prueba4_Sujeto1']
+mediciones = ['2026-07-10/A_T1_Lucas', '2026-07-10/A_T2_Lucas', '2026-07-10/A_T3_Lucas', '2026-07-10/A_T4_Lucas', '2026-07-10/A_T5_Lucas', '2026-07-10/A_T6_Lucas', '2026-07-10/A_T7_Lucas', '2026-07-10/E_T1_Lucas', '2026-07-10/E_T2_Lucas', '2026-07-10/E_T3_Lucas', '2026-07-10/E_T4_Lucas', '2026-07-10/E_T5_Lucas', '2026-07-10/E_T6_Lucas', '2026-07-10/E_T7_Lucas', '2026-07-10/I_T1_Lucas', '2026-07-10/I_T2_Lucas', '2026-07-10/I_T3_Lucas', '2026-07-10/I_T4_Lucas', '2026-07-10/I_T5_Lucas', '2026-07-10/I_T6_Lucas', '2026-07-10/I_T7_Lucas', '2026-07-10/O_T1_Lucas', '2026-07-10/O_T2_Lucas', '2026-07-10/O_T3_Lucas', '2026-07-10/O_T4_Lucas', '2026-07-10/O_T5_Lucas', '2026-07-10/O_T6_Lucas', '2026-07-10/O_T7_Lucas', '2026-07-10/U_T1_Lucas', '2026-07-10/U_T2_Lucas', '2026-07-10/U_T3_Lucas', '2026-07-10/U_T4_Lucas', '2026-07-10/U_T5_Lucas', '2026-07-10/U_T6_Lucas', '2026-07-10/U_T7_Lucas']
 base_dir = r"/home/lbraun/Repos/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos"
 
 try:
@@ -17,7 +17,7 @@ try:
   dialog.populate_channels(base_dir, mediciones)
 
   # Trasplantar la selección de canales de PySide6 a Tkinter
-  canales_elegidos = ['canal_0', 'canal_1', 'canal_2']
+  canales_elegidos = ['canal_0', 'canal_1', 'canal_2', 'canal_3']
   for canal_key, var in dialog.canales_seleccionados.items():
     var.set(canal_key in canales_elegidos)
 

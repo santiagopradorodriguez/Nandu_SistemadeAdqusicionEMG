@@ -15,7 +15,7 @@ Mejorar sustancialmente la frecuencia relativa (predictibilidad) de cada vocal a
 * **Vectorización (Optimización de Velocidad):** 
   Dado que 3 canales con pasos de 0.01 equivalen a 1,000,000 de combinaciones de umbrales, el algoritmo se escribirá utilizando matrices de `NumPy`. Esto permitirá calcular las discretizaciones de todos los pulsos y evaluar las colisiones en menos de un segundo.
 * **Sistema de Puntuación (Scoring):**
-  Para cada combinación de umbrales (Ej: Masetero=0.60, Cigomático=0.45, Digástrico=0.80):
+  Para cada combinación de umbrales (Ej: Mylohyoid=0.60, Depressor Anguli Oris=0.45, Orbicularis Oris=0.80):
   1. Se discretizan los picos.
   2. Se extrae la "Moda" (vector más repetido) de cada vocal.
   3. **Regla de Oro:** Si dos vocales comparten la misma Moda (colisión), la combinación de umbrales recibe una puntuación fatal (`-1`) y se descarta.
@@ -24,7 +24,7 @@ Mejorar sustancialmente la frecuencia relativa (predictibilidad) de cada vocal a
 ## Paso 3: Exportación y Reportes
 * Modificar la función que genera la tabla (`plot_results_table`) y el archivo LaTeX.
 * El título y el nombre de los archivos reflejarán la modalidad elegida (ej. `training_results_table_FiltroAmbos_UmbralesCanal.png`).
-* En lugar de mostrar `Umbral seleccionado: 0.55`, la tabla detallará el umbral específico asignado a cada músculo (ej. `Masetero: 0.45 | Digástrico: 0.70`).
+* En lugar de mostrar `Umbral seleccionado: 0.55`, la tabla detallará el umbral específico asignado a cada músculo (ej. `Mylohyoid: 0.45 | Orbicularis Oris: 0.70`).
 
 ## Paso 4: Pruebas y Ajustes
 * Ejecutar un análisis usando el modo "Umbral por Canal" sobre las mediciones actuales para verificar que la frecuencia relativa suba considerablemente respecto al <50% obtenido con el umbral común.
@@ -33,7 +33,7 @@ Mejorar sustancialmente la frecuencia relativa (predictibilidad) de cada vocal a
 La velocidad y eficiencia para calcular los intervalos de umbrales óptimos radica en las siguientes técnicas matemáticas y computacionales empleadas en el código:
 
 1. **Producto Cartesiano (Combinatoria Multidimensional):**
-   Al independizar los canales, el algoritmo transforma una búsqueda lineal (1D) en una búsqueda de volumen $N$-dimensional (donde $N$ es el número de canales). Matemáticamente se calcula el producto cartesiano de los vectores de posibles umbrales. Ej: $U_{masetero} \times U_{digastrico} \times U_{cigomatico}$. Esto permite mapear el espacio completo de permutaciones usando la librería iteradora `itertools.product`.
+   Al independizar los canales, el algoritmo transforma una búsqueda lineal (1D) en una búsqueda de volumen $N$-dimensional (donde $N$ es el número de canales). Matemáticamente se calcula el producto cartesiano de los vectores de posibles umbrales. Ej: $U_{mylohyoid} \times U_{orbicularis} \times U_{depressor}$. Esto permite mapear el espacio completo de permutaciones usando la librería iteradora `itertools.product`.
 
 2. **Broadcasting y Vectorización Numérica:**
    Para no recorrer pulso por pulso con bucles lentos de Python (lo cual congelaría la interfaz al tener cientos de miles de combinaciones), las comparaciones lógicas (`amplitud >= umbral`) se evalúan a nivel bajo de C mediante `NumPy`. El algoritmo evalúa matrices enteras de picos simultáneamente.

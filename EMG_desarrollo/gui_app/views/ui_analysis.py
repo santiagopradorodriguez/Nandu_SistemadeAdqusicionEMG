@@ -391,6 +391,80 @@ class TrainingMotorTab(QWidget):
         
         self.layout.addLayout(btn_layout)
 
+class PcaMotorTab(QWidget):
+    """Pestaña para Análisis PCA y Reducción de Dimensionalidad"""
+    def __init__(self):
+        super().__init__()
+        self.layout = QVBoxLayout(self)
+        
+        # 1. Configuración del PCA
+        g_pca = QGroupBox("1. Hiperparámetros y Pre-procesamiento PCA")
+        l_pca = QFormLayout()
+        
+        self.chk_supervised = QCheckBox("PCA Supervisado (Agrupar/colorear por vocal)")
+        self.chk_supervised.setChecked(True)
+        l_pca.addRow(self.chk_supervised)
+        
+        # Integración con UMAP
+        self.chk_use_umap = QCheckBox("Utilizar resultados limpios en UMAP")
+        self.chk_use_umap.setChecked(True)
+        self.chk_use_umap.toggled.connect(self.toggle_umap_options)
+        l_pca.addRow(self.chk_use_umap)
+        
+        self.inp_n_components = QSpinBox()
+        self.inp_n_components.setRange(2, 300)
+        self.inp_n_components.setValue(15)
+        self.inp_n_components.setToolTip("Número de componentes a retener para UMAP (ej: 15)")
+        l_pca.addRow("N° Componentes Intermedias:", self.inp_n_components)
+        
+        g_pca.setLayout(l_pca)
+        self.layout.addWidget(g_pca)
+        
+        # 2. Opciones de Filtro (Igual que Training/UMAP)
+        g_filtro = QGroupBox("2. Limpieza de Datos (SNR)")
+        l_filtro = QFormLayout()
+        
+        self.chk_snr = QCheckBox("Descartar pulsos con SNR menor a:")
+        self.chk_snr.setChecked(True)
+        
+        self.inp_snr_limit = QDoubleSpinBox()
+        self.inp_snr_limit.setRange(0.1, 50.0)
+        self.inp_snr_limit.setSingleStep(0.5)
+        self.inp_snr_limit.setValue(4.0)
+        
+        self.cmb_snr_tipo = QComboBox()
+        self.cmb_snr_tipo.addItems(["Por Ventana (Individual)", "Global (Toda la medición)", "Ambos (Global + Ventana)"])
+        
+        row_lyt = QHBoxLayout()
+        row_lyt.addWidget(self.chk_snr)
+        row_lyt.addWidget(self.inp_snr_limit)
+        row_lyt.addWidget(self.cmb_snr_tipo)
+        row_lyt.addStretch()
+        
+        l_filtro.addRow(row_lyt)
+        g_filtro.setLayout(l_filtro)
+        self.layout.addWidget(g_filtro)
+        
+        # Botón Lanzar
+        btn_layout = QHBoxLayout()
+        self.btn_run_pca = QPushButton("🧩 LANZAR ANÁLISIS PCA")
+        self.btn_run_pca.setFixedHeight(50)
+        self.btn_run_pca.setCursor(Qt.PointingHandCursor)
+        self.btn_run_pca.setStyleSheet("""
+            QPushButton {
+                font-weight: bold; font-size: 14px;
+                background-color: transparent; color: #ffaa00; border: 2px solid #ffaa00; border-radius: 5px;
+            }
+            QPushButton:hover { background-color: #ffaa00; color: #000; }
+            QPushButton:disabled { border: 2px solid #555; color: #555; }
+        """)
+        btn_layout.addWidget(self.btn_run_pca)
+        
+        self.layout.addLayout(btn_layout)
+
+    def toggle_umap_options(self, checked):
+        self.inp_n_components.setEnabled(checked)
+
 class UmapMotorTab(QWidget):
     """Pestaña para Análisis de Clustering con UMAP/SUMAP"""
     def __init__(self):
@@ -519,6 +593,10 @@ class AnalysisPanel(QWidget):
         # Pestaña Entrenamiento de Umbrales
         self.tab_training = TrainingMotorTab()
         self.tabs.addTab(self.tab_training, "🎯 Entrenamiento de Umbrales")
+
+        # Pestaña PCA
+        self.tab_pca = PcaMotorTab()
+        self.tabs.addTab(self.tab_pca, "🧩 Análisis PCA")
 
         # Pestaña UMAP
         self.tab_umap = UmapMotorTab()

@@ -2632,7 +2632,7 @@ def _comparative_session_plots(mediciones_data, nombre_salida_base):
             hist_data_amp[ch_idx][letra].extend(filtered_amp.tolist())
 
     colors = {0: '#66FCF1', 1: '#FF00FF', 2: '#FFFF00'}
-    labels = {0: 'Canal 0 (Masetero)', 1: 'Canal 1 (Cigomático)', 2: 'Canal 2 (Orbicular)'}
+    labels = {0: 'Canal 0 (Mylohyoid)', 1: 'Canal 1 (Depressor Anguli Oris)', 2: 'Canal 2 (Orbicularis Oris)'}
     
     # --- PLOT 1: Evolución SNR ---
     fig_snr, ax_snr = plt.subplots(figsize=(15, 6))
