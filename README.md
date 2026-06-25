@@ -177,9 +177,12 @@ python -m venv venv
 # En Linux/Mac:
 source venv/bin/activate
 
-# 4. Entrar a la carpeta principal e instalar dependencias
-cd Emg
+# 4. Instalar dependencias
+# En Windows (Para Python 3.8 máximo):
 pip install -r requirements.txt
+
+# En Linux/Mac (Para Python 3.12+):
+pip install -r requirements_linux.txt
 ```
 
 ### 3. Drivers (Crítico)
@@ -190,10 +193,10 @@ Para comunicar con la tarjeta de adquisición, **debes** instalar el driver **NI
 
 ## Guía de Uso Rápida
 
-Ejecuta el lanzador principal desde la carpeta `Emg` (si usas VSCode, asegúrate de abrir la terminal en ese directorio):
+Ejecuta el lanzador principal desde la raíz del repositorio (si usas VSCode, simplemente abre la terminal en la carpeta principal):
 
 ```bash
-python gui_app/main_app.py
+python EMG_desarrollo/gui_app/main_app.py
 ```
 
 1.  **Modo AutoForge (Dataset Automatizado):**

@@ -1,0 +1,17 @@
+numpy
+pandas
+matplotlib
+scipy
+soundfile
+sounddevice
+pyqtgraph
+PySide6
+Pillow
+nidaqmx
+qdarkstyle
+torch
+torchaudio
+torchvision
+pyinstaller
+scikit-learn
+umap-learn

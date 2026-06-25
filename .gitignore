@@ -18,3 +18,5 @@ EMG_desarrollo/base_de_datos_letras/
 EMG_desarrollo/analisis_comparativos/
 EMG_desarrollo/__pycache__/
 EMG_desarrollo/EMG_Ejecutable_Build/
+venv/
+.vscode/__pycache__/
