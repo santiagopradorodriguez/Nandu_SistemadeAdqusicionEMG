@@ -4,23 +4,46 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, random_split
 import matplotlib.pyplot as plt
+import numpy as np
+import random
+
+# Forzar reproducibilidad absoluta
+SEED = 42
+random.seed(SEED)
+np.random.seed(SEED)
+torch.manual_seed(SEED)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(SEED)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
 from dataset_emg import EMGDataset
 from modelos import ConvAutoencoder1D
 
-def train_autoencoder(csv_path, epochs=150, batch_size=32, lr=1e-3, latent_dim=16):
-    print(f"==================================================")
-    print(f"Iniciando entrenamiento del Autoencoder Convolucional...")
-    print(f"Usando archivo de entrenamiento: {os.path.abspath(csv_path)}")
-    print(f"==================================================")
+def train_autoencoder(csv_path, epochs=150, batch_size=32, lr=1e-3, latent_dim=16, force_epochs=False, alpha=0.5, verbose=True, save_model=True):
+    # Forzar reproducibilidad absoluta EN CADA LLAMADA a la función
+    SEED = 42
+    random.seed(SEED)
+    np.random.seed(SEED)
+    torch.manual_seed(SEED)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(SEED)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        
+    if verbose:
+        print(f"==================================================")
+        print(f"Iniciando entrenamiento del Autoencoder Convolucional...")
+        print(f"Usando archivo de entrenamiento: {os.path.abspath(csv_path)}")
+        print(f"Parametros: Epochs={epochs}, BatchSize={batch_size}, LR={lr}, LatentDim={latent_dim}, Alpha={alpha}")
+        print(f"==================================================")
     
-    dataset_train = EMGDataset(csv_path, target_length=100, apply_augmentation=True)
-    dataset_val = EMGDataset(csv_path, target_length=100, apply_augmentation=False)
+    dataset_train = EMGDataset(csv_path, apply_augmentation=True)
+    dataset_val = EMGDataset(csv_path, apply_augmentation=False)
     
     # ---------------------------------------------------------
     # FIX DATA LEAKAGE: Split por 'Toma' en lugar de ventanas
     # ---------------------------------------------------------
-    import numpy as np
     
     todas_las_tomas = dataset_train.tomas
     # Extraer el identificador físico de la sesión (ej. 'T1_Lucas' de 'A_T1_Lucas_Win0')
@@ -34,9 +57,8 @@ def train_autoencoder(csv_path, epochs=150, batch_size=32, lr=1e-3, latent_dim=1
     sesiones_base = [get_session_id(toma) for toma in todas_las_tomas]
     sesiones_unicas = list(set(sesiones_base))
     
-    # Ordenar y fijar semilla para reproducibilidad
+    # Ordenar y mezclar de forma determinista (la semilla ya está fijada arriba)
     sesiones_unicas.sort()
-    np.random.seed(42)
     np.random.shuffle(sesiones_unicas)
     
     # 80% Sesiones para Train, 20% Sesiones para Validación
@@ -67,7 +89,8 @@ def train_autoencoder(csv_path, epochs=150, batch_size=32, lr=1e-3, latent_dim=1
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Dispositivo de entrenamiento: {device}")
     
-    model = ConvAutoencoder1D(latent_dim=latent_dim).to(device)
+    inferred_target_length = dataset_train.tensors.shape[2]
+    model = ConvAutoencoder1D(latent_dim=latent_dim, target_length=inferred_target_length).to(device)
     
     # Criterio y Optimizador
     criterion_mse = nn.MSELoss() # Reconstrucción
@@ -81,7 +104,12 @@ def train_autoencoder(csv_path, epochs=150, batch_size=32, lr=1e-3, latent_dim=1
     train_accs = []
     val_accs = []
     
-    alpha = 0.5 # Factor de balance (50% Reconstruccion, 50% Clasificacion)
+    # alpha ya viene como parámetro
+    
+    best_val_loss = float('inf')
+    best_model_wts = None
+    best_epoch = 0
+    best_val_acc = 0.0
     
     # 3. Bucle de Entrenamiento
     for epoch in range(1, epochs + 1):
@@ -144,18 +172,35 @@ def train_autoencoder(csv_path, epochs=150, batch_size=32, lr=1e-3, latent_dim=1
         val_accs.append(val_acc)
         scheduler.step(epoch_val_loss)
         
-        if epoch % 10 == 0 or epoch == epochs:
+        if verbose and (epoch % 10 == 0 or epoch == epochs):
             print(f"Epoch [{epoch:3d}/{epochs}] - Loss: {epoch_loss:.4f} | Val Loss: {epoch_val_loss:.4f} | Train Acc: {train_acc:.1f}% | Val Acc: {val_acc:.1f}%")
+            
+        # Guardar el mejor modelo (Model Checkpointing basado en Validation Accuracy)
+        if val_acc > best_val_acc:
+            best_val_loss = epoch_val_loss
+            best_val_acc = val_acc
+            best_epoch = epoch
+            import copy
+            best_model_wts = copy.deepcopy(model.state_dict())
+            
+    if verbose:
+        print(f"\nEntrenamiento finalizado. Mejor Validation Accuracy logrado: {best_val_acc:.2f}% en la Época {best_epoch} (Loss: {best_val_loss:.4f})")
+    
+    if force_epochs:
+        if verbose: print(f"FORZANDO ÉPOCAS: Se guardarán los pesos de la última época ({epochs}) ignorando el Checkpointing.")
+    elif best_model_wts is not None:
+        if verbose: print(f"Restaurando los pesos del modelo a la época con mejor Accuracy ({best_epoch}) (Cancelando Overfitting de Clasificación)...")
+        model.load_state_dict(best_model_wts)
             
     # 4. Guardar resultados
     current_dir = os.path.dirname(os.path.abspath(__file__))
     base_repo_dir = os.path.abspath(os.path.join(current_dir, ".."))
-    out_dir = os.path.join(base_repo_dir, "resultados", "resultados_autoencoder")
-    os.makedirs(out_dir, exist_ok=True)
-    
-    model_path = os.path.join(out_dir, f"autoencoder_emg_{latent_dim}d.pth")
-    torch.save(model.state_dict(), model_path)
-    print(f"Modelo guardado en {model_path}")
+    if save_model:
+        out_dir = os.path.join(base_repo_dir, "resultados", "resultados_autoencoder")
+        os.makedirs(out_dir, exist_ok=True)
+        model_path = os.path.join(out_dir, "autoencoder_emg_16d.pth")
+        torch.save(best_model_wts if best_model_wts and not force_epochs else model.state_dict(), model_path)
+        if verbose: print(f"Modelo guardado en: {model_path}")
     
     # Graficar curva de Loss y Accuracy
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
@@ -172,15 +217,16 @@ def train_autoencoder(csv_path, epochs=150, batch_size=32, lr=1e-3, latent_dim=1
     ax2.plot(val_accs, label='Validation Accuracy', color='orange')
     ax2.set_xlabel('Epochs')
     ax2.set_ylabel('Accuracy (%)')
-    ax2.set_title('Curva de Clasificación de Vocales')
-    ax2.legend()
-    ax2.grid(True)
+    plt.title(f'Autoencoder Training Curve\nBest Val Loss: {best_val_loss:.4f} (Epoch {best_epoch})')
+    plt.legend()
     
-    plot_path = os.path.join(out_dir, "loss_curve.png")
-    plt.savefig(plot_path)
-    # Mostrar curva de entrenamiento
-    plt.show()
+    if save_model:
+        plot_path = os.path.join(out_dir, "loss_curve.png")
+        plt.savefig(plot_path)
+    plt.close(fig)
     
+    return best_val_loss, best_val_acc
+
 if __name__ == "__main__":
     current_dir = os.path.dirname(os.path.abspath(__file__))
     base_repo_dir = os.path.abspath(os.path.join(current_dir, ".."))

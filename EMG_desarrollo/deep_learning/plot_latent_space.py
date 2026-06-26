@@ -53,42 +53,81 @@ def plot_latent_space(csv_path, model_path, latent_dim=16):
     labels_true = np.array(labels_true)
     labels_pred = np.array(labels_pred)
     
-    # Calcular Silhouette sobre el espacio latente de 16D
-    sil_score = silhouette_score(latents, labels_true, metric='euclidean')
-    print(f"Silhouette Score (Latent Space {latent_dim}D): {sil_score:.4f}")
+    # ---------------------------------------------------------
+    # RECREAR EL MISMO SPLIT DE TRAIN/TEST (Semilla 42)
+    # ---------------------------------------------------------
+    todas_las_tomas = dataset.tomas
+    def get_session_id(toma_str):
+        parts = toma_str.split('_')
+        if len(parts) >= 3:
+            return f"{parts[1]}_{parts[2]}"
+        return toma_str.split('_Win')[0]
+        
+    sesiones_base = [get_session_id(toma) for toma in todas_las_tomas]
+    sesiones_unicas = list(set(sesiones_base))
+    sesiones_unicas.sort()
     
-    # Reducir a 3D con UMAP para visualización
-    print("Aplicando UMAP para reducción a 3D...")
+    np.random.seed(42)
+    np.random.shuffle(sesiones_unicas)
+    
+    train_sesiones_size = int(0.8 * len(sesiones_unicas))
+    train_sesiones = set(sesiones_unicas[:train_sesiones_size])
+    val_sesiones = set(sesiones_unicas[train_sesiones_size:])
+    
+    train_indices = [i for i, sesion in enumerate(sesiones_base) if sesion in train_sesiones]
+    test_indices = [i for i, sesion in enumerate(sesiones_base) if sesion in val_sesiones]
+    
+    latents_train = latents[train_indices]
+    labels_train = labels_true[train_indices]
+    
+    latents_test = latents[test_indices]
+    labels_test = labels_true[test_indices]
+    
+    print(f"Total: {len(latents)} | Train: {len(latents_train)} | Test: {len(latents_test)}")
+    
+    # Calcular Silhouette sobre el espacio latente de 16D (Solo Train para ser justos)
+    sil_score_train = silhouette_score(latents_train, labels_train, metric='euclidean')
+    print(f"Silhouette Score Train (Latent Space {latent_dim}D): {sil_score_train:.4f}")
+    
+    # Reducir a 3D con UMAP para visualización (Solo fit en Train)
+    print("Aplicando UMAP para reducción a 3D (Solo en Train)...")
     reducer = umap.UMAP(n_components=3, random_state=42, min_dist=0.1)
-    latents_3d = reducer.fit_transform(latents)
+    latents_train_3d = reducer.fit_transform(latents_train)
     
-    sil_umap_3d = silhouette_score(latents_3d, labels_true, metric='euclidean')
-    print(f"Silhouette Score (Latent Space -> UMAP 3D): {sil_umap_3d:.4f}")
+    print("Transformando el set de Test ciegamente...")
+    latents_test_3d = reducer.transform(latents_test)
     
-    # Plotear en 3D
-    fig = plt.figure(figsize=(10, 8))
-    ax = fig.add_subplot(111, projection='3d')
+    sil_umap_3d_train = silhouette_score(latents_train_3d, labels_train, metric='euclidean')
+    sil_umap_3d_test = silhouette_score(latents_test_3d, labels_test, metric='euclidean')
+    print(f"Silhouette Score Train (UMAP 3D): {sil_umap_3d_train:.4f}")
+    print(f"Silhouette Score Test (UMAP 3D): {sil_umap_3d_test:.4f}")
+    
+    # Plotear en 3D (Dos gráficos: Train vs Test)
+    fig = plt.figure(figsize=(18, 8))
     
     vocales = sorted(list(set(labels_true)))
     palette = sns.color_palette("Set1", n_colors=len(vocales))
     
+    # Subplot Train
+    ax1 = fig.add_subplot(121, projection='3d')
     for i, vocal in enumerate(vocales):
-        idx = labels_true == vocal
-        ax.scatter(
-            latents_3d[idx, 0], 
-            latents_3d[idx, 1], 
-            latents_3d[idx, 2], 
-            label=vocal, 
-            color=palette[i], 
-            s=40, 
-            edgecolor='k', 
-            alpha=0.8
+        idx = labels_train == vocal
+        ax1.scatter(
+            latents_train_3d[idx, 0], latents_train_3d[idx, 1], latents_train_3d[idx, 2], 
+            label=vocal, color=palette[i], s=40, edgecolor='k', alpha=0.8
         )
-        
-    ax.set_title(f"Espacio Latente (Autoencoder) -> UMAP 3D\nSilhouette {latent_dim}D: {sil_score:.4f}")
-    ax.set_xlabel("UMAP 1")
-    ax.set_ylabel("UMAP 2")
-    ax.set_zlabel("UMAP 3")
+    ax1.set_title(f"UMAP 3D (Train Set)\nSil Train: {sil_umap_3d_train:.4f}")
+    
+    # Subplot Test
+    ax2 = fig.add_subplot(122, projection='3d')
+    for i, vocal in enumerate(vocales):
+        idx = labels_test == vocal
+        ax2.scatter(
+            latents_test_3d[idx, 0], latents_test_3d[idx, 1], latents_test_3d[idx, 2], 
+            label=vocal, color=palette[i], s=40, edgecolor='k', alpha=0.8
+        )
+    ax2.set_title(f"UMAP 3D (Test Set Ciego)\nSil Test: {sil_umap_3d_test:.4f}")
+    
     plt.legend()
     
     base_repo_dir = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
@@ -101,11 +140,15 @@ def plot_latent_space(csv_path, model_path, latent_dim=16):
     # --- GRÁFICOS DE PRECISIÓN (Accuracy por Vocal) ---
     print("\nGenerando gráficos de precisión...")
     
-    # Matriz de confusión
-    cm = confusion_matrix(labels_true, labels_pred, labels=vocales)
+    # Matriz de confusión SOLO SOBRE EL TEST SET
+    labels_test_true = labels_true[test_indices]
+    labels_test_pred = labels_pred[test_indices]
+    cm = confusion_matrix(labels_test_true, labels_test_pred, labels=vocales)
     
     # Accuracy por vocal
     acc_por_vocal = cm.diagonal() / cm.sum(axis=1) * 100
+    acc_global = accuracy_score(labels_test_true, labels_test_pred) * 100
+    print(f"Accuracy Global en Test Set: {acc_global:.2f}%")
     
     fig2, (ax_cm, ax_bar) = plt.subplots(1, 2, figsize=(14, 6))
     
@@ -121,11 +164,11 @@ def plot_latent_space(csv_path, model_path, latent_dim=16):
     ax_bar.set_ylim(0, 110)
     ax_bar.set_ylabel('Precisión (%)')
     
-    # Añadir números sobre las barras
+    # Añadir números sobre las barras con 2 decimales
     for bar in bars:
         height = bar.get_height()
         ax_bar.text(bar.get_x() + bar.get_width()/2., height + 1,
-                f'{height:.1f}%',
+                f'{height:.2f}%',
                 ha='center', va='bottom', fontweight='bold')
                 
     plt.tight_layout()

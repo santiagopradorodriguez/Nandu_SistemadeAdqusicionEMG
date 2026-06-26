@@ -69,7 +69,7 @@ def get_interpulse_noise(processed_segment, initial_noise):
         
     return curr_mean
 
-def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_ms=120, notch_q=2.0):
+def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_ms=120, notch_q=2.0, target_length=100, use_manual_exclusions=True, verbose=True):
     """
     Extrae y alinea las ventanas de los canales 0, 1 y 2.
     Devuelve X (matriz de features), Y (labels/vocales) y Tomas (nombres de las mediciones).
@@ -91,23 +91,27 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_
         vocal = partes[0].upper()
         if vocal not in ['A', 'E', 'I', 'O', 'U']:
             continue
-            
-        print(f"\nProcesando: {med_name} (Vocal: {vocal})")
+        if verbose:
+            print(f"\nProcesando: {med_name} (Vocal: {vocal})")
         
-        # Leemos archivo manual de exclusiones si existe
+        # Leemos las exclusiones directamente del metadata.json del canal_0 si la opción está activada
         excluded_windows = []
-        exclude_path = os.path.join(med_path, 'excluded_windows.json')
-        if os.path.exists(exclude_path):
-            with open(exclude_path, 'r') as f:
-                data_excl = json.load(f)
-                excluded_windows = data_excl.get("excluded_windows", [])
+        if use_manual_exclusions:
+            meta_path_ch0 = os.path.join(med_path, "canal_0", "metadata.json")
+            if os.path.exists(meta_path_ch0):
+                try:
+                    with open(meta_path_ch0, 'r') as f:
+                        meta_ch0 = json.load(f)
+                        excluded_windows = meta_ch0.get("excluded_windows", [])
+                except: pass
                 
         canales_data = {}
         
         for ch in canales_procesar:
             carpeta = os.path.join(med_path, ch)
             if not os.path.exists(carpeta):
-                print(f"  Advertencia: {ch} no encontrado en {med_name}")
+                if verbose:
+                    print(f"  Advertencia: {ch} no encontrado en {med_name}")
                 continue
                 
             bpm_u, noise_u, pulsos_u = 50, 2.0, None
@@ -119,6 +123,9 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_
                         bpm_u = meta.get('bpm', bpm_u)
                         noise_u = meta.get('noise_seconds', noise_u)
                         pulsos_u = meta.get('pulse_count', pulsos_u)
+                        # Por si acaso, si el canal_i tiene exclusions las sumamos
+                        if use_manual_exclusions and "excluded_windows" in meta:
+                            excluded_windows = list(set(excluded_windows + meta.get("excluded_windows", [])))
             except: pass
             
             # Usar la función original para procesar
@@ -129,7 +136,8 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_
                 excluded_windows=excluded_windows,
                 show_interactive_plot=False,
                 notch_q_factor=notch_q,
-                tipo_envolvente="rms", smooth_ms=smooth_ms
+                tipo_envolvente="rms", smooth_ms=smooth_ms,
+                verbose=verbose
             )
             
             if res_final:
@@ -137,7 +145,8 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_
                 canales_data[ch] = res_final[fname]
                 
         if len(canales_data) < 4:
-            print(f"  -> Se omite porque no están los 4 canales válidos (0, 1, 2 y 3).")
+            if verbose:
+                print(f"  -> Se omite porque no están los 4 canales válidos (0, 1, 2 y 3).")
             continue
             
         # Alinear ventanas usando canal 3 como maestro (find_peaks global)
@@ -152,7 +161,7 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_
         
         picos_mic, _ = find_peaks(env_mic_raw, distance=dist_samples, height=min_height)
         
-        TARGET_LEN = 100
+        TARGET_LEN = target_length
         
         for win_idx, pico in enumerate(picos_mic):
             # Definir ventana física simétrica basada en el pico del micrófono
@@ -299,14 +308,16 @@ def calcular_centroides_y_distancias(X_proj, Y):
             
     return centroides, dist_matrix, vocales
 
-def ejecutar_procesamiento(mediciones, alpha_ruido=1.0, snr_threshold=0.5, outlier_contamination=0.05, smooth_ms=120, notch_q=2.0):
+def ejecutar_procesamiento(mediciones, alpha_ruido=1.0, snr_threshold=0.5, outlier_contamination=0.05, smooth_ms=120, notch_q=2.0, target_length=100, use_manual_exclusions=True, verbose=True):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     base_dir = os.path.join(os.path.dirname(os.path.dirname(script_dir)), "base_de_datos_electrodos")
     out_dir = os.path.join(script_dir, "resultados_pca_umap")
     os.makedirs(out_dir, exist_ok=True)
     
-    print(f"\n2. Extracción y concatenación de características de {len(mediciones)} mediciones...")
-    X, Y, Tomas, SNRs = extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=alpha_ruido, smooth_ms=smooth_ms, notch_q=notch_q)
+    if verbose:
+        print(f"\n2. Extracción y concatenación de características de {len(mediciones)} mediciones...")
+        X, Y, Tomas, SNRs = extraer_features_concatenadas(
+            base_dir, mediciones, alpha_ruido=alpha_ruido, smooth_ms=smooth_ms, notch_q=notch_q, target_length=target_length, use_manual_exclusions=use_manual_exclusions, verbose=verbose)
     
     if len(X) == 0:
         print("Error: No se obtuvieron datos válidos para procesar.")

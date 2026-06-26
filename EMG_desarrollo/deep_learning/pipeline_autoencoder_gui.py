@@ -60,7 +60,7 @@ class PipelineAutoencoderGUI:
         scrollbar = tk.Scrollbar(frame_med)
         scrollbar.pack(side="right", fill="y")
         
-        self.listbox_med = tk.Listbox(frame_med, selectmode=tk.MULTIPLE, height=6, bg="#111111", fg="white", yscrollcommand=scrollbar.set)
+        self.listbox_med = tk.Listbox(frame_med, selectmode=tk.EXTENDED, height=6, bg="#111111", fg="white", yscrollcommand=scrollbar.set)
         self.listbox_med.pack(side="left", fill="x", expand=True)
         scrollbar.config(command=self.listbox_med.yview)
         
@@ -76,6 +76,7 @@ class PipelineAutoencoderGUI:
             ("SNR Min:", "0.5", "ent_snr"),
             ("Outliers (%):", "0.05", "ent_outliers"),
             ("Smooth (ms):", "150", "ent_smooth"),
+            ("Target Len:", "100", "ent_target"),
             ("Notch Q:", "2.0", "ent_notch_q")
         ]
         
@@ -88,6 +89,11 @@ class PipelineAutoencoderGUI:
             ent.grid(row=row, column=col+1, sticky="w", padx=5, pady=5)
             setattr(self, attr_name, ent)
             
+        # Checkbox exclusiones manuales
+        self.var_manual_excl = tk.BooleanVar(value=True)
+        self.chk_manual_excl = tk.Checkbutton(grid_dsp, text="Aplicar Exclusiones Manuales (metadata.json)", variable=self.var_manual_excl, bg=self.bg_panel, fg=self.fg_text, selectcolor=self.bg_dark)
+        self.chk_manual_excl.grid(row=2, column=0, columnspan=6, sticky="w", padx=5, pady=5)
+            
         # --- PANEL DE AUTOENCODER ---
         frame_nn = tk.LabelFrame(main_frame, text=" 3. Parámetros de Red Neuronal ", bg=self.bg_panel, fg=self.cyan_neon, font=("Arial", 11, "bold"), padx=10, pady=10)
         frame_nn.pack(fill="x", pady=5)
@@ -98,7 +104,8 @@ class PipelineAutoencoderGUI:
         params_nn = [
             ("Épocas:", "150", "ent_epochs"),
             ("Batch Size:", "32", "ent_batch"),
-            ("Latent Dim:", "16", "ent_latent")
+            ("Latent Dim:", "16", "ent_latent"),
+            ("Alpha Loss:", "0.5", "ent_alpha_loss")
         ]
         
         for i, (label_text, default_val, attr_name) in enumerate(params_nn):
@@ -107,6 +114,11 @@ class PipelineAutoencoderGUI:
             ent.insert(0, default_val)
             ent.grid(row=0, column=i*2+1, sticky="w", padx=5, pady=5)
             setattr(self, attr_name, ent)
+            
+        # Checkbox forzar épocas
+        self.var_force_epochs = tk.BooleanVar(value=False)
+        self.chk_force_epochs = tk.Checkbutton(grid_nn, text="Forzar Épocas (Ignorar Checkpoint)", variable=self.var_force_epochs, bg=self.bg_panel, fg=self.fg_text, selectcolor=self.bg_dark)
+        self.chk_force_epochs.grid(row=1, column=0, columnspan=6, sticky="w", padx=5, pady=5)
             
         # --- BOTONES DE EJECUCION ---
         frame_btns = tk.Frame(main_frame, bg=self.bg_dark)
@@ -160,14 +172,18 @@ class PipelineAutoencoderGUI:
             float(self.ent_snr.get()),
             float(self.ent_outliers.get()),
             int(self.ent_smooth.get()),
-            float(self.ent_notch_q.get())
+            int(self.ent_target.get()),
+            float(self.ent_notch_q.get()),
+            self.var_manual_excl.get()
         )
         
     def get_params_nn(self):
         return (
             int(self.ent_epochs.get()),
             int(self.ent_batch.get()),
-            int(self.ent_latent.get())
+            int(self.ent_latent.get()),
+            float(self.ent_alpha_loss.get()),
+            self.var_force_epochs.get()
         )
         
     def toggle_buttons(self, state):
@@ -193,7 +209,7 @@ class PipelineAutoencoderGUI:
         self.log("=========================================")
         threading.Thread(target=self._extraccion_thread, args=(seleccionadas, *params)).start()
 
-    def _extraccion_thread(self, seleccionadas, val_alpha, val_snr, val_out, val_smooth, val_notch_q):
+    def _extraccion_thread(self, seleccionadas, val_alpha, val_snr, val_out, val_smooth, val_target, val_notch_q, use_manual_excl):
         import traceback
         try:
             old_stdout = sys.stdout
@@ -210,7 +226,9 @@ class PipelineAutoencoderGUI:
                 snr_threshold=val_snr,
                 outlier_contamination=val_out,
                 smooth_ms=val_smooth,
-                notch_q=val_notch_q
+                target_length=val_target,
+                notch_q=val_notch_q,
+                use_manual_exclusions=use_manual_excl
             )
             
             sys.stdout = old_stdout
@@ -225,7 +243,7 @@ class PipelineAutoencoderGUI:
 
     def ejecutar_entrenamiento(self):
         try:
-            v_epochs, v_batch, v_latent = self.get_params_nn()
+            params = self.get_params_nn()
         except ValueError:
             messagebox.showerror("Error", "Parámetros numéricos inválidos en Red Neuronal.")
             return
@@ -234,9 +252,9 @@ class PipelineAutoencoderGUI:
         self.log("=========================================")
         self.log("INICIANDO ENTRENAMIENTO AUTOENCODER")
         self.log("=========================================")
-        threading.Thread(target=self._entrenamiento_thread, args=(v_epochs, v_batch, v_latent)).start()
+        threading.Thread(target=self._entrenamiento_thread, args=params).start()
 
-    def _entrenamiento_thread(self, v_epochs, v_batch, v_latent):
+    def _entrenamiento_thread(self, v_epochs, v_batch, v_latent, v_alpha_loss, v_force):
         import traceback
         try:
             old_stdout = sys.stdout
@@ -254,7 +272,7 @@ class PipelineAutoencoderGUI:
             if not os.path.exists(csv_file):
                 raise Exception(f"No se encontró el dataset en {csv_file}\nDebes extraer el dataset primero.")
                 
-            ta.train_autoencoder(csv_file, epochs=v_epochs, batch_size=v_batch, latent_dim=v_latent)
+            ta.train_autoencoder(csv_file, epochs=v_epochs, batch_size=v_batch, latent_dim=v_latent, force_epochs=v_force, alpha=v_alpha_loss)
             
             sys.stdout = old_stdout
             self.log("\n>>> ENTRENAMIENTO COMPLETADO <<<")
@@ -268,7 +286,7 @@ class PipelineAutoencoderGUI:
 
     def ejecutar_ploteo(self):
         try:
-            _, _, v_latent = self.get_params_nn()
+            _, _, v_latent, _, _ = self.get_params_nn()
         except ValueError:
             messagebox.showerror("Error", "Latent Dim inválido.")
             return
@@ -343,9 +361,9 @@ class PipelineAutoencoderGUI:
             modelo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "resultados", "resultados_autoencoder", "autoencoder_emg_16d.pth")
             
             # Traer parametros de ruido/notch actuales de la GUI si se quiere
-            val_alpha, _, _, val_smooth, val_notch_q = self.get_params_dsp()
+            val_alpha, _, _, val_smooth, val_target, val_notch_q, val_manual = self.get_params_dsp()
             
-            dc.decodificar_secuencia(carpeta, modelo_path, alpha_ruido=val_alpha, smooth_ms=val_smooth, notch_q=val_notch_q)
+            dc.decodificar_secuencia(carpeta, modelo_path, alpha_ruido=val_alpha, smooth_ms=val_smooth, notch_q=val_notch_q, use_manual_exclusions=val_manual, target_length=val_target)
             
             sys.stdout = old_stdout
             self.log("\n>>> DECODIFICACIÓN COMPLETADA <<<")
