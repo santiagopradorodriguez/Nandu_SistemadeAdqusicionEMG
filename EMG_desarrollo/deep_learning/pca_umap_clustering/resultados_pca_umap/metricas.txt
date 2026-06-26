@@ -1,56 +1,23 @@
 ========================================================
-      INFO OCULTA DE CLUSTERING (PARA EL PROFESOR)
+      INFO METRICAS TEST SET (UMAP SUPERVISADO)
 ========================================================
 
---- MATRIZ BRUTA PCA 3D ---
-   Clúster 0  Clúster 1  Clúster 2  Clúster 3  Clúster 4
-A          0          5         71         26          0
-E          0         35          6         66          0
-I          0         90          0         19          0
-O         49          0          0          1         54
-U         57          0          0          0         48
-Mapeo Húngaro: Clúster 2 -> Vocal A | Clúster 3 -> Vocal E | Clúster 1 -> Vocal I | Clúster 4 -> Vocal O | Clúster 0 -> Vocal U
+Accuracy Clasificación KNN (Test): 76.36%
+Silhouette Score (UMAP 3D Test): 0.3354
 
---- MATRIZ BRUTA UMAP 3D ---
-   Clúster 0  Clúster 1  Clúster 2  Clúster 3  Clúster 4
-A         63          0         19          0         20
-E         16          0          0          0         91
-I          0          0          0          0        109
-O          0         46          0         58          0
-U          0         44          0         61          0
-Mapeo Húngaro: Clúster 0 -> Vocal A | Clúster 2 -> Vocal E | Clúster 4 -> Vocal I | Clúster 1 -> Vocal O | Clúster 3 -> Vocal U
+Matriz de Confusión KNN (UMAP 3D Test):
+    A   E   I   O   U
+A  16   4   2   0   0
+E   2  12   8   0   0
+I   0   4  18   0   0
+O   0   0   0  18   4
+U   0   0   0   2  20
 
-========================================================
-
-Silhouette Score (PCA 3D): 0.1297
-Silhouette Score (UMAP 3D): 0.0286
-
-Accuracy No Supervisado (PCA 3D): 64.14%
-  - Vocal A: 69.61%
-  - Vocal E: 61.68%
-  - Vocal I: 82.57%
-  - Vocal O: 51.92%
-  - Vocal U: 54.29%
-
-Accuracy No Supervisado (UMAP 3D): 52.94%
-  - Vocal A: 61.76%
-  - Vocal E: 0.00%
-  - Vocal I: 100.00%
-  - Vocal O: 44.23%
-  - Vocal U: 58.10%
-
-Matriz de Distancias (PCA 3D):
-          A         E         I         O         U
-A  0.000000  0.629224  0.916108  1.249179  1.456911
-E  0.629224  0.000000  0.339967  1.158965  1.345216
-I  0.916108  0.339967  0.000000  1.302096  1.450953
-O  1.249179  1.158965  1.302096  0.000000  0.229717
-U  1.456911  1.345216  1.450953  0.229717  0.000000
-
-Matriz de Distancias (UMAP 3D):
+Matriz de Distancias de Centroides (UMAP 3D Test):
            A          E          I          O          U
-A   0.000000   4.591760   5.302539  17.298325  17.378551
-E   4.591760   0.000000   0.940901  15.578527  15.894843
-I   5.302539   0.940901   0.000000  15.260534  15.597137
-O  17.298325  15.578527  15.260534   0.000000   0.986599
-U  17.378551  15.894843  15.597137   0.986599   0.000000
+A   0.000000  10.253188  18.789051  15.578380  22.766083
+E  10.253188   0.000000  12.116881  20.711756  21.953932
+I  18.789051  12.116881   0.000000  19.727646  13.673456
+O  15.578380  20.711756  19.727646   0.000000  14.214708
+U  22.766083  21.953932  13.673456  14.214708   0.000000
+

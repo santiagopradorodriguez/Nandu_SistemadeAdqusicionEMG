@@ -19,3 +19,12 @@ torchvision<=0.15.2
 pyinstaller==5.13.2
 scikit-learn
 umap-learn
+python-decouple
+xgboost
+tensorly
+click
+numba
+seaborn
+requests
+tzlocal
+hightime

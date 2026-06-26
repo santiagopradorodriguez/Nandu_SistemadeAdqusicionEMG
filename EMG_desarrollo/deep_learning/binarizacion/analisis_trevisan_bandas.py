@@ -709,7 +709,7 @@ class ProcessingOptionsDialog(tk.Toplevel):
         self.root = root
         self.OUT_DIR = out_dir
         super().__init__(root)
-        self.title("Ñandú LSD - Opciones de Procesamiento Trevisan")
+        self.title("Ñandú LSD - Opciones de BinarizacionTrevisanBandas:")
         self.geometry("600x750")
         self.transient(root)
         self.grab_set()
@@ -1149,59 +1149,93 @@ class ProcessingOptionsDialog(tk.Toplevel):
             # Para el fallback por pureza mínima
             best_for_unique = {}  # unique -> (thresholds, sum_purity, avg_purity, modas, per_vowel_purity)
             candidates_by_unique = defaultdict(list)  # unique -> list of (th0,th1,th2, avg_purity, per_vowel_purity)
-            total_comb = len(thresholds_vals)**3
+            # Precomputar candidatos de banda (min, max)
+            band_candidates = []
+            for th_min in thresholds_vals:
+                for th_max in thresholds_vals:
+                    if th_min < th_max:
+                        band_candidates.append((th_min, th_max))
+                        
+            # Si no hay candidatos, usamos [0.0, 1.0] (por ejemplo, si el step es muy grande)
+            if not band_candidates:
+                band_candidates.append((0.0, 1.0))
+                
+            total_comb = len(band_candidates)**3
+            
+            # --- OPTIMIZACION: PRECOMPUTAR BANDERAS (BINARIZACION) POR VOCAL Y CANAL ---
+            # Para cada vocal, tendremos un diccionario:
+            # precomp[vocal][canal] = matriz booleana de tamaño (N_rep, B_bands)
+            precomp = {}
+            for v in ["A", "E", "I", "O", "U"]:
+                reps = np.concatenate([m['picos_norm'] for m in sweep_meas_data if m['vocal'] == v]) if sweep_meas_data else np.array([])
+                if len(reps) > 0:
+                    precomp[v] = {}
+                    for ch in range(3):
+                        reps_ch = reps[:, ch]
+                        # Crear matriz: filas = repeticiones, columnas = bandas
+                        flags = np.zeros((len(reps_ch), len(band_candidates)), dtype=np.int32)
+                        for b_idx, b in enumerate(band_candidates):
+                            flags[:, b_idx] = ((reps_ch >= b[0]) & (reps_ch <= b[1])).astype(np.int32)
+                        precomp[v][ch] = flags
+            
             comb_index = 0
-            for th0 in thresholds_vals:
-                for th1 in thresholds_vals:
-                    for th2 in thresholds_vals:
+            for i0, b0 in enumerate(band_candidates):
+                for i1, b1 in enumerate(band_candidates):
+                    for i2, b2 in enumerate(band_candidates):
                         comb_index += 1
-                        print_progress_bar(comb_index, total_comb, prefix=f"  ({th0:.2f},{th1:.2f},{th2:.2f})", length=50)
-                        global_pats = defaultdict(list)
-                        for med in sweep_meas_data:
-                            vocal = med['vocal']
-                            pn = med['picos_norm']
-                            flags0 = (pn[:,0] > th0).astype(int)
-                            flags1 = (pn[:,1] > th1).astype(int)
-                            flags2 = (pn[:,2] > th2).astype(int)
-                            for j in range(pn.shape[0]):
-                                global_pats[vocal].append((flags0[j], flags1[j], flags2[j]))
+                        if comb_index % 1000 == 0 or comb_index == total_comb:
+                            print_progress_bar(comb_index, total_comb, prefix=f"  Banda 0: ({b0[0]:.2f}-{b0[1]:.2f})", length=50)
+                            
                         modas = {}
                         per_vowel_purity = {}
-                        for v, pats in global_pats.items():
-                            cnt = Counter(pats)
-                            mode_pat, mode_cnt = cnt.most_common(1)[0]
+                        
+                        for v, data_v in precomp.items():
+                            # Combinar los 3 canales en un solo entero (0 a 7)
+                            pat_int = (data_v[0][:, i0] * 4 + data_v[1][:, i1] * 2 + data_v[2][:, i2])
+                            
+                            # Encontrar la moda
+                            counts = np.bincount(pat_int, minlength=8)
+                            mode_val = np.argmax(counts)
+                            mode_cnt = counts[mode_val]
+                            
+                            # Convertir mode_val (0-7) a tupla (ch0, ch1, ch2)
+                            mode_pat = ((mode_val >> 2) & 1, (mode_val >> 1) & 1, mode_val & 1)
+                            
                             modas[v] = mode_pat
-                            per_vowel_purity[v] = mode_cnt / len(pats)
+                            per_vowel_purity[v] = mode_cnt / len(pat_int)
+
                         unique = len(set(modas.values()))
                         sum_purity = sum(per_vowel_purity.values())
                         num_vocals = len(per_vowel_purity)
                         avg_purity = sum_purity / num_vocals if num_vocals > 0 else 0.0
 
                         # Guardar en candidates_by_unique
-                        candidates_by_unique[unique].append((th0, th1, th2, avg_purity, per_vowel_purity.copy()))
+                        candidates_by_unique[unique].append((b0, b1, b2, avg_purity, per_vowel_purity.copy()))
 
                         # Actualizar best_for_unique
                         if unique not in best_for_unique or sum_purity > best_for_unique[unique][1]:
-                            best_for_unique[unique] = ((th0, th1, th2), sum_purity, avg_purity, modas, per_vowel_purity.copy())
+                            best_for_unique[unique] = ((b0, b1, b2), sum_purity, avg_purity, modas, per_vowel_purity.copy())
 
                         # Lógica original para best_score (sin usar para la selección final)
                         if unique > best_score:
                             best_score = unique
                             best_sum_purity = sum_purity
-                            best_thresholds = (th0, th1, th2)
+                            best_thresholds = (b0, b1, b2)
                             best_modas = modas
                             best_candidates = [(best_thresholds, best_score, avg_purity, per_vowel_purity)]
-                            best_thresholds_list = [(th0, th1, th2)]
-                            all_best_triplets = [(th0, th1, th2, per_vowel_purity.copy())]
+                            best_thresholds_list = [(b0, b1, b2)]
+                            all_best_triplets = [(b0, b1, b2, per_vowel_purity.copy())]
                         elif unique == best_score:
-                            best_thresholds_list.append((th0, th1, th2))
-                            all_best_triplets.append((th0, th1, th2, per_vowel_purity.copy()))
+                            if sum_purity == best_sum_purity:
+                                best_candidates.append(((b0, b1, b2), unique, avg_purity, per_vowel_purity))
+                                best_thresholds_list.append((b0, b1, b2))
+                                all_best_triplets.append((b0, b1, b2, per_vowel_purity.copy()))
                             if sum_purity > best_sum_purity:
                                 best_sum_purity = sum_purity
-                                best_thresholds = (th0, th1, th2)
+                                best_thresholds = (b0, b1, b2)
                                 best_modas = modas
                             if not any(abs(c[2] - avg_purity) < 1e-9 for c in best_candidates):
-                                best_candidates.append(((th0, th1, th2), unique, avg_purity, per_vowel_purity))
+                                best_candidates.append(((b0, b1, b2), unique, avg_purity, per_vowel_purity))
 
             # Seleccionar la mejor combinación que cumpla los requisitos
             selected_unique = None
@@ -1226,7 +1260,7 @@ class ProcessingOptionsDialog(tk.Toplevel):
             best_thresholds, _, best_avg_purity, best_modas, best_purities = best_for_unique[selected_unique]
 
             print(f"\nCombinaciones evaluadas: {total_comb}")
-            print(f"Configuración elegida: umbrales = {best_thresholds} -> {selected_unique} modas únicas, pureza promedio = {best_avg_purity:.3f}")
+            print(f"Configuración elegida: bandas = {best_thresholds} -> {selected_unique} modas únicas, pureza promedio = {best_avg_purity:.3f}")
             for v, moda in best_modas.items():
                 print(f"  {v}: {moda}")
 
@@ -1237,21 +1271,29 @@ class ProcessingOptionsDialog(tk.Toplevel):
 
             # ---- Boxplot de umbrales ----
             if feasible_selected:
-                th0_vals = [t[0] for t in feasible_selected]
-                th1_vals = [t[1] for t in feasible_selected]
-                th2_vals = [t[2] for t in feasible_selected]
-                fig, ax = plt.subplots(figsize=(8,6))
-                bp = ax.boxplot([th0_vals, th1_vals, th2_vals], tick_labels=['Canal 0', 'Canal 1', 'Canal 2'], patch_artist=True)
-                for patch, color in zip(bp['boxes'], ['lightblue', 'lightgreen', 'lightcoral']):
+                th0_mins = [t[0][0] for t in feasible_selected]
+                th0_maxs = [t[0][1] for t in feasible_selected]
+                th1_mins = [t[1][0] for t in feasible_selected]
+                th1_maxs = [t[1][1] for t in feasible_selected]
+                th2_mins = [t[2][0] for t in feasible_selected]
+                th2_maxs = [t[2][1] for t in feasible_selected]
+                
+                fig, ax = plt.subplots(figsize=(10,6))
+                bp = ax.boxplot([th0_mins, th0_maxs, th1_mins, th1_maxs, th2_mins, th2_maxs], 
+                                tick_labels=['C0 Min', 'C0 Max', 'C1 Min', 'C1 Max', 'C2 Min', 'C2 Max'], patch_artist=True)
+                
+                colors = ['lightblue', 'lightblue', 'lightgreen', 'lightgreen', 'lightcoral', 'lightcoral']
+                for patch, color in zip(bp['boxes'], colors):
                     patch.set_facecolor(color)
-                ax.scatter([1,2,3], [best_thresholds[0], best_thresholds[1], best_thresholds[2]],
+                    
+                ax.scatter([1,2,3,4,5,6], 
+                           [best_thresholds[0][0], best_thresholds[0][1], 
+                            best_thresholds[1][0], best_thresholds[1][1], 
+                            best_thresholds[2][0], best_thresholds[2][1]],
                            color='red', marker='D', s=80, label='Mejor combinación')
-                if th0_vals:
-                    ax.hlines(y=[min(th0_vals), max(th0_vals)], xmin=0.8, xmax=1.2, colors='gray', linestyles='dashed')
-                    ax.hlines(y=[min(th1_vals), max(th1_vals)], xmin=1.8, xmax=2.2, colors='gray', linestyles='dashed')
-                    ax.hlines(y=[min(th2_vals), max(th2_vals)], xmin=2.8, xmax=3.2, colors='gray', linestyles='dashed')
-                ax.set_title(f'Umbrales que producen {selected_unique} modas únicas (candidatos)')
-                ax.set_ylabel('Valor del umbral')
+                
+                ax.set_title(f'Bandas que producen {selected_unique} modas únicas (candidatos)')
+                ax.set_ylabel('Valor de las bandas')
                 ax.legend()
                 plt.tight_layout()
                 boxplot_path = os.path.join(self.OUT_DIR, "umbrales_boxplot.png")
@@ -1310,15 +1352,15 @@ class ProcessingOptionsDialog(tk.Toplevel):
                 purity_curves = defaultdict(list)
                 for th_val in sens_range:
                     th_trio = list(opt_thresholds)
-                    th_trio[idx_ch] = th_val
-                    th0, th1, th2 = th_trio
+                    th_trio[idx_ch] = (th_val, th_val+0.1)
+                    b0, b1, b2 = th_trio
                     global_pats = defaultdict(list)
                     for med in sweep_meas_data:
                         vocal = med['vocal']
                         pn = med['picos_norm']
-                        flags0 = (pn[:,0] > th0).astype(int)
-                        flags1 = (pn[:,1] > th1).astype(int)
-                        flags2 = (pn[:,2] > th2).astype(int)
+                        flags0 = ((pn[:,0] >= b0[0]) & (pn[:,0] <= b0[1])).astype(int)
+                        flags1 = ((pn[:,1] >= b1[0]) & (pn[:,1] <= b1[1])).astype(int)
+                        flags2 = ((pn[:,2] >= b2[0]) & (pn[:,2] <= b2[1])).astype(int)
                         for j in range(pn.shape[0]):
                             global_pats[vocal].append((flags0[j], flags1[j], flags2[j]))
                     modas = {}
@@ -1333,36 +1375,18 @@ class ProcessingOptionsDialog(tk.Toplevel):
                     th_vals.append(th_val)
                 for v in sorted(purity_curves.keys()):
                     ax.plot(th_vals, purity_curves[v], label=v, linewidth=2)
-                ax.axvline(opt_thresholds[idx_ch], color='red', linestyle='--', label=f'Óptimo ({opt_thresholds[idx_ch]:.3f})')
+                ax.axvline(opt_thresholds[idx_ch][0], color='red', linestyle='--', label=f'Óptimo ({opt_thresholds[idx_ch][0]:.3f})')
                 ax.set_title(f'{channels[idx_ch]}')
-                ax.set_xlabel('Umbral')
+                ax.set_xlabel('Inicio de Banda')
                 ax.set_ylabel('Pureza')
                 ax.grid(True, alpha=0.3)
                 ax.legend(fontsize=8)
-            fig_sens.suptitle('Sensibilidad de la pureza por vocal al variar cada umbral\n(los otros dos umbrales se mantienen en su valor óptimo)', fontsize=14)
+            fig_sens.suptitle('Sensibilidad de la pureza por vocal al variar cada banda', fontsize=14)
             plt.tight_layout(rect=[0,0.03,1,0.95])
             sens_path = os.path.join(self.OUT_DIR, "sensibilidad_umbrales.png")
             plt.savefig(sens_path, dpi=300, bbox_inches='tight')
             plt.close()
             print(f"Gráfico de sensibilidad guardado en {sens_path}")
-
-            # ---- Rango de umbrales con pureza mínima ----
-            min_purity = 0.5
-            feasible = []
-            for (th0, th1, th2, _, purities) in feasible_selected:
-                if all(p >= min_purity for p in purities.values()):
-                    feasible.append((th0, th1, th2))
-            if feasible:
-                th0_feas = [t[0] for t in feasible]
-                th1_feas = [t[1] for t in feasible]
-                th2_feas = [t[2] for t in feasible]
-                print(f"\nRangos de umbrales que mantienen pureza ≥ {min_purity}:")
-                print(f"  Canal 0: [{min(th0_feas):.3f}, {max(th0_feas):.3f}]")
-                print(f"  Canal 1: [{min(th1_feas):.3f}, {max(th1_feas):.3f}]")
-                print(f"  Canal 2: [{min(th2_feas):.3f}, {max(th2_feas):.3f}]")
-                print(f"  Total combinaciones en esta región: {len(feasible)}")
-            else:
-                print(f"\nNo se encontraron combinaciones con pureza ≥ {min_purity} para todas las vocales.")
 
             th0_opt, th1_opt, th2_opt = best_thresholds
         else:
@@ -1376,7 +1400,6 @@ class ProcessingOptionsDialog(tk.Toplevel):
             th0_opt = th1_opt = th2_opt = th
 
         # Generar gráficos y resumen final
-        threshold_norm = (th0_opt, th1_opt, th2_opt) if sweep_canal else th0_opt
         global_patterns = defaultdict(list)
 
         for med_name, canales_data in datos_para_plot_combinado.items():
@@ -1397,10 +1420,14 @@ class ProcessingOptionsDialog(tk.Toplevel):
                     max_peak = np.max(np.column_stack([canales_data[c]['picos_ventana'] for c in sorted_chs]), axis=1)
                     pn = np.array(picos_orig) / (max_peak + 1e-9)
                 ch_id = int(ch.split('_')[-1]) if '_' in ch else idx_ch
-                th_ch = [th0_opt, th1_opt, th2_opt][ch_id] if sweep_canal else th0_opt
-                flags = [1 if p > th_ch else 0 for p in pn]
+                
+                if sweep_canal:
+                    b_ch = [th0_opt, th1_opt, th2_opt][ch_id]
+                    flags = [1 if (b_ch[0] <= p <= b_ch[1]) else 0 for p in pn]
+                else:
+                    flags = [1 if p > th0_opt else 0 for p in pn]
+                    
                 canales_data[ch]['activation_flags'] = flags
-                canales_data[ch]['activation_threshold'] = th_ch
                 flags_matrix.append(flags)
 
             for j in range(n_w):
@@ -1431,14 +1458,17 @@ class ProcessingOptionsDialog(tk.Toplevel):
                 flags = data['activation_flags']
                 muestras_pulso = data['muestras_pulso']
                 ch_id = int(ch.split('_')[-1]) if '_' in ch else idx_ax
-                th_ch = [th0_opt, th1_opt, th2_opt][ch_id] if sweep_canal else th0_opt
+                
                 ax = axs[idx_ax]
                 ax.plot(t_concat, env_norm_dyn, color=colors_env[idx_ax%len(colors_env)], linewidth=2, label=ch)
-                if th_ch > 0:
-                    ax.fill_between(t_concat, th_ch, env_norm_dyn, where=env_norm_dyn>=th_ch,
-                                    color='lime', alpha=0.3, interpolate=True)
-                    ax.axhline(th_ch, color='magenta', linestyle='--', linewidth=2,
-                               label=f'Umbral={th_ch:.4f}')
+                
+                # Resaltar bandas
+                if sweep_canal:
+                    b_ch = [th0_opt, th1_opt, th2_opt][ch_id]
+                    ax.fill_between(t_concat, b_ch[0], b_ch[1], color='lime', alpha=0.2)
+                    ax.axhline(b_ch[0], color='magenta', linestyle='--', linewidth=1)
+                    ax.axhline(b_ch[1], color='magenta', linestyle='--', linewidth=1)
+                
                 for b in boundaries:
                     if 0 < b < len(t_concat):
                         ax.axvline(x=t_concat[b], color='gray', linestyle=':', alpha=0.6)
@@ -1449,7 +1479,7 @@ class ProcessingOptionsDialog(tk.Toplevel):
                     tc = t_concat[st + (end-st)//2]
                     label = str(flags[i]) if i < len(flags) else "?"
                     ymax = np.max(env_norm_dyn[st:end])
-                    ypos = max(ymax, th_ch) * 1.05 + 0.02*(ax.get_ylim()[1]-ax.get_ylim()[0])
+                    ypos = ymax * 1.05 + 0.02*(ax.get_ylim()[1]-ax.get_ylim()[0])
                     ax.text(tc, ypos, label, ha='center', va='bottom', fontsize=10, fontweight='bold',
                             bbox=dict(boxstyle="round,pad=0.2", facecolor='white', alpha=0.7))
                 ax.set_title(f"Canal: {ch}")
@@ -1458,8 +1488,7 @@ class ProcessingOptionsDialog(tk.Toplevel):
                 ax.grid(True, alpha=0.5)
                 ax.legend(loc='upper right', fontsize=8)
             axs[-1].set_xlabel("Tiempo [s] concatenado")
-            plt.suptitle(f"Señal Corregida Dinámica - {med_name} (vocal {vocal})\n"
-                         f"Umbrales: {threshold_norm} | Moda: {mode_str} (p={mode_prob:.2f})",
+            plt.suptitle(f"Señal Corregida Dinámica - {med_name} (vocal {vocal})\nModa: {mode_str} (p={mode_prob:.2f})",
                          fontsize=14)
             plt.tight_layout(rect=[0,0.03,1,0.93])
             out_med = os.path.join(self.OUT_DIR, med_name)
@@ -1536,7 +1565,7 @@ class ProcessingOptionsDialog(tk.Toplevel):
 class AnalysisGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title(f"Análisis Trevisan v{__version__}")
+        self.root.title("Análisis Trevisan - Método de Binarización (BANDAS)")
         self.root.geometry("500x400")
         script_dir = os.path.dirname(os.path.abspath(__file__))
         self.BASE_DIR = os.path.join(os.path.dirname(os.path.dirname(script_dir)), "base_de_datos_electrodos")

@@ -18,7 +18,7 @@ def get_interpulse_noise(env_segment, fallback_noise):
     if len(env_segment) < 3: return fallback_noise
     return np.median(env_segment)
 
-def decodificar_secuencia(carpeta_secuencia, modelo_path, alpha_ruido=1.0, smooth_ms=150, notch_q=2.0):
+def decodificar_secuencia(carpeta_secuencia, modelo_path, alpha_ruido=1.0, smooth_ms=150, notch_q=2.0, use_manual_exclusions=True, target_length=100):
     print(f"\n==================================================")
     print(f"DECODIFICANDO SECUENCIA CONTINUA")
     print(f"Carpeta: {carpeta_secuencia}")
@@ -36,6 +36,7 @@ def decodificar_secuencia(carpeta_secuencia, modelo_path, alpha_ruido=1.0, smoot
     bpm_u = 40
     noise_u = 5.0
     pulsos_u = 20
+    excluded_windows_list = []
     
     # Buscar metadata en canal_0
     meta_path = os.path.join(carpeta_secuencia, "canal_0", "metadata.json")
@@ -47,6 +48,8 @@ def decodificar_secuencia(carpeta_secuencia, modelo_path, alpha_ruido=1.0, smoot
                 bpm_u = meta.get('bpm', bpm_u)
                 noise_u = meta.get('noise_seconds', noise_u)
                 pulsos_u = meta.get('pulse_count', pulsos_u)
+                if use_manual_exclusions and "excluded_windows" in meta:
+                    excluded_windows_list.extend(meta.get("excluded_windows", []))
         except:
             pass
 
@@ -67,7 +70,7 @@ def decodificar_secuencia(carpeta_secuencia, modelo_path, alpha_ruido=1.0, smoot
             carpeta=ch_dir, output_root=ch_dir,
             bpm=bpm_u, mostrar_recortes=False,
             noise_seconds=noise_u, n_pulsos_manual=pulsos_u,
-            excluded_windows=[], show_interactive_plot=False,
+            excluded_windows=list(set(excluded_windows_list)), show_interactive_plot=False,
             notch_q_factor=notch_q, tipo_envolvente="rms", smooth_ms=smooth_ms
         )
         
@@ -92,7 +95,7 @@ def decodificar_secuencia(carpeta_secuencia, modelo_path, alpha_ruido=1.0, smoot
         print("No se detectaron picos en el micrófono.")
         return
 
-    TARGET_LEN = 100
+    TARGET_LEN = target_length
     X_tensores = []
     ventanas_validas_grafico = [] # Guardar las formas de onda crudas para plotear
     

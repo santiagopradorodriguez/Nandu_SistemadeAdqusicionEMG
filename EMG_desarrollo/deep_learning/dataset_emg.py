@@ -9,7 +9,7 @@ class EMGDataset(Dataset):
     Carga el CSV de características exportadas (aplanadas a N x 300) y 
     las devuelve como tensores de PyTorch de forma (3, 100).
     """
-    def __init__(self, csv_path, target_length=100, apply_augmentation=False):
+    def __init__(self, csv_path, target_length=None, apply_augmentation=False):
         self.data = pd.read_csv(csv_path)
         print(f"[Dataset EMG] Archivo cargado exitosamente desde: {os.path.abspath(csv_path)}")
         print(f"[Dataset EMG] Dimensiones leídas (Filas, Columnas): {self.data.shape}")
@@ -21,7 +21,11 @@ class EMGDataset(Dataset):
         # El resto son las características (300 columnas)
         features = self.data.iloc[:, 2:].values
         
-        # Remodelamos a (N, 3, 100)
+        # Inferir target_length si no se pasa
+        if target_length is None:
+            target_length = features.shape[1] // 3
+            
+        # Remodelamos a (N, 3, target_length)
         self.tensors = features.reshape(-1, 3, target_length)
         print(f"[Dataset EMG] Dataset convertido exitosamente a Tensor de forma: {self.tensors.shape}")
         

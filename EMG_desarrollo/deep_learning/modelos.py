@@ -2,8 +2,9 @@ import torch
 import torch.nn as nn
 
 class ConvAutoencoder1D(nn.Module):
-    def __init__(self, latent_dim=32):
+    def __init__(self, latent_dim=32, target_length=100):
         super(ConvAutoencoder1D, self).__init__()
+        self.target_length = target_length
         
         # Entrada: (Batch, 3, 100)
         # Usamos stride=1 para NO destruir la resolución temporal de 20ms
@@ -19,9 +20,9 @@ class ConvAutoencoder1D(nn.Module):
             nn.Dropout(0.1)
         )
         
-        # Al mantener 100 puntos de tiempo, aplanamos 32 canales * 100
+        # Al mantener target_length puntos de tiempo, aplanamos 32 canales * target_length
         self.encoder_fc = nn.Sequential(
-            nn.Linear(32 * 100, 128),
+            nn.Linear(32 * target_length, 128),
             nn.BatchNorm1d(128),
             nn.LeakyReLU(0.2),
             nn.Linear(128, latent_dim)
@@ -32,7 +33,7 @@ class ConvAutoencoder1D(nn.Module):
             nn.Linear(latent_dim, 128),
             nn.BatchNorm1d(128),
             nn.LeakyReLU(0.2),
-            nn.Linear(128, 32 * 100),
+            nn.Linear(128, 32 * target_length),
             nn.LeakyReLU(0.2)
         )
         
@@ -61,7 +62,7 @@ class ConvAutoencoder1D(nn.Module):
 
     def decode(self, latent):
         x = self.decoder_fc(latent)
-        x = x.view(x.size(0), 32, 100) # Reshape
+        x = x.view(x.size(0), 32, self.target_length) # Reshape
         x = self.decoder_cnn(x)
         return x
 

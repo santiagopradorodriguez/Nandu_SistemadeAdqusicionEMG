@@ -419,7 +419,7 @@ def ejecutar_procesamiento(
     umap_supervised=False
 ):
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    out_dir = os.path.join(script_dir, "resultados_pca_umap")
+    out_dir = os.path.join(script_dir, "resultados_umap_supervisado")
     os.makedirs(out_dir, exist_ok=True)
     
     print(f"\n2. Extracción y concatenación de características de {len(mediciones)} mediciones...")
@@ -498,126 +498,230 @@ def ejecutar_procesamiento(
     print(f"  -> Repeticiones finales válidas: {len(X)}")
     Y = np.array(Y)
     
+    # ------------------ GRÁFICO DE DESCARTES POR SESIÓN ------------------
+    if len(descartados) > 0:
+        print("\n[+] Generando Gráfico de Mediciones Descartadas...")
+        df_desc = pd.DataFrame(descartados)
+        # Extraer Session ID de la toma
+        def parse_session_desc(toma_str):
+            parts = toma_str.split('_')
+            if len(parts) >= 3:
+                return f"{parts[1]}_{parts[2]}" 
+            return toma_str.split('_Win')[0]
+            
+        df_desc['Sesion'] = df_desc['Toma'].apply(parse_session_desc)
+        conteo_sesiones = df_desc.groupby('Sesion').size().sort_values(ascending=True)
+        
+        plt.figure(figsize=(10, max(6, len(conteo_sesiones)*0.4)))
+        conteo_sesiones.plot(kind='barh', color='salmon', edgecolor='black')
+        plt.title('Ventanas Descartadas por Sesión (Filtros SNR + IsolationForest)')
+        plt.xlabel('Cantidad de Ventanas Rechazadas')
+        plt.ylabel('Sesión de Grabación')
+        plt.grid(axis='x', linestyle='--', alpha=0.7)
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_dir, "Descartados_por_Sesion.png"), dpi=300)
+        plt.close()
+        print("  -> Gráfico guardado en 'Descartados_por_Sesion.png'")
+    
     # La normalización por pulso ya se aplicó dentro del bucle
     X_scaled = X
 
-    print(f"\nAplicando PCA y UMAP...")
+    # ------------------ Train / Test Split Físico ------------------
+    print("\n4. Aplicando Group Shuffle Split (Train/Test) por Sesión Física...")
     
-    # ------------------ PCA ------------------
-    # --- PCA 2D ---
-    pca_2d = PCA(n_components=2)
-    X_pca_2d = pca_2d.fit_transform(X_scaled)
+    def get_session_id(toma_str):
+        parts = toma_str.split('_')
+        if len(parts) >= 3:
+            return f"{parts[1]}_{parts[2]}" 
+        return toma_str.split('_Win')[0]
+
+    sesiones_base = [get_session_id(toma) for toma in Tomas]
+    sesiones_unicas = list(set(sesiones_base))
+    sesiones_unicas.sort()
     
-    # --- PCA 3D ---
-    pca_3d = PCA(n_components=3)
-    X_pca_3d = pca_3d.fit_transform(X_scaled)
+    np.random.seed(42)
+    np.random.shuffle(sesiones_unicas)
     
-    var_exp = np.sum(pca_3d.explained_variance_ratio_)
-    print(f"Varianza explicada por PCA 3D: {var_exp*100:.2f}%")
+    train_sesiones_size = int(0.8 * len(sesiones_unicas))
+    train_sesiones = set(sesiones_unicas[:train_sesiones_size])
+    val_sesiones = set(sesiones_unicas[train_sesiones_size:])
     
-    plot_scatter(X_pca_2d, Y, "PCA 2D - Vocales EMG", os.path.join(out_dir, "PCA_2D.png"), is_3d=False, variance_ratios=pca_2d.explained_variance_ratio_)
-    plot_scatter(X_pca_3d, Y, "PCA 3D - Vocales EMG", os.path.join(out_dir, "PCA_3D.png"), is_3d=True, variance_ratios=pca_3d.explained_variance_ratio_)
+    train_indices = [i for i, sesion in enumerate(sesiones_base) if sesion in train_sesiones]
+    test_indices = [i for i, sesion in enumerate(sesiones_base) if sesion in val_sesiones]
     
-    # --- PCA 2D Centroides ---
-    cent_pca_2d, _, vocales_pca_2d = calcular_centroides_y_distancias(X_pca_2d, Y)
-    X_cent_2d = np.array([cent_pca_2d[v] for v in vocales_pca_2d])
-    Y_cent_2d = np.array(vocales_pca_2d)
-    plot_scatter(X_cent_2d, Y_cent_2d, "PCA 2D - Promedio de Vocales", os.path.join(out_dir, "PCA_2D_Centroides.png"), is_3d=False, variance_ratios=pca_2d.explained_variance_ratio_, connect_points=True)
+    print(f"  -> Total de Sesiones Físicas: {len(sesiones_unicas)} | Train: {len(train_sesiones)} | Test: {len(val_sesiones)}")
+    print(f"  -> Sesiones asignadas a TRAIN: {sorted(list(train_sesiones))}")
+    print(f"  -> Sesiones asignadas a TEST: {sorted(list(val_sesiones))}")
+    print(f"  -> Ventanas Train: {len(train_indices)} | Ventanas Test: {len(test_indices)}")
     
-    # --- PCA 3D Centroides ---
-    cent_pca, _, vocales_pca = calcular_centroides_y_distancias(X_pca_3d, Y)
-    X_cent = np.array([cent_pca[v] for v in vocales_pca])
-    Y_cent = np.array(vocales_pca)
-    plot_scatter(X_cent, Y_cent, "PCA 3D - Promedio de Vocales", os.path.join(out_dir, "PCA_3D_Centroides.png"), is_3d=True, variance_ratios=pca_3d.explained_variance_ratio_, connect_points=True)
-    
-    # ------------------ UMAP ------------------
-    print(f"\n5. Aplicando UMAP (n_neighbors={umap_n_neighbors}, min_dist={umap_min_dist}, metric={umap_metric})...")
-    
-    # Asegurar que n_neighbors no sea mayor que el número de muestras
-    if umap_n_neighbors >= len(X):
-        umap_n_neighbors = max(2, len(X) - 1)
-        print(f"  [Aviso] n_neighbors ajustado a {umap_n_neighbors} por falta de muestras.")
+    if len(test_indices) == 0 or len(train_indices) == 0:
+        print("Error: No hay suficientes datos para hacer un split. Intenta seleccionar más mediciones.")
+        return
         
-    if umap_supervised:
-        print("  [INFO] Usando UMAP Supervisado (con etiquetas Y).")
-        from sklearn.preprocessing import LabelEncoder
-        le = LabelEncoder()
-        Y_encoded = le.fit_transform(Y)
-        umap_2d = umap.UMAP(n_neighbors=umap_n_neighbors, min_dist=umap_min_dist, metric=umap_metric, n_components=2, random_state=42)
-        X_umap_2d = umap_2d.fit_transform(X_scaled, y=Y_encoded)
+    X_train = X_scaled[train_indices]
+    Y_train = Y[train_indices]
+    Tomas_train = Tomas[train_indices]
+    
+    X_test = X_scaled[test_indices]
+    Y_test = Y[test_indices]
+    Tomas_test = Tomas[test_indices]
+    
+    # ------------------ UMAP SUPERVISADO ------------------
+    print(f"\n5. Aplicando UMAP Supervisado (n_neighbors={umap_n_neighbors}, min_dist={umap_min_dist}, metric={umap_metric})...")
+    
+    if umap_n_neighbors >= len(X_train):
+        umap_n_neighbors = max(2, len(X_train) - 1)
+        print(f"  [Aviso] n_neighbors ajustado a {umap_n_neighbors} por falta de muestras en Train.")
         
-        umap_3d = umap.UMAP(n_neighbors=umap_n_neighbors, min_dist=umap_min_dist, metric=umap_metric, n_components=3, random_state=42)
-        X_umap_3d = umap_3d.fit_transform(X_scaled, y=Y_encoded)
+    from sklearn.preprocessing import LabelEncoder
+    le = LabelEncoder()
+    Y_train_encoded = le.fit_transform(Y_train)
+    
+    # Entrenar modelo UMAP
+    umap_2d = umap.UMAP(n_neighbors=umap_n_neighbors, min_dist=umap_min_dist, metric=umap_metric, n_components=2, random_state=42)
+    X_train_umap_2d = umap_2d.fit_transform(X_train, y=Y_train_encoded)
+    
+    umap_3d = umap.UMAP(n_neighbors=umap_n_neighbors, min_dist=umap_min_dist, metric=umap_metric, n_components=3, random_state=42)
+    X_train_umap_3d = umap_3d.fit_transform(X_train, y=Y_train_encoded)
+    
+    # Transformar el set de test ciegamente
+    print("  -> Transformando Set de Prueba (Blind Transform)...")
+    X_test_umap_2d = umap_2d.transform(X_test)
+    X_test_umap_3d = umap_3d.transform(X_test)
+    
+    # --- LIMPIEZA DE OUTLIERS ESPACIALES EN TRAIN ---
+    print("\n[+] Detectando Outliers Espaciales en UMAP 3D (Train)...")
+    from sklearn.neighbors import LocalOutlierFactor
+    
+    lof = LocalOutlierFactor(n_neighbors=20, contamination=0.03) # 3% más extremo
+    inlier_mask = lof.fit_predict(X_train_umap_3d) == 1
+    
+    outliers_train_indices = np.where(~inlier_mask)[0]
+    if len(outliers_train_indices) > 0:
+        print(f"  -> Se identificaron {len(outliers_train_indices)} puntos aislados en el espacio de entrenamiento.")
+        with open(os.path.join(out_dir, "Outliers_Espaciales_Train.txt"), "w") as f:
+            f.write("LISTA DE VENTANAS AISLADAS EN EL UMAP 3D DE ENTRENAMIENTO:\n")
+            f.write("Elimine estos archivos físicos para mejorar la calidad del modelo:\n\n")
+            for idx in outliers_train_indices:
+                f.write(f"- {Tomas_train[idx]} (Vocal {Y_train[idx]})\n")
+        print("  -> Nombres exactos guardados en 'Outliers_Espaciales_Train.txt'")
     else:
-        umap_2d = umap.UMAP(n_neighbors=umap_n_neighbors, min_dist=umap_min_dist, metric=umap_metric, n_components=2, random_state=42)
-        X_umap_2d = umap_2d.fit_transform(X_scaled)
+        print("  -> No se detectaron outliers espaciales.")
         
-        umap_3d = umap.UMAP(n_neighbors=umap_n_neighbors, min_dist=umap_min_dist, metric=umap_metric, n_components=3, random_state=42)
-        X_umap_3d = umap_3d.fit_transform(X_scaled)
+    X_train_umap_3d = X_train_umap_3d[inlier_mask]
+    X_train_umap_2d = X_train_umap_2d[inlier_mask]
+    Y_train = Y_train[inlier_mask]
+    Tomas_train = Tomas_train[inlier_mask]
+
+    # Graficar
+    plot_scatter(X_train_umap_2d, Y_train, "UMAP 2D (Train Set Limpio) - Supervisado", os.path.join(out_dir, "UMAP_2D_Train.png"), is_3d=False)
+    plot_scatter(X_test_umap_2d, Y_test, "UMAP 2D (Test Set Ciego) - Supervisado", os.path.join(out_dir, "UMAP_2D_Test.png"), is_3d=False)
     
-    titulo_extra = "(Supervisado)" if umap_supervised else "(No Supervisado)"
-    plot_scatter(X_umap_2d, Y, f"UMAP 2D {titulo_extra} - Vocales EMG", os.path.join(out_dir, "UMAP_2D.png"), is_3d=False)
-    plot_scatter(X_umap_3d, Y, f"UMAP 3D {titulo_extra} - Vocales EMG", os.path.join(out_dir, "UMAP_3D.png"), is_3d=True)
+    plot_scatter(X_train_umap_3d, Y_train, "UMAP 3D (Train Set Limpio) - Supervisado", os.path.join(out_dir, "UMAP_3D_Train.png"), is_3d=True)
+    plot_scatter(X_test_umap_3d, Y_test, "UMAP 3D (Test Set Ciego) - Supervisado", os.path.join(out_dir, "UMAP_3D_Test.png"), is_3d=True)
     
-    # ------------------ MÉTRICAS ------------------
-    print("\n5. Calculando distancias (Euclidiana) y Silhouette Scores...")
-    sil_pca_2d = silhouette_score(X_pca_2d, Y, metric='euclidean')
-    sil_pca_3d = silhouette_score(X_pca_3d, Y, metric='euclidean')
+    # ------------------ MÉTRICAS EN TEST SET ------------------
+    print("\n6. Calculando distancias (Euclidiana) y Silhouette Scores sobre el TEST SET...")
+    sil_umap_2d_test = silhouette_score(X_test_umap_2d, Y_test, metric='euclidean')
+    sil_umap_3d_test = silhouette_score(X_test_umap_3d, Y_test, metric='euclidean')
     
-    sil_umap_2d = silhouette_score(X_umap_2d, Y, metric='euclidean')
-    sil_umap_3d = silhouette_score(X_umap_3d, Y, metric='euclidean')
+    print(f"Silhouette Score (UMAP 2D Test): {sil_umap_2d_test:.4f}")
+    print(f"Silhouette Score (UMAP 3D Test): {sil_umap_3d_test:.4f}")
     
-    print(f"Silhouette Score (PCA 2D): {sil_pca_2d:.4f}")
-    print(f"Silhouette Score (PCA 3D): {sil_pca_3d:.4f}")
-    print(f"Silhouette Score (UMAP 2D): {sil_umap_2d:.4f}")
-    print(f"Silhouette Score (UMAP 3D): {sil_umap_3d:.4f}")
-    
-    print("\n--- Distancias entre centroides (PCA 3D) ---")
-    cent_pca, dist_mat_pca, vocales_pca = calcular_centroides_y_distancias(X_pca_3d, Y)
-    df_dist_pca = pd.DataFrame(dist_mat_pca, index=vocales_pca, columns=vocales_pca)
-    print(df_dist_pca.to_string())
-    
-    print("\n--- Distancias entre centroides (UMAP 3D) ---")
-    cent, dist_mat, vocales = calcular_centroides_y_distancias(X_umap_3d, Y)
+    print("\n--- Distancias entre centroides (UMAP 3D Test) ---")
+    cent, dist_mat, vocales = calcular_centroides_y_distancias(X_test_umap_3d, Y_test)
     
     df_dist = pd.DataFrame(dist_mat, index=vocales, columns=vocales)
     print(df_dist.to_string())
     
-    # ------------------ CLUSTERING NO SUPERVISADO ------------------
-    print("\n--- Evaluando Clustering No Supervisado (K-Means + Húngaro) ---")
+    # ------------------ CLASIFICADOR KNN EN ESPACIO UMAP ------------------
+    print("\n--- Evaluando Precisión (Accuracy) con K-Nearest Neighbors ---")
+    from sklearn.neighbors import KNeighborsClassifier
+    from sklearn.metrics import confusion_matrix
     
-    acc_pca_3d, acc_vocales_pca, voc_pca, df_cm_pca, mapeo_pca = evaluar_clustering_no_supervisado(X_pca_3d, Y, "PCA 3D")
-    acc_umap_3d, acc_vocales_umap, voc_umap, df_cm_umap, mapeo_umap = evaluar_clustering_no_supervisado(X_umap_3d, Y, "UMAP 3D")
+    # Entrenar KNN en el espacio UMAP LIMPIO del Train Set (3D)
+    knn_3d = KNeighborsClassifier(n_neighbors=5)
+    knn_3d.fit(X_train_umap_3d, Y_train)
+    Y_pred_3d = knn_3d.predict(X_test_umap_3d)
     
-    print(f"\n=> TOTAL Accuracy Clustering No Supervisado (PCA 3D) : {acc_pca_3d:.2f}%")
-    print(f"=> TOTAL Accuracy Clustering No Supervisado (UMAP 3D): {acc_umap_3d:.2f}%")
+    # Entrenar KNN en el espacio UMAP LIMPIO del Train Set (2D)
+    knn_2d = KNeighborsClassifier(n_neighbors=5)
+    knn_2d.fit(X_train_umap_2d, Y_train)
+    Y_pred_2d = knn_2d.predict(X_test_umap_2d)
+    
+    # --- GRÁFICO DE ERRORES DE PREDICCIÓN DETALLADO (VENTANAS) ---
+    errores = []
+    for i in range(len(Y_test)):
+        if Y_test[i] != Y_pred_3d[i]:
+            toma_str = Tomas_test[i]
+            # Acortar un poco el nombre para que quepa en el gráfico
+            label = f"{toma_str} (R:{Y_test[i]}->P:{Y_pred_3d[i]})"
+            errores.append({'TomaLabel': label})
+            
+    if len(errores) > 0:
+        print(f"\n[!] Se encontraron {len(errores)} predicciones incorrectas en el Test Set.")
+        df_err = pd.DataFrame(errores)
+        
+        # Guardar archivo de texto con el detalle
+        with open(os.path.join(out_dir, "Errores_Detalle_Ventanas.txt"), "w") as f:
+            f.write("LISTA DE VENTANAS MAL CLASIFICADAS:\n")
+            for e in errores:
+                f.write(f"- {e['TomaLabel']}\n")
+                
+        conteo_err = df_err.groupby('TomaLabel').size().sort_index(ascending=False)
+        
+        plt.figure(figsize=(10, max(6, len(conteo_err)*0.3)))
+        conteo_err.plot(kind='barh', color='orange', edgecolor='black')
+        plt.title('Ventanas Específicas Mal Clasificadas por KNN (Test Set)')
+        plt.xlabel('Ocurrencia (1=Error)')
+        plt.ylabel('Ventana de Grabación (Real -> Predicción)')
+        plt.xticks([0, 1])
+        plt.grid(axis='x', linestyle='--', alpha=0.7)
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_dir, "Errores_Prediccion_Ventanas.png"), dpi=300)
+        plt.close()
+        print("  -> Gráfico de ventanas guardado en 'Errores_Prediccion_Ventanas.png'")
+        print("  -> Lista en texto guardada en 'Errores_Detalle_Ventanas.txt'")
+    else:
+        print("\n[!] ¡PERFECTO! 0 errores de predicción en el Test Set.")
+    acc_knn_3d = accuracy_score(Y_test, Y_pred_3d) * 100
+    acc_knn_2d = accuracy_score(Y_test, Y_pred_2d) * 100
+    print(f"=> Accuracy KNN (UMAP 3D Test): {acc_knn_3d:.2f}%")
+    print(f"=> Accuracy KNN (UMAP 2D Test): {acc_knn_2d:.2f}%")
+    
+    # Matriz de Confusión Normalizada (Porcentajes) 3D
+    vocales_ordenadas = sorted(list(set(Y)))
+    cm_3d = confusion_matrix(Y_test, Y_pred_3d, labels=vocales_ordenadas, normalize='true')
+    cm_percent_3d = cm_3d * 100
+    df_cm_3d = pd.DataFrame(cm_percent_3d, index=vocales_ordenadas, columns=vocales_ordenadas)
+    
+    # Matriz de Confusión Normalizada (Porcentajes) 2D
+    cm_2d = confusion_matrix(Y_test, Y_pred_2d, labels=vocales_ordenadas, normalize='true')
+    cm_percent_2d = cm_2d * 100
+    df_cm_2d = pd.DataFrame(cm_percent_2d, index=vocales_ordenadas, columns=vocales_ordenadas)
+    
+    print("\nMatriz de Confusión en % (3D):")
+    print(df_cm_3d.round(2).to_string())
     
     # Guardar métricas
     with open(os.path.join(out_dir, "metricas.txt"), "w") as f:
         f.write("========================================================\n")
-        f.write("      INFO OCULTA DE CLUSTERING (PARA EL PROFESOR)\n")
-        f.write("========================================================\n\n")
-        f.write("--- MATRIZ BRUTA PCA 3D ---\n")
-        f.write(df_cm_pca.to_string() + "\n")
-        f.write("Mapeo Húngaro: " + " | ".join(mapeo_pca) + "\n\n")
-        
-        f.write("--- MATRIZ BRUTA UMAP 3D ---\n")
-        f.write(df_cm_umap.to_string() + "\n")
-        f.write("Mapeo Húngaro: " + " | ".join(mapeo_umap) + "\n\n")
+        f.write("      INFO METRICAS TEST SET (UMAP SUPERVISADO)\n")
         f.write("========================================================\n\n")
         
-        f.write(f"Silhouette Score (PCA 3D): {sil_pca_3d:.4f}\n")
-        f.write(f"Silhouette Score (UMAP 3D): {sil_umap_3d:.4f}\n\n")
-        f.write(f"Accuracy No Supervisado (PCA 3D): {acc_pca_3d:.2f}%\n")
-        for i, v in enumerate(voc_pca):
-            f.write(f"  - Vocal {v}: {acc_vocales_pca[i]:.2f}%\n")
-        f.write(f"\nAccuracy No Supervisado (UMAP 3D): {acc_umap_3d:.2f}%\n")
-        for i, v in enumerate(voc_umap):
-            f.write(f"  - Vocal {v}: {acc_vocales_umap[i]:.2f}%\n")
-        f.write("\nMatriz de Distancias (PCA 3D):\n")
-        f.write(df_dist_pca.to_string() + "\n\n")
-        f.write("Matriz de Distancias (UMAP 3D):\n")
-        f.write(df_dist.to_string())
+        f.write(f"Accuracy Clasificación KNN (Test 3D): {acc_knn_3d:.2f}%\n")
+        f.write(f"Accuracy Clasificación KNN (Test 2D): {acc_knn_2d:.2f}%\n")
+        f.write(f"Silhouette Score (UMAP 3D Test): {sil_umap_3d_test:.4f}\n")
+        f.write(f"Silhouette Score (UMAP 2D Test): {sil_umap_2d_test:.4f}\n\n")
+        
+        f.write("Matriz de Confusión KNN (%) (UMAP 3D Test):\n")
+        f.write(df_cm_3d.round(2).to_string() + "\n\n")
+        
+        f.write("Matriz de Confusión KNN (%) (UMAP 2D Test):\n")
+        f.write(df_cm_2d.round(2).to_string() + "\n\n")
+        
+        f.write("Matriz de Distancias de Centroides (UMAP 3D Test):\n")
+        f.write(df_dist.to_string() + "\n\n")
         
     # Guardar reporte de mediciones descartadas
     if descartados:
@@ -655,13 +759,72 @@ def ejecutar_procesamiento(
         plt.close()
 
     try:
-        # Guardar Tablas de Distancia
-        guardar_tabla_imagen(df_dist_pca, "Matriz de Distancias - PCA 3D", os.path.join(out_dir, "tabla_distancias_pca.png"))
-        guardar_tabla_imagen(df_dist, "Matriz de Distancias - UMAP 3D", os.path.join(out_dir, "tabla_distancias_umap.png"))
+        # Guardar Tabla de Parámetros
+        parametros = {
+            "Parámetro": [
+                "Alpha Ruido", "SNR Mínimo", "Contaminación Outliers",
+                "Ventana RMS (ms)", "Remuestreo (target_len)", "Filtro Notch (Q)",
+                "UMAP n_neighbors", "UMAP min_dist", "UMAP métrica"
+            ],
+            "Valor": [
+                alpha_ruido, snr_threshold, outlier_contamination,
+                smooth_ms, target_length, notch_q,
+                umap_n_neighbors, umap_min_dist, umap_metric
+            ]
+        }
+        df_params = pd.DataFrame(parametros).set_index("Parámetro")
+        guardar_tabla_imagen(df_params, "Configuración del Experimento", os.path.join(out_dir, "tabla_parametros.png"), col_width=4.0)
         
-        # Guardar Tablas de Confusión (Mapeo Húngaro)
-        guardar_tabla_imagen(df_cm_pca, "Matriz de Clustering (K-Means vs Real) - PCA 3D", os.path.join(out_dir, "tabla_clustering_pca.png"))
-        guardar_tabla_imagen(df_cm_umap, "Matriz de Clustering (K-Means vs Real) - UMAP 3D", os.path.join(out_dir, "tabla_clustering_umap.png"))
+        # Guardar Tablas de Distancia
+        guardar_tabla_imagen(df_dist, "Matriz de Distancias - UMAP 3D Test", os.path.join(out_dir, "tabla_distancias_umap.png"))
+        
+        # Mapa de Calor de Matriz de Confusión 3D
+        plt.figure(figsize=(8, 6))
+        sns.heatmap(df_cm_3d, annot=True, fmt=".1f", cmap="Blues", cbar=True, vmin=0, vmax=100)
+        plt.title(f"Matriz de Confusión KNN - UMAP 3D\n(Accuracy Global: {acc_knn_3d:.2f}%)", pad=15, fontweight='bold', fontsize=14)
+        plt.ylabel("Vocal Real", fontweight='bold')
+        plt.xlabel("Vocal Predicha (Por KNN)", fontweight='bold')
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_dir, "heatmap_confusion_knn_3D.png"), dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        # Mapa de Calor de Matriz de Confusión 2D
+        plt.figure(figsize=(8, 6))
+        sns.heatmap(df_cm_2d, annot=True, fmt=".1f", cmap="Blues", cbar=True, vmin=0, vmax=100)
+        plt.title(f"Matriz de Confusión KNN - UMAP 2D\n(Accuracy Global: {acc_knn_2d:.2f}%)", pad=15, fontweight='bold', fontsize=14)
+        plt.ylabel("Vocal Real", fontweight='bold')
+        plt.xlabel("Vocal Predicha (Por KNN)", fontweight='bold')
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_dir, "heatmap_confusion_knn_2D.png"), dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        # Gráfico de Barras de Aciertos por Vocal 3D
+        plt.figure(figsize=(8, 5))
+        aciertos_por_vocal_3d = np.diag(df_cm_3d)
+        sns.barplot(x=df_cm_3d.index, y=aciertos_por_vocal_3d, palette="viridis")
+        plt.ylim(0, 110)
+        plt.title("Porcentaje de Acierto por Vocal - UMAP 3D (Test Set)", pad=15, fontweight='bold', fontsize=14)
+        plt.ylabel("Accuracy (%)", fontweight='bold')
+        plt.xlabel("Vocal", fontweight='bold')
+        for i, v in enumerate(aciertos_por_vocal_3d):
+            plt.text(i, v + 2, f"{v:.1f}%", ha='center', va='bottom', fontweight='bold')
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_dir, "barplot_accuracy_vocal_3D.png"), dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        # Gráfico de Barras de Aciertos por Vocal 2D
+        plt.figure(figsize=(8, 5))
+        aciertos_por_vocal_2d = np.diag(df_cm_2d)
+        sns.barplot(x=df_cm_2d.index, y=aciertos_por_vocal_2d, palette="viridis")
+        plt.ylim(0, 110)
+        plt.title("Porcentaje de Acierto por Vocal - UMAP 2D (Test Set)", pad=15, fontweight='bold', fontsize=14)
+        plt.ylabel("Accuracy (%)", fontweight='bold')
+        plt.xlabel("Vocal", fontweight='bold')
+        for i, v in enumerate(aciertos_por_vocal_2d):
+            plt.text(i, v + 2, f"{v:.1f}%", ha='center', va='bottom', fontweight='bold')
+        plt.tight_layout()
+        plt.savefig(os.path.join(out_dir, "barplot_accuracy_vocal_2D.png"), dpi=300, bbox_inches='tight')
+        plt.close()
         
         # Guardar Resumen de Procesamiento
         if descartados:
@@ -692,37 +855,6 @@ def ejecutar_procesamiento(
         df_detalle = pd.concat([detalle_procesadas, detalle_descartadas], ignore_index=True)
         # Ordenar alfabéticamente por Toma para que queden A_T1, A_T2...
         df_detalle = df_detalle.sort_values(by=['Vocal', 'Toma']).set_index('Toma')
-        
-        # Al ser una tabla larga (35 filas), achicamos un poco la altura de fila para que entre en la imagen sin que sea gigante
-        guardar_tabla_imagen(df_detalle, "Detalle Exacto por Toma", os.path.join(out_dir, "tabla_detalle_mediciones.png"), col_width=3.0, row_height=0.35, font_size=9)
-        
-        # --- TABLAS DE PARÁMETROS ---
-        df_params_dsp = pd.DataFrame({
-            "Parámetro": ["Agresividad Resta Ruido (Alpha)", "Filtro Notch (Q)", "Envolvente (Smooth ms)", "Remuestreo (Longitud)", "Filtro de SNR", "Filtro Isolation Forest"],
-            "Valor": [str(alpha_ruido), str(notch_q), f"{smooth_ms} ms", f"{target_length} pts", f">= {snr_threshold}", f"{outlier_contamination*100}% outliers"]
-        }).set_index("Parámetro")
-        
-        df_params_umap = pd.DataFrame({
-            "Parámetro": ["Nº Vecinos (n_neighbors)", "Distancia Mín. (min_dist)", "Métrica de Distancia", "Dimensiones UMAP"],
-            "Valor": [str(umap_n_neighbors), str(umap_min_dist), str(umap_metric).capitalize(), "3D"]
-        }).set_index("Parámetro")
-        
-        guardar_tabla_imagen(df_params_dsp, "Parámetros de Filtrado y DSP", os.path.join(out_dir, "tabla_parametros_dsp.png"), col_width=4.0)
-        guardar_tabla_imagen(df_params_umap, "Hiperparámetros UMAP Topológico", os.path.join(out_dir, "tabla_parametros_umap.png"), col_width=4.0)
-        
-        # --- TABLA DE ACCURACY COMPARATIVA ---
-        metricas_nombres = ["Silhouette Score", "Accuracy Global"] + [f"Accuracy Vocal {v}" for v in voc_pca]
-        
-        pca_vals = [f"{sil_pca_3d:.4f}", f"{acc_pca_3d:.2f}%"] + [f"{acc:.2f}%" for acc in acc_vocales_pca]
-        umap_vals = [f"{sil_umap_3d:.4f}", f"{acc_umap_3d:.2f}%"] + [f"{acc:.2f}%" for acc in acc_vocales_umap]
-        
-        df_accuracy = pd.DataFrame({
-            "Métrica": metricas_nombres,
-            "PCA 3D": pca_vals,
-            "UMAP 3D": umap_vals
-        }).set_index("Métrica")
-        
-        guardar_tabla_imagen(df_accuracy, "Comparativa de Precisión (Accuracy) y Silhouette", os.path.join(out_dir, "tabla_accuracy_comparativa.png"), col_width=3.5, row_height=0.45)
         
         print("  -> ¡Tablas en imagen guardadas exitosamente!")
     except Exception as e:
@@ -757,10 +889,10 @@ def ejecutar_procesamiento(
         
     print(f"\nProceso completado. Resultados guardados en {out_dir}")
 
-class GeneradorPCAGUI:
+class GeneradorUMAPSupervisadoGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("Generador PCA/UMAP")
+        self.root.title("Generador UMAP Supervisado (Train/Test Split)")
         self.root.geometry("600x850")
         
         script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -808,23 +940,23 @@ class GeneradorPCAGUI:
         self.ent_outliers.pack(side="left")
         self.ent_outliers.insert(0, "0.05")
         
-        # 4. Envolvente (smooth_ms)
+        # 4. Suavizado RMS (ms)
         f4 = tk.Frame(params_frame, bg="#1F2833")
         f4.pack(fill="x", pady=2)
-        tk.Label(f4, text="Suavizado Envolvente RMS (ms):", width=35, anchor="w", bg="#1F2833", fg="white").pack(side="left")
+        tk.Label(f4, text="Ventana Envolvente RMS (ms):", width=35, anchor="w", bg="#1F2833", fg="white").pack(side="left")
         self.ent_smooth = tk.Entry(f4, width=10, bg="#0B0C10", fg="white", insertbackground="white")
         self.ent_smooth.pack(side="left")
-        self.ent_smooth.insert(0, "90")
+        self.ent_smooth.insert(0, "75")
         
-        # 6. Target Length
-        f6 = tk.Frame(params_frame, bg="#1F2833")
-        f6.pack(fill="x", pady=2)
-        tk.Label(f6, text="Puntos de Remuestreo (TARGET_LEN):", width=35, anchor="w", bg="#1F2833", fg="white").pack(side="left")
-        self.ent_target_len = tk.Entry(f6, width=10, bg="#0B0C10", fg="white", insertbackground="white")
+        # 4.b Longitud Objetivo (Remuestreo)
+        f4b = tk.Frame(params_frame, bg="#1F2833")
+        f4b.pack(fill="x", pady=2)
+        tk.Label(f4b, text="Puntos de Remuestreo (target_len):", width=35, anchor="w", bg="#1F2833", fg="white").pack(side="left")
+        self.ent_target_len = tk.Entry(f4b, width=10, bg="#0B0C10", fg="white", insertbackground="white")
         self.ent_target_len.pack(side="left")
         self.ent_target_len.insert(0, "20")
         
-        # 5. Notch Q Factor
+        # 5. Filtro Notch (Q)
         f5 = tk.Frame(params_frame, bg="#1F2833")
         f5.pack(fill="x", pady=2)
         tk.Label(f5, text="Filtro Notch Q Factor:", width=35, anchor="w", bg="#1F2833", fg="white").pack(side="left")
@@ -842,7 +974,7 @@ class GeneradorPCAGUI:
         tk.Label(fu1, text="n_neighbors (Local vs Global):", width=35, anchor="w", bg="#1F2833", fg="white").pack(side="left")
         self.ent_umap_nn = tk.Entry(fu1, width=10, bg="#0B0C10", fg="white", insertbackground="white")
         self.ent_umap_nn.pack(side="left")
-        self.ent_umap_nn.insert(0, "15")
+        self.ent_umap_nn.insert(0, "20")
         
         # UMAP min_dist
         fu2 = tk.Frame(umap_frame, bg="#1F2833")
@@ -858,14 +990,10 @@ class GeneradorPCAGUI:
         tk.Label(fu3, text="Métrica de distancia:", width=35, anchor="w", bg="#1F2833", fg="white").pack(side="left")
         self.combo_metric = ttk.Combobox(fu3, values=["euclidean", "cosine", "manhattan", "correlation"], width=15)
         self.combo_metric.pack(side="left")
-        self.combo_metric.set("correlation")
-        
-        # UMAP supervisado
-        self.var_umap_sup = tk.BooleanVar(value=True)
-        tk.Checkbutton(umap_frame, text="UMAP Supervisado (Recomendado)", variable=self.var_umap_sup, bg="#1F2833", fg="white", selectcolor="#0B0C10").pack(anchor="w", pady=(5,0))
+        self.combo_metric.set("euclidean")
         
         # --- Botón Procesar ---
-        self.btn_procesar = tk.Button(main_frame, text="Generar Dataset y Visualizar", command=self.iniciar_procesamiento, bg="#45A29E", fg="white", font=("Arial", 12, "bold"))
+        self.btn_procesar = tk.Button(main_frame, text="Generar Test/Train y Visualizar", command=self.iniciar_procesamiento, bg="#45A29E", fg="white", font=("Arial", 12, "bold"))
         self.btn_procesar.pack(fill="x", pady=10)
         
         self.cargar_mediciones()
@@ -910,13 +1038,12 @@ class GeneradorPCAGUI:
             notch_q=val_notch_q,
             umap_n_neighbors=val_umap_nn,
             umap_min_dist=val_umap_md,
-            umap_metric=val_umap_metric,
-            umap_supervised=self.var_umap_sup.get()
+            umap_metric=val_umap_metric
         )
 
 def main():
     root = tk.Tk()
-    app = GeneradorPCAGUI(root)
+    app = GeneradorUMAPSupervisadoGUI(root)
     root.mainloop()
 
 if __name__ == "__main__":
