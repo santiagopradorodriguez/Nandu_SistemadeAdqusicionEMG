@@ -279,7 +279,10 @@ class FeatureViewerApp:
         self.fig.tight_layout()
         self.canvas.draw()
 
-if __name__ == "__main__":
+def main():
     root = tk.Tk()
     app = FeatureViewerApp(root)
     root.mainloop()
+
+if __name__ == "__main__":
+    main()

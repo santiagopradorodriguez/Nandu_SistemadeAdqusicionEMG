@@ -15,9 +15,9 @@ import threading
 import subprocess
 
 # Para invocar lógicas existentes
-import generador_pca_tensorial as gpt
-import train_autoencoder as ta
-import plot_latent_space as pls
+import deep_learning.dataset_tools.generador_pca_tensorial as gpt
+import deep_learning.train_autoencoder as ta
+import deep_learning.plot_latent_space as pls
 
 class PipelineAutoencoderGUI:
     def __init__(self, root, rutas_preseleccionadas=None):

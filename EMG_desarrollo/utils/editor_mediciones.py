@@ -42,6 +42,8 @@ class MeasurementEditorDialog(QDialog):
 
         _current_dir = os.path.dirname(os.path.abspath(__file__))
         self.BASE_DIR = os.path.join(os.path.dirname(_current_dir), "base_de_datos_electrodos")
+        if not os.path.exists(self.BASE_DIR):
+            os.makedirs(self.BASE_DIR, exist_ok=True)
         self.selected_measurement = None
 
         # --- Layout Principal ---
@@ -236,7 +238,12 @@ class MeasurementEditorDialog(QDialog):
             self.set_editor_state(False)
             self.lbl_current_name.setText("Nombre Actual: (ninguno)")
 
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
+def main():
+    app = QApplication.instance()
+    if not app:
+        app = QApplication(sys.argv)
     dialog = MeasurementEditorDialog()
     dialog.exec()
+
+if __name__ == "__main__":
+    main()

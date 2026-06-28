@@ -213,6 +213,10 @@ python EMG_desarrollo/gui_app/main_app.py
 3.  **Análisis y Procesamiento:**
     * Utiliza las herramientas complementarias descritas en la sección de Utilidades para procesar, segmentar y analizar estadísticamente las carpetas generadas.
 
+4.  **Compilación de Ejecutables (Build):**
+    * En Windows: Ejecuta el script `EMG_desarrollo/build.bat` para compilar el ejecutable mediante PyInstaller.
+    * En Linux: Ejecuta el script `./EMG_desarrollo/build_linux.sh` (asegúrate de darle permisos de ejecución previamente con `chmod +x EMG_desarrollo/build_linux.sh`). El binario resultante se encontrará en `EMG_Ejecutable_Build/dist/NanduLsd/run_nandu.sh`.
+
 ---
 
 ## Roadmap y Tareas Pendientes (Beta 6.0+)

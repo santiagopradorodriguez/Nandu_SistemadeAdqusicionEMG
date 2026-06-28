@@ -1580,7 +1580,10 @@ class AnalysisGUI:
         dialog = ProcessingOptionsDialog(self.root, self.OUT_DIR)
         dialog.populate_channels(self.BASE_DIR, mediciones)
 
-if __name__ == "__main__":
+def main():
     root = tk.Tk()
     app = AnalysisGUI(root)
     root.mainloop()
+
+if __name__ == "__main__":
+    main()

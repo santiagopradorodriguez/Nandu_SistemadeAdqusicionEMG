@@ -197,8 +197,13 @@ class InstructionsWindow(QMainWindow):
         btn_close.clicked.connect(self.close)
         layout.addWidget(btn_close)
 
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
+def main():
+    app = QApplication.instance()
+    if not app:
+        app = QApplication(sys.argv)
     window = InstructionsWindow()
     window.show()
-    sys.exit(app.exec())
+    app.exec()
+
+if __name__ == "__main__":
+    main()

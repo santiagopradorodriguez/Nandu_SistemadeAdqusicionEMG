@@ -56,6 +56,7 @@ additional_modules = [
     'acquisition.autoforge_daq',
     'acquisition.autoforge_daq_experimental',
     'acquisition.metronomo_visual',
+    'acquisition.modulo_de_entrenamiento',
     'analysis.analisis_por_track_integrado',
     'analysis.analisis_por_track_integrado_experimental',
     'analysis.segmentador_secuencias',
@@ -70,7 +71,13 @@ additional_modules = [
     'utils.migrar_mediciones_por_fecha',
     'instrucciones_uso',
     'acquisition.ventana_palabras',
-    'views.config_dialog'
+    'views.config_dialog',
+    'deep_learning.pipeline_autoencoder_gui',
+    'deep_learning.pca_umap_clustering.generador_pca_umap',
+    'deep_learning.machine_learning.analisis_xgboost',
+    'deep_learning.binarizacion.analisis_trevisan',
+    'deep_learning.dataset_tools.visor_features',
+    'deep_learning.dataset_tools.plot_3_musculos_standalone'
 ]
 
 # Librerías que PyInstaller a veces no detecta automáticamente
@@ -78,7 +85,7 @@ hidden_imports = [
     'scipy.signal', 'scipy.special', 'scipy.io.wavfile',
     'matplotlib.backends.backend_tkagg', 'matplotlib.backends.backend_qt5agg',
     'nidaqmx', 'sounddevice', 'soundfile', 'pyqtgraph', 'pandas', 'PIL',
-    'PySide6', 'qdarkstyle', 'utils', 'acquisition', 'analysis', 'core', 'views'
+    'PySide6', 'qdarkstyle', 'utils', 'acquisition', 'analysis', 'core', 'views', 'deep_learning', 'tkinter', 'seaborn', 'xgboost'
 ] + additional_modules + nidaqmx_hiddenimports + sd_hiddenimports + sf_hiddenimports
 
 datas = [
