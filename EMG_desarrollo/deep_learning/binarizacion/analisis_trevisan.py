@@ -1072,23 +1072,47 @@ class ProcessingOptionsDialog(tk.Toplevel):
 
                 picos_matrix = np.column_stack(picos_list)
                 
-                # NORMALIZACION ORIGINAL (SIN PISO DE RUIDO)
-                max_pico_ventana = np.max(picos_matrix, axis=1) + 1e-9
-                picos_norm = picos_matrix / max_pico_ventana[:, np.newaxis]
+                # SUAVIZADO POR TIME SLIDE WINDOWS (Filtro de Mediana + Ventana Larga)
+                # Esto aplana la variabilidad y elimina ruidos abruptos, respetando la tendencia general
+                import pandas as pd
+                df_picos = pd.DataFrame(picos_matrix)
+                # Ventana de 15 repeticiones con Filtro de Mediana
+                picos_matrix_suavizados = df_picos.rolling(window=15, center=True, min_periods=1).median().values
+                
+                # NORMALIZACION LOCAL POR EL MÚSCULO MÁXIMO DE LA REPETICIÓN
+                max_pico_ventana = np.max(picos_matrix_suavizados, axis=1) + 1e-9
+                picos_norm = picos_matrix_suavizados / max_pico_ventana[:, np.newaxis]
+                
+                # DETRENDING LINEAL (Corrección por despegue de electrodos / fatiga)
+                # Pivota la curva de cada canal sobre su media para emparejar los picos en el tiempo
+                x_idx = np.arange(len(picos_norm))
+                for c_idx in range(picos_norm.shape[1]):
+                    y_vals = picos_norm[:, c_idx]
+                    if len(y_vals) > 1:
+                        slope, intercept = np.polyfit(x_idx, y_vals, 1)
+                        trend = slope * x_idx + intercept
+                        # Restar tendencia y devolver a la media original
+                        picos_norm[:, c_idx] = y_vals - trend + np.mean(y_vals)
+                        # Asegurar que se mantenga entre 0 y 1.0
+                        picos_norm[:, c_idx] = np.clip(picos_norm[:, c_idx], 0.0, 1.0)
 
                 if sweep_canal or (percentil is not None) or (fixed_threshold is not None):
                     sweep_meas_data.append({'vocal': vocal, 'picos_norm': picos_norm.copy()})
 
                 for idx_ch, ch in enumerate(sorted_chs):
+                    canales_data[ch]['picos_ventana_norm'] = picos_norm[:, idx_ch]
                     env_orig = canales_data[ch]['env_corregida_concat']
                     boundaries = canales_data[ch]['window_boundaries']
+                    raw_peaks_ch = canales_data[ch]['picos_ventana']
                     if len(env_orig) == 0:
                         continue
                     env_norm = env_orig.copy()
                     for i, start_idx in enumerate(boundaries):
                         end_idx = start_idx + muestras_pulso
                         if end_idx > len(env_norm): end_idx = len(env_norm)
-                        env_norm[start_idx:end_idx] /= max_pico_ventana[i]
+                        # Escalar la señal para que el dibujo coincida EXACTAMENTE con el pico suavizado
+                        factor = picos_norm[i, idx_ch] / (raw_peaks_ch[i] + 1e-9)
+                        env_norm[start_idx:end_idx] = env_orig[start_idx:end_idx] * factor
                     canales_data[ch]['env_corregida_concat_norm'] = env_norm
 
             return sweep_meas_data, datos_para_plot_combinado
