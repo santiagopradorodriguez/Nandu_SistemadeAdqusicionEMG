@@ -268,7 +268,21 @@ class FeatureViewerApp:
         self.ax.plot(time_axis, ch1_vals, label='Canal 1 (Orbicular)', color='#FF6B6B', linewidth=2)
         self.ax.plot(time_axis, ch2_vals, label='Canal 2 (Cigomático)', color='#C5C6C7', linewidth=2)
         
-        self.ax.axvline(x=0, color='#F3E94C', linestyle='--', linewidth=2, alpha=0.8, label='Pico Micrófono (Ancla)')
+        # Encontrar y graficar los picos de las derivadas
+        def plot_peak(ch_np, color):
+            if np.max(ch_np) == 0: return
+            grad = np.gradient(ch_np)
+            win = max(1, len(ch_np) // 10) # Suavizado ligero adaptativo
+            if win > 1: grad = np.convolve(grad, np.ones(win)/win, mode='same')
+            idx_pico = np.argmax(grad)
+            self.ax.plot(time_axis[idx_pico], ch_np[idx_pico], 'o', color=color, markersize=8)
+            self.ax.axvline(time_axis[idx_pico], color=color, linestyle=':', alpha=0.5)
+
+        plot_peak(np.array(ch0_vals), '#45B7D1')
+        plot_peak(np.array(ch1_vals), '#FF6B6B')
+        plot_peak(np.array(ch2_vals), '#C5C6C7')
+        
+        self.ax.axvline(x=0, color='#F3E94C', linestyle='--', linewidth=2, alpha=0.8, label='Centro Ventana (Pico/Onset Micrófono)')
         
         self.ax.set_title(f"Características Dinámicas - Toma: {row['Toma']}", color=self.cyan_neon)
         self.ax.set_xlabel('Tiempo relativo al pico del micrófono (%)')

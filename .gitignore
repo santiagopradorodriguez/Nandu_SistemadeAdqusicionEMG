@@ -20,3 +20,5 @@ EMG_desarrollo/__pycache__/
 EMG_desarrollo/EMG_Ejecutable_Build/
 venv/
 .vscode/__pycache__/
+__pycache__/
+*.patch

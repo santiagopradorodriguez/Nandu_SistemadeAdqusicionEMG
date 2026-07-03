@@ -73,9 +73,9 @@ def get_interpulse_noise(processed_segment, initial_noise):
         
     return curr_mean
 
-def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_ms=250, notch_q=30.0, target_len=100, return_raw_cache=False, aplicar_trevisan=False):
+def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_ms=250, notch_q=30.0, target_len=100, return_raw_cache=False, aplicar_trevisan=False, modo_alineacion="Pico Volumen Micrófono", pre_pct=0.4, post_pct=0.6, canales_features=["canal_0", "canal_1", "canal_2"]):
     """
-    Extrae y alinea las ventanas de los canales 0, 1 y 2.
+    Extrae y alinea las ventanas de los canales solicitados.
     Devuelve X (matriz de features), Y (labels/vocales) y Tomas (nombres de las mediciones).
     """
     X = []
@@ -83,8 +83,7 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_
     Tomas = []
     SNRs = []
     
-    canales_features = ["canal_0", "canal_1", "canal_2"]
-    canales_procesar = ["canal_0", "canal_1", "canal_2", "canal_3"]
+    canales_procesar = list(set(canales_features + ["canal_3"]))
     
     total_mediciones = len(mediciones)
     
@@ -140,7 +139,8 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_
                     excluded_windows=excluded_windows,
                     show_interactive_plot=False,
                     notch_q_factor=notch_q,
-                    tipo_envolvente="rms", smooth_ms=smooth_ms
+                    tipo_envolvente="rms", smooth_ms=smooth_ms,
+                    pre_pct=pre_pct, post_pct=post_pct
                 )
             finally:
                 sys.stdout = old_stdout
@@ -149,8 +149,8 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_
                 fname = list(res_final.keys())[0]
                 canales_data[ch] = res_final[fname]
                 
-        if len(canales_data) < 4:
-            print(f"  -> Se omite porque no están los 4 canales válidos (0, 1, 2 y 3).")
+        if len(canales_data) < len(canales_procesar):
+            print(f"  -> Se omite porque no se pudieron cargar los {len(canales_procesar)} canales solicitados.")
             continue
             
         # Alinear ventanas usando canal 3 como maestro (find_peaks global)
@@ -165,6 +165,25 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_
         
         picos_mic, _ = find_peaks(env_mic_raw, distance=dist_samples, height=min_height)
         
+        # --- ALINEACIÓN POR DERIVADA (NUEVO) ---
+        if modo_alineacion == "Pico Derivada Micrófono (Onset)":
+            periodo_sec = 60.0 / bpm_u
+            sr_aprox = int(muestras_pulso / periodo_sec)
+            
+            deriv_mic = np.gradient(env_mic_raw)
+            win_size = max(1, int(sr_aprox * 0.25))
+            deriv_mic = np.convolve(deriv_mic, np.ones(win_size)/win_size, mode='same')
+            
+            picos_deriv = []
+            for p_amp in picos_mic:
+                rango_inicio = max(0, int(p_amp - pre_pct * muestras_pulso))
+                if rango_inicio < p_amp:
+                    idx_rel = np.argmax(deriv_mic[rango_inicio:p_amp])
+                    picos_deriv.append(rango_inicio + idx_rel)
+                else:
+                    picos_deriv.append(p_amp)
+            picos_mic = np.array(picos_deriv)
+        
         TARGET_LEN = target_len
         
         # Almacenamiento temporal para esta medición
@@ -173,8 +192,8 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_
         
         for win_idx, pico in enumerate(picos_mic):
             # Definir ventana física simétrica basada en el pico del micrófono
-            pre_samples = int(muestras_pulso * 0.4)
-            post_samples = int(muestras_pulso * 0.6)
+            pre_samples = int(muestras_pulso * pre_pct)
+            post_samples = int(muestras_pulso * post_pct)
             
             real_cut_start = pico - pre_samples
             real_cut_end = pico + post_samples
@@ -457,6 +476,15 @@ def calcular_centroides_y_distancias(X_proj, Y):
             
     return centroides, dist_matrix, vocales
 
+def plot_distance_heatmap(dist_matrix, vocales, title, output_path):
+    plt.figure(figsize=(6, 5))
+    plt.style.use('dark_background')
+    sns.heatmap(dist_matrix, annot=True, cmap="YlGnBu", xticklabels=vocales, yticklabels=vocales, fmt=".2f", cbar_kws={'label': 'Distancia Euclidiana'})
+    plt.title(title, color="white", pad=15)
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='#0B0C10')
+    plt.close()
+
 def ejecutar_procesamiento(
     mediciones, 
     base_dir, 
@@ -471,14 +499,20 @@ def ejecutar_procesamiento(
     umap_metric,
     pca_comps=[1, 2, 3],
     aplicar_trevisan=False,
-    algoritmo_clustering="K-Means"
+    algoritmo_clustering="K-Means",
+    modo_alineacion="Pico Volumen Micrófono",
+    pre_pct=0.4,
+    post_pct=0.6,
+    canales_features=["canal_0", "canal_1", "canal_2"]
 ):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     out_dir = os.path.join(script_dir, "resultados_pca_umap")
     os.makedirs(out_dir, exist_ok=True)
     
-    print(f"\n2. Extracción y concatenación de características de {len(mediciones)} mediciones (Trevisan={aplicar_trevisan})...")
-    X, Y, Tomas, SNRs = extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=alpha_ruido, smooth_ms=smooth_ms, notch_q=notch_q, target_len=target_length, aplicar_trevisan=aplicar_trevisan)
+    print(f"\n2. Extracción y concatenación de características de {len(mediciones)} mediciones (Trevisan={aplicar_trevisan}, Alineación={modo_alineacion})...")
+    print(f"   -> Canales incluidos en PCA: {', '.join(canales_features)}")
+    print(f"   -> Recorte de ventana configurado: Pre={pre_pct*100:.1f}%, Post={post_pct*100:.1f}% del período.")
+    X, Y, Tomas, SNRs = extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=alpha_ruido, smooth_ms=smooth_ms, notch_q=notch_q, target_len=target_length, aplicar_trevisan=aplicar_trevisan, modo_alineacion=modo_alineacion, pre_pct=pre_pct, post_pct=post_pct, canales_features=canales_features)
     
     if len(X) == 0:
         print("Error: No se obtuvieron datos válidos para procesar.")
@@ -655,6 +689,9 @@ def ejecutar_procesamiento(
     df_dist = pd.DataFrame(dist_mat, index=vocales, columns=vocales)
     print(df_dist.to_string())
     
+    plot_distance_heatmap(dist_mat_pca, vocales_pca, f"Matriz de Distancias - Centroides (PCA {len(pca_comps)}D)", os.path.join(out_dir, "heatmap_distancias_pca.png"))
+    plot_distance_heatmap(dist_mat, vocales, "Matriz de Distancias - Centroides (UMAP 3D)", os.path.join(out_dir, "heatmap_distancias_umap.png"))
+    
     # ------------------ CLUSTERING NO SUPERVISADO ------------------
     print(f"\n--- Evaluando Clustering No Supervisado ({algoritmo_clustering} + Húngaro) ---")
     
@@ -824,11 +861,14 @@ def ejecutar_procesamiento(
     print("\n6. Exportando características (SIN FILTRAR) a CSV para auditoría visual...")
     n_features = X_orig.shape[1]
     cols = []
-    # Asumimos que los features están en orden: Ch0 (100 pts), Ch1 (100 pts), Ch2 (100 pts)
-    puntos_por_canal = n_features // 3
-    for ch in range(3):
+    
+    num_canales = len(canales_features)
+    puntos_por_canal = n_features // num_canales
+    
+    for ch_name in canales_features:
+        ch_idx = ch_name.split('_')[-1]
         for t in range(puntos_por_canal):
-            cols.append(f"Ch{ch}_T{t}")
+            cols.append(f"Ch{ch_idx}_T{t}")
             
     # Exportamos las limpias (después de SNR y Outliers) para que el autoencoder no entrene con basura
     df_export = pd.DataFrame(X_clean, columns=cols)
@@ -871,6 +911,19 @@ class GeneradorPCAGUI:
         sb = tk.Scrollbar(meas_frame, orient="vertical", command=self.listbox_mediciones.yview)
         sb.pack(side="right", fill="y")
         self.listbox_mediciones.config(yscrollcommand=sb.set)
+        
+        # --- Selección de Canales ---
+        ch_frame = tk.LabelFrame(main_frame, text="Canales EMG a incluir en PCA", padx=5, pady=5, bg="#1F2833", fg="#66FCF1")
+        ch_frame.pack(fill="x", pady=(0,5))
+        
+        self.var_ch0 = tk.BooleanVar(value=True)
+        tk.Checkbutton(ch_frame, text="Canal 0 (Masetero)", variable=self.var_ch0, bg="#1F2833", fg="white", selectcolor="#0B0C10").pack(side="left", padx=10)
+        
+        self.var_ch1 = tk.BooleanVar(value=True)
+        tk.Checkbutton(ch_frame, text="Canal 1 (Orbicular)", variable=self.var_ch1, bg="#1F2833", fg="white", selectcolor="#0B0C10").pack(side="left", padx=10)
+        
+        self.var_ch2 = tk.BooleanVar(value=True)
+        tk.Checkbutton(ch_frame, text="Canal 2 (Tiroaritenoideo)", variable=self.var_ch2, bg="#1F2833", fg="white", selectcolor="#0B0C10").pack(side="left", padx=10)
         
         # --- Parámetros Configurables ---
         params_frame = tk.LabelFrame(main_frame, text="Parámetros DSP y Limpieza", padx=5, pady=5, bg="#1F2833", fg="#66FCF1")
@@ -946,12 +999,31 @@ class GeneradorPCAGUI:
         self.combo_cluster.pack(side="left")
         self.combo_cluster.set("K-Means")
         
-        # --- Normalización Trevisan ---
-        trev_frame = tk.LabelFrame(main_frame, text="Normalización Avanzada", padx=5, pady=5, bg="#1F2833", fg="#66FCF1")
+        # --- Normalización Avanzada (DSP y Trevisan) ---
+        trev_frame = tk.LabelFrame(main_frame, text="DSP Avanzado y Normalización", padx=5, pady=5, bg="#1F2833", fg="#66FCF1")
         trev_frame.pack(fill="x", pady=(0,5))
         
         self.var_aplicar_trevisan = tk.BooleanVar(value=True)
-        tk.Checkbutton(trev_frame, text="Aplicar Corrección Trevisan (Mediana Móvil + Detrending)", variable=self.var_aplicar_trevisan, bg="#1F2833", fg="white", selectcolor="#0B0C10").pack(anchor="w")
+        tk.Checkbutton(trev_frame, text="Aplicar Corrección Trevisan (Mediana Móvil + Detrending)", variable=self.var_aplicar_trevisan, bg="#1F2833", fg="white", selectcolor="#0B0C10").grid(row=0, column=0, columnspan=2, sticky="w")
+        
+        tk.Label(trev_frame, text="Pre-Ventana (%):", width=15, anchor="w", bg="#1F2833", fg="white").grid(row=1, column=0, padx=2, pady=2)
+        self.ent_pre_pct = tk.Entry(trev_frame, width=8, bg="#0B0C10", fg="white", insertbackground="white")
+        self.ent_pre_pct.grid(row=1, column=1, padx=2, pady=2)
+        self.ent_pre_pct.insert(0, "0.4")
+        
+        tk.Label(trev_frame, text="Post-Ventana (%):", width=15, anchor="w", bg="#1F2833", fg="white").grid(row=1, column=2, padx=2, pady=2)
+        self.ent_post_pct = tk.Entry(trev_frame, width=8, bg="#0B0C10", fg="white", insertbackground="white")
+        self.ent_post_pct.grid(row=1, column=3, padx=2, pady=2)
+        self.ent_post_pct.insert(0, "0.6")
+        
+        # --- Alineación Temporal ---
+        align_frame = tk.LabelFrame(main_frame, text="Alineación Temporal", padx=5, pady=5, bg="#1F2833", fg="#66FCF1")
+        align_frame.pack(fill="x", pady=(0,5))
+        
+        tk.Label(align_frame, text="Centrar ventana en:", width=20, anchor="w", bg="#1F2833", fg="white").pack(side="left")
+        self.combo_align = ttk.Combobox(align_frame, values=["Pico Volumen Micrófono", "Pico Derivada Micrófono (Onset)"], width=30)
+        self.combo_align.pack(side="left")
+        self.combo_align.set("Pico Volumen Micrófono")
         
         # --- Botón Procesar ---
         self.btn_procesar = tk.Button(main_frame, text="Generar Dataset y Visualizar", command=self.iniciar_procesamiento, bg="#45A29E", fg="white", font=("Arial", 12, "bold"))
@@ -990,7 +1062,19 @@ class GeneradorPCAGUI:
                 return
             
             val_trevisan = self.var_aplicar_trevisan.get()
+            val_pre_pct = float(self.ent_pre_pct.get())
+            val_post_pct = float(self.ent_post_pct.get())
             val_algoritmo = self.combo_cluster.get()
+            val_align = self.combo_align.get()
+            
+            canales_sel = []
+            if self.var_ch0.get(): canales_sel.append("canal_0")
+            if self.var_ch1.get(): canales_sel.append("canal_1")
+            if self.var_ch2.get(): canales_sel.append("canal_2")
+            
+            if not canales_sel:
+                messagebox.showwarning("Advertencia", "Debe seleccionar al menos 1 canal muscular.")
+                return
             
         except ValueError:
             messagebox.showerror("Error", "Parámetros numéricos inválidos")
@@ -1011,7 +1095,11 @@ class GeneradorPCAGUI:
             umap_metric=val_umap_metric,
             pca_comps=val_pca_comps,
             aplicar_trevisan=val_trevisan,
-            algoritmo_clustering=val_algoritmo
+            algoritmo_clustering=val_algoritmo,
+            modo_alineacion=val_align,
+            pre_pct=val_pre_pct,
+            post_pct=val_post_pct,
+            canales_features=canales_sel
         )
 
 def main():

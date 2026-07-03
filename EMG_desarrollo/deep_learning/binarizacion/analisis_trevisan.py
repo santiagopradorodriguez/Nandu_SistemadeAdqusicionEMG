@@ -71,7 +71,7 @@ def _read_wav_mono(filepath):
         signal = signal[:, 0]
     return np.asarray(signal, dtype=float), sr
 
-def _compute_env_full(signal_abs, apply_envelope, smooth_ms, samplerate, tipo_env="media_movil"):
+def _compute_env_full(signal_abs, apply_envelope, smooth_ms, samplerate, tipo_env="media_movil", extreme_smooth=False):
     if tipo_env == "rms" and smooth_ms is not None and smooth_ms > 0:
         win_len = int(max(1, round(smooth_ms * samplerate / 1000.0)))
         if win_len > 1:
@@ -99,6 +99,14 @@ def _compute_env_full(signal_abs, apply_envelope, smooth_ms, samplerate, tipo_en
         if win_len > 1:
             window = np.ones(win_len, dtype=float) / float(win_len)
             env_full = np.convolve(env_full, window, mode='same')
+            
+    if extreme_smooth:
+        from scipy.signal import butter, filtfilt
+        nyq = 0.5 * samplerate
+        b_lp, a_lp = butter(2, 5.0 / nyq, btype='low', analog=False)
+        env_full = filtfilt(b_lp, a_lp, env_full)
+        env_full[env_full < 0] = 0
+            
     return env_full
 
 # ---------------------- Noise estimation (initial window) -------------------
@@ -398,6 +406,8 @@ def procesar_wavs_promedio(
     peak_distance_sec=0.4,
     pre_window_sec=None,
     post_window_sec=None,
+    pre_pct=0.4,
+    post_pct=0.6,
     normalize_by='rms',
     resample_len=None,
     one_max_per_cut=True,
@@ -422,7 +432,8 @@ def procesar_wavs_promedio(
     mostrar_senal_cruda=True,
     is_final_curation_pass=False,
     activation_percentile=90,
-    verbose=True
+    verbose=True,
+    extreme_smooth=False
 ):
     rng = np.random.RandomState(seed)
     archivos = [f for f in os.listdir(carpeta) if f.lower().endswith(".wav")]
@@ -504,7 +515,7 @@ def procesar_wavs_promedio(
         final_plot_title = plot_title_name or filename
         signal_abs = np.abs(signal)
 
-        env_full = _compute_env_full(signal_abs, apply_envelope, smooth_ms, samplerate, tipo_envolvente)
+        env_full = _compute_env_full(signal_abs, apply_envelope, smooth_ms, samplerate, tipo_envolvente, extreme_smooth)
 
         t = np.linspace(0, len(signal)/samplerate, len(signal), endpoint=False)
         mask = (t >= tiempoinicial) & (t <= duracion_total_signal)
@@ -516,11 +527,11 @@ def procesar_wavs_promedio(
             continue
 
         if pre_window_sec is None:
-            pre_w = 0.4 * periodo
+            pre_w = pre_pct * periodo
         else:
             pre_w = pre_window_sec
         if post_window_sec is None:
-            post_w = 0.6 * periodo
+            post_w = post_pct * periodo
         else:
             post_w = post_window_sec
         pre_samples = int(round(pre_w * samplerate))
@@ -818,6 +829,10 @@ class ProcessingOptionsDialog(tk.Toplevel):
         tk.Checkbutton(curation_frame, text="Graficar recortes (original y corregido)", variable=self.var_mostrar_recortes,
                        bg=self.bg_panel, fg=self.fg_text, selectcolor=self.bg_dark).pack(anchor="w")
 
+        self.var_aplicar_detrending = tk.BooleanVar(value=True)
+        tk.Checkbutton(curation_frame, text="Aplicar Corrección de Fatiga Pura (Detrending+Mediana)", variable=self.var_aplicar_detrending,
+                       bg=self.bg_panel, fg=self.fg_text, selectcolor=self.bg_dark).pack(anchor="w")
+
         exclude_frame = tk.Frame(curation_frame, bg=self.bg_panel)
         exclude_frame.pack(fill='x', pady=(5,0))
         self.var_excluir_primera = tk.BooleanVar(value=True)
@@ -965,8 +980,9 @@ class ProcessingOptionsDialog(tk.Toplevel):
         except:
             smooth_ms = 250
         tipo_env = self.var_tipo_env.get()
+        aplicar_detrending = self.var_aplicar_detrending.get()
 
-        def procesar_mediciones(smooth_ms, tipo_env, exclusion_por_medicion, snr_threshold):
+        def procesar_mediciones(smooth_ms, tipo_env, exclusion_por_medicion, snr_threshold, aplicar_detrending):
             datos_para_plot_combinado = {}
             for med_name, ch_list in meas_to_channels.items():
                 final_excl = exclusion_por_medicion[med_name]
@@ -1072,29 +1088,40 @@ class ProcessingOptionsDialog(tk.Toplevel):
 
                 picos_matrix = np.column_stack(picos_list)
                 
-                # SUAVIZADO POR TIME SLIDE WINDOWS (Filtro de Mediana + Ventana Larga)
-                # Esto aplana la variabilidad y elimina ruidos abruptos, respetando la tendencia general
-                import pandas as pd
-                df_picos = pd.DataFrame(picos_matrix)
-                # Ventana de 15 repeticiones con Filtro de Mediana
-                picos_matrix_suavizados = df_picos.rolling(window=15, center=True, min_periods=1).median().values
-                
-                # NORMALIZACION LOCAL POR EL MÚSCULO MÁXIMO DE LA REPETICIÓN
-                max_pico_ventana = np.max(picos_matrix_suavizados, axis=1) + 1e-9
-                picos_norm = picos_matrix_suavizados / max_pico_ventana[:, np.newaxis]
-                
-                # DETRENDING LINEAL (Corrección por despegue de electrodos / fatiga)
-                # Pivota la curva de cada canal sobre su media para emparejar los picos en el tiempo
-                x_idx = np.arange(len(picos_norm))
-                for c_idx in range(picos_norm.shape[1]):
-                    y_vals = picos_norm[:, c_idx]
-                    if len(y_vals) > 1:
-                        slope, intercept = np.polyfit(x_idx, y_vals, 1)
-                        trend = slope * x_idx + intercept
-                        # Restar tendencia y devolver a la media original
-                        picos_norm[:, c_idx] = y_vals - trend + np.mean(y_vals)
-                        # Asegurar que se mantenga entre 0 y 1.0
-                        picos_norm[:, c_idx] = np.clip(picos_norm[:, c_idx], 0.0, 1.0)
+                if aplicar_detrending:
+                    # MATEMÁTICA PURA (Detrending a picos brutos -> Normalización)
+                    import pandas as pd
+                    df_picos = pd.DataFrame(picos_matrix)
+                    picos_matrix_suavizados = df_picos.rolling(window=15, center=True, min_periods=1).median().values
+                    
+                    picos_detrended = picos_matrix_suavizados.copy()
+                    x_idx = np.arange(len(picos_detrended))
+                    for c_idx in range(picos_detrended.shape[1]):
+                        y_vals = picos_detrended[:, c_idx]
+                        if len(y_vals) > 1:
+                            slope, intercept = np.polyfit(x_idx, y_vals, 1)
+                            trend = slope * x_idx + intercept
+                            picos_detrended[:, c_idx] = np.maximum(y_vals - trend + np.mean(y_vals), 0.0)
+
+                    max_pico_ventana = np.max(picos_detrended, axis=1) + 1e-9
+                    picos_norm = picos_detrended / max_pico_ventana[:, np.newaxis]
+                else:
+                    # MATEMÁTICA ORIGINAL "WINDOWS" (Normalización -> Detrending con Clip)
+                    import pandas as pd
+                    df_picos = pd.DataFrame(picos_matrix)
+                    picos_matrix_suavizados = df_picos.rolling(window=15, center=True, min_periods=1).median().values
+                    
+                    max_pico_ventana = np.max(picos_matrix_suavizados, axis=1) + 1e-9
+                    picos_norm = picos_matrix_suavizados / max_pico_ventana[:, np.newaxis]
+                    
+                    x_idx = np.arange(len(picos_norm))
+                    for c_idx in range(picos_norm.shape[1]):
+                        y_vals = picos_norm[:, c_idx]
+                        if len(y_vals) > 1:
+                            slope, intercept = np.polyfit(x_idx, y_vals, 1)
+                            trend = slope * x_idx + intercept
+                            picos_norm[:, c_idx] = y_vals - trend + np.mean(y_vals)
+                            picos_norm[:, c_idx] = np.clip(picos_norm[:, c_idx], 0.0, 1.0)
 
                 if sweep_canal or (percentil is not None) or (fixed_threshold is not None):
                     sweep_meas_data.append({'vocal': vocal, 'picos_norm': picos_norm.copy()})
@@ -1117,7 +1144,7 @@ class ProcessingOptionsDialog(tk.Toplevel):
 
             return sweep_meas_data, datos_para_plot_combinado
 
-        sweep_meas_data, datos_para_plot_combinado = procesar_mediciones(smooth_ms, tipo_env, exclusion_por_medicion, snr_threshold)
+        sweep_meas_data, datos_para_plot_combinado = procesar_mediciones(smooth_ms, tipo_env, exclusion_por_medicion, snr_threshold, aplicar_detrending)
 
         # Generar boxplot de separabilidad estadística de los picos
         if sweep_meas_data:
