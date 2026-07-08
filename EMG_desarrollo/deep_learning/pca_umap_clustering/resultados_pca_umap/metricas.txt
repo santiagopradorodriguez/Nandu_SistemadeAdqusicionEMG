@@ -4,57 +4,57 @@
 
 --- MATRIZ BRUTA PCA 3D ---
    Clúster 0  Clúster 1  Clúster 2  Clúster 3  Clúster 4
-A          4         71         19          2          6
-E          6          2         38          7         53
-I         15          0         17          2         75
-O         39         12          9         31         13
-U         56          0          8         38          3
-Mapeo Húngaro: Clúster 1 -> Vocal A | Clúster 2 -> Vocal E | Clúster 4 -> Vocal I | Clúster 3 -> Vocal O | Clúster 0 -> Vocal U
+A          0         59         43          0          0
+E          0         45         62          0          0
+I          0         79         30          0          0
+O         44          0          0         16         44
+U         50          2          0         37         16
+Mapeo Húngaro: Clúster 3 -> Vocal A | Clúster 2 -> Vocal E | Clúster 1 -> Vocal I | Clúster 4 -> Vocal O | Clúster 0 -> Vocal U
 
 --- MATRIZ BRUTA UMAP 3D ---
    Clúster 0  Clúster 1  Clúster 2  Clúster 3  Clúster 4
-A          3         81          0         18          0
-E         19          9          6         64          8
-I         44          3         16         43          3
-O          6         16         33          8         41
-U          1          0         52          5         47
-Mapeo Húngaro: Clúster 1 -> Vocal A | Clúster 3 -> Vocal E | Clúster 0 -> Vocal I | Clúster 4 -> Vocal O | Clúster 2 -> Vocal U
+A         42          0         38          1         21
+E         53          0         26          0         28
+I         39          0         56          0         14
+O          0         84          0         20          0
+U          0         40          2         63          0
+Mapeo Húngaro: Clúster 4 -> Vocal A | Clúster 0 -> Vocal E | Clúster 2 -> Vocal I | Clúster 1 -> Vocal O | Clúster 3 -> Vocal U
 
 ========================================================
 
-Silhouette Score (PCA 2D): 0.0359
-Silhouette Score (PCA 3D): 0.0475
-Silhouette Score (UMAP 2D): 0.0747
-Silhouette Score (UMAP 3D): 0.0743
+Silhouette Score (PCA 2D): 0.0275
+Silhouette Score (PCA 3D): 0.0204
+Silhouette Score (UMAP 2D): 0.0589
+Silhouette Score (UMAP 3D): 0.0601
 
-Accuracy No Supervisado (PCA 2D): 46.39%
-Accuracy No Supervisado (PCA 3D): 51.52%
-  - Vocal A: 69.61%
-  - Vocal E: 35.85%
-  - Vocal I: 68.81%
-  - Vocal O: 29.81%
-  - Vocal U: 53.33%
+Accuracy No Supervisado (PCA 2D): 48.96%
+Accuracy No Supervisado (PCA 3D): 44.59%
+  - Vocal A: 0.00%
+  - Vocal E: 57.94%
+  - Vocal I: 72.48%
+  - Vocal O: 42.31%
+  - Vocal U: 47.62%
 
-Accuracy No Supervisado (UMAP 2D): 52.09%
-Accuracy No Supervisado (UMAP 3D): 53.61%
-  - Vocal A: 79.41%
-  - Vocal E: 60.38%
-  - Vocal I: 40.37%
-  - Vocal O: 39.42%
-  - Vocal U: 49.52%
+Accuracy No Supervisado (UMAP 2D): 51.61%
+Accuracy No Supervisado (UMAP 3D): 52.56%
+  - Vocal A: 20.59%
+  - Vocal E: 49.53%
+  - Vocal I: 51.38%
+  - Vocal O: 80.77%
+  - Vocal U: 60.00%
 
 Matriz de Distancias (PCA 3D):
           A         E         I         O         U
-A  0.000000  0.635431  0.780241  0.668869  0.907684
-E  0.635431  0.000000  0.244186  0.393605  0.605189
-I  0.780241  0.244186  0.000000  0.368611  0.511250
-O  0.668869  0.393605  0.368611  0.000000  0.255497
-U  0.907684  0.605189  0.511250  0.255497  0.000000
+A  0.000000  0.068696  0.174101  1.208186  1.362516
+E  0.068696  0.000000  0.228060  1.228282  1.388614
+I  0.174101  0.228060  0.000000  1.268536  1.411225
+O  1.208186  1.228282  1.268536  0.000000  0.203333
+U  1.362516  1.388614  1.411225  0.203333  0.000000
 
 Matriz de Distancias (UMAP 3D):
-          A         E         I         O         U
-A  0.000000  2.594079  3.655640  4.342678  6.042126
-E  2.594079  0.000000  1.437314  2.399626  4.153370
-I  3.655640  1.437314  0.000000  1.707842  3.338531
-O  4.342678  2.399626  1.707842  0.000000  1.789291
-U  6.042126  4.153370  3.338531  1.789291  0.000000
+           A          E          I          O          U
+A   0.000000   0.468164   0.907144  14.013875  13.026555
+E   0.468164   0.000000   1.344781  14.424509  13.444499
+I   0.907144   1.344781   0.000000  13.195389  12.224828
+O  14.013875  14.424509  13.195389   0.000000   1.409647
+U  13.026555  13.444499  12.224828   1.409647   0.000000
