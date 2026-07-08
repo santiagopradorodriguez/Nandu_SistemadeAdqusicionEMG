@@ -5,7 +5,7 @@
 # Descripción: Procesamiento, filtrado y análisis de señales por track integrado.
 # Versión de script: Trevisan 1.0
 # ==============================================================================
-
+#s
 import os
 import json
 import numpy as np
