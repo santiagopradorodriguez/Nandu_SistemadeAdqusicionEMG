@@ -829,8 +829,11 @@ class ProcessingOptionsDialog(tk.Toplevel):
         tk.Checkbutton(curation_frame, text="Graficar recortes (original y corregido)", variable=self.var_mostrar_recortes,
                        bg=self.bg_panel, fg=self.fg_text, selectcolor=self.bg_dark).pack(anchor="w")
 
+        self.var_aplicar_mediana = tk.BooleanVar(value=True)
+        tk.Checkbutton(curation_frame, text="1. Suavizar Picos (Sliding Window / Mediana)", variable=self.var_aplicar_mediana,
+                       bg=self.bg_panel, fg=self.fg_text, selectcolor=self.bg_dark).pack(anchor="w")
         self.var_aplicar_detrending = tk.BooleanVar(value=True)
-        tk.Checkbutton(curation_frame, text="Aplicar Corrección de Fatiga Pura (Detrending+Mediana)", variable=self.var_aplicar_detrending,
+        tk.Checkbutton(curation_frame, text="2. Corregir Fatiga (Detrending Lineal)", variable=self.var_aplicar_detrending,
                        bg=self.bg_panel, fg=self.fg_text, selectcolor=self.bg_dark).pack(anchor="w")
 
         exclude_frame = tk.Frame(curation_frame, bg=self.bg_panel)
@@ -980,9 +983,10 @@ class ProcessingOptionsDialog(tk.Toplevel):
         except:
             smooth_ms = 250
         tipo_env = self.var_tipo_env.get()
+        aplicar_mediana = self.var_aplicar_mediana.get()
         aplicar_detrending = self.var_aplicar_detrending.get()
 
-        def procesar_mediciones(smooth_ms, tipo_env, exclusion_por_medicion, snr_threshold, aplicar_detrending):
+        def procesar_mediciones(smooth_ms, tipo_env, exclusion_por_medicion, snr_threshold, aplicar_mediana, aplicar_detrending):
             datos_para_plot_combinado = {}
             for med_name, ch_list in meas_to_channels.items():
                 final_excl = exclusion_por_medicion[med_name]
@@ -1088,13 +1092,17 @@ class ProcessingOptionsDialog(tk.Toplevel):
 
                 picos_matrix = np.column_stack(picos_list)
                 
-                if aplicar_detrending:
-                    # MATEMÁTICA PURA (Detrending a picos brutos -> Normalización)
+                # Paso 1: Sliding Window (Mediana Móvil)
+                if aplicar_mediana:
                     import pandas as pd
                     df_picos = pd.DataFrame(picos_matrix)
-                    picos_matrix_suavizados = df_picos.rolling(window=15, center=True, min_periods=1).median().values
-                    
-                    picos_detrended = picos_matrix_suavizados.copy()
+                    picos_procesados = df_picos.rolling(window=15, center=True, min_periods=1).median().values
+                else:
+                    picos_procesados = picos_matrix.copy()
+
+                # Paso 2: Detrending Lineal
+                if aplicar_detrending:
+                    picos_detrended = picos_procesados.copy()
                     x_idx = np.arange(len(picos_detrended))
                     for c_idx in range(picos_detrended.shape[1]):
                         y_vals = picos_detrended[:, c_idx]
@@ -1102,26 +1110,11 @@ class ProcessingOptionsDialog(tk.Toplevel):
                             slope, intercept = np.polyfit(x_idx, y_vals, 1)
                             trend = slope * x_idx + intercept
                             picos_detrended[:, c_idx] = np.maximum(y_vals - trend + np.mean(y_vals), 0.0)
+                    picos_procesados = picos_detrended
 
-                    max_pico_ventana = np.max(picos_detrended, axis=1) + 1e-9
-                    picos_norm = picos_detrended / max_pico_ventana[:, np.newaxis]
-                else:
-                    # MATEMÁTICA ORIGINAL "WINDOWS" (Normalización -> Detrending con Clip)
-                    import pandas as pd
-                    df_picos = pd.DataFrame(picos_matrix)
-                    picos_matrix_suavizados = df_picos.rolling(window=15, center=True, min_periods=1).median().values
-                    
-                    max_pico_ventana = np.max(picos_matrix_suavizados, axis=1) + 1e-9
-                    picos_norm = picos_matrix_suavizados / max_pico_ventana[:, np.newaxis]
-                    
-                    x_idx = np.arange(len(picos_norm))
-                    for c_idx in range(picos_norm.shape[1]):
-                        y_vals = picos_norm[:, c_idx]
-                        if len(y_vals) > 1:
-                            slope, intercept = np.polyfit(x_idx, y_vals, 1)
-                            trend = slope * x_idx + intercept
-                            picos_norm[:, c_idx] = y_vals - trend + np.mean(y_vals)
-                            picos_norm[:, c_idx] = np.clip(picos_norm[:, c_idx], 0.0, 1.0)
+                # Paso 3: Normalización cruzada (Relativa entre canales)
+                max_pico_ventana = np.max(picos_procesados, axis=1) + 1e-9
+                picos_norm = picos_procesados / max_pico_ventana[:, np.newaxis]
 
                 if sweep_canal or (percentil is not None) or (fixed_threshold is not None):
                     sweep_meas_data.append({'vocal': vocal, 'picos_norm': picos_norm.copy()})
@@ -1144,7 +1137,7 @@ class ProcessingOptionsDialog(tk.Toplevel):
 
             return sweep_meas_data, datos_para_plot_combinado
 
-        sweep_meas_data, datos_para_plot_combinado = procesar_mediciones(smooth_ms, tipo_env, exclusion_por_medicion, snr_threshold, aplicar_detrending)
+        sweep_meas_data, datos_para_plot_combinado = procesar_mediciones(smooth_ms, tipo_env, exclusion_por_medicion, snr_threshold, aplicar_mediana, aplicar_detrending)
 
         # Generar boxplot de separabilidad estadística de los picos
         if sweep_meas_data:
@@ -1583,6 +1576,8 @@ class ProcessingOptionsDialog(tk.Toplevel):
                 print(f"Error generando gráfico 3D: {e}")
 
         self.root.destroy()
+        import sys
+        sys.exit(0)
 
 class AnalysisGUI:
     def __init__(self, root):
