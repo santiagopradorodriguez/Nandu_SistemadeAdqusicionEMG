@@ -923,7 +923,7 @@ class GeneradorPCAGUI:
         tk.Checkbutton(ch_frame, text="Canal 1 (Orbicular)", variable=self.var_ch1, bg="#1F2833", fg="white", selectcolor="#0B0C10").pack(side="left", padx=10)
         
         self.var_ch2 = tk.BooleanVar(value=True)
-        tk.Checkbutton(ch_frame, text="Canal 2 (Tiroaritenoideo)", variable=self.var_ch2, bg="#1F2833", fg="white", selectcolor="#0B0C10").pack(side="left", padx=10)
+        tk.Checkbutton(ch_frame, text="Canal 2 (Depresor)", variable=self.var_ch2, bg="#1F2833", fg="white", selectcolor="#0B0C10").pack(side="left", padx=10)
         
         # --- Parámetros Configurables ---
         params_frame = tk.LabelFrame(main_frame, text="Parámetros DSP y Limpieza", padx=5, pady=5, bg="#1F2833", fg="#66FCF1")
@@ -1003,7 +1003,7 @@ class GeneradorPCAGUI:
         trev_frame = tk.LabelFrame(main_frame, text="DSP Avanzado y Normalización", padx=5, pady=5, bg="#1F2833", fg="#66FCF1")
         trev_frame.pack(fill="x", pady=(0,5))
         
-        self.var_aplicar_trevisan = tk.BooleanVar(value=True)
+        self.var_aplicar_trevisan = tk.BooleanVar(value=False)
         tk.Checkbutton(trev_frame, text="Aplicar Corrección Trevisan (Mediana Móvil + Detrending)", variable=self.var_aplicar_trevisan, bg="#1F2833", fg="white", selectcolor="#0B0C10").grid(row=0, column=0, columnspan=2, sticky="w")
         
         tk.Label(trev_frame, text="Pre-Ventana (%):", width=15, anchor="w", bg="#1F2833", fg="white").grid(row=1, column=0, padx=2, pady=2)
