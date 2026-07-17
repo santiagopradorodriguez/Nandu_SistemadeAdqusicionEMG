@@ -1,0 +1,114 @@
+\documentclass[12pt, a4paper]{article}
+
+% Paquetes esenciales para imágenes y diseño
+\usepackage{graphicx} % Para incluir figuras
+\usepackage[spanish]{babel} % Idioma español
+\usepackage[utf8]{inputenc} % Codificación UTF-8
+\usepackage{geometry} % Configuración de márgenes
+\usepackage{subcaption} % Para subfiguras
+\usepackage{float} % Mejor posicionamiento de figuras
+\usepackage{caption} % Configuración de captions
+\usepackage{booktabs}
+
+% Configuración de márgenes de la página
+\geometry{
+    left=2.5cm,
+    right=2.5cm,
+    top=3cm,
+    bottom=3cm
+}
+
+% Configuración del estilo de los captions
+\captionsetup{
+    font=small,
+    labelfont=bf,
+    labelsep=period,
+    justification=justified
+}
+
+\title{\textbf{Reporte de Figuras}}
+\author{Autor}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section*{Introducción}
+Este documento sirve como plantilla base para la compilación de todas las figuras generadas para el informe. Cada figura incluirá su respectivo código y un pie de foto detallado.
+
+% ---------------------------------------------------------
+% EJEMPLO: Figura del Amplificador Diferencial (Ya creada)
+% ---------------------------------------------------------
+\section{Hardware del Amplificador Diferencial}
+
+Aquí se presenta la primera figura solicitada, correspondiente a las perspectivas del hardware del amplificador.
+
+\begin{figure}[H]
+    \centering
+    % Se asume que la imagen se encuentra en la misma carpeta que este archivo .tex
+    \includegraphics[width=\textwidth]{perspectivas_amplificador.png}
+    \caption{Diferentes perspectivas del hardware del amplificador diferencial. A la izquierda se muestra la vista superior del dispositivo. A la derecha, se presentan las vistas laterales: en la parte superior se observa el panel de salidas con conectores BNC, y en la inferior el panel de entradas, el indicador de encendido y el interruptor principal.}
+    \label{fig:amplificador_perspectivas}
+\end{figure}
+
+\begin{table}[H]
+    \centering
+    \caption{Protocolo experimental para la preparación del sujeto y adquisición de señales EMG y audio.}
+    \label{tab:protocolo_emg}
+    \renewcommand{\arraystretch}{1.5} % Mejora el espaciado vertical de las filas
+    \begin{tabular}{c p{13cm}}
+        \toprule
+        \textbf{Paso} & \textbf{Descripción de la Tarea} \\
+        \midrule
+        1 & \textbf{Preparación de electrodos:} Debido a la rigidez de los pines, insertarlos en los electrodos antes de la adhesión facial. Recortar el electrodo sin despegarlo, fijar con cinta adhesiva, conectar los cables y luego posicionar sobre el músculo. \\
+        2 & \textbf{Preparación del sujeto:} Lavado facial con detergente especial y secado con gasa. Reforzar la limpieza aplicando alcohol al 70\% de forma localizada. Registrar fotográficamente el rostro del sujeto como referencia de la distribución del vello facial. \\
+        3 & \textbf{Aislamiento acústico:} Conectar auriculares al sujeto para evitar la filtración del ruido del metrónomo hacia el micrófono. \\
+        4 & \textbf{Configuración de captura:} Configurar el patrón polar del micrófono en modo cardioide. \\
+        5 & \textbf{Sincronización:} Establecer el metrónomo en 30 BPM (parámetro sujeto a ajustes durante la prueba). \\
+        6 & \textbf{Verificación de conexiones:} Chequear la continuidad de los cables, la integridad de la malla y la correcta conexión a la referencia (GND). \\
+        7 & \textbf{Verificación de alimentación:} Comprobar con antelación el estado de las baterías del micrófono o la alimentación \textit{phantom power}. \\
+        8 & \textbf{Entrenamiento y calibración:} Antes de colocar los electrodos o lavar el rostro, realizar una práctica de vocales sincronizada con el \textit{beat}. Ajustar la ganancia de la interfaz para que el nivel promedio se sitúe en -18 dB, asegurando una óptima relación señal-ruido (SNR). \\
+        9 & \textbf{Colocación y validación de canales EMG:} Colocar los electrodos de a uno y verificar la señal individualmente:
+        \vspace{-2mm}
+        \begin{itemize} \setlength{\itemsep}{0pt}
+            \item \textbf{Canal 0 (Milohioideo):} Solicitar al sujeto que trague saliva.
+            \item \textbf{Canal 1 (Depresor):} Solicitar una sonrisa exagerada o mostrar los dientes.
+            \item \textbf{Canal 2 (Orbicular):} Solicitar una sonrisa exagerada o mostrar los dientes.
+        \end{itemize} \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+
+% ---------------------------------------------------------
+% Figura del Set Experimental
+% ---------------------------------------------------------
+\begin{figure}[H]
+    \centering
+    % Asegúrate de que el nombre del archivo coincida con la imagen descargada
+    \includegraphics[width=\textwidth]{diagrama_experimental.png}
+    \caption{Diagrama de bloques del set experimental. La señal de audio es capturada por el micrófono TAKSTAR SGC 568, el cual se conecta a la placa de sonido y luego a la tarjeta de adquisición de datos (NIDAQ). Por otro lado, las señales bioeléctricas provenientes del amplificador diferencial Ñandú LSD ingresan directamente a la NIDAQ. Finalmente, toda la información sincronizada es enviada a la PC para su registro y procesamiento posterior.}
+    \label{fig:diagrama_set_experimental}
+\end{figure}
+
+
+% ---------------------------------------------------------
+% Panel de Resultados de Vocales
+% ---------------------------------------------------------
+\begin{figure}[H]
+    \centering
+    % Asegúrate de que el nombre coincida con el archivo descargado
+    \includegraphics[width=\textwidth]{panel_resultados_vocales.png}
+    \caption{Resultados del proceso de calibración, extracción de características y registro mioeléctrico de las vocales. \textbf{(a)} Aplicación de la técnica de umbrales sobre las señales normalizadas de los tres canales musculares durante la pronunciación de la vocal 'A'. Los pulsos superan el umbral establecido, identificando la activación. \textbf{(b)} Tabla resumen con los resultados de calibración discreta y las modas globales obtenidas para cada vocal. \textbf{(c)} Registros de las vocales 'O' (superior) y 'U' (inferior), exhibiendo patrones de activación muscular muy similares entre sí. \textbf{(d)} Registros comparativos para las vocales 'E' (superior) e 'I' (inferior).}
+    \label{fig:panel_resultados_vocales}
+\end{figure}
+
+% ---------------------------------------------------------
+% ESPACIO PARA FUTURAS FIGURAS
+% ---------------------------------------------------------
+\section{Nuevas Figuras}
+
+% Aquí se irán agregando las nuevas figuras que solicites.
+
+\end{document}

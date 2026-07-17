@@ -19,3 +19,8 @@ EMG_desarrollo/analisis_comparativos/
 EMG_desarrollo/__pycache__/
 EMG_desarrollo/EMG_Ejecutable_Build/__pycache__/
 *.pyc
+*.aux
+*.log
+*.fls
+*.jpg
+*.out

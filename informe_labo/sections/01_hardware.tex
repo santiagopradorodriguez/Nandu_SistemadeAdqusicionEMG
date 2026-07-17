@@ -1,0 +1,22 @@
+\subsection{Introducción}
+El presente diseño se basa en el uso de amplificadores de instrumentación diferenciales, específicamente el circuito integrado AD620, ideal para el registro de señales bioeléctricas de baja amplitud. Como punto de partida, se utilizó y adaptó un circuito preamplificador previamente desarrollado por un grupo de Laboratorio 7, el cual había sido diseñado originalmente para registrar potenciales de activación en músculos de aves. 
+
+Una de las adaptaciones más críticas consistió en el ajuste del filtro pasa-altos de entrada. El circuito original empleaba una frecuencia de corte de \SI{72}{\hertz}, adecuada para conservar la frecuencia fundamental de los músculos aviares. Sin embargo, dado que este proyecto se enfoca en el reconocimiento electromiográfico de músculos faciales humanos, cuyo contenido espectral de interés puede encontrarse en frecuencias más bajas, fue necesario readaptar el filtrado. Tras revisar bibliografía específica (como el trabajo de Ratnovsky), se determinó que filtrar frecuencias por debajo de \SI{50}{\hertz} resultaba más conveniente para conservar la información de los músculos faciales sin comprometer la señal.
+
+\subsection{Diseño de circuito}
+El circuito diseñado consta de tres canales de amplificación independientes y un sistema central de protección. Para garantizar la seguridad de los componentes, en especial los costosos amplificadores AD620, se implementó un circuito de protección contra inversión de polaridad. Este circuito utiliza transistores MOSFET tipo P (F9540N) y tipo N (IRFZ44N), complementados con fusibles de \SI{0.25}{\ampere}, evitando posibles daños en caso de conectar erróneamente las baterías de alimentación.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.8\textwidth]{rutas/pendientes.png}
+\caption{Circuito esquemático mostrando los canales de amplificación diferencial y la etapa de protección contra cambio de polaridad.}
+\label{fig:circuito_esquematico}
+\end{figure}
+
+Un aspecto fundamental del diseño fue la determinación de la resistencia de ganancia ($R_g$) para los amplificadores AD620. La amplificación del integrado está dada por la relación de fábrica dictada por la hoja de datos. Durante la etapa experimental, se realizaron mediciones empíricas sobre el músculo facial \textit{depressor anguli oris} y barridos de frecuencia para caracterizar la respuesta del sistema. 
+
+Inicialmente se probaron resistencias de bajo valor, como \SI{47}{\ohm}, buscando maximizar la ganancia (la cual apuntaba a valores superiores a \num{1000}). Sin embargo, los resultados mostraron que forzar el integrado a factores de amplificación muy elevados generaba saturación, distorsión y un aumento considerable del nivel de ruido en las señales registradas. Adicionalmente, los ensayos revelaron que operar en los límites de amplificación de este circuito integrado comprometía la linealidad y el ancho de banda del canal. 
+
+Por estos motivos, se descartaron los valores bajos de resistencia y se optó definitivamente por utilizar resistencias $R_g$ de \SI{100}{\ohm} en los tres canales. Este valor proporciona una ganancia estable y segura (aproximadamente $495\times$), evitando la saturación del integrado frente a las tensiones entregadas por las baterías y manteniendo la amplificación dentro de un régimen lineal altamente confiable para la adquisición de la electromiografía.
+
+Respecto al suministro de componentes críticos, los amplificadores de instrumentación AD620 fueron adquiridos en G.M. ELECTRÓNICA S.A., Av. Rivadavia 2458, C1034ACQ Cdad. Autónoma de Buenos Aires, 011 4953-0417.
