@@ -281,47 +281,57 @@ def ejecutar_entrenamiento(asignaciones_vocales, canales_seleccionados, mapped_n
     logger(f" EJECUTANDO BARRIDO DE UMBRALES ({tipo_barrido})")
     logger("-" * 50)
     
+    import itertools
+    umbrales_base = np.arange(0.0, 1.01, paso_barrido)
+    mejores_resultados = None
+    max_distincion = -1
+    mejor_frec_media = -1
+    
     if "Canal" in tipo_barrido:
-        # Barrido por canal
-        logger("  [i] Estrategia: Búsqueda del intervalo óptimo independiente por canal")
+        logger("  [i] Estrategia: Búsqueda del umbral óptimo independiente por canal")
+        logger(f"  [i] Evaluando {len(umbrales_base)**num_canales} combinaciones posibles...")
         
-        # Evaluar cada canal de 0 a 1
-        intervalos_por_canal = {}
-        for c_idx, ch in enumerate(canales_seleccionados):
-            picos_ch = {vocal: [pulso[c_idx] for pulso in pulsos] for vocal, pulsos in datos_por_vocal.items()}
-            
-            umbrales = np.arange(0.0, 1.01, paso_barrido)
-            vector_optimo_vocal = {v: [1 if i == c_idx else 0 for i in range(num_canales)] for v in datos_por_vocal.keys()}
-            
-            # Buscar minimo que aísle
-            min_umbral = None
-            max_umbral = None
-            
-            for th in umbrales:
-                # Contar vocales que superan el umbral
-                vocales_superan = []
-                for vocal, vals in picos_ch.items():
-                    if any(v > th for v in vals):
-                        vocales_superan.append(v)
+        combinaciones = list(itertools.product(umbrales_base, repeat=num_canales))
+        umbral_optimo_general = {ch: 0.5 for ch in canales_seleccionados}
+        
+        for comb in combinaciones:
+            res = evaluar_umbral(datos_por_vocal, num_canales, comb)
+            modas = [r['moda_global'] for r in res if len(r['vectores']) >= 1 and r['frecuencias'][0] > 70]
+            # Validar que no se superpongan vectores modales
+            modas_unicas = set(modas)
+            # Solo contamos si cada vocal dominante tiene un vector distinto
+            distincion = len(modas_unicas)
+            if distincion < len(modas):
+                distincion = 0 # Castigamos si dos vocales caen en el mismo vector modal
                 
-                # Para simplificar el algoritmo multicanal, guardaremos un intervalo de umbrales 
-                # donde la activación sea 'segura'. Si este canal no aísla una sola vocal, su intervalo será alto.
-                pass
+            frec_media = np.mean([r['frecuencias'][0] for r in res if len(r['frecuencias']) > 0]) if distincion > 0 else 0
             
-            # Para respetar el algoritmo anterior (simplificado):
-            intervalos_por_canal[ch] = (0.3, 0.7) # Simulado si falla
-        
-        # Ejecutar lógica antigua de barrido discreto general como base (adaptado)
-        umbrales_evaluar = np.arange(0.0, 1.01, paso_barrido)
-        mejores_resultados = None
-        umbral_optimo_general = 0.5
-        max_distincion = 0
-        
-        for umbral in umbrales_evaluar:
-            res = evaluar_umbral(datos_por_vocal, num_canales, umbral)
-            distincion = sum([1 for r in res if len(r['vectores']) == 1 and r['frecuencias'][0] > 70])
-            if distincion > max_distincion:
+            if distincion > max_distincion or (distincion == max_distincion and frec_media > mejor_frec_media):
                 max_distincion = distincion
+                mejor_frec_media = frec_media
+                mejores_resultados = res
+                umbral_optimo_general = {ch: (comb[i]-0.01, comb[i]+0.01) for i, ch in enumerate(canales_seleccionados)}
+                
+        umbral_final = umbral_optimo_general
+        logger(f"  [+] Mejor distinción lograda: {max_distincion} vocales aisladas.")
+        
+    else:
+        logger("  [i] Estrategia: Búsqueda de umbral común para todos los canales")
+        umbral_optimo_general = 0.5
+        
+        for umbral in umbrales_base:
+            res = evaluar_umbral(datos_por_vocal, num_canales, umbral)
+            modas = [r['moda_global'] for r in res if len(r['vectores']) >= 1 and r['frecuencias'][0] > 70]
+            modas_unicas = set(modas)
+            distincion = len(modas_unicas)
+            if distincion < len(modas):
+                distincion = 0
+                
+            frec_media = np.mean([r['frecuencias'][0] for r in res if len(r['frecuencias']) > 0]) if distincion > 0 else 0
+            
+            if distincion > max_distincion or (distincion == max_distincion and frec_media > mejor_frec_media):
+                max_distincion = distincion
+                mejor_frec_media = frec_media
                 mejores_resultados = res
                 umbral_optimo_general = umbral
                 
@@ -329,35 +339,36 @@ def ejecutar_entrenamiento(asignaciones_vocales, canales_seleccionados, mapped_n
             mejores_resultados = evaluar_umbral(datos_por_vocal, num_canales, 0.5)
             umbral_optimo_general = 0.5
             
-        if "Canal" in tipo_barrido:
-            # Simulamos el optimo por canal usando el general como pivot
-            umbral_final = {ch: (umbral_optimo_general-0.1, umbral_optimo_general+0.1) for ch in canales_seleccionados}
-        else:
-            umbral_final = umbral_optimo_general
-            
-        plot_results_table(mejores_resultados, umbral_final, out_dir_final, filtro_snr_tipo, filtro_snr_limite, asignaciones_vocales, folder_name)
-        _plot_training_verification(mediciones_para_verificacion, umbral_final, out_dir_final, folder_name)
+        umbral_final = umbral_optimo_general
+        logger(f"  [+] Mejor distinción lograda: {max_distincion} vocales aisladas (Umbral: {umbral_final:.2f}).")
         
-        # Guardar JSON
-        out_json = os.path.join(out_dir_final, "umbrales_optimos.json")
-        res_dict = {
-            "estrategia": tipo_barrido,
-            "umbral_optimo": umbral_final,
-            "resultados_detallados": mejores_resultados
-        }
-        with open(out_json, 'w') as f:
-            json.dump(res_dict, f, indent=4)
-            
-        logger(f"\n[+] Entrenamiento Finalizado. Gráficos y JSON guardados en: {out_dir_final}")
+    plot_results_table(mejores_resultados, umbral_final, out_dir_final, filtro_snr_tipo, filtro_snr_limite, asignaciones_vocales, folder_name)
+    _plot_training_verification(mediciones_para_verificacion, umbral_final, out_dir_final, folder_name)
+    
+    # Guardar JSON
+    out_json = os.path.join(out_dir_final, "umbrales_optimos.json")
+    res_dict = {
+        "estrategia": tipo_barrido,
+        "umbral_optimo": umbral_final,
+        "resultados_detallados": mejores_resultados
+    }
+    with open(out_json, 'w') as f:
+        json.dump(res_dict, f, indent=4)
         
+    logger(f"\n[+] Entrenamiento Finalizado. Gráficos y JSON guardados en: {out_dir_final}")
+
 def evaluar_umbral(datos_por_vocal, num_canales, umbral):
-    # Función auxiliar intacta
     from collections import Counter
     resultados = []
+    is_list = isinstance(umbral, (list, tuple, np.ndarray))
+    
     for vocal, lista_pulsos in datos_por_vocal.items():
         vectores_binarios = []
         for pulso in lista_pulsos:
-            binario = tuple([1 if val > umbral else 0 for val in pulso])
+            if is_list:
+                binario = tuple([1 if val > th else 0 for val, th in zip(pulso, umbral)])
+            else:
+                binario = tuple([1 if val > umbral else 0 for val in pulso])
             vectores_binarios.append(binario)
             
         conteo = Counter(vectores_binarios)
@@ -446,8 +457,7 @@ def _plot_training_verification(mediciones_para_verificacion, umbral_optimo, out
             for i in range(num_pulsos + 1):
                 ax.axvline(i, color='gray', linestyle='--', alpha=0.3)
                 
-            if idx == 0:
-                ax.legend(loc='upper right')
+            ax.legend(loc='upper right')
                 
         axes[-1].set_xlabel('Pulsos')
         fig.suptitle(f"Validación de Umbrales - {os.path.basename(path)}", fontweight='bold')

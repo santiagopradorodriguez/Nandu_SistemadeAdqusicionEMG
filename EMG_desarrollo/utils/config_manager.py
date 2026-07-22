@@ -34,7 +34,7 @@ DEFAULT_CONFIG = {
     },
     "canales": {
         "Canal 0": {
-            "musculo": "Depresor Anguli Oris",
+            "musculo": "Depressor Anguli Oris",
             "color_hex": "#00ffcc",
             "factor_calibracion": 495.0
         },

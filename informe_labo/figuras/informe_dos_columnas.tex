@@ -1,0 +1,363 @@
+\documentclass[11pt, a4paper, twocolumn]{article}
+
+% Paquetes esenciales para imágenes y diseño
+\usepackage{graphicx} % Para incluir figuras
+\usepackage[spanish]{babel} % Idioma español
+\usepackage[utf8]{inputenc} % Codificación UTF-8
+\usepackage{geometry} % Configuración de márgenes
+\usepackage{subcaption} % Para subfiguras
+\usepackage{float} % Mejor posicionamiento de figuras
+\usepackage{caption} % Configuración de captions
+\usepackage{booktabs}
+\usepackage{tikz} % Añadido para dibujar sobre imágenes
+\usepackage{palatino}
+
+% Configuración de márgenes de la página
+\geometry{
+    left=2.5cm,
+    right=2.5cm,
+    top=3cm,
+    bottom=3cm
+}
+
+% Configuración del estilo de los captions
+\captionsetup{
+    font=small,
+    labelfont=bf,
+    labelsep=period,
+    justification=justified
+}
+
+\title{\textbf{Reporte de Figuras}}
+\author{Autor}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+% ---------------------------------------------------------
+% EJEMPLO: Figura del Amplificador Diferencial
+% ---------------------------------------------------------
+\section{Hardware del Amplificador Diferencial}
+
+% =========================================================
+% OPCIÓN 1: UNA SOLA COLUMNA (Se ajusta al ancho de la columna)
+% =========================================================
+\begin{figure}[htbp]
+    \centering
+    \begin{tikzpicture}
+        % Cargamos la imagen ajustada a la columna
+        \node[anchor=south west,inner sep=0] (image) at (0,0) {\includegraphics[width=\columnwidth]{hardware_figure.png}};
+        
+        % Definimos el scope de coordenadas relativas (0,0 a 1,1)
+        \begin{scope}[x={(image.south east)},y={(image.north west)}]
+            
+            % Estilo global: fondo blanco, borde negro, texto negro, negrita, con padding
+            \tikzset{etiqueta/.style={fill=white, draw=black, text=black, inner sep=1pt, font=\scriptsize \bfseries}}
+            
+            % Coordenadas para cada sub-imagen (esquina superior izquierda de cada panel)
+            \node [etiqueta] at (0.37, 0.966) {(a)}; % Vista superior amplificador
+            \node [etiqueta] at (0.97, 0.966) {(b)}; % Panel de entradas (arriba derecha)
+            \node [etiqueta] at (0.973, 0.74) {(c)}; % Panel BNC (medio derecha)
+            \node [etiqueta] at (0.708, 0.508) {(d)}; % Cables (abajo al medio)
+            \node [etiqueta] at (0.972, 0.508) {(e)}; % Conector metálico (abajo a la derecha, arriba)
+            \node [etiqueta] at (0.974, 0.29) {(f)}; % Electrodo (abajo a la derecha, abajo)
+            
+        \end{scope}
+    \end{tikzpicture}
+    \caption{Imágenes del equipo que desarrollamos.
+    \textbf{(a)} Vista superior del amplificador de 3 canales. 
+    \textbf{(b)} Vista lateral con las entradas de los electrodos, 
+    y pulsador de encendido y apagado.
+    \textbf{(c)} Vista lateral con salidas de los canales de amplificación. 
+    Código QR al repositorio del proyecto en GitHub.
+    \textbf{(d)} Juego de cables trenzados y mallados. \textbf{(e)} Extremo del cable conector
+    al amplificador. 
+    \textbf{(f)} Extremo del cable conector a los electrodos.}
+    \label{fig:hardware_completo_1col}
+\end{figure}
+
+
+% =========================================================
+% OPCIÓN 2: DOS COLUMNAS (Ocupa el ancho total de la hoja)
+% =========================================================
+\begin{figure*}[t]
+    \centering
+    \begin{tikzpicture}
+        % Cargamos la imagen ajustada al ancho total de la página (\textwidth)
+        \node[anchor=south west,inner sep=0] (image) at (0,0) {\includegraphics[width=\textwidth]{hardware_figure.png}};
+        
+        \begin{scope}[x={(image.south east)},y={(image.north west)}]
+            
+            % Como la imagen será más grande, aumentamos un poco la fuente a \large
+            \tikzset{etiqueta/.style={fill=white, draw=black, text=black, inner sep=4pt, font=\large\bfseries}}
+            
+            % Coordenadas para cada sub-imagen (esquina superior izquierda de cada panel)
+            \node [etiqueta] at (0.37, 0.966) {(a)}; % Vista superior amplificador
+            \node [etiqueta] at (0.97, 0.966) {(b)}; % Panel de entradas (arriba derecha)
+            \node [etiqueta] at (0.973, 0.74) {(c)}; % Panel BNC (medio derecha)
+            \node [etiqueta] at (0.708, 0.508) {(d)}; % Cables (abajo al medio)
+            \node [etiqueta] at (0.972, 0.508) {(e)}; % Conector metálico (abajo a la derecha, arriba)
+            \node [etiqueta] at (0.974, 0.29) {(f)}; % Electrodo (abajo a la derecha, abajo)
+            
+        \end{scope}
+    \end{tikzpicture}
+    \caption{Imágenes del equipo que desarrollamos.
+    \textbf{(a)} Vista superior del amplificador de 3 canales. 
+    \textbf{(b)} Vista lateral con las entradas de los electrodos, 
+    y pulsador de encendido y apagado.
+    \textbf{(c)} Vista lateral con salidas de los canales de amplificación. 
+    Código QR al repositorio del proyecto en GitHub.
+    \textbf{(d)} Juego de cables trenzados y mallados. \textbf{(e)} Extremo del cable conector
+    al amplificador. 
+    \textbf{(f)} Extremo del cable conector a los electrodos.}
+    \label{fig:hardware_completo_1col}
+    \label{fig:hardware_completo_2col}
+\end{figure*}
+
+% ---------------------------------------------------------
+% Figura del Set Experimental
+% ---------------------------------------------------------
+\section{Medicion EMG de los tres musculos}
+
+% ---------------------------------------------------------
+% UNA COLUMNA
+% ---------------------------------------------------------
+
+\begin{figure}[hbt!]
+    \centering
+    
+    % Imagen A (Arriba)
+    \begin{subfigure}{\linewidth}
+        \centering
+        \includegraphics[width=0.8\linewidth]{diagrama_exp_a.png}
+        \caption{}
+        \label{fig:set 3 musculos a}
+    \end{subfigure}
+    
+    \vspace{1em} % Espacio vertical entre las imágenes
+    
+    % Imagen B (Abajo)
+    \begin{subfigure}{\linewidth}
+        \centering
+        \includegraphics[width=0.8\linewidth]{diagrama_exp_b.png}
+        \caption{}
+        \label{fig:set 3 musculos b}
+    \end{subfigure}
+    
+    \caption{\textbf{(a)} Se resaltan los músculos utilizados para colocar los electrodos. También se observan esquemas ilustrativos
+    de como se posicionaron los electrodos utilizados en dichos músculos. \textbf{(b)} Set experimental de la medición. Los electrodos
+    se conectaron al amplificador de 3 canales \textit{Ñandú LSD}, que fue conectado a la placa \textit{NI DAQ USB-6212} y este a una computadora.
+    El micrófono \textit{TAKSTAR SGC 568}, utilizado para grabar la voz, se conectó a una placa de audio \textit{Behringer TUBE ULTRAGAIN MIC100}, que fue
+    conectada a la mencionada placa de NI.}
+    \label{fig:set 3 musculos}
+\end{figure}
+
+% ---------------------------------------------------------
+% DOS COLUMNAS
+% ---------------------------------------------------------
+
+\begin{figure*}[hbt!] % El asterisco rompe las columnas para usar el ancho total
+    \centering
+    
+    % Imagen A (Izquierda)
+    \begin{subfigure}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{diagrama_exp_a.png}
+        \caption{}
+        \label{fig:imagen_a_horiz}
+    \end{subfigure}\hfill
+    % Imagen B (Derecha)
+    \begin{subfigure}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{diagrama_exp_b.png}
+        \caption{}
+        \label{fig:imagen_b_horiz}
+    \end{subfigure}
+    
+    \caption{\textbf{(a)} Se resaltan los músculos utilizados para colocar los electrodos. También se observan esquemas ilustrativos
+    de como se posicionaron los electrodos utilizados en dichos músculos. \textbf{(b)} Set experimental de la medición. Los electrodos
+    se conectaron al amplificador de 3 canales \textit{Ñandú LSD}, que fue conectado a la placa \textit{NI DAQ USB-6212} y este a una computadora.
+    El micrófono \textit{TAKSTAR SGC 568}, utilizado para grabar la voz, se conectó a una placa de audio \textit{Behringer TUBE ULTRAGAIN MIC100}, que fue
+    conectada a la mencionada placa de NI.}
+    \label{fig:imagenes_horizontal}
+\end{figure*}
+
+\section{Software Ñandú LSD}
+
+% =========================================================
+% OPCIÓN 2: DOS COLUMNAS (Ocupa el ancho total de la hoja)
+% =========================================================
+\begin{figure*}[t]
+    \centering
+    \begin{tikzpicture}
+        % Cargamos la imagen ajustada al ancho total de la página (\textwidth)
+        \node[anchor=south west,inner sep=0] (image) at (0,0) {\includegraphics[width=\textwidth]{main_menu_software.png}};
+        
+        \begin{scope}[x={(image.south east)},y={(image.north west)}]
+            
+            % Como la imagen será más grande, aumentamos un poco la fuente a \large
+            \tikzset{etiqueta/.style={fill=white, draw=black, text=black, inner sep=1pt, font=\scriptsize\bfseries}}
+            
+            % Coordenadas para cada sub-imagen (esquina superior izquierda de cada panel)
+            \node [etiqueta] at (0.125, 0.87) {(a)}; % Vista superior amplificador
+            \node [etiqueta] at (0.445, 0.965) {(b)}; % Panel de entradas (arriba derecha)
+            \node [etiqueta] at (0.595, 0.965) {(c)}; % Panel BNC (medio derecha)
+            \node [etiqueta] at (0.75, 0.972) {(d)}; % Cables (abajo al medio)
+            \node [etiqueta] at (0.9, 0.965) {(e)}; % Conector metálico (abajo a la derecha, arriba)
+            \node [etiqueta] at (0.974, 0.7) {(f)}; % Electrodo (abajo a la derecha, abajo)
+            \node [etiqueta] at (0.974, 0.418) {(g)}; % Electrodo (abajo a la derecha, abajo)
+            
+        \end{scope}
+    \end{tikzpicture}
+    \caption{Pantalla principal del software asociado al amplificador \textit{Ñandú LSD}. Se comenta lo más relevante:
+    \textbf{(a)} Base de datos de las mediciones realizadas. 
+    \textbf{(b)} Pestaña con programas para realizar distintos tipos de análisis.
+    \textbf{(c)} Visualizador de las mediciones “crudas“ de la base de datos.
+    \textbf{(d)} Pestaña que contiene los resultados de los análisis realizados.
+    \textbf{(e)} Pestaña que contiene resultados de una sesión en particular.
+    \textbf{(f)} y \textbf{(g)} Central de medición que funciona como “osciloscopio“ de las señales musculares.}
+
+    \label{fig:hardware_completo_2col}
+\end{figure*}
+
+\section{Umbrales, modas y parecidos}
+
+% figure* abarca ambas columnas en un documento 'twocolumn'
+\begin{figure*}[t]
+    \centering
+    
+    % =========================================================
+    % FILA SUPERIOR: (a) y (b)
+    % =========================================================
+    % Panel (a) normal, sin TikZ
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{verificacion_O_T1_Lucas.png}
+        \caption{}
+        \label{fig:entrenamiento}
+    \end{subfigure}
+    \hfill
+    % Panel (b)
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{tabla_modas_umbrales.png}
+        \caption{}
+        \label{fig:calibracion}
+    \end{subfigure}
+
+    \vspace{1.5em} % Espaciado vertical entre la fila superior e inferior
+
+    % =========================================================
+    % FILA INFERIOR: (c) y (d) con entorno TikZ
+    % =========================================================
+    % Panel (c) con dos imágenes apiladas y TikZ
+\begin{subfigure}[t]{0.48\textwidth}
+    \centering
+    
+    % --- Gráfico Superior (Vocal E) ---
+    \begin{tikzpicture}
+        \node[anchor=south west, inner sep=0] (image_e) at (0,0) {
+            \includegraphics[width=\linewidth]{letra_e1.png}
+        };
+        \begin{scope}[x={(image_e.south east)}, y={(image_e.north west)}]
+            % Etiqueta opcional arriba a la izquierda
+            \node[fill=white, text=black, font=\footnotesize, inner sep=2pt, rounded corners] at (0.9, 0.9) {Vocal E};
+        \end{scope}
+    \end{tikzpicture}
+    
+    \vspace{0.2cm} % Espaciado vertical entre los dos gráficos
+    
+    % --- Gráfico Inferior (Vocal I) ---
+    \begin{tikzpicture}
+        \node[anchor=south west, inner sep=0] (image_i) at (0,0) {
+            \includegraphics[width=\linewidth]{letra_i1.png}
+        };
+        \begin{scope}[x={(image_i.south east)}, y={(image_i.north west)}]
+            % Etiqueta opcional arriba a la izquierda
+            \node[fill=white, text=black, font=\footnotesize, inner sep=2pt, rounded corners] at (0.9, 0.9) {Vocal I};
+        \end{scope}
+    \end{tikzpicture}
+    
+    \caption{}
+    \label{fig:emg_c}
+\end{subfigure}
+    % Panel (d) con dos imágenes apiladas y TikZ
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        
+        % --- Gráfico Superior (Vocal O) ---
+        \begin{tikzpicture}
+            \node[anchor=south west, inner sep=0] (image_o) at (0,0) {
+                \includegraphics[width=\linewidth]{letra_o1.png}
+            };
+            \begin{scope}[x={(image_o.south east)}, y={(image_o.north west)}]
+                % Etiqueta opcional arriba a la izquierda
+                \node[fill=white, text=black, font=\footnotesize, inner sep=2pt, rounded corners] at (0.9, 0.9) {Vocal O};
+            \end{scope}
+        \end{tikzpicture}
+        
+        \vspace{0.2cm} % Espaciado vertical entre los dos gráficos
+        
+        % --- Gráfico Inferior (Vocal U) ---
+        \begin{tikzpicture}
+            \node[anchor=south west, inner sep=0] (image_u) at (0,0) {
+                \includegraphics[width=\linewidth]{letra_u1.png}
+            };
+            \begin{scope}[x={(image_u.south east)}, y={(image_u.north west)}]
+                % Etiqueta opcional arriba a la izquierda
+                \node[fill=white, text=black, font=\footnotesize, inner sep=2pt, rounded corners] at (0.9, 0.9) {Vocal U};
+            \end{scope}
+        \end{tikzpicture}
+        
+        \caption{}
+        \label{fig:emg_d}
+    \end{subfigure}
+
+    % Caption general del panel
+    \caption{Algunas imágenes asociadas al método de discretización por umbrales.
+    \textbf{(a)} Resultado de aplicar el método a una medición de la vocal O. 
+    \textbf{(b)} Tabla de modas de discretizaciones en el espacio asociadas a cada vocal para un set de mediciones.
+    Según el umbral definido por canal, se muestra la frecuencia relativa en porcentaje de cada posición para cada vocal.
+    \textbf{(c)} Comparación de las mediciones de la vocal E (arriba) y la vocal I (abajo). Se activan los músculos
+    de forma parecida.
+    \textbf{(d)} Comparación de las mediciones de la vocal O (arriba) y la vocal U (abajo). Se activan los músculos
+    de forma parecida.}
+    \label{fig:panel_completo_emg}
+\end{figure*}
+
+\section{Otra version}
+% figure* abarca ambas columnas en un documento 'twocolumn'
+\begin{figure*}[t]
+    \centering
+    
+    % =========================================================
+    % FILA SUPERIOR: (a) y (b)
+    % =========================================================
+    % Panel (a) normal, sin TikZ
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{verificacion_O_T1_Lucas.png}
+        \caption{}
+        \label{fig:entrenamiento1}
+    \end{subfigure}
+    \hfill
+    % Panel (b)
+    \begin{subfigure}[t]{0.48\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{tabla_modas_umbrales.png}
+        \caption{}
+        \label{fig:calibracion}
+    \end{subfigure}
+
+    % Caption general del panel
+    \caption{Ejemplo de resultado del método de discretización por umbrales.
+    \textbf{(a)} Resultado de aplicar el método a una medición de la vocal O. 
+    \textbf{(b)} Tabla de modas de discretizaciones en el espacio asociadas a cada vocal para un set de mediciones.
+    Según el umbral definido por canal, se muestra la frecuencia relativa en porcentaje de cada posición
+     para cada vocal.}
+    \label{fig:panel_completo_emg1}
+\end{figure*}
+
+\end{document}

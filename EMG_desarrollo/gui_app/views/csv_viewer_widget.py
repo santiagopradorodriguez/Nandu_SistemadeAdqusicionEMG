@@ -27,9 +27,9 @@ import pyqtgraph as pg
 import pyqtgraph.exporters
 import sys
 
-root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if root_dir not in sys.path:
-    sys.path.append(root_dir)
+root_project_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if root_project_dir not in sys.path:
+    sys.path.insert(0, root_project_dir)
 
 from utils.config_manager import ConfigManager
 config_mgr = ConfigManager()
@@ -295,6 +295,11 @@ class CsvViewerWidget(QWidget):
         self.btn_export = QPushButton("📸 Exportar PNG")
         self.btn_export.clicked.connect(self.export_png)
         lyt_opts.addWidget(self.btn_export)
+        
+        self.chk_export_cyberpunk = QCheckBox("Mantener Tema Cyberpunk")
+        self.chk_export_cyberpunk.setChecked(True)
+        lyt_opts.addWidget(self.chk_export_cyberpunk)
+        
         self.slayout.addWidget(grp_opts)
         
         self.slayout.addStretch()
@@ -575,9 +580,91 @@ class CsvViewerWidget(QWidget):
     def export_png(self):
         filepath, _ = QFileDialog.getSaveFileName(self, "Exportar Gráfico", "export.png", "PNG (*.png)")
         if filepath:
-            exporter = pg.exporters.ImageExporter(self.plot_widget.scene())
-            exporter.export(filepath)
-            self.lbl_status.setText(f"Exportado a: {filepath}")
+            is_cyberpunk = getattr(self, 'chk_export_cyberpunk', None) is None or self.chk_export_cyberpunk.isChecked()
+            
+            orig_pens = {}
+            if not is_cyberpunk:
+                # Save original states
+                original_bg = self.plot_widget.backgroundBrush().color()
+                ax_bottom = self.plot_widget.getAxis('bottom')
+                ax_left = self.plot_widget.getAxis('left')
+                
+                orig_bottom_pen = ax_bottom.pen()
+                orig_bottom_textPen = ax_bottom.textPen()
+                orig_left_pen = ax_left.pen()
+                orig_left_textPen = ax_left.textPen()
+                
+                from PySide6.QtGui import QFont
+                
+                # Save axis properties
+                orig_bottom_label = ax_bottom.labelText
+                orig_bottom_units = getattr(ax_bottom, 'labelUnits', '')
+                orig_left_label = ax_left.labelText
+                orig_left_units = getattr(ax_left, 'labelUnits', '')
+                
+                orig_bottom_tickFont = ax_bottom.style.get('tickFont', None)
+                orig_left_tickFont = ax_left.style.get('tickFont', None)
+                
+                # Apply light theme and large sizes
+                self.plot_widget.setBackground('w')
+                
+                black_pen = pg.mkPen('k', width=2)
+                ax_bottom.setPen(black_pen)
+                ax_bottom.setTextPen(black_pen)
+                ax_left.setPen(black_pen)
+                ax_left.setTextPen(black_pen)
+                
+                # Enlarge ticks and labels
+                large_font = QFont("Arial", 14, QFont.Bold)
+                ax_bottom.setTickFont(large_font)
+                ax_left.setTickFont(large_font)
+                
+                ax_bottom.setLabel(orig_bottom_label, units=orig_bottom_units, **{'font-size': '18pt', 'color': '#000000', 'font-weight': 'bold'})
+                ax_left.setLabel(orig_left_label, units=orig_left_units, **{'font-size': '18pt', 'color': '#000000', 'font-weight': 'bold'})
+                
+                # Light theme colors mapping with thicker lines
+                light_colors = ['#1f77b4', '#800080', '#ff7f0e', '#2ca02c', '#d62728', '#8c564b']
+                
+                for idx, item in enumerate(self.plot_widget.listDataItems()):
+                    orig_pens[item] = item.opts['pen']
+                    c = light_colors[idx % len(light_colors)]
+                    item.setPen(pg.mkPen(color=c, width=3.5)) # Lineas más gruesas
+                    
+                # Fix legend text opacity and enlarge font
+                legend = getattr(self.plot_widget.plotItem, 'legend', None)
+                if legend is not None:
+                    for sample, label in legend.items:
+                        text = getattr(label, 'text', '')
+                        label.setText(text, color='k', size='16pt', bold=True)
+                    
+            try:
+                exporter = pg.exporters.ImageExporter(self.plot_widget.scene())
+                exporter.export(filepath)
+                self.lbl_status.setText(f"Exportado a: {filepath}")
+            finally:
+                if not is_cyberpunk:
+                    # Revert everything safely
+                    self.plot_widget.setBackground(original_bg)
+                    ax_bottom.setPen(orig_bottom_pen)
+                    ax_bottom.setTextPen(orig_bottom_textPen)
+                    ax_left.setPen(orig_left_pen)
+                    ax_left.setTextPen(orig_left_textPen)
+                    
+                    # Revert fonts
+                    ax_bottom.setTickFont(orig_bottom_tickFont)
+                    ax_left.setTickFont(orig_left_tickFont)
+                    ax_bottom.setLabel(orig_bottom_label, units=orig_bottom_units, **{'font-size': '11pt', 'color': '#C5C6C7'})
+                    ax_left.setLabel(orig_left_label, units=orig_left_units, **{'font-size': '11pt', 'color': '#C5C6C7'})
+                    
+                    for item, p in orig_pens.items():
+                        item.setPen(p)
+                        
+                    # Revert legend text and size
+                    legend = getattr(self.plot_widget.plotItem, 'legend', None)
+                    if legend is not None:
+                        for sample, label in legend.items:
+                            text = getattr(label, 'text', '')
+                            label.setText(text, color='#C5C6C7', size='10pt', bold=False)
 
     def _on_config_changed(self):
         config_mgr.set("csv_viewer", "notch", self.chk_notch.isChecked())
