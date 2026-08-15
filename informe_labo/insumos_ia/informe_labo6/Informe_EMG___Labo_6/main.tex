@@ -1,0 +1,1212 @@
+\documentclass[11pt,letterpaper]{article}
+%margenes y espacio entre columnas
+\usepackage[left=1.7cm,right=1.7cm,top=2cm,bottom=2.5cm, columnsep=0.75cm]{geometry}
+\usepackage[utf8]{inputenc}
+
+\usepackage{breqn}
+\usepackage[spanish, es-tabla]{babel}
+%\usepackage[version=3]{mhchem}
+%\usepackage[journal=jacs]{chemstyle} Comente esto y se puso bien el captions de Tabla 1
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{makeidx}
+\usepackage{xcolor}
+\usepackage[stable]{footmisc}
+\usepackage[section]{placeins}
+%\usepackage{hyperref}
+\usepackage{ulem}
+\usepackage{lipsum}
+\usepackage{xurl}
+% 1. Permite cortar URLs en cualquier letra (Soluciona Ref [9])
+
+
+% 2. Fuerza la alineación a la izquierda en la bibliografía (Soluciona Ref [8])
+% Esto evita que LaTeX intente "justificar" textos largos como el de la revista Chaos
+
+%Modificación del formato de los captions
+\usepackage[margin=10pt,labelfont=bf]{caption}
+\captionsetup[figure]{position=bottom}
+\captionsetup[table]{position=bottom}
+\usepackage{subcaption}
+
+\usepackage{multicol}
+
+%Paquetes necesarios para tablas
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{xtab}
+\usepackage{multirow}
+\usepackage{colortab}
+\usepackage{floatrow}
+
+% definir ancho de tabla
+\usepackage{tabularx}
+
+\usepackage{stfloats}
+
+% Tabla más "cientifica"
+\usepackage{booktabs}
+
+
+%Paquete para el manejo de las unidades
+\usepackage{siunitx}
+\sisetup{mode=text, output-decimal-marker = {.}, per-mode = symbol, qualifier-mode = phrase, qualifier-phrase = { de }, list-units = brackets, range-units = brackets, range-phrase = --}
+% \DeclareSIUnit[number-unit-product = \;] \atmosphere{atm}
+% \DeclareSIUnit[number-unit-product = \;] \pound{lb}
+% \DeclareSIUnit[number-unit-product = \;] \inch{"}
+% \DeclareSIUnit[number-unit-product = \;] \foot{ft}
+% \DeclareSIUnit[number-unit-product = \;] \yard{yd}
+% \DeclareSIUnit[number-unit-product = \;] \mile{mi}
+% \DeclareSIUnit[number-unit-product = \;] \pint{pt}
+% \DeclareSIUnit[number-unit-product = \;] \quart{qt}
+% \DeclareSIUnit[number-unit-product = \;] \flounce{fl-oz}
+% \DeclareSIUnit[number-unit-product = \;] \ounce{oz}
+% \DeclareSIUnit[number-unit-product = \;] \degreeFahrenheit{\SIUnitSymbolDegree F}
+% \DeclareSIUnit[number-unit-product = \;] \degreeRankine{\SIUnitSymbolDegree R}
+% \DeclareSIUnit[number-unit-product = \;] \usgallon{galón}
+% \DeclareSIUnit[number-unit-product = \;] \uma{uma}
+% \DeclareSIUnit[number-unit-product = \;] \ppm{ppm}
+% \DeclareSIUnit[number-unit-product = \;] \eqg{eq-g}
+% \DeclareSIUnit[number-unit-product = \;] \normal{\eqg\per\liter\of{solución}}
+% \DeclareSIUnit[number-unit-product = \;] \molal{\mole\per\kilo\gram\of{solvente}}
+\decimalpoint
+\usepackage{cancel}
+%Paquetes necesarios para imágenes, pies de página, etc.
+\usepackage{graphicx}
+%\usepackage{lmodern}
+\usepackage{palatino}
+\usepackage{fancyhdr}
+%\usepackage[left=2.5cm,right=2cm,top=2cm,bottom=2.5cm]{geometry}
+%\fancyhead[L]{FCEN, UBA} % Top left header
+\fancyhead[L]{Laboratorio de Sistemas Dinámicos} % Top left header
+%\fancyhead[C]{Laboratorio 6}
+\fancyhead[R]{Braunstein - Prado Rodriguez - Labo 6} % Top right header
+\renewcommand{\headrulewidth}{0.09pt} % Rule under the header
+\fancyfoot[C]{\thepage} % Bottom center footer
+%\renewcommand{\footrulewidth}{1.4pt} % Rule under the footer
+\pagestyle{fancy} % Use the custom headers and footers throughout the document
+
+% Para que la PRIMERA PÁGINA NO tenga encabezado:
+\fancypagestyle{firstpage}{%
+  \fancyhf{} % Borra encabezado y pie de página en la primera página
+  \renewcommand{\headrulewidth}{0pt} % Sin línea en la primera página
+}
+
+%Instrucción para evitar la indentación
+%\setlength\parindent{0pt}
+
+%Paquete para poder comentar palabras en la misma linea
+\usepackage{comment}
+
+
+%Formato del título de las secciones
+
+\usepackage{titlesec}
+\usepackage{enumitem}
+\titleformat*{\section}{\bfseries\large}
+\titleformat*{\subsection}{\bfseries\normalsize}
+
+%Creación del ambiente anexos
+\usepackage{float}
+\floatstyle{plaintop}
+\newfloat{anexo}{thp}{anx}
+\floatname{anexo}{Anexo}
+\restylefloat{anexo}
+
+%Paquete para incluir comentarios
+%\usepackage{todonotes}
+
+% %Paquete para incluir hipervínculos
+% \usepackage[colorlinks=true, 
+%             linkcolor = black,
+%             urlcolor  = blue,
+%             citecolor = black,
+%             anchorcolor = black]{hyperref}
+
+\usepackage{xurl} % Para URLs que se rompen en cualquier carácter
+%Paquete para incluir hipervínculos
+\usepackage[colorlinks=true, 
+            linkcolor = orange,
+            urlcolor  = blue,
+            citecolor = red,
+            anchorcolor = orange, breaklinks]{hyperref}
+
+%Paquetes para bibliografía
+\usepackage{csquotes}
+%\usepackage[style=ieee]{biblatex}
+\usepackage[style=numeric, sorting=none, backend=biber]{biblatex}
+% Esto hace que el campo URL se vea como "[Enlace]" pero sea clicable
+\DeclareFieldFormat{url}{\href{#1}{[Enlace]}}
+\addbibresource{referencias.bib}
+%\addbibresource{refs.bib}
+\usepackage{microtype}
+% Opcional: para personalizar el formato de las referencias
+\DeclareFieldFormat{title}{#1} % Títulos en formato normal (no itálico)
+\DeclareFieldFormat[article]{title}{#1} % Artículos también en formato normal
+\renewcommand{\bibfont}{\normalfont\normalsize} % Fuente normal para bibliografía
+
+%Paquete para escribir las comillas
+\usepackage{dirtytalk}
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%
+%Inicio del documento%
+%%%%%%%%%%%%%%%%%%%%%%
+\raggedbottom % hace que si sobra espacio en una columna, el texto no se distribuya en todo el espacio sobrante sino que deje tal espacio en blanco.
+
+\setlength{\columnsep}{20pt} %separacion entre columnas
+
+\begin{document}
+
+\thispagestyle{firstpage} % Aplica el estilo sin encabezado solo en la primera página
+
+\renewcommand{\labelitemi}{$\checkmark$}
+
+\renewcommand{\CancelColor}{\color{red}}
+
+\newcolumntype{L}[1]{>{\raggedright\let\newline\\\arraybackslash}m{#1}}
+
+\newcolumntype{C}[1]{>{\centering\let\newline\\\arraybackslash}m{#1}}
+
+\newcolumntype{R}[1]{>{\raggedleft\let\newline\\\arraybackslash}m{#1}}
+
+\begin{center}
+    % TÍTULO
+    \textbf{\LARGE{Desarrollo e Implementación de un Sistema}}\\
+    \vspace{2mm}
+    \textbf{\LARGE{de Adquisición de Electromiografía Multicanal}}\\
+    \vspace{4mm}
+    
+    % ALUMNOS
+    \textbf{\large{Braunstein Lucas, Prado Rodriguez Santiago}}\\
+    \vspace{2mm}
+    % MAILS (Mejor ponerlos acá para que se entienda que son suyos)
+    \small{braunstein.lucas@gmail.com, santiagopradorodriguez@gmail.com}\\
+    
+    \vspace{2mm}
+    
+    % DIRECTORES
+    \small \textbf{Directora:} Ana Amador \\
+    % Perro pidió poner "Co-directores", así que uso ese título para Fiamma y Felipe
+    \small \textbf{Colaboradores} Fiamma L. Leites, Felipe Cignoli \\
+    
+    \vspace{4mm}
+    
+    % INFO DEL LABO
+    \textit{\large{Laboratorio 6 2°C 2025 - Laboratorio de Sistemas Dinámicos\\
+    Departamento de Física, FCEyN, UBA\\
+    10 de diciembre de 2025}}
+\end{center}
+%\vspace{7mm}
+\vspace{4mm}
+
+\begin{abstract}
+En este trabajo se realizaron mediciones de actividad electromiográfica (EMG) utilizando diferentes configuraciones de electrodos, con el objetivo de evaluar la relación señal–ruido (SNR) bajo escenarios controlados. Se generó un protocolo y un método de análisis. Inicialmente, el foco estuvo puesto en la comparación entre las marcas de electrodos Medi-Trace y 3M, midiendo el músculo de la mano \textit{palmar corto} utilizando hardware y software de \textit{Backyard Brains}. Los resultados mostraron que los electrodos Medi-Trace presentaron una mejor relación señal–ruido frente a los 3M. Respecto a la reproducibilidad de las mediciones, esta dependió críticamente de la adhesión y del control experimental. Luego se elaboró manualmente una placa electrónica de amplificación de tres canales junto con un circuito de protección ante cambio de polaridad. También se decidió desarrollar un software de adquisición específico para la placa elaborada, el \textit{Ñandú LSD}, que pudo medir las señales en simultáneo, y que integró parte del protocolo y el método de análisis. Finalmente, se midieron tres músculos en simultáneo. Además, se corroboró que diferentes fonemas generan diferentes tipos de señales en los músculos faciales que activan.
+
+\end{abstract}
+
+\vspace{4mm}
+
+\begin{multicols*}{2}
+\section{Introducción}
+
+El reconocimiento automático del habla (RAH) es una forma de interacción hombre–máquina que tradicionalmente utiliza señales acústicas para decodificar unidades lingüísticas (\textcite{meltzner2018}). En los últimos años se ha explorado la posibilidad de realizar RAH a partir de señales electromiográficas (EMG) de músculos faciales y de la cavidad oral; dichos enfoques muestran potencial para aplicaciones en ambientes ruidosos, comunicación aumentativa y control discreto (\textcite{ratnovsky2021}, \textcite{schultz2010}).
+
+La electromiografía superficial registra la actividad eléctrica generada por la despolarización de fibras musculares mediante electrodos colocados sobre la piel (ver Fig. \ref{fig: ejemplo emg}). Se mide el potencial de activación de las \textit{motoneuronas}, que son parte del sistema nervioso. Para aplicaciones relacionadas a la interpretación de movimientos finos o señales faciales, se busca emplear electrodos de área reducida y una configuración de montaje que localice la medición en músculos determinados. Aún así, al ser \textit{señales biológicas}, la medición resultante tendrá múltiples componentes espectrales difíciles de separar, periódicas o no, que complejizarán el análisis posterior.
+
+En este sentido, un parámetro relevante para cuantificar la calidad de la medición es la relación señal–ruido (SNR). Puede definirse en términos de amplitud:
+\begin{equation}
+\label{eq: snr amplitud}
+\mathrm{SNR}_{\text{amplitud}} = \frac{A_s}{U},
+\end{equation}
+
+\noindent donde $A_s$ es la amplitud máxima de la señal y $U$ es el umbral de ruido.
+
+También puede definirse en términos de energía:
+\begin{equation}
+\label{eq: snr energia}
+\mathrm{SNR}_{\text{energía}} = \frac{E_s}{E_n},
+\end{equation}
+
+ \noindent siendo $E_s$ la energía de la señal y $E_n$ la energía del ruido.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=.8\linewidth]{introduccion/emg_representacion_1.png}
+\captionsetup{width=.9\linewidth}
+\caption{\label{fig: ejemplo emg} Esquema de medición de EMG sobre un músculo. Los electrodos se colocan sobre la piel y la señal resultante puede descomponerse para obtener los potenciales de activación de cada motoneurona. \textit{Imagen extraída de Khan Academy \cite{mdurance2019}}.}
+\end{figure}
+\vspace{-10mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-3mm} % Reduce el espacio antes de la línea
+
+Si se pretendiera realizar mediciones de EMG en músculos faciales sería importante conocer la mejor disposición y tamaño de electrodos, la \say{mejor configuración}, que optimice la SNR. Dado que los músculos faciales presentan un área pequeña y señales de baja amplitud, se podría utilizar otro músculo, como el palmar corto (también conocido como \textit{palmaris brevis}, ver Fig. \ref{fig: palmar corto}). Músculo \say{comparable} a los faciales, por su tamaño y relativa independencia anatómica: al ser superficial, de pequeño volumen e inervado localmente por el \textit{nervio cubital}, no se solapa significativamente con músculos vecinos.
+
+La selección de los músculos faciales para medir se basa en su mecánica durante el habla (ver Fig. \ref{fig: musculos cara}). El \textit{orbicularis oris}, por ejemplo, actúa como el sistema de cierre y retracción, permitiendo el control fino de los labios \cite{nicolau1983}. El \textit{depressor anguli oris} aplica una fuerza diagonal (hacia abajo y afuera) sobre la esquina de
+
+\vspace{-4mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-4mm} % Reduce el espacio antes de la línea
+\begin{figure}[H]
+\centering
+\includegraphics[width=.55\linewidth]{introduccion/palmar_corto.png}
+\captionsetup{width=.9\linewidth}
+\caption{\label{fig: palmar corto} Aponeurosis de la palma izquierda. Se señala el músculo \textit{Palmar corto}.}
+\end{figure}
+
+\noindent la boca, modificando su forma para asistir en la apertura \cite{hussain2004}. Finalmente, se podría mencionar también el \textit{mylohyoid}, que funciona como suelo de la boca. Su dinámica ayuda al movimiento de la lengua y facilita el descenso de la mandíbula \cite{okada2013}. Además, dependiendo de los fonemas que se pronuncien o gestos que se hagan, los músculos se activan de manera diferente. Esto podría medirse justamente con EMG.
+
+\vspace{-6mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-6mm} % Reduce el espacio antes de la línea
+\begin{figure}[H]
+\centering
+\includegraphics[width=.75\linewidth]{introduccion/3 Musculos .png}
+\captionsetup{width=.9\linewidth}
+\caption{\label{fig: musculos cara} Esquema de los músculos faciales de interés. Se señalan el \textit{Depressor Anguli Oris} el \textit{Orbicularis Oris} y el \textit{mylohyoid}. \textit{Imagen extraída de \textcite{ratnovsky2021}.}}
+\end{figure}
+\vspace{-11.5mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-4.5mm} % Reduce el espacio antes de la línea
+
+Los dispositivos comerciales de EMG, de bajo costo relativo, suelen limitarse a un único canal de amplificación, lo cual resulta insuficiente para la decodificación del habla, proceso que requiere el monitoreo simultáneo de varios músculos faciales. Uno de ellos es el \textit{Muscle SpikerBox} de Backyard Brains: un modelo comercial orientado al área educativa, con un solo canal de amplificación, y con tecnología apta para otros tipos de mediciones además de EMG (ECG, EEG, plantas). La amplificación para esta aplicación es diferencial y suele basarse en amplificadores operacionales, como el \textit{AD620} (\textcite{fainstein2021}) que tiene un factor de ganancia $G$ dado por:
+\begin{equation}
+    \label{eq: ganancia ad620}
+    G = \frac{49.4 \, k\Omega}{R_g} + 1,
+\end{equation}
+
+\noindent con $R_g$ la \say{resistencia de ganancia}.
+
+Este trabajo tiene varios objetivos. Primero, determinar la mejor disposición y tamaño de electrodos, la mejor configuración, que optimiza la SNR, utilizando como músculo de estudio el \textit{palmar corto}. Como segundo, desarrollar electrónica específica para medir, a través de 3 canales de amplificación, las señales EMG de tres músculos: el \textit{depressor anguli oris}, el \textit{orbicularis oris} y el \textit{mylohyoid}. Tercero, desarrollar un software que permita integrar la medición de la electrónica desarrollada con el equipo de laboratorio. Cuarto, realizar las mediciones y corroborar que diferentes fonemas producen señales diferentes de EMG en los músculos faciales.
+
+% Por ende, una parte central de este trabajo consiste en el desarrollo de un dispositivo de medición adaptado específicamente al experimento. Basándose en prototipos de amplificación diferencial previamente utilizadas en fisiología animal (\textcite{fainstein2021}), se propone adaptar el diseño para aplicaciones en humanos utilizando el amplificador de instrumentación AD620. El diseño contempla la implementación de tres canales independientes en una placa de circuito impreso (PCB) fabricada en el laboratorio. Este circuito integrado permite ajustar la ganancia mediante una resistencia externa, lo cual servirá para encontrar la mejor SNR.
+
+% el sistema se completa con la digitalización y el procesamiento de las señales. Para ello, se integra el hardware construido con una tarjeta de adquisición de datos  (NI-DAQ -6252, National Instruments). La gestión de este sistema requiere el desarrollo de un entorno de software en Python capaz de adquirir los 3 canales en simultáneo y gestionar el almacenamiento de datos para el post-procesamiento, permitiendo así estudiar la relación temporal entre la activación muscular y el habla. 
+
+
+ 
+% Entonces, los objetivos de esta experiencia se estructuran en tres ejes principales: 1) comparar y caracterizar distintos tipos de electrodos  y variantes mediante un protocolo de SNR en el músculo \textit{palmaris brevis}; 2) diseñar y construir un preamplificador analógico de tres canales basado en el AD620 y optimizado para EMG facial; y 3) desarrollar e integrar una interfaz de software que permita la adquisición, visualización y análisis simultáneo de señales EMG para futuras aplicaciones.
+
+\section{Desarrollo Experimental}
+
+\subsection{Determinación mejor configuración de electrodos}
+
+Para las mediciones de EMG de este experimento se utilizó la placa de Backyard Brains \textit{Muscle SpikerBox v 1.2.1} \cite{backyardbrains}. Esta se conectó a la computadora mediante la entrada mini plug $3.5$ mm de audio y se utilizó su software de adquisición asociado \textit{Spike Recorder}. Los electrodos se colocaron en el músculo palmar corto (\textit{palmaris brevis}) y se conectaron a la placa mediante cables con fichas cocodrilo. La disposición consistió en un par de electrodos en el músculo y un electrodo de referencia en la muñeca contralateral, como se observa en la Fig. (\ref{fig: montaje experimental electrodos}).
+
+\vspace{-5mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-5mm} % Reduce el espacio antes de la línea
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=.85\linewidth]{desarrollo_experimental/montaje_electrodos_2.png}
+    \captionsetup{width=.9\linewidth}
+    \caption{\label{fig: montaje experimental electrodos} Esquema del montaje experimental. La señal de los electrodos es preamplificada por la placa Muscle SpikerBox y digitalizada en la PC. Se indican las posiciones del potenciómetro utilizadas para cada configuración.}
+\end{figure}
+\vspace{-11mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-4mm} % Reduce el espacio antes de la línea
+
+Se evaluaron dos marcas comerciales de electrodos, \textit{Medi-Trace} y \textit{3M}. Se modificaron manualmente para generar las diferentes configuraciones, que se denominaron como; \say{3M chico con venda MT}, \say{3M mediano}, \say{MT chico con apósito cuadrado}, \say{MT chico con apósito}, \say{MT chico con venda 3M}, \say{MT chico estándar} y \say{MT mediano} (ver las configuraciones en la Fig. \ref{fig: electrodos_todas}).
+
+Como el potenciómetro que modifica la amplificación no tenía ninguna referencia, se fijó una ganancia de amplificación en la placa según la posición relativa de una marca sobre el mismo. Se denominó entonces \say{posición \textit{100}} para electrodos marca 3M, excepto los de tamaño chico, y \say{posición \textit{cap}} para marca Medi-Trace y demás configuraciones. Debido a la sensibilidad del potenciómetro, se mantuvo una configuración estática durante toda la serie experimental para asegurar poder comparar los datos.
+
+\vspace{-4.5mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-4.5mm} % Reduce el espacio antes de la línea
+\begin{figure}[H]
+    \centering
+    
+    % --- FILA 1 (3 imágenes) ---
+    \begin{subfigure}{0.32\linewidth}
+        \centering
+        \includegraphics[width=0.85\linewidth]{desarrollo_experimental/tipos_de_electrodos/3m_chico_vendamt.jpg}
+        \caption{\label{fig: 3m chico vendamt} 3M chico con venda MT.}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.32\linewidth}
+        \centering
+        \includegraphics[width=0.85\linewidth]{desarrollo_experimental/tipos_de_electrodos/3m_medianos.jpg}
+        \caption{\label{fig: 3m medianos} 3M mediano (sólo la mitad).}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.32\linewidth}
+        \centering
+        \includegraphics[width=0.85\linewidth]{desarrollo_experimental/tipos_de_electrodos/mt_chicos_cuadraditos.jpg}
+        \caption{\label{fig: mt chico cuadradito} MT chico con apósito cuadrado.}
+    \end{subfigure}
+    
+    \vspace{3mm} % Espacio vertical entre filas
+    
+    % --- FILA 2 (3 imágenes) ---
+    \begin{subfigure}{0.32\linewidth}
+        \centering
+        \includegraphics[width=0.85\linewidth]{desarrollo_experimental/tipos_de_electrodos/mt_chicos_curitas.jpg}
+        \caption{\label{fig: mt chico curita} MT chico con apósito.}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.32\linewidth}
+        \centering
+        \includegraphics[width=0.85\linewidth]{desarrollo_experimental/tipos_de_electrodos/mt_chicos_venda3m.jpg}
+        \caption{\label{fig: mt chico venda3m} MT chico con venda 3M.}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.32\linewidth}
+        \centering
+        \includegraphics[width=0.85\linewidth]{desarrollo_experimental/tipos_de_electrodos/mt_chicos.jpg}
+        \caption{\label{fig: mt chico} MT chico estándar.}
+    \end{subfigure}
+    
+    \vspace{3mm} % Espacio vertical
+    
+    % --- FILA 3 (1 imagen centrada) ---
+    \begin{subfigure}{0.32\linewidth}
+        \centering
+        \includegraphics[width=0.85\linewidth]{desarrollo_experimental/tipos_de_electrodos/mt_medianos.jpg}
+        \caption{\label{fig: mt mediano} MT mediano.}
+    \end{subfigure}
+    
+    \captionsetup{width=.9\linewidth}
+    \caption{Comparativa visual de todas las configuraciones de electrodos evaluadas. \textit{Imágenes extraídas del laboratorio.}}
+    \label{fig: electrodos_todas}
+\end{figure}
+\vspace{-10mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-3mm} % Reduce el espacio antes de la línea
+
+Un factor importante en la calidad de la medición de EMG es la impedancia de la interfaz piel-electrodo, la cual se ve comprometida por la presencia de transpiración, y en consecuencia, la débil adhesión de los electrodos. Por lo tanto, se procuró realizar sobre la piel un lavado con jabón líquido seguido de una limpieza con alcohol al 70\%, antes de colocar los electrodos.
+
+% \vspace{-5mm}
+% \begin{center}
+%     \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}}
+% \end{center}
+
+% \vspace{-3mm} % Reduce el espacio antes de la línea
+
+\subsubsection{Protocolo para caracterizar SNR}
+\label{section: protocolo SNR}
+
+Se diseñó un protocolo de medición de señales EMG para calcular el coeficiente de SNR. Primero se configuró el \say{modo EMG} en el software de adquisición, según las especificaciones del fabricante. Este modo aplica un filtro pasabanda digital con frecuencias de corte en $70$ Hz y $2500$ Hz (ver Fig. \ref{fig: emg spike recorder}), eliminando componentes de continua y ruido de alta frecuencia.
+\vspace{-5mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-5mm} % Reduce el espacio antes de la línea
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=.7\linewidth]{desarrollo_experimental/confi_spikerecorder.png}
+    \captionsetup{width=.9\linewidth}
+    \caption{\label{fig: emg spike recorder} Interfaz de configuración del software \textit{Spike Recorder}, mostrando los parámetros de filtrado digital aplicados.}
+\end{figure}
+\vspace{-12mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-4.5mm} % Reduce el espacio antes de la línea
+
+Luego se realizó el lavado, como se describió previamente, y se aplicó la configuración de electrodos a medir.
+A continuación, para asegurar la periodicidad y reproducibilidad de la actividad muscular, se utilizó un metrónomo a $50$ bpm como estímulo auditivo. El movimiento que se utilizó en toda la experiencia fue: mano extendida relajada y luego unión de la punta de los dedos, tensionando el músculo (ver Fig. \ref{fig: movimiento mano}).
+Luego se grabó la señal, con cinco segundos de reposo al inicio, y se midieron quince pulsos.
+
+Una vez obtenida la medición, el procesamiento de las señales adquiridas  se estructuró en las siguientes etapas:
+\begin{enumerate}
+    \item \textbf{Cálculo de la envolvente:} Se aplicó la transformada de Hilbert para obtener la envolvente analítica de la señal, permitiendo suavizar la respuesta transitoria.
+    \item \textbf{División en ventanas:} Utilizando los pulsos del metrónomo como referencia, la señal se segmentó en ventanas discretas correspondientes a cada ciclo.
+    \item \textbf{Calculo de señal ruido SNR:} Para cada ventana se extrajo el valor máximo de amplitud. Estos máximos fueron promediados y divididos respecto al nivel promedio de ruido basal (de los primeros cinco segundos en reposo de la medición, ver Ec. \ref{eq: snr amplitud}). De forma complementaria, se calculó la SNR por energía como el cociente entre la energía promedio de las ventanas de actividad y la energía del ruido (Ec. \ref{eq: snr energia}).
+\end{enumerate}
+
+\vspace{-6mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-4mm} % Reduce el espacio antes de la línea
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=.65\linewidth]{desarrollo_experimental/movimiento_mano.png}
+    \captionsetup{width=.9\linewidth}
+    \caption{\label{fig: movimiento mano} Movimiento de activación del músculo Palmar corto: transición desde la posición relajada extendida (izq.) hacia la oposición del músculo tensionado (der.).}
+\end{figure}
+\vspace{-9mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-5mm} % Reduce el espacio antes de la línea
+
+\subsection{Software de adquisición y análisis multicanal}
+\label{section: ñandu lsd}
+
+Si bien el software \textit{Spike Recorder} resultó efectivo previamente, la necesidad de registrar simultáneamente tres músculos, conocer los valores de tensión y garantizar una sincronización temporal precisa con los estímulos, requirió el desarrollo de una plataforma de software más especializada. Se implementó un entorno de trabajo en \textit{Python}, diseñado para interactuar con la tarjeta de adquisición \textit{NI-DAQ 6252} y automatizar el protocolo para obtener la SNR definido en la sección anterior. Este programa se denominó \textit{Ñandú LSD} (ver \hyperref[apendice: ñandu lsd]{Apéndice} para acceder al código).
+
+El programa se estructura en dos módulos principales que gestionan el flujo de datos desde la captura hasta el resultado del análisis:
+
+\vspace{-6mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-5mm} % Reduce el espacio antes de la línea
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=.8\linewidth]{desarrollo_experimental/adquisición.png}
+    \captionsetup{width=.9\linewidth}
+    \caption{Interfaz del módulo osciloscopio de Ñandú LSD.}
+\end{figure}
+
+\subsubsection{Adquisición}
+
+El script principal o \say{módulo de osciloscopio}, actúa como interfaz de visualización para la tarjeta de adquisición. A diferencia del software de \textit{Backyard Brains}, este desarrollo permite la configuración y lectura simultánea de múltiples canales analógicos, manteniendo una frecuencia de muestreo constante, típicamente $44,100$ Hz, sin desfasaje entre canales. El script permite configurar y marcar el tiempo considerado \say{de basal} (o ruido) antes de empezar la medición. El metrónomo, que anteriormente era externo, está integrado y registra simultáneamente una marca de tiempo en los metadatos, facilitando la posterior segmentación de las ventanas. El sistema guarda automáticamente los registros \say{crudos} (sin ningún tipo de procesamiento) y un archivo de metadatos que almacena la fecha, la hora, nombre del sujeto de prueba y un comentario sobre la medición.
+
+\subsubsection{Análisis de señal-ruido SNR}
+
+Para procesar el volumen de datos generado por los tres canales, se desarrolló un módulo de análisis que implementa el procedimiento descrito en la sección anterior (ver \ref{section: protocolo SNR}). El software realiza el procesamiento cargando inicialmente los datos crudos y aplicando los factores de calibración para convertir las unidades del conversor analógico-digital (ADC) a voltaje real. A continuación, aplica la transformada de Hilbert y utiliza los pulsos del metrónomo registrados durante la adquisición para recortar las ventanas de interés de forma automática. Finalmente, evalúa la SNR (tanto en amplitud como en energía) para cada ventana, facilitando además una inspección interactiva de los datos.
+Un ejemplo de análisis usando este módulo se muestra en la Fig. (\ref{fig: analisis snr ñandu}).
+
+\subsection{Circuito electrónico}
+
+Como se mencionó, el hardware utilizado para realizar las mediciones de EMG de los electrodos, fue la placa de Backyard Brains \textit{Muscle SpikerBox v 1.2.1}.
+%: un modelo comercial orientado al área educativa, con un solo canal de amplificación, y con tecnología apta para otros tipos de mediciones además de EMG (ECG, EEG, plantas).
+Se propuso el diseño y la elaboración de una placa de adquisición inspirada en el modelo de Backyard Brains, y mejorada con la tecnología de medición de músculos en pájaros del Laboratorio de Sistemas Dinámicos, para el uso específico de este experimento.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{desarrollo_experimental/ProtocoloSeñalRuido.png}
+    \captionsetup{width=.9\linewidth}
+    \caption{Señal procesada con Ñandú LSD. En lineas punteadas verticales se delimitan los segmentos, los puntos rojos son los máximos relativos y las ventanas sombreadas en rojo muestran los segmentos que no se consideran al no presentar señal relevante.}
+    \label{fig: analisis snr ñandu}
+\end{figure}
+\vspace{-12mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-9mm} % Reduce el espacio antes de la línea
+
+\subsubsection{Diseño}
+El diseño consistió en realizar previamente; el análisis del canal de amplificación del \textit{Muscle SpikerBox v 1.2.1}, el análisis del canal de un circuito orientado a los músculos de los pájaros \cite{datasheet_labo7} y la comparación entre ambos para llegar a una síntesis.
+
+Entonces, el canal se basó en el amplificador operacional (\textit{op-amp}) \textit{AD620} de \textit{Analogue Devices}. Se optó por colocar un filtro pasa altos con una frecuencia de corte de $(50 \pm 3)$ Hz en la entrada, para obtener, junto con el filtro pasa bajos interno del amplificador cuya frecuencia de corte depende de la ganancia, un filtro pasa banda. La frecuencia de corte del filtro en la entrada del canal fue determinada según bibliografía (\textcite{ratnovsky2021}) y los resultados de las mediciones de los electrodos en este trabajo, junto con la decisión de atenuar toda frecuencia por debajo de los $50$ Hz. Se repitió este circuito tres veces (por los tres canales de amplificación).
+
+La ganancia se determina según la resistencia $R_g$ del circuito, que es la resistencia más importante en cuanto a la aplicación que se propuso. Según la bibliografía, el orden de magnitud de la tensión de los músculos de la cara relevantes, rondaría los $150$ $\mu$V. A su vez, se tiene que considerar la tensión proveída por la fuente y la capacidad de amplificación del integrado, para asegurarse un uso dentro del regimen \say{normal} de la electrónica. Si bien el fabricante del AD620 proporciona información suficiente en cuanto a valores típicos de amplificación \cite{ad620}, al no tener mediciones propias, se decidió determinar a posterior (luego de la elaboración) el valor de dicha resistencia.
+
+La fuente de alimentación fueron dos baterías de $9$ V conectadas en serie, de manera de obtener una tensión negativa y una tensión positiva, que es un requisito del amplificador. Entonces, como medida de seguridad, además de usar un fusible ante picos de corriente, se colocó un circuito de protección ante un cambio de polaridad (que se traduce en conectar al revés las baterías), basado en los MOSFET tipo P y N, \textit{F9540n} y \textit{IRFZ44N} respectivamente.
+
+Se puede observar en la Fig. (\ref{fig: diseño circuito}) el circuito esquemático utilizado y su posterior diseño PCB para imprimir.
+
+\vspace{-6mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-6mm} % Reduce el espacio antes de la línea
+\begin{figure}[H]
+    \centering
+    
+    % --- Figura A (Arriba) ---
+    % Al poner 1.0\linewidth, obligás a que ocupe todo el ancho de la columna
+    \begin{subfigure}[b]{1.0\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{desarrollo_experimental/circuito/schematic_conlabels.png}
+        \caption{Diseño de circuito esquemático.}
+        \label{fig: circuito_a}
+    \end{subfigure}
+    
+    % Este comando agrega espacio vertical entre la figura A y la B
+    \vspace{0.5cm} 
+    
+    % --- Figura B (Abajo) ---
+    \begin{subfigure}[b]{1.0\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{desarrollo_experimental/circuito/circuito_pcb_este.png}
+        \caption{Diseño de circuito PCB.}
+        \label{fig: circuito_b}
+    \end{subfigure}
+    
+    % --- Caption General ---
+    \captionsetup{width=.9\linewidth}
+    \caption{\label{fig: diseño circuito} (a) Circuito esquemático del circuito. Se observan los tres canales de amplificación a la derecha, y el circuito de protección a la izquierda. Ver \hyperref[apendice: materiales placa]{Apéndice} para relacionar los \textit{labels}.\\
+    (b) Diseño del circuito en PCB para imprimir sobre placa de cobre.}
+\end{figure}
+\vspace{-12mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-9mm} % Reduce el espacio antes de la línea
+
+\subsubsection{Elaboración de la placa}
+
+Antes de iniciar, se corroboró el tamaño de los componentes electrónicos utilizando un calibre. Se imprimió el circuito, como se observa en la Fig. (\ref{fig: circuito impreso}), en un \textit{papel de transferencia térmica}. A continuación, se procedió a recortar una \textit{placa de cobre virgen de epoxy}, según las medidas de la impresión. Se limpió la grasa y residuos de la superficie del cobre con la parte verde de una esponja de cocina, y se envolvió la placa virgen con el papel, de manera que la tinta quedara del lado del cobre. Se reforzó la envoltura con dos hojas A4 más. Luego, se procedió a \say{planchar} la placa, con el objetivo de que el calor transfiriera la tinta del papel al cobre.
+
+No existe un tiempo exacto, pero el proceso de planchado, repasando toda la superficie con atención en los bordes, fue de aproximadamente $13$ minutos. Es importante prestar atención a la temperatura, ya que el calor puede arruinar el cobre. Pasado este tiempo, se retiró el papel con las manos, con la placa sumergida en agua fría.
+
+\vspace{-5mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-5mm} % Reduce el espacio antes de la línea
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\linewidth]{desarrollo_experimental/circuito/pcb_impreso.png}
+    \caption{\label{fig: circuito impreso} Circuito electrónico, impreso, correspondiente a la capa de cobre.}
+\end{figure}
+\vspace{-9mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-3mm} % Reduce el espacio antes de la línea
+
+Una vez finalizado el proceso de planchado, con la tinta del circuito transferida al cobre, se reforzó con marcador indeleble las partes que quedaron incompletas. Luego, se calentó \textit{ácido férrico} a baño maría y se sumergió la placa en él. Este proceso conserva el cobre cubierto por la tinta y \say{lava} el cobre que no lo está, por lo que la placa solo queda con el circuito impreso. Moviendo ocasionalmente la placa dentro del ácido, el proceso de \say{lavado} duró aproximadamente una hora. Al observar que la placa solo tenia la impresión, se la retiró y se la lavó con agua fría para sacarle el resto de ácido y frenar el proceso.
+%Se utilizaron mechas de diámetro de $0.75$ mm, $1.5$ mm y $3$ mm.
+
+A continuación, una vez la placa estuvo seca, se procedió a realizar las perforaciones para montar los componentes. Finalmente se procedió a soldar con estaño todos los componentes excepto las resistencias $R_g$. Debido a que no se había determinado el factor de ganancia, se soldaron en su lugar, y solo en uno de los canales, pines de componentes utilizados para probar diferentes resistencias sin estropear la placa.
+
+Se puede ver un resumen ilustrativo del proceso en la Fig. (\ref{fig: resumen elaboración}).
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{desarrollo_experimental/circuito/elab_placa_1.png}
+    \caption{\label{fig: resumen elaboración} Proceso de elaboración de la placa: a) Transferencia térmica a través del planchado, b) Inmersión en ácido férrico, c) Agujereado con taladro de mesa, d) Placa lista para montar los componentes y soldarlos.}
+\end{figure}
+\vspace{-11mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-9mm} % Reduce el espacio antes de la línea
+
+\subsubsection{Determinación de resistencia de ganancia $R_g$}
+
+Para determinar la resistencia de ganancia $R_g$ se realizaron dos experimentos. Para el primero, se tomó como referencia el orden de magnitud de la tensión de la bibliografía y la información del fabricante del \textit{AD620}. De esta manera se obtuvieron valores de resistencias para probar directamente sobre algún músculo de la cara. Se colocaron electrodos pequeños en el músculo \textit{depressor anguli oris}, la referencia se colocó detrás de la oreja derecha y todo se conectó a la entrada de un canal de amplificación de la placa amplificadora. La salida se conectó a la placa de adquisición \textit{NI-DAQ-USB-6252} \cite{manualnidaq}, y esta se conectó a una computadora donde se utilizó el software de adquisición Ñandú LSD (se puede ver el esquema del set en la Fig. \ref{fig: montaje medicion electrodo}).
+La medición constó de unos primeros cinco segundos de silencio, y luego 20 activaciones musculares utilizando un metrónomo de 30 bpm. El procedimiento se realizó para las resistencias de: $2.2$ $\Omega$, $5$ $\Omega$, $10$ $\Omega$, $22$ $\Omega$, $33$ $\Omega$, $47$ $\Omega$, $100$ $\Omega$, $1$ k$\Omega$ y $1.2$ k$\Omega$. Se sometió a todas las mediciones al análisis de señal de los electrodos y se comparó sus valores de SNR.
+
+Para el segundo experimento, con el objetivo de definir la resistencia a utilizar, se realizó un barrido de frecuencias para caracterizar la amplificación de cada integrado. Se conectó un generador de señales \textit{Agilent 33120A} a la entrada de la placa y al CH1 del osciloscopio \textit{Tektronix TBS 1052B}. La salida de la placa se conectó al CH2. El osciloscopio se conectó a
+
+\begin{figure}[H]
+    \centering
+    
+    % --- Figura A (Arriba) ---
+    % Al poner 1.0\linewidth, obligás a que ocupe todo el ancho de la columna
+    \begin{subfigure}[b]{.8\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{desarrollo_experimental/circuito/esquema_medicion_electrodo.png}
+        \caption{Montaje de medición de electrodos.}
+        \label{fig: montaje medicion electrodo}
+    \end{subfigure}
+    
+    % Este comando agrega espacio vertical entre la figura A y la B
+    \vspace{0.5cm} 
+    
+    % --- Figura B (Abajo) ---
+    \begin{subfigure}[b]{.9\linewidth}
+        \centering
+        \includegraphics[width=\linewidth]{desarrollo_experimental/circuito/esquema_barrido.png}
+        \caption{Montaje de medición de barrido de frecuencias.}
+        \label{fig: montaje barrido}
+    \end{subfigure}
+    
+    % --- Caption General ---
+    \captionsetup{width=.9\linewidth}
+    \caption{\label{fig: set experimental rg} (a) Montaje experimental para la medición de electrodos sobre músculos faciales.\\
+    (b) Montaje experimental para caracterización de la amplificación del \textit{AD620} con un barrido de frecuencias.}
+\end{figure}
+\vspace{-11mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-3mm} % Reduce el espacio antes de la línea
+
+\noindent la computadora (se puede ver una esquema en la Fig. \ref{fig: montaje barrido}). Se utilizó una señal de $100$ mVpp y un barrido de frecuencias de 41 puntos en el intervalo de $10$ Hz a $86$ kHz. En una primera instancia, el objetivo fue caracterizar la amplificación para las resistencias del primer experimento.
+
+\subsection{Medición EMG de 3 músculos en simultáneo}
+
+% Usá [t] para que aparezca arriba de todo de la hoja
+% Usá [b] para que aparezca al pie de página (gracias a stfloats)
+\begin{figure*}[t] 
+    \centering
+    
+    % --- Imagen 1 (Izquierda) ---
+    \begin{subfigure}[b]{0.32\textwidth}
+        \centering
+        \includegraphics[width=0.5\linewidth]{desarrollo_experimental/mediciones/medicion_referencia.png}
+        \caption{Electrodo referencia.}
+        \label{fig: img1}
+    \end{subfigure}
+    \hfill % Espacio flexible para separarlas
+    % --- Imagen 2 (Centro) ---
+    \begin{subfigure}[b]{0.32\textwidth}
+        \centering
+        \includegraphics[width=0.5\linewidth]{desarrollo_experimental/mediciones/medicion_mylohyoid.png}
+        \caption{Electrodos sobre \textit{mylohyoid}.}
+        \label{fig:img2}
+    \end{subfigure}
+    \hfill % Espacio flexible
+    % --- Imagen 3 (Derecha) ---
+    \begin{subfigure}[b]{0.32\textwidth}
+        \centering
+        \includegraphics[width=0.5\linewidth]{desarrollo_experimental/mediciones/mediciones_frente.png}
+        \caption{Electrodos alrededor de la boca.}
+        \label{fig:img3}
+    \end{subfigure}
+
+    \captionsetup{width=.9\linewidth}
+    \caption{\label{fig: disposicion 3 musculos} Representación de la disposición de los electrodos para medir los músculos \textit{mylohyoid}, \textit{depressor angularis oris}, \textit{orbicularis oris} y la \textit{referencia}. La colocación de los electrodos sucedió de izquierda a derecha (de $a)$ a $b)$)}
+\end{figure*}
+
+Para la medición en simultáneo, se seleccionaron los músculos de la bibliografía: \textit{depressor anguli oris}, \textit{orbicularis oris} y \textit{mylohyoid}. Se utilizaron  dos electrodos (por ser una amplificación diferencial) por cada músculo, posicionando la referencia (tierra) en la apófisis mastoides (hueso detrás de la oreja). Se puede ver la disposición en la Fig. (\ref{fig: disposicion 3 musculos}). Se conectaron los electrodos a la placa de amplificación y la salida de esta a la placa de adquisición \textit{NI-DAQ-USB-6252} que va a la computadora. El montaje experimental se muestra en la Fig. (\ref{fig: montaje medicion electrodo}).
+
+%\vspace{-10mm} % Reduce el espacio antes de la línea
+\vspace{-6mm}
+\subsubsection{Protocolo de medición}
+
+El protocolo de medición incluyó la pronunciación de los vocablos \say{ñandú} y \say{arte}. Finalmente, se realizó una comparación de las señales aplicando un filtro notch para eliminar el ruido de línea y, posteriormente, un filtro pasa banda de frecuencias de corte de 20 Hz y de 1000 Hz. Se utilizó el software Ñandú LSD para esta experiencia (ver sección \ref{section: ñandu lsd}).
+\vspace{-6mm}
+\section{Resultados}
+\vspace{-4mm}
+\subsection{Determinación mejor configuración de electrodos}
+
+Debido al espacio, no se reportarán todos los resultados de este experimento. Se recomienda ver el informe de \textit{Caracterización de electrodos 3M y Medi-Trace para utilizar en electromiografía} \cite{informeElectrodos2025}, donde se amplían los resultados y la discusión de esta parte.
+
+Se exploraron señales con diferentes tipos de electrodos y a diferentes distancias entre ellos.
+%Este último punto fue debido al tamaño de los mismos. En general se denominó \textit{electrodo mediano} a electrodos donde la mitad (aproximadamente) del pad de pegamento fue recortado, y \textit{electrodo chico} a los que se recortó todo el pad dejando simplemente el pin metálico y el gel. Además, 
+Se contempló  si se usó gel adicional, si se utilizó venda o apósito para reforzar el agarre y si los electrodos eran nuevos o de días anteriores. Se tomaron los electrodos de marca 3M y Medi-Trace, sin modificar, como estándar de una buena señal-ruido (SNR) garantizada por el fabricante.
+% \vspace{-6mm} % Reduce el espacio antes de la línea
+% \begin{center}
+%     \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+% \end{center}
+% \vspace{-9mm} % Reduce el espacio antes de la línea
+% \begin{figure}[H]
+%     \centering
+%     \includegraphics[width=\linewidth]{resultados/mediciones jueves 180925/histogramadia7.png}
+%     \captionsetup{width=.9\linewidth}
+%     \caption{\label{fig: grafico de barras mediciones jueves} Gráfico de barras que compara resultados de las amplitudes SNR amplitud (barra izq.) y energía (barra der.) para las diferentes configuraciones, diferenciando la marca MT en azul y la 3M en negro.}
+% \end{figure}
+% \vspace{-10mm} % Reduce el espacio antes de la línea
+% \begin{center}
+%     \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+% \end{center}
+% \vspace{-3mm} % Reduce el espacio antes de la línea
+
+Las mediciones presentaron, en general, una SNR elevada. Es decir, la señal de interés fue bien diferenciable del resto de valores. Los electrodos de mejor SNR fueron los marca Medi-Trace. Esto puede ser por la adhesión que genera el pad sticker y el gel. %Para el caso de los electrodos 3M la señal mejora utilizando gel.
+Se intuye que los 3M tienen menos pegamento que los Medi-Trace, y por lo tanto la menor adhesión genera un menor SNR. La preferencia es hacia electrodos lo más pequeños posibles, que dieron buenos resultados. Por lo tanto, para determinar el límite de resolución espacial, se evaluaron distintas separaciones entre electrodos utilizando la configuración Medi-Trace con apósitos. La adhesión de esta configuración permitió reducir la distancia hasta $D=(7.80\pm0.02)$ mm sin contacto entre geles (ver Fig. \ref{fig: comparacion distancia 7.8 y 14}).
+
+\vspace{-7mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-7mm} % Reduce el espacio antes de la línea
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}{\linewidth}
+        \centering
+        \includegraphics[width=0.9\linewidth]{resultados/distancias/electrodos7.8.png}
+        \caption{Separación $D=(7.80\pm0.02)$ mm}
+        \label{fig: electrodos7.8}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{\linewidth}
+        \centering
+        \includegraphics[width=.9\linewidth]{resultados/distancias/electrodos14mm.png}
+        \caption{Separación $D=(14.00\pm0.02)$ mm}
+        \label{fig: electrodos14}
+    \end{subfigure}
+    \captionsetup{width=.9\linewidth}
+    \caption{\label{fig: comparacion distancia 7.8 y 14} Comparación cualitativa de la señal EMG. Nótese la diferencia en definición y amplitud.}
+\end{figure}
+
+% A continuación, y en el sentido de estudiar las configuraciones de electrodos chicos de ambas marcas para determinar cual utilizar, se compararon los análisis de SNR. Además, para determinar el límite de resolución espacial, se evaluaron distintas separaciones entre electrodos utilizando la configuración Medi-Trace con apósitos (ver Tabla \ref{tabla: convencion distancia}). La adhesión de esta configuración permitió reducir la distancia hasta $D=(7.80\pm0.02)$ mm sin contacto entre geles. Las configuraciones de distancias se detallan en la siguiente tabla.
+
+%Las configuraciones analizadas se detallan en la Tabla \ref{tabla: convencion comparacion mt 3m}.
+
+
+% \begin{table}[H]
+% \centering
+% \caption{Configuraciones evaluadas: 1) 3M con apósito; 2) Medi-Trace nuevos sin apósito; 3) Medi-Trace nuevos con apósito; 4) 3M nuevos sin apósito.}
+% \label{tabla: convencion comparacion mt 3m}
+% % El 0.5 reduce la tabla a la mitad del ancho disponible
+% \resizebox{0.5\linewidth}{!}{ 
+%     \begin{tabular}{|c|l|}
+%     \hline
+%     \textbf{Nº} & \textbf{Identificador de la Medición} \\
+%     \hline
+%     1 & 3M-C-2-U-D=13.8mm-12.23.07 \\
+%     \hline
+%     2 & MT-C-1-N-D=14mm-12.33.05 \\
+%     \hline
+%     3 & MT-C-2-N-D=14mm-12.37 \\
+%     \hline
+%     4 & 3M-C-1-N-D=14mm-12.18.45 \\
+%     \hline
+%     \end{tabular}
+% }
+% \end{table}
+
+% \begin{table}[H]
+% \centering
+% \caption{Distancias evaluadas con electrodos Medi-Trace y apósito: 1) $7.80$ mm; 2) $14.00$ mm; 3) $10.40$ mm.}
+% \label{tabla: convencion distancia}
+% \resizebox{0.5\linewidth}{!}{
+%     \begin{tabular}{|c|l|}
+%     \hline
+%     \textbf{Nº} & \textbf{Identificador de la Medición} \\
+%     \hline
+%     1 & MT-C-2-N-D=7.8mm-12.55.18 \\
+%     \hline
+%     2 & MT-C-2-N-D=14mm-12.37 \\
+%     \hline
+%     3 & MT-C-2-N-D=10.4mm-12.46.41 \\
+%     \hline
+%     \end{tabular}
+% }
+% \end{table}
+
+% Se puede observar en la Fig. (\ref{fig: analisis snr}) que el uso de  apósitos resultó ser la configuración óptima. Si bien agregar esto mejoró la relación señal-ruido (SNR) en los electrodos 3M, el agarre fue superior en la marca Medi-Trace (MT) debido al tamaño de su pin metálico. Se observó que la transpiración y la humedad son factores importantes que degradan el contacto durante tiempos largos.
+
+El uso de  apósitos resultó ser la configuración óptima. Si bien agregar esto mejoró la SNR en los electrodos 3M, el agarre fue superior en la marca Medi-Trace debido al tamaño de su pin metálico. Se observó que la transpiración es un factor importante que degrada el contacto durante tiempos largos.
+
+% \begin{figure}[H]
+%     \centering
+%     % Primer gráfico (Arriba)
+%     \begin{subfigure}{\linewidth}
+%         \centering
+%         % Ajusté el width a 0.8\linewidth para que no se vea gigante, puedes ponerlo en 1.0 si prefieres
+%         \includegraphics[width=.9\linewidth]{resultados/comparacion_mt_3m/Figure_13.png}
+%         \caption{Comparación por Marcas/Configuración}
+%         \label{fig: snr marcas}
+%     \end{subfigure}
+    
+%     \vspace{5mm} % Espacio vertical de separación entre gráficos
+    
+%     % Segundo gráfico (Abajo)
+%     \begin{subfigure}{\linewidth}
+%         \centering
+%         \includegraphics[width=.9\linewidth]{resultados/distancias/comparacionpordistancias.png}
+%         \caption{Comparación por Distancia}
+%         \label{fig: snr distancias}
+%     \end{subfigure}
+    
+%     \captionsetup{width=.9\linewidth}
+%     \caption{\label{fig: analisis snr} Análisis de SNR (Amplitud en azul, Energía en negro). (a) Resultados de comparación entre marcas para electrodos chicos. (b) Resultados para las distancias de la Tabla \ref{tabla: convencion distancia}.}
+% \end{figure}
+
+% Además, como se observa en la Fig. (\ref{fig: snr distancias}), la distancia afecta la amplitud de la señal. A $D= (7.80 \pm 0.02)$ mm, la amplitud resultó ser aproximadamente tres veces menor que a $D = (14\pm0.02)$ mm, pero la señal presentó mayor definición y menor ruido relativo (ver Fig. \ref{fig: comparacion distancia 7.8 y 14}). Esto confirma la viabilidad de medir con separaciones inferiores a $10$ mm para discriminar músculos faciales pequeños.
+
+Además, la distancia entre electrodos afecta la amplitud de la señal. A $D= (7.80 \pm 0.02)$ mm, la amplitud resultó ser aproximadamente tres veces menor que a $D = (14\pm0.02)$ mm, pero la señal presentó mayor definición y menor ruido relativo (ver Fig. \ref{fig: comparacion distancia 7.8 y 14}). Esto confirma la viabilidad de medir con separaciones inferiores a $10$ mm para discriminar músculos faciales pequeños.
+%Nuevamente, para un análisis detallado junto a más resultados, ver el informe citado al principio de la sección. 
+
+\subsection{Circuito electrónico}
+
+\subsubsection{Determinación de resistencia de ganancia $R_g$}
+
+Se muestran los resultados SNR para las mediciones sobre el músculo \textit{depressor anguli oris}, para diferentes valores de resistencia $R_g$ pronunciando la letra \say{B}, en la Fig. (\ref{fig: graficos snr rg}).
+
+\vspace{-5mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-7mm} % Reduce el espacio antes de la línea
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{desarrollo_experimental/circuito/Señal Ruido Vs Resistencia de Ganancia.png}
+    \captionsetup{width=.9\linewidth}
+    \caption{\label{fig: graficos snr rg} Valores de SNR en función de la resistencia $R_g$ utilizada.}
+\end{figure}
+\vspace{-12mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-5mm} % Reduce el espacio antes de la línea
+
+La relación entre el valor SNR y las resistencias pareciera ser logarítmica, lo que en primera instancia es algo conveniente, ya que se podría optar por no usar resistencias que hagan trabajar al integrado en los límites de amplificación. En este sentido, el fabricante garantiza una amplificación hasta un factor de $G = 10,000$. Por ello, se descartó el valor para la resistencia de $2.2$ $\Omega$, que produciría un valor de $G \approx 22,000$. Además, el fabricante solo detalla una amplificación lineal para frecuencias dadas, para hasta un factor $G = 1000$, y aclara que resistencias de valores muy bajos ($<47$ $\Omega$) podrían amplificar ruido y señales indeseables. El resultado obtenido, debido a que el factor SNR crece conforme baja el factor de ganancia, junto con la advertencia de las resistencias de bajo valor, permiten que solo se contemplen las resistencia a partir de $47$ $\Omega$. En particular, se escoge la resistencia de $100$ $\Omega$. Se analizó la medición con este último valor de resistencia y no pareciera haber diferencia con la SNR usando la $R_g = 47$ $\Omega$. Entonces se utilizó un \textit{filtro notch} en $50$ Hz para analizar las señales, como lo hubiera procesado la placa de \textit{Backyard Brains}. Se puede observar el resultado en la Fig. (\ref{fig: snr 100 vs 47}).
+
+\vspace{-5mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-5.5mm} % Reduce el espacio antes de la línea
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{desarrollo_experimental//circuito/Resistencia 100 omh vs 47 omh.png}
+    \captionsetup{width=.9\linewidth}
+    \caption{Comparación señal-ruido (SNR) promedio de la medición en el músculo \textit{depressor anguli oris} para una $R_g = 100$ $\Omega$ y una $R_g = 47$ $\Omega$ con y sin filtro notch en 50 Hz.}
+    \label{fig: snr 100 vs 47}
+\end{figure}
+\vspace{-10.7mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-3.7mm} % Reduce el espacio antes de la línea
+
+Si bien los intervalos de confianza de los resultados de SNR coinciden, la incerteza para la $R_g = 100$ $\Omega$ es levemente menor. Además, sería preferible utilizar un factor de ganancia teórico de $G = 495$ para no forzar el integrado. Por estos motivos, se definió utilizar una resistencia $R_g = 100$ $\Omega$.
+
+A continuación, se realizó un barrido de frecuencias para todas las $R_g$ consideradas previamente, en orden de evaluar linealidad de la amplificación y el ancho de banda resultante (ver Fig. \ref{fig: ganancia_vs_r}).
+
+Solamente coincidieron con los valores garantizados por el fabricante las resistencias $R_g = 100$ $\Omega$, $200$ $\Omega$. Esto indica que se estaría utilizando un valor de amplificación dentro de un régimen \say{normal} del amplificador operacional. Con las frecuencias de corte $f_{c1} = (49.7 \pm 2.5)$ Hz y $f_{c2} = (20.28 \pm 0.94)$ kHz, el ancho de banda resultante es suficiente para la aplicación. Se define la amplificación resultante para cada canal de la placa desarrollada en la próxima sección.
+
+\vspace{-7mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-6mm} % Reduce el espacio antes de la línea
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{desarrollo_experimental/circuito/ganancia en funcion de resistencia.png}
+    \captionsetup{width=.9\linewidth}
+    \caption{ \label{fig: ganancia_vs_r} Curvas de amplificación en función de la resistencia $R_g$. En línea punteada el valor teórico según el fabricante.}
+\end{figure}
+\vspace{-10mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-8mm} % Reduce el espacio antes de la línea
+
+\subsubsection{Placa final}
+\vspace{-2mm}
+A continuación se puede observar la placa soldada con la resistencia determinada en la sección anterior (ver Fig. \ref{fig: placa soldada}). Los componentes que se utilizaron están en \hyperref[apendice: materiales placa]{Apéndice}. Las dimensiones finales de la placa: largo $(13.60 \pm 0.10)$ cm, ancho $(5.50 \pm 0.10)$ cm.
+
+\vspace{-7mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-7mm} % Reduce el espacio antes de la línea
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=.85\linewidth]{resultados/circuito/placa_final.jpg}
+    \captionsetup{width=.9\linewidth}
+    \caption{\label{fig: placa soldada} Imagen de la placa electrónica soldada. A la izquierda el circuito de protección ante cambio de polaridad y a la derecha los 3 canales de amplificación.}
+\end{figure}
+\vspace{-10mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-3mm} % Reduce el espacio antes de la línea
+
+De izquierda a derecha, la amplificación de cada canal queda definida por cada $R_g$ según la Ec. (\ref{eq: ganancia ad620}). Entonces para $R_{g1} = (101.7 \pm 1.0)$ $\Omega$, queda determinada la amplificación $A_{CH1} = (486.7 \pm 4.8)$. Para $R_{g2} = (98.60 \pm 0.99)$ $\Omega$, queda determinada la amplificación $A_{CH2} = (502.0 \pm 5.0)$. Para $R_{g3} = (99.3 \pm 1.0)$ $\Omega$, queda determinada la amplificación $A_{CH3} = (498.5 \pm 5.0)$.
+
+\vspace{-6mm}
+\subsection{Medición EMG de 3 músculos en simultáneo}
+\vspace{-3mm}
+Con la placa terminada y el software de adquisición Ñandú LSD lo suficientemente desarrollado, se realizaron las mediciones de los 3 músculos. Con la experiencia acumulada del análisis de este tipo de señales, se observó que el \say{ruido} de las mediciones, se correspondía con una frecuencia de aproximadamente $50$ Hz. Por lo tanto, se propuso aplicar un \textit{filtro notch} y un \textit{filtro pasabanda} de frecuencias de corte de $20$ Hz y $2000$ Hz, ambos digitales. La utilización de estos filtros, asemejan el software de adquisición a los parámetros utilizados por el software de Backyard Brains \textit{Spike Recorder}.
+
+El desarrollo de una metodología para diferenciar palabras forma parte del Plan de Trabajo de Laboratorio 7. Será esencial en el devenir del experimento.
+
+% Se puede observar una comparación de la señal sin procesar, o \say{cruda}, con la señal procesada para la pronunciación de la letra \say{B} en la Fig. (\ref{fig: señal cruda vs notch y pasabanda}).
+
+% \begin{figure}[H]
+%     \centering
+%     % --- Subfigura 1: Señal Cruda ---
+%     \begin{subfigure}[b]{\linewidth}
+%         \centering
+%         \includegraphics[width=\linewidth]{resultados/3 musculos/Señales Crudas/plot_calibrado_ARTE_Prueba1_Santi_crudo.png}
+%         \caption{Señal cruda proveniente de los 3 canales de amplificación.}
+%         \label{fig: filtro_cruda}
+%     \end{subfigure}
+    
+%     %\par\medskip % Espacio vertical
+    
+%     % --- Subfigura 2: Solo Notch ---
+%     \begin{subfigure}[b]{\linewidth}
+%         \centering
+%         \includegraphics[width=1\linewidth]{resultados/3 musculos/Señales Crudas/plot_calibrado_ARTE_Prueba1_Santi_Notch.png}
+%         \caption{Señal con filtro notch en $50$ Hz y filtro pasabanda con frecuencias de corte en $20$ Hz y $2000$ Hz.}
+%         \label{fig: filtro_notch}
+%     \end{subfigure}
+    
+    
+%     % --- Caption y Label General ---
+%     \caption{Señal cruda. (a) con filtro y sin filtro en 50 hz.}
+%     \label{fig: señal cruda vs notch y pasabanda}
+% \end{figure}
+
+% \subsubsection{Letra B}
+
+% Se optó por pronunciar la letra \say{\textit{B}}, ya que se esperó obtener una buena activación en los 3 músculos. La medición resultante se puede observar en la Fig. (\ref{fig: mediciones letra b}).
+
+% \begin{figure}[H]
+%     \centering
+%     \includegraphics[width=\linewidth]{resultados/3 musculos/Señales Procesadadas/plot_calibrado_B_Prueba3_Santi.png}
+%     \caption{Mediciones de la
+%     pronunciación de la letra B en los 3 músculos, procesadas con el filtro notch y el filtro pasa banda. Se grafica la envolvente RMS y la señal cruda para cada músculo.}
+%     \label{fig: mediciones letra b}
+% \end{figure}
+
+% Es notable la activación de los músculos \textit{depressor anguli oris} y el \textit{orbicularis oris}, en comparación con el \textit{mylohyoid}. Esto puede deberse a que, al ser dos músculos cercanos a la boca, la pronunciación de la \say{B} los activa y también los sincronice. Con respecto al otro músculo, además de no activarse como los demás, presenta un desfasaje temporal del orden de los milisegundos, lo que podría indicar que se activa al final de la pronunciación.
+
+\vspace{-6mm}
+\subsubsection{Ñandú vs Arte}
+%Con el objetivo de probar distintos fonemas y en particular los asociados  al español.
+%Se eligieron las palabras \say{Ñandú} y \say{arte}, ya que cumplían con la consigna de medir fonemas propios del español. Una hipótesis era si el sensor podía distinguir entre mover la lengua hacia arriba (Ñ) y abrir la boca (A), además de probar palabras de dos sílabas, ya que de este tipo son las que usa el paper de Ravnosky. 
+\vspace{-3mm}
+Se pueden observar las mediciones de la pronunciación de las palabras \say{Ñandú} y \say{Arte}, ya procesadas, en la Fig. (\ref{fig: nandu}). Las mediciones de la palabra \say{Arte} presentan más correlación entre si, y además se observa que el músculo \textit{Mylohyoid} tiene una señal de menor magnitud.
+
+En la palabra \say{Ñandú}, ambas silabas generan picos en las mediciones, algo que no sucedió con la palabra \say{Arte}. Cuando se pronuncia el \say{Ñan} se activan los 3 músculos en sincronía, mientras que la silaba \say{dú} activa solo el \textit{orbicularis oris}, ya que la expresión genera una contracción en él. También se ve que la señal es mas suave.
+
+Si bien no se puede asegurar que las causas de la activación sean las mencionadas en este trabajo, lo que se observó es que las señales fueron diferentes dependiendo los fonemas. En este sentido, agregando que se consiguió medir en simultáneo los músculos con tres canales de amplificación, se corroboró que diferentes fonemas provocan diferentes activaciones musculares y que estas son medibles.
+
+\vspace{-5mm}
+\section{Conclusiones}
+\vspace{-4mm}
+A lo largo del experimento se realizaron mediciones de actividad electromiográfica (EMG) utilizando diferentes configuraciones de electrodos, con el objetivo de evaluar la relación señal–ruido (SNR) bajo escenarios controlados. Se generó un protocolo y un método de análisis.
+
+Inicialmente, el foco estuvo puesto en la comparación entre las marcas de electrodos Medi-Trace y 3M, midiendo el músculo de la mano \textit{palmar corto}
+
+\begin{figure}[H]
+    \centering
+    % Primera Subfigura: Ñandú (arriba)
+    % Usamos \linewidth para que el contenedor ocupe todo el ancho
+    \begin{subfigure}[b]{\linewidth}
+        \centering
+        % Ajustamos el width aquí (ej: 0.7\linewidth) para controlar el tamaño de la imagen
+        \includegraphics[width=1\linewidth]{resultados/3 musculos/Señales Procesadadas/plot_calibrado_NANDU_Prueba2_Santi.png}
+        \caption{Señal procesada para \say{Ñandú}.}
+        \label{fig: nandu}
+    \end{subfigure}
+    
+    % Espacio vertical entre las imágenes
+    %\par\bigskip 
+    
+    % Segunda Subfigura: Arte (abajo)
+    \begin{subfigure}[b]{\linewidth}
+        \centering
+        \includegraphics[width=1\linewidth]{resultados/3 musculos/Señales Procesadadas/plot_calibrado_ARTE_Prueba1_Santi.png}
+        \caption{Señal procesada para \say{Arte}.}
+        \label{fig:arte}
+    \end{subfigure}
+    
+    \caption{Comparación de señales procesadas con envolvente RMS para las palabras Ñandú (a) y Arte (B).}
+    \label{fig:nandu_vs_arte}
+\end{figure}
+\vspace{-10.5mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-4.5mm} % Reduce el espacio antes de la línea
+%esto es porque  participa menos que los otros dos,auque no se descarta la hipotesís que tenga que ver con la distancia de los electrodos por lo visto en la sección anterior. Se puede observar además que solo se detecta la primera silaba. Por otro lado se observa una señal mucho mas baja en el musculo 3, sin embargo la hipótesis de que la señal era más baja por el canal de amplificación fue descartada midiendo la palabra 'Jerjes'.
+%\noindent   diferentes configuraciones de electrodos, con el objetivo de evaluar la relación señal–ruido (SNR) bajo escenarios controlados. Se generó un protocolo y un método de análisis.
+
+\noindent  utilizando la placa y software de \textit{Backyard Brains}. Los resultados mostraron que los primeros presentaron una SNR mayor frente a los 3M. Además, al analizar el efecto de la distancia, se observó que al reducir la separación interelectrodo a un mínimo, usando un apósito modificado para evitar el contacto entre si, fue posible medir. En este caso, la amplitud de la señal resultó aproximadamente tres veces menor respecto a distancias mayores, con un perfil temporal más definido y con menor nivel de ruido relativo. Respecto a la reproducibilidad de las mediciones, esta dependió críticamente de la adhesión y del control experimental.
+
+Luego se decidió desarrollar un software de adquisición específico para la medición de 3 señales en simultáneo: el \textit{Ñandú LSD}. Este software permitió una visualización cual osciloscopio, la posibilidad de aplicar filtros para pre procesar la señal e integrar diferentes scripts del protocolo de medición.
+
+También se elaboró manualmente una placa electrónica de amplificación de 3 canales junto con un circuito de protección ante cambio de polaridad. Para determinar el factor de amplificación, se realizó una medición sobre el músculo \textit{depressor anguli oris}, se estudió el datasheet del amplificador operacional AD620 y se realizó un barrido de frecuencias para caracterizar el perfil de amplificación. Así, quedaron definidos los factores de amplificación de cada canal; $A_{CH1} = (486.7 \pm 4.8)$, $A_{CH2} = (502.0 \pm 5.0)$ y $A_{CH3} = (498.5 \pm 5.0)$.
+
+Finalmente, se logró el objetivo de medir 3 músculos en simultáneo. Si bien hay factores que pueden \say{ensuciar} la señal, como el ruido de línea o la mala adhesión de los electrodos por sudoración, se obtiene la información de interés aplicando los filtros notch en $50$ Hz y pasa banda con frecuencias de corte de $20$ Hz y $2000$ Hz. Además, se corroboró que diferentes fonemas generan diferentes tipos de señales en los músculos faciales que activan.
+
+\section*{Apéndice}
+% \begin{figure}[H]
+%     \centering
+%     \includegraphics[width=1\linewidth]{resultados/3 musculos/Ruido.png}
+%     \caption{Ruido de 50hz}
+%     \label{fig: ruido de 50 Hz}
+% \end{figure}
+% Se ve claramente una forma de onda sinusoidal, cuyo periodo es de 50 hz. Entonces, se eligió realizar mediciones usando un filtro notch de 50 hz y  un filtro pasabanda. 
+
+%% 
+% [1] Meltzner, G. S., Heaton, J. T., Deng, Y., De Luca, G., Roy, S. H., \& Kline, J. C. (2018). Development of sEMG sensors and algorithms for silent speech recognition. Journal of neural engineering, 15(4), 046031.
+
+% [2] Ratnovsky, A., Malayev, S., Ratnovsky, S., Naftali, S., \& Rabin, N. (2021). EMG-based speech recognition using dimensionality reduction methods. Journal of Ambient Intelligence and Humanized Computing, 14(1), 597-607.
+
+% [3] Schultz, T., \& Wand, M. (2010). Modeling coarticulation in EMG-based continuous speech recognition. Speech Communication, 52(4), 341-353.
+
+% [4] ¿Qué es la electromiografía de superficie o EMG? - mDurance 2019, \url{https://mdurance.com/blog/que-es-la-electromiografia-de-superficie/}
+
+% [5] Gray, H., (1992) Anatomía de Gray Tomo I (pp. 649). Churchill Livingstone.
+
+% [6] Muscle Spiker Box - Backyard Brains - Documentación: \url{https://docs.backyardbrains.com/human/muscle-spikerbox-classic/}
+
+% [7] Cuaderno de Laboratorio - Grupo 3, Braunstein Lucas y Prado Rodriguez Santiago - Acceso: \url{https://docs.google.com/document/d/1wg0eWNjh2F9rtq2oX2DvIZ6X3FiOwV90SkuEJRFCUCw/edit?usp=sharing}
+
+% [datasheet del spikerbox] Muscle SpikerBox v 1.2.1 - Backyard Brains - Documentación: \url{https://docs.backyardbrains.com/human/muscle-spikerbox-classic/}
+
+% [datasheet labo 7] Datasheet de los chicos de labo 7
+
+% [informe electrodos] Adjuntar el informe%%
+\vspace{-3mm}
+\subsection*{Incertezas}
+\vspace{-2mm}
+Se utilizaron las incertezas reportadas por los fabricantes en los manuales de los equipos.
+
+Para la SNR por amplitud, el error es debido a la amplitud máxima del pulso promedio, \(A_{\max}\). 
+Al calcular el promedio de \(M\) pulsos se obtiene una estimación \(\bar p(t)\) 
+con una dispersión asociada. En particular, en el instante en el que \(\bar p(t)\) alcanza su máximo, la dispersión entre los pulsos 
+se calcula mediante la desviación estándar \(\sigma_p(t_{\max})\). 
+La incerteza de \(A_{\max}\) se toma entonces como el error estándar del promedio:
+\begin{equation*}
+    \Delta A_{\max} = \frac{\sigma_p(t_{\max})}{\sqrt{M}}.
+\end{equation*}
+
+Si consideramos al umbral \(U\) como conocido (definido previamente a partir de como se estima el ruido), la incerteza se obtiene por propagación de errores:
+\[
+\Delta \mathrm{SNR}_{\text{amplitud}} \;\approx\; \frac{\Delta A_{\max}}{U}.
+\]
+
+Por otro lado, la fuente de incerteza de SNR energía proviene de la dispersión de esos 
+M valores por pulso. Entonces se estima la incertidumbre de \(\mathrm{SNR}_{\mathrm{energia}}\) según error estándar:
+\[
+\Delta\mathrm{SNR}_{\text{energía}} \;=\; \frac{\sigma \bigl(\mathrm{SNR}_{\text{energía},m}\bigr)}{\sqrt{M}}.
+\]
+
+% \subsection{Materiales y componentes para la fabricación de la placa}
+% \label{apendice: placa}
+
+% A continuación los componentes necesarios para la elaboración de la placa.
+
+% \begin{table}[H]
+%     \centering
+%     % \footnotesize reduce el tamaño de la fuente solo dentro de esta tabla
+%     \footnotesize 
+    
+%     \begin{tabular}{lc} % l=alineado izq (texto), c=centrado (números)
+%         \toprule % Línea superior gruesa (necesita package booktabs)
+%         \textbf{Componente} & \textbf{Cantidad} \\ 
+%         \midrule % Línea separadora media
+        
+%         Amplificador de Instrumentación AD620 & 1 \\
+%         Resistencias de \SI{10}{\kilo\ohm} & 4 \\
+%         Resistencias de \SI{1}{\kilo\ohm} & 2 \\
+%         Capacitores cerámicos \SI{100}{\nano\farad} & 3 \\
+%         Conectores tipo banana (hembra) & 2 \\
+%         Baterías \SI{9}{\volt} & 2 \\
+%         Placa experimental (Protoboard) & 1 \\
+        
+%         \bottomrule % Línea inferior de cierre
+%     \end{tabular}
+    
+%     % Tu template fuerza el caption abajo, así que lo dejamos acá
+%     \caption{\label{tab:componentes} Listado de componentes electrónicos utilizados para el armado del circuito.}
+% \end{table}
+
+\phantomsection
+\subsection*{Ñandú LSD}
+\label{apendice: ñandu lsd}
+
+El código del software desarrollado se encuentra en el siguiente link: \href{https://github.com/santiagopradorodriguez/Nandu_SistemadeAdqusicionEMG}{[Enlace]}
+\phantomsection
+\subsection*{Materiales de la placa electrónica}
+\label{apendice: materiales placa}
+
+En la Tabla (\ref{tab: componentes electronicos}), la lista de componentes utilizados para la realización de la placa electrónica y su denominación en el circuito esquemático.
+
+% \begin{table}[H]
+%     \centering
+%     \captionsetup{width=.9\linewidth}
+%     \caption{\label{tab: componentes electronicos} Lista de materiales y componentes utilizados.}
+%     \begin{tabular}{clc} % c=centrado, l=izquierda, c=centrado (vacío)
+%         \toprule
+%         \textbf{Cant.} & \textbf{Componente} & \textbf{Label esquemático} \\
+%         \midrule
+%         2 & Resistencia 10 k$\Omega$ & \\
+%         8 & Resistencia 100 k$\Omega$ & \\
+%         3 & Resistencia 100 $\Omega$ & \\
+%         6 & Capacitor 33 nF & \\
+%         2 & Diodo Zener 1N4741A & \\
+%         1 & MOSFET IRFZ44N & \\
+%         1 & MOSFET F9540N & \\
+%         3 & Amplificador Operacional AD620 & \\
+%         3 & Zócalo de 8 pines & \\
+%         2 & Portafusible & \\
+%         2 & Fusible 0.25 A & \\
+%         1 & Tira de 40 pines macho rectos 2.54 mm & \\
+%         2 & Mini jumper paso 2.54 mm & \\
+%         1 & Placa de cobre virgen 15x15 cm Epoxi & \\
+%         \bottomrule
+%     \end{tabular}
+% \end{table}
+
+\begin{table}[H]
+    \centering
+    \caption{\label{tab: componentes electronicos}Lista de materiales y componentes utilizados.}
+    % X = Columna flexible que se ajusta al ancho
+    % c = columna centrada
+    \begin{tabularx}{\linewidth}{c X c} 
+        \toprule
+        \textbf{Cant.} & \textbf{Componente} & \textbf{Label} \\
+        \midrule
+        2 & Resistencia 10 k$\Omega$ & $R_{1,3}$\\
+        8 & Resistencia 100 k$\Omega$ & $R_{1,2,5,4,7,8}$\\
+        3 & Resistencia 100 $\Omega$ & $R_{3,6,9}$\\
+        6 & Capacitor 33 nF & $C_{1,2,3,4,5,6}$\\
+        2 & Diodo Zener 1N4741A & $D_{1,2}$\\
+        1 & MOSFET IRFZ44N & $MOS$ $N$\\
+        1 & MOSFET F9540N & $MOS$ $P$\\
+        3 & Amp. Op. AD620 & $U_{1,2,3}$\\
+        3 & Zócalo de 8 pines & $U_{1,2,3}$\\
+        2 & Portafusible & $FUSN/P_{1,2}$\\
+        2 & Fusible 0.25 A & $FUSE_{1,2}$\\
+        1 & Tira pines macho rectos 2.54 mm & \\
+        2 & Mini jumper paso 2.54 mm & \\
+        1 & Placa de cobre virgen 15x15 cm Epoxi & \\
+        \bottomrule
+    \end{tabularx}
+\end{table}
+
+%$BAT$, $SWITCH$, $IN_{1,2,3GND}$, $OUT_{1,2,3}$
+
+\subsection*{Declaración de uso de IA}
+
+Para este trabajo se utilizó \textit{Gemini 3 Pro}: para sugerencias sobre estructura de código de python, para realizar algunas figuras representativas de montajes experimentales y para reformular algunos párrafos de texto, en orden de mejorar la claridad, fluidez y cohesión.
+
+\begingroup
+    \raggedright  % <--- Esto es clave: alinea a la izquierda y evita estirar espacios
+    \renewcommand{\bibfont}{\small}
+    \printbibliography
+\endgroup
+
+
+\end{multicols*}
+\end{document}
+
+%
+
+%@article{nicolau1983,
+  title={The orbicularis oris muscle: a functional approach to its repair in the cleft lip},
+  author={Nicolau, PJ},
+  journal={British Journal of Plastic Surgery},
+  volume={36},
+  number={2},
+  pages={141--153},
+  year={1983},
+  publisher={Elsevier}
+}
+
+@article{hussain2004,
+  title={Depressor labii inferioris resection: an effective treatment for marginal mandibular nerve paralysis},
+  author={Hussain, G and Manktelow, RT and Tomat, LR},
+  journal={British Journal of Plastic Surgery},
+  volume={57},
+  number={6},
+  pages={502--510},
+  year={2004},
+  publisher={Elsevier}
+}
+
+@article{okada2013,
+  title={Morphology of the mylohyoid muscle: the mylohyoid line and the mylohyoid groove},
+  author={Okada, S and others},
+  journal={Okajimas folia anatomica Japonica},
+  volume={90},
+  number={2},
+  pages={25--30},
+  year={2013}
+}
+
+@article{hirano1992,
+  title={Dysphagia following various degrees of resection of the oral cavity},
+  author={Hirano, M and others},
+  journal={Annals of Otology, Rhinology \& Laryngology},
+  volume={101},
+  number={2},
+  pages={138--141},
+  year={1992}
+}

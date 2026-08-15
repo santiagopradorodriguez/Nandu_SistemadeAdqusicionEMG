@@ -1,22 +1,1088 @@
-\subsection{Introducción}
-El presente diseño se basa en el uso de amplificadores de instrumentación diferenciales, específicamente el circuito integrado AD620, ideal para el registro de señales bioeléctricas de baja amplitud. Como punto de partida, se utilizó y adaptó un circuito preamplificador previamente desarrollado por un grupo de Laboratorio 7, el cual había sido diseñado originalmente para registrar potenciales de activación en músculos de aves. 
+\newpage
+\vspace*{2cm}
+\begin{center}
+    \Huge \textbf{Capítulo 1: Hardware}
+\end{center}
+\vspace{2cm}
+\phantomsection
+\addcontentsline{toc}{section}{Hardware}
 
-Una de las adaptaciones más críticas consistió en el ajuste del filtro pasa-altos de entrada. El circuito original empleaba una frecuencia de corte de \SI{72}{\hertz}, adecuada para conservar la frecuencia fundamental de los músculos aviares. Sin embargo, dado que este proyecto se enfoca en el reconocimiento electromiográfico de músculos faciales humanos, cuyo contenido espectral de interés puede encontrarse en frecuencias más bajas, fue necesario readaptar el filtrado. Tras revisar bibliografía específica (como el trabajo de Ratnovsky), se determinó que filtrar frecuencias por debajo de \SI{50}{\hertz} resultaba más conveniente para conservar la información de los músculos faciales sin comprometer la señal.
+\subsection{Diseño de circuito y consideraciones en Proteus}
 
-\subsection{Diseño de circuito}
-El circuito diseñado consta de tres canales de amplificación independientes y un sistema central de protección. Para garantizar la seguridad de los componentes, en especial los costosos amplificadores AD620, se implementó un circuito de protección contra inversión de polaridad. Este circuito utiliza transistores MOSFET tipo P (F9540N) y tipo N (IRFZ44N), complementados con fusibles de \SI{0.25}{\ampere}, evitando posibles daños en caso de conectar erróneamente las baterías de alimentación.
+El diseño del circuito se originó a partir de una adaptación de un modelo previo del grupo de Laboratorio 7\footnote{Basado en el circuito preamplificador de electromiografía del grupo anterior, referenciado en el plan de trabajo y cuadernos de laboratorio originales.}. Mientras que ellos contaban con un circuito de protección ante cambio de polarización por un lado y los canales de amplificación por otro, el objetivo para este manual fue consolidar todo en una única placa: el sistema de protección junto a los tres canales de amplificación diferencial.
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=0.8\textwidth]{rutas/pendientes.png}
-\caption{Circuito esquemático mostrando los canales de amplificación diferencial y la etapa de protección contra cambio de polaridad.}
+\includegraphics[width=0.9\textwidth]{insumos_ia/cuaderno_de_labo/images/image468.png}
+\caption{Circuito esquemático consolidado, mostrando los canales de amplificación diferencial y la etapa de protección.}
 \label{fig:circuito_esquematico}
 \end{figure}
 
-Un aspecto fundamental del diseño fue la determinación de la resistencia de ganancia ($R_g$) para los amplificadores AD620. La amplificación del integrado está dada por la relación de fábrica dictada por la hoja de datos. Durante la etapa experimental, se realizaron mediciones empíricas sobre el músculo facial \textit{depressor anguli oris} y barridos de frecuencia para caracterizar la respuesta del sistema. 
+El diseño del circuito impreso (PCB) se realizó en Proteus 8.1 SP. Durante este proceso, se tomaron decisiones cruciales para garantizar la fiabilidad de la placa de cobre virgen de epoxi:
 
-Inicialmente se probaron resistencias de bajo valor, como \SI{47}{\ohm}, buscando maximizar la ganancia (la cual apuntaba a valores superiores a \num{1000}). Sin embargo, los resultados mostraron que forzar el integrado a factores de amplificación muy elevados generaba saturación, distorsión y un aumento considerable del nivel de ruido en las señales registradas. Adicionalmente, los ensayos revelaron que operar en los límites de amplificación de este circuito integrado comprometía la linealidad y el ancho de banda del canal. 
+\begin{itemize}
+    \item \textbf{Ancho de pistas:} Teniendo en cuenta la corriente máxima y la densidad de la placa, se determinó que un ancho de pista de \qty{40}{th} (\qty{1.016}{\milli\meter}) era suficiente.
+    \item \textbf{Plano de masa:} Se configuraron las propiedades del plano de masa ajustando el parámetro \enquote{Relief} a \qty{33}{th} (\qty{0.8382}{\milli\meter}), y el \enquote{Clearance} a \qty{17}{th} (\qty{0.4318}{\milli\meter}).
+\end{itemize}
 
-Por estos motivos, se descartaron los valores bajos de resistencia y se optó definitivamente por utilizar resistencias $R_g$ de \SI{100}{\ohm} en los tres canales. Este valor proporciona una ganancia estable y segura (aproximadamente $495\times$), evitando la saturación del integrado frente a las tensiones entregadas por las baterías y manteniendo la amplificación dentro de un régimen lineal altamente confiable para la adquisición de la electromiografía.
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.4\textwidth]{insumos_ia/cuaderno_de_labo/images/image265.png}
+\caption{Valores asignados a las propiedades del plano de masa en Proteus.}
+\label{fig:plano_masa}
+\end{figure}
 
-Respecto al suministro de componentes críticos, los amplificadores de instrumentación AD620 fueron adquiridos en G.M. ELECTRÓNICA S.A., Av. Rivadavia 2458, C1034ACQ Cdad. Autónoma de Buenos Aires, 011 4953-0417.
+\begin{itemize}
+    \item \textbf{Fusibles:} Se definió el tamaño de la huella a mano para los portafusibles (\qty{24.3}{\milli\meter} $\times$ \qty{9.6}{\milli\meter}) utilizando el pad \texttt{C-180-M3}. Se instalaron dos fusibles de \qty{0.25}{\ampere}.
+    \item \textbf{Pads extendidos:} Se decidió agrandar los pads por defecto para facilitar la perforación y soldadura manual. Se utilizó \texttt{M3} para tornillos, \texttt{C-90-40} para diodos, \texttt{C-70-30} para resistencias y capacitores, \texttt{S-80-40} para transistores MOSFET, y \texttt{C-80-40} para las tiras de pines. Para los circuitos integrados se usó \texttt{S-60-30} en el primer pin y \texttt{C-60-30} circulares para el resto.
+    \item \textbf{Estética y Logo:} Se vectorizó el logo del Laboratorio de Sistemas Dinámicos y se importó en formato BMP. Para evitar un cortocircuito con el plano de tierra, se utilizó la herramienta \enquote{Zone Mode} configurada como \texttt{Empty}, creando una zona de exclusión exclusiva para el logo.
+\end{itemize}
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.3\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image50.png}
+    \caption{Opción Zone Mode.}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image440.png}
+    \caption{Configuración de la zona de exclusión.}
+\end{subfigure}
+\caption{Parámetros para la creación de la zona \enquote{Empty} alrededor del logo.}
+\label{fig:zona_exclusion}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.9\textwidth]{insumos_ia/cuaderno_de_labo/images/image41.png}
+\caption{Vista superior de la placa finalizada en el entorno de Proteus.}
+\label{fig:vista_proteus_arriba}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image118.png}
+    \caption{Frente de la placa.}
+\end{subfigure}\hfill
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image269.png}
+    \caption{Parte trasera (logo espejado).}
+\end{subfigure}
+\caption{Vistas del circuito impreso generadas por software antes de imprimir.}
+\label{fig:vistas_proteus}
+\end{figure}
+
+Para la impresión final, se extrajo el diseño desde \textit{Output $>$ Print Layout}. Se seleccionaron exclusivamente la capa de cobre y el marco de referencia. La impresión debe hacerse en modo \enquote{Normal} (sin espejar la placa entera), espejando únicamente el logo gráfico para que se lea correctamente en el reverso\footnote{Acá el archivo para Proteus y todo el logo.}.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[height=12cm, angle=-90]{insumos_ia/cuaderno_de_labo/images/image125.png}
+\caption{Figura final utilizada para la transferencia térmica sobre la placa de cobre.}
+\label{fig:figura_impresion}
+\end{figure}
+
+
+\subsection{Fabricación de la placa}
+
+\subsubsection{Impresión y planchado}
+El proceso de transferencia térmica requirió un tratamiento riguroso. Primero, se imprimió el PDF sobre papel en blanco A4. Luego, se superpuso y adhirió el papel transfer amarillo, imprimiendo nuevamente y garantizando que la tinta se depositara sobre el lado brillante.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.6\textwidth]{insumos_ia/cuaderno_de_labo/images/image88.jpg}
+\caption{Impresión final sobre el papel transfer amarillo.}
+\label{fig:impresion_transfer}
+\end{figure}
+
+La placa de cobre virgen fue recortada utilizando un mototool (Dremel) con sierra de corte, dejando un margen de seguridad de \qty{2}{\milli\meter} por lado. La limpieza de la superficie fue crítica: se lavó frotando en una sola dirección con la parte abrasiva de una esponja para remover grasa, seguido de alcohol isopropílico.
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[height=6cm]{insumos_ia/cuaderno_de_labo/images/image413.jpg}
+    \caption{Recorte de la placa de epoxi.}
+\end{subfigure}\hfill
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[height=6cm]{insumos_ia/cuaderno_de_labo/images/image270.jpg}
+    \caption{Proceso de planchado.}
+\end{subfigure}
+\caption{Mecanizado inicial y aplicación de calor.}
+\label{fig:recorte_planchado}
+\end{figure}
+
+El planchado se realizó posicionando el papel sobre el cobre, envolviéndolo ajustadamente. Duró \qty{13}{\minute}, priorizando los bordes. Posteriormente, la placa caliente fue sumergida en agua fría, disolviendo las capas de papel gradualmente hasta poder despegar el transfer \enquote{como un sticker}.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.5\textwidth]{insumos_ia/cuaderno_de_labo/images/image381.jpg}
+\caption{Resultado final de la transferencia térmica antes del ácido.}
+\label{fig:resultado_planchado}
+\end{figure}
+
+\subsubsection{Ataque con ácido férrico}
+Se repasaron con marcador indeleble aquellas pistas donde la tinta no se había adherido óptimamente. La placa fue luego sumergida en ácido férrico utilizando un baño maría. Agitando el recipiente ocasionalmente, el proceso demoró cerca de \qty{50}{\minute}. Una vez consumido el cobre sobrante, se enjuagó la placa y se retiró la máscara de tinta con virulana metálica.
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \centering
+    \includegraphics[height=\textwidth]{insumos_ia/cuaderno_de_labo/images/image34.jpg}
+    \caption{Ácido con 3 usos previos.}
+\end{subfigure}\hfill
+\begin{subfigure}{0.32\textwidth}
+    \centering
+    \includegraphics[height=\textwidth]{insumos_ia/cuaderno_de_labo/images/image121.jpg}
+    \caption{Baño maría.}
+\end{subfigure}\hfill
+\begin{subfigure}{0.32\textwidth}
+    \centering
+    \includegraphics[height=\textwidth]{insumos_ia/cuaderno_de_labo/images/image55.jpg}
+    \caption{Placa atacada.}
+\end{subfigure}
+\caption{Evolución del proceso de remoción de cobre excedente.}
+\label{fig:proceso_acido}
+\end{figure}
+
+\subsubsection{Mecanizado y Soldadura}
+Para el agujereado se empleó el Dremel con una mecha de \qty{0.75}{\milli\meter} para casi todos los componentes, y de \qty{1.5}{\milli\meter} para los portafusibles. 
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[height=\textwidth]{insumos_ia/cuaderno_de_labo/images/image210.jpg}
+    \caption{Uso del soporte vertical.}
+\end{subfigure}\hfill
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[height=\textwidth]{insumos_ia/cuaderno_de_labo/images/image370.jpg}
+    \caption{Detalle de las perforaciones.}
+\end{subfigure}
+\caption{Proceso de perforación de la placa base.}
+\label{fig:agujereado}
+\end{figure}
+
+Para la soldadura, se instalaron conectores tipo pines (\textit{headers}) en las terminales designadas para la resistencia de ganancia ($R_g$), facilitando el recambio modular. Si bien inicialmente se soldó y ensambló un solo canal de amplificación para realizar pruebas de ganancia y ruido, el proceso de armado finalizó con los tres canales de amplificación soldados en su totalidad. Para el funcionamiento final de cada canal se eligieron e instalaron resistencias de valor nominal \qty{100}{\ohm}, cuyos valores reales medidos en el laboratorio fueron:
+\begin{itemize}
+    \item Canal 1: $101.7 \pm \dots\ \Omega$
+    \item Canal 2: $98.6 \pm \dots\ \Omega$
+    \item Canal 3: $99.3 \pm \dots\ \Omega$
+\end{itemize}
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image116.jpg}
+    \caption{Canal 1 finalizado y listo para testeo inicial.}
+\end{subfigure}\hfill
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image233.jpg}
+    \caption{Placa final con los tres canales soldados.}
+\end{subfigure}
+\caption{Progresión del ensamblaje y soldadura de componentes electrónicos.}
+\label{fig:soldadura}
+\end{figure}
+
+\subsubsection{Tabla de componentes y materiales}
+
+Finalmente, la lista de componentes utilizados en el ensamble de la placa se detalla en la Tabla \ref{tab: componentes electronicos}.
+
+\begin{table}[htbp]
+    \centering
+    \caption{\label{tab: componentes electronicos}Lista de materiales y componentes utilizados en el ensamble final.}
+    \begin{tabularx}{\linewidth}{c X c} 
+        \toprule
+        \textbf{Cant.} & \textbf{Componente} & \textbf{Label esquemático} \\
+        \midrule
+        2 & Resistencia 10 k$\Omega$ & $R_{1,3}$\\
+        8 & Resistencia 100 k$\Omega$ & $R_{1,2,5,4,7,8}$\\
+        3 & Resistencia 100 $\Omega$ & $R_{3,6,9}$\\
+        6 & Capacitor 33 nF & $C_{1,2,3,4,5,6}$\\
+        2 & Diodo Zener 1N4741A & $D_{1,2}$\\
+        1 & MOSFET IRFZ44N & $MOS_N$\\
+        1 & MOSFET F9540N & $MOS_P$\\
+        3 & Amp. Op. AD620 & $U_{1,2,3}$\\
+        3 & Zócalo de 8 pines & $U_{1,2,3}$\\
+        2 & Portafusible & $FUSN/P_{1,2}$\\
+        2 & Fusible 0.25 A & $FUSE_{1,2}$\\
+        1 & Tira pines macho rectos 2.54 mm & \\
+        2 & Mini jumper paso 2.54 mm & \\
+        1 & Placa de cobre virgen 15x15 cm Epoxi & \\
+        \bottomrule
+    \end{tabularx}
+\end{table}
+
+\subsection{Caracterización empírica de las resistencias ($R_g$)}
+
+Antes del armado definitivo del set y de soldar todos los canales, se procedió a caracterizar la ganancia del amplificador AD620 y a determinar la mejor resistencia $R_g$. En la placa, se diferenciaron los pines de entrada del canal de amplificación: el pin \enquote{-Vs} a la izquierda (cable verde), el pin \enquote{+Vs} al medio (cable rojo) y el pin GND a la derecha (cable negro). Se corroboraron las tensiones de alimentación directamente en el zócalo del AD620 obteniendo \qty{+9.23}{\volt} en el pin 7 y \qty{-8.2}{\volt} en el pin 4 utilizando el manual del multímetro BAW 113A\footnote{\href{https://drive.google.com/file/d/1Ys8rz5UgeEuBFSSgIJXgsLeXh0dEUI4q/view}{Enlace al manual del multímetro BAW 113A.}}.
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.55\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image366.jpg}
+    \caption{Conexión de los pines de alimentación y switch.}
+\end{subfigure}\hfill
+\begin{subfigure}{0.4\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image214.jpg}
+    \caption{Montaje de la placa para las pruebas de ganancia.}
+\end{subfigure}
+\caption{Preparación y verificación de la alimentación en el laboratorio.}
+\label{fig:pines_alimentacion}
+\end{figure}
+
+Las pruebas iniciales con una resistencia de \qty{220}{\ohm} y luego de \qty{1.2}{\kilo\ohm} mostraron que el canal amplificaba correctamente. Se pudo observar en el software Ñandú LSD\footnote{\href{https://github.com/santiagopradorodriguez/Emg_system_analizer}{Repositorio de GitHub del software Ñandú LSD.}} que la señal respondía a los estímulos, pero era altamente sensible al movimiento de los cables y presentaba ruidos esporádicos.
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.25\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image90.png}
+    \caption{Saturación inicial (220 $\Omega$).}
+\end{subfigure}\hfill
+\begin{subfigure}{0.7\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image197.png}
+    \caption{Señal capturada en la interfaz con resistencia de 1.2 k$\Omega$.}
+\end{subfigure}
+\caption{Primeros indicios de amplificación del AD620.}
+\label{fig:primeras_pruebas_rg}
+\end{figure}
+
+\subsubsection{Pruebas con electrodos faciales}
+
+Con base en la bibliografía\footnote{\href{https://drive.google.com/file/d/1zkSc-Q4K2s937X-n-DpRYiXGkAC2WUlk/view}{Ratnovsky et al., 2021.}}, se decidió apuntar al músculo \textit{Depressor anguli oris}. Se colocaron electrodos Medi-Trace (\enquote{chicos con apósitos o curitas}) rodeando dicho músculo y la referencia se ubicó detrás de la oreja o sobre el hueso de la muñeca.
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.2\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image313.jpg}
+\end{subfigure}\hfill
+\begin{subfigure}{0.2\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image542.jpg}
+\end{subfigure}\hfill
+\begin{subfigure}{0.28\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image186.jpg}
+\end{subfigure}\hfill
+\begin{subfigure}{0.24\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image543.jpg}
+\end{subfigure}
+\caption{Colocación de los electrodos faciales para apuntar al músculo \textit{Depressor anguli oris}.}
+\label{fig:electrodos_cara}
+\end{figure}
+
+Se propuso probar un barrido de resistencias para encontrar el mejor equilibrio entre la ganancia y la relación señal-ruido (SNR), utilizando la fórmula teórica del amplificador:
+\begin{equation}
+    G = \frac{\qty{49.4}{\kilo\ohm}}{R_g} + 1
+\end{equation}
+
+\begin{table}[htbp]
+    \centering
+    \caption{\label{tab: tabla_resistencias}Tabla de ganancias teóricas esperadas para diferentes valores de resistencia $R_g$.}
+    \begin{tabular}{cc} 
+        \toprule
+        \textbf{$R_G$ ($\Omega$)} & \textbf{Ganancia $G$} \\
+        \midrule
+        47 & 1052 \\
+        33 & 1498 \\
+        22 & 2247 \\
+        10 & 4941 \\
+        5 & 9881 \\
+        2.2 & 22456 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Al probar con una resistencia pequeña de \qty{47}{\ohm} (ganancia teórica de 1052), la señal se saturó rápidamente y se evidenció un fuerte ruido en \qty{100}{\hertz} analizando el audio exportado en Reaper, causado parcialmente por mala configuración del muestreo del NIDAQ. Además, al procesar las mediciones con el script en Python, se observó que el valor del ruido basal variaba radicalmente con la resistencia elegida.
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image142.png}
+    \caption{Campana de ruido en los \qty{100}{\hertz} y ruido de alta frecuencia vistos en Reaper.}
+\end{subfigure}\hfill
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image169.png}
+    \caption{Señal cruda tomada con $R_g$ pequeño (Toma 1).}
+\end{subfigure}
+\caption{Problemas de ruido y saturación enfrentados con alta amplificación.}
+\label{fig:ruido_saturacion}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image212.png}
+\end{subfigure}\hfill
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image309.png}
+\end{subfigure}
+\vspace{2mm}
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image219.png}
+\end{subfigure}\hfill
+\begin{subfigure}{0.35\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image160.jpg}
+\end{subfigure}
+\caption{Toma 2: Secuencia de inestabilidades en la medición y cambio de cable de alimentación en el protoboard.}
+\label{fig:toma2_inestabilidad}
+\end{figure}
+
+Para mitigar los problemas de inestabilidad y ruido de línea (\qty{50}{\hertz} y \qty{100}{\hertz}), se aplicaron filtros Notch por software en el análisis, y se probaron distintos posicionamientos de la referencia en el cuerpo del sujeto. A continuación, el análisis calculó los pulsos promedios y la relación SNR separando el ruido basal del pulso de actividad muscular.
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image449.png}
+    \caption{Anomalías de amplitudes negativas observadas esporádicamente.}
+\end{subfigure}\hfill
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image235.png}
+    \caption{Alineación de pulsos y cálculo del promedio en el script de análisis.}
+\end{subfigure}
+\caption{Procesamiento de señal para el cálculo del SNR.}
+\label{fig:procesamiento_snr}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.35\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image232.png}
+    \caption{Resultado del pulso promedio.}
+\end{subfigure}\hfill
+\begin{subfigure}{0.6\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image395.png}
+    \caption{Relación de SNR respecto al valor de $R_g$ (escala logarítmica).}
+\end{subfigure}
+\caption{Comparativa del desempeño SNR para distintos factores de amplificación.}
+\label{fig:resultados_snr}
+\end{figure}
+
+El gráfico de SNR vs $R_g$ arrojó una curva logarítmica donde a menores resistencias (mayor amplificación) el ruido del propio AD620 (RTI y RTO) se magnifica tanto que deteriora la calidad de la señal, acercándola a la zona de saturación de la alimentación. Esto coincidió con las especificaciones del fabricante, que no recomienda utilizar ganancias extremas (cercanas a 10000).
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image100.png}
+    \caption{Amplitud promedio recuperada de los picos.}
+\end{subfigure}\hfill
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image170.png}
+    \caption{Acercamiento a la zona de saturación con bajas resistencias.}
+\end{subfigure}
+\caption{Análisis de confiabilidad según los límites del AD620.}
+\label{fig:analisis_limites}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.45\textwidth]{insumos_ia/cuaderno_de_labo/images/image248.png}
+\caption{Límite de ganancia operativa recomendado por el datasheet (máximo 10000).}
+\label{fig:datasheet_limite}
+\end{figure}
+
+Asimismo, el ancho de banda del AD620 (y por ende su frecuencia de corte superior) está íntimamente ligado a la ganancia configurada, como se detalla en las gráficas provistas por el fabricante.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.45\textwidth]{insumos_ia/cuaderno_de_labo/images/image317.png}
+\caption{Ancho de banda del AD620 en función de la ganancia, estableciendo un límite de frecuencia de corte superior.}
+\label{fig:datasheet_bandwidth}
+\end{figure}
+
+Debido a que se estaba forzando demasiado la amplificación, se propuso probar empíricamente con resistencias más grandes, buscando factores de amplificación más pequeños y manejables. 
+
+\begin{table}[htbp]
+    \centering
+    \caption{\label{tab: tabla_resistencias_grandes}Tabla de ganancias teóricas para valores grandes de $R_g$ propuestos como alternativa.}
+    \begin{tabular}{cc} 
+        \toprule
+        \textbf{$R_G$ ($\Omega$)} & \textbf{Ganancia $G$} \\
+        \midrule
+        1.2 k & 42.2 \\
+        1 k & 50.4 \\
+        820 & 61.2 \\
+        680 & 73.6 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Para estas nuevas pruebas, se utilizaron apósitos de la marca Curitas. Estas presentaron diferencias sutiles (no son transparentes y miden $19 \times 72\ \text{mm}$, siendo \qty{4}{\milli\meter} más cortas que las previas), considerándose posibles variaciones en el \enquote{agarre} y el ruido introducido. Al colocar los electrodos en el sujeto de prueba, se notó que, al no estar recién afeitado, el vello facial en la mandíbula levantaba ligeramente el electrodo inferior, aunque lograron mantenerse adheridos durante las mediciones.
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.3\textwidth}
+    \centering
+    \includegraphics[height=4.5cm]{insumos_ia/cuaderno_de_labo/images/image30.jpg}
+    \caption{Apósitos Curitas.}
+\end{subfigure}\hfill
+\begin{subfigure}{0.3\textwidth}
+    \centering
+    \includegraphics[height=4.5cm]{insumos_ia/cuaderno_de_labo/images/image287.jpg}
+    \caption{Electrodos (vello facial).}
+\end{subfigure}\hfill
+\begin{subfigure}{0.3\textwidth}
+    \centering
+    \includegraphics[height=4.5cm]{insumos_ia/cuaderno_de_labo/images/image12.jpg}
+    \caption{Cables conectados.}
+\end{subfigure}
+\caption{Preparación de los electrodos con apósitos alternativos y su colocación en el sujeto.}
+\label{fig:curitas_santiago}
+\end{figure}
+
+\subsubsection{Análisis de respuesta en frecuencia}
+
+Posteriormente, se decidió caracterizar la ganancia del sistema en función de la frecuencia, realizando barridos con un generador de funciones (Agilent 33120A) y un osciloscopio (Tektronix TBS 1052B). Dado que las ganancias esperadas para resistencias muy pequeñas llegaban a ser de \num{1500}, fue necesario utilizar un divisor resistivo a la entrada ($R_1 = \qty{1.5}{\kilo\ohm}$, $R_2 = \qty{100}{\ohm}$) para evitar que la tensión mínima provista por el generador saturara la placa.
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.4\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image424.jpg}
+    \caption{Armado inicial del barrido.}
+\end{subfigure}\hfill
+\begin{subfigure}{0.18\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image319.png}
+    \caption{Circuito del divisor.}
+\end{subfigure}\hfill
+\begin{subfigure}{0.35\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image151.jpg}
+    \caption{Set experimental con osciloscopio.}
+\end{subfigure}
+\caption{Montaje experimental para la caracterización de respuesta en frecuencia utilizando un divisor de tensión a la entrada.}
+\label{fig:barrido_frecuencias_setup}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.4\textwidth]{insumos_ia/cuaderno_de_labo/images/image3.png}
+\caption{Fórmula del divisor de tensión utilizado para adaptar la señal del generador a la entrada del circuito.}
+\label{fig:formula_divisor}
+\end{figure}
+
+Se realizó un barrido logarítmico de 41 puntos desde \qty{10}{\hertz} hasta \qty{85.515}{\kilo\hertz} utilizando una señal de \qty{50}{\milli\volt}pp. Al procesar las mediciones con distintas resistencias ($R_g$ de \qty{33}{\ohm}, \qty{47}{\ohm}, y \qty{52}{\ohm}), los primeros gráficos de ganancia en función de la frecuencia mostraron anomalías. Por un lado, se identificaron saturaciones prematuras para las resistencias menores (como la de \qty{33}{\ohm}), las cuales resultaban en ganancias empíricas mucho más altas que las teóricas (ej. medido 2496 frente al teórico de 1498), evidenciando que se excedía la capacidad de excursión dictada por las baterías (\qty{\sim 9}{\volt}). Además, el divisor resistivo en la protoboard inducía inestabilidades (picos espurios y falsos contactos).
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image89.png}
+    \caption{Curva preliminar de ganancia para 51.6 $\Omega$.}
+\end{subfigure}\hfill
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image157.png}
+    \caption{Curva preliminar de ganancia para 33.7 $\Omega$.}
+\end{subfigure}
+\caption{Primeros resultados anómalos del barrido de frecuencia por problemas de conexión y saturación.}
+\label{fig:barridos_anomalos}
+\end{figure}
+
+Tras recalibrar el cálculo de ganancia tomando en cuenta adecuadamente la atenuación del divisor, se volvió a procesar la información. Se graficó la caída de tensión en baja frecuencia provocada por el filtro pasa-altos activo en la entrada del circuito ($C = \qty{33}{\nano\farad}$ y $R = \qty{100}{\kilo\ohm}$), validando que el filtro cortaba según lo esperado.
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.35\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image345.png}
+    \caption{Fórmula teórica de la frecuencia de corte.}
+\end{subfigure}\hfill
+\begin{subfigure}{0.6\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image404.png}
+    \caption{Efecto del filtro pasa-altos en las mediciones empíricas de ganancia a baja frecuencia.}
+\end{subfigure}
+\caption{Comportamiento en bajas frecuencias del canal de amplificación.}
+\label{fig:frecuencia_corte}
+\end{figure}
+
+Al intentar medir con mayor precisión el canal de $R_g = \qty{33}{\ohm}$ modificando el divisor para atenuar aún más la señal (de \qty{1.5}{\kilo\ohm} a \qty{3.3}{\kilo\ohm}), la señal de salida resultante quedó oculta bajo el piso de ruido del osciloscopio, dificultando en gran medida su adquisición e interrumpiendo el barrido normal.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.7\textwidth]{insumos_ia/cuaderno_de_labo/images/image202.png}
+\caption{Intento fallido de medición incrementando la atenuación del divisor resistivo. La señal queda absorbida por el piso de ruido.}
+\label{fig:medicion_ruido_osci}
+\end{figure}
+
+Dadas las inestabilidades e incertezas con las resistencias de menor valor, se concluyó que la resistencia de \qty{100}{\ohm} ofrecía un comportamiento sumamente predecible y consistente entre las diversas mediciones. La ganancia empírica para esta resistencia resultó de \num{483.3}, muy próxima al valor teórico de \num{495}. Al superponer los resultados experimentales calibrados con las curvas teóricas provistas por el \textit{datasheet} del AD620, se comprobó que la resistencia de \qty{100}{\ohm} copiaba a la perfección el comportamiento esperado a lo largo de todo el espectro de frecuencias analizado, a diferencia de las de menor valor que presentaban márgenes de error importantes.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.8\textwidth]{insumos_ia/cuaderno_de_labo/images/image403.png}
+\caption{Resultados consolidados de ganancia (curvas continuas) comparados con los valores teóricos del datasheet (líneas punteadas). La curva de 100 $\Omega$ presenta el mejor ajuste.}
+\label{fig:barrido_final_comparacion}
+\end{figure}
+
+Por consiguiente, se determinó definitivamente utilizar resistencias de \qty{100}{\ohm} para ensamblar los tres canales de amplificación, asegurando robustez ante las limitaciones de excursión de tensión y garantizando una excelente relación señal-ruido. Los resultados finales de los barridos de frecuencia para los tres canales totalmente integrados y funcionales, confirmaron que, con excepción de las ganancias extremas solicitadas por las resistencias menores a \qty{50}{\ohm}, el sistema opera exactamente dentro de los parámetros diseñados.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.8\textwidth]{insumos_ia/cuaderno_de_labo/images/image544.png}
+\caption{Curvas de Bode experimentales para los 3 canales de amplificación operando simultáneamente.}
+\label{fig:bode_3_canales}
+\end{figure}
+
+
+\subsection{Armado del gabinete}
+
+El ensamblaje del hardware final requirió un gabinete adecuado para contener la placa y baterías. En primer lugar, se adquirió un gabinete plástico con tapa acrílica transparente. Asimismo, se consiguieron fichas hembras BNC y plug metálicas (de \qty{6}{\milli\meter}) para la referencia (se descartaron las de plástico por fragilidad) y cables BNC de alta frecuencia (\qty{50}{\ohm}) para las salidas. Para las conexiones de baterías y extras se consiguieron porta-pilas de \qty{9}{\volt} e interruptores. También se desguazaron cables de conectores antiguos presentes en el laboratorio para reutilizarlos en la placa.
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.3\textwidth}
+    \centering
+    \includegraphics[height=4cm]{insumos_ia/cuaderno_de_labo/images/image350.jpg}
+\end{subfigure}\hfill
+\begin{subfigure}{0.3\textwidth}
+    \centering
+    \includegraphics[height=4cm]{insumos_ia/cuaderno_de_labo/images/image161.jpg}
+\end{subfigure}\hfill
+\begin{subfigure}{0.35\textwidth}
+    \centering
+    \includegraphics[height=4cm]{insumos_ia/cuaderno_de_labo/images/image153.png}
+\end{subfigure}
+\caption{Adquisición de componentes, gabinete plástico y cables reciclados del laboratorio.}
+\label{fig:componentes_gabinete}
+\end{figure}
+
+Para mecanizar el gabinete, se proyectaron los componentes y se utilizó una perforadora de banco, limando luego los orificios. Un detalle importante es que las mechas disponibles en el laboratorio no eran lo suficientemente grandes para hacer el espacio de una ficha mini-canon. La solución fue realizar dos perforaciones pequeñas y utilizar una lima redonda hasta alcanzar la medida. Se agrandaron también los orificios de la placa PCB para poder montarla al gabinete mediante tornillos y separadores.
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image515.png}
+\end{subfigure}\hfill
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image174.png}
+\end{subfigure}
+\caption{Proceso de perforación y pulido del gabinete.}
+\label{fig:agujereado_gabinete}
+\end{figure}
+
+\subsubsection{Soldadura de chasis y detalles finales}
+
+Se enfrentaron dificultades al soldar los cables de masa a las carcasas de las fichas BNC de panel. El esmalte que las recubre impide la correcta adherencia del estaño. Para solucionarlo, fue necesario raspar exhaustivamente la superficie con una lima antes de aplicar calor y flux. Adicionalmente, se conectó un LED rojo de encendido empleando una resistencia de \qty{3.3}{\kilo\ohm} conectada entre \qty{+9}{\volt} y \qty{-9}{\volt} (alimentación total de \qty{18}{\volt}, elegida para que la descarga de ambas baterías fuera simétrica).
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \centering
+    \includegraphics[height=4.5cm]{insumos_ia/cuaderno_de_labo/images/image467.png}
+\end{subfigure}\hfill
+\begin{subfigure}{0.32\textwidth}
+    \centering
+    \includegraphics[height=4.5cm]{insumos_ia/cuaderno_de_labo/images/image231.png}
+\end{subfigure}\hfill
+\begin{subfigure}{0.32\textwidth}
+    \centering
+    \includegraphics[height=4.5cm]{insumos_ia/cuaderno_de_labo/images/image165.png}
+\end{subfigure}
+\caption{Raspado del esmalte de las fichas BNC y soldadura de la masa a la carcasa.}
+\label{fig:soldadura_bnc}
+\end{figure}
+
+Para fijar los soportes de las baterías de \qty{9}{\volt}, se optó por instalarlos por fuera del gabinete utilizando tornillos de cabeza plana y tuercas. Como el material de los soportes raspaba las baterías, se recubrieron preventivamente con cinta aislante. 
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=0.4\textwidth]{insumos_ia/cuaderno_de_labo/images/image65.png}
+\end{subfigure}\hfill
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=0.4\textwidth]{insumos_ia/cuaderno_de_labo/images/image163.png}
+\end{subfigure}
+\caption{Soportes para las baterías de \qty{9}{\volt} que se amuraron al exterior del gabinete.}
+\label{fig:soportes_baterias}
+\end{figure}
+
+Es menester destacar una recomendación para futuras iteraciones: en su momento, se decidió soldar los cables directamente a los terminales macho de la placa (cubriéndolos luego con termocontraíble) en lugar de utilizar conectores Molex 2510 extraíbles, buscando reducir tiempos. Sin embargo, por las dimensiones del gabinete, la proximidad de los componentes y el riesgo de quemar partes adyacentes, esta técnica resultó compleja y exigió un pulso sumamente firme, por lo que no es recomendable para ensambladores sin experiencia previa. Hubiera sido mucho más cómodo desoldar los pines y armar fichas Molex hembra.
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image173.jpg}
+\end{subfigure}\hfill
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image48.jpg}
+\end{subfigure}
+\caption{Vista superior y posterior del ensamble interno, con las baterías montadas por fuera.}
+\label{fig:vista_interna_gabinete}
+\end{figure}
+
+Finalmente, la caja fue cerrada con su tapa acrílica. Se retiraron los plásticos protectores y se colocaron etiquetas adhesivas indicativas tanto para las entradas (electrodo activo, pasivo, referencia) como para las salidas, logrando un instrumento prolijo y modular.
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image527.jpg}
+\end{subfigure}\hfill
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image528.jpg}
+\end{subfigure}
+\vspace{2mm}
+\begin{subfigure}{0.3\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image396.jpg}
+\end{subfigure}\hfill
+\begin{subfigure}{0.3\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image378.jpg}
+\end{subfigure}\hfill
+\begin{subfigure}{0.3\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image260.jpg}
+\end{subfigure}
+\caption{Amplificador finalizado: vistas frontales, laterales y superiores del dispositivo de adquisición EMG ensamblado y rotulado.}
+\label{fig:amplificador_finalizado}
+\end{figure}
+
+
+\clearpage
+
+\subsection{Cables}
+
+\subsubsection{Cable de referencia original}
+
+En las primeras iteraciones para las pruebas del dispositivo, se construyó un cable de referencia empleando una ficha plug metálica (de \qty{6}{\milli\meter}) y una ficha mini-canon con dos botones a presión, correspondientes a los electrodos comerciales. Estos botones a presión metálicos tienen un diámetro de \qty{11}{\milli\meter}.
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.3\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image136.jpg}
+\end{subfigure}\hfill
+\begin{subfigure}{0.3\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image171.jpg}
+\end{subfigure}\hfill
+\begin{subfigure}{0.3\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image433.jpg}
+\end{subfigure}
+\caption{Construcción de los primeros cables con botones a presión de \qty{11}{\milli\meter} y conectores plug.}
+\label{fig:cables_iniciales}
+\end{figure}
+
+
+\subsubsection{Experimentación y selección de cables}
+
+Durante varias semanas se llevó a cabo un proceso de prueba y medición caótico para determinar qué tipo de cables y electrodos utilizar (mallados, trenzados, sin trenzar, conectados a masa, etc.), y cómo estos afectaban la Relación Señal a Ruido (SNR).
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.3\textwidth}
+    \centering
+    \includegraphics[height=4cm]{insumos_ia/cuaderno_de_labo/images/image456.jpg}
+\end{subfigure}\hfill
+\begin{subfigure}{0.3\textwidth}
+    \centering
+    \includegraphics[height=4cm]{insumos_ia/cuaderno_de_labo/images/image422.jpg}
+\end{subfigure}\hfill
+\begin{subfigure}{0.3\textwidth}
+    \centering
+    \includegraphics[height=4cm]{insumos_ia/cuaderno_de_labo/images/image504.jpg}
+\end{subfigure}
+\caption{Imágenes de la fase exploratoria. Electrodo de referencia, conexión de cables mallados al paciente y setup completo hacia la NIDAQ.}
+\label{fig:caotico_setup}
+\end{figure}
+
+Si bien esta fase fue desordenada, se rescataron importantes observaciones empíricas:
+
+\begin{itemize}
+    \item \textbf{Desgaste de los broches metálicos:} Se descubrió que la presión necesaria para abrochar los cables dependía de un \enquote{resorte} interno. En conectores nuevos, la separación entre resortes era de \qty{2.7}{\milli\meter}, mientras que en los usados se ensanchaba a \qty{3}{\milli\meter}. Esta diferencia provocaba que, al aplicar fuerza para conectar los broches sobre el músculo, el gel conductivo del electrodo se desplazara, arruinando la medición temporalmente al introducir ruido por mal contacto.
+    \item \textbf{Ruido de línea y configuración de la placa NIDAQ:} Se observó que el sistema presentaba un ruido de \qty{50}{\hertz} persistente. Tras sospechar del hardware, se descubrió que la NIDAQ estaba configurada por defecto en modo diferencial. Cambiar la configuración de lectura por software al modo \enquote{RSE} (Referenced Single-Ended) permitió referenciar las señales correctamente a la tierra del circuito, aunque no erradicó el ruido por completo.
+    \item \textbf{Descarga a tierra y ficha T:} Durante el desarrollo, se observó que al tocar la computadora con la mano de la referencia (o al desconectar la PC de la fuente), el ruido de \qty{50}{\hertz} disminuía notablemente. También se propuso utilizar una ficha T en la entrada de la NIDAQ, confirmando la vulnerabilidad del sistema ante bucles de masa y el ruido de línea.
+    \item \textbf{Filtros Notch y artefactos de Gibbs:} Se debatió extensamente el uso de filtros Notch para eliminar los \qty{50}{\hertz}, versus el uso de un simple filtro pasabanda. La literatura científica advertía que los filtros Notch con bandas de rechazo muy angostas pueden inducir el \enquote{fenómeno de Gibbs}, generando distorsiones y oscilaciones artificiales que alteran la morfología real del pico muscular en el dominio del tiempo.
+\end{itemize}
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=0.5\textwidth]{insumos_ia/cuaderno_de_labo/images/image308.png}
+\end{subfigure}\hfill
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[height=5cm]{insumos_ia/cuaderno_de_labo/images/image138.jpg}
+\end{subfigure}
+\caption{Izquierda: distancia entre los resortes internos (\enquote{r}) del broche a presión. Derecha: Cinta Durapore 3M empleada para las pruebas.}
+\label{fig:tips_cables}
+\end{figure}
+
+\clearpage
+
+A partir del análisis de datos de esta primera etapa, se discutió arduamente sobre el uso del filtro Notch. Debido a desconfianzas, se separó el análisis de la SNR evaluando los datos con y sin dicho filtro:
+
+\textbf{SIN filtro NOTCH:}
+
+Según las mediciones, lo primero que notamos es que las mejores SNR se dieron antes de un intervalo de descanso, siendo la destacada la del cable mallado \textit{sin} conectar a tierra. Sin embargo, en la inspección visual (y recordando las experiencias en vivo) parecía haber problemas con la adhesión de los electrodos que ensuciaban los datos. A continuación, la mejor y peor medición según nuestro criterio para este análisis sin filtro Notch:
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.6\textwidth]{insumos_ia/cuaderno_de_labo/images/image299.png}
+\caption{Cable mallado sin tierra toma 2 (la mejor medición sin Notch).}
+\label{fig:mejor_sin_notch}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.6\textwidth]{insumos_ia/cuaderno_de_labo/images/image209.png}
+\caption{Cable mallado con tierra toma 2 (la peor medición sin Notch).}
+\label{fig:peor_sin_notch}
+\end{figure}
+
+\textbf{CON filtro NOTCH:}
+
+Según nuestro criterio de que un SNR $\geq$ 4 califica como buena señal, en esta oportunidad 4 de las mediciones superan el valor. Más allá de eso, el único cambio significativo con el filtro Notch es que ahora la medición del \textit{cable sin mallar} es la que gana, pero el análisis en profundidad seguía siendo poco claro. 
+
+A continuación se observan los pulsos individuales procesados sin filtro Notch y luego con filtro Notch, para contrastarlos visualmente:
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image523.png}
+\end{subfigure}\hfill
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image312.png}
+\end{subfigure}
+\caption{Sin filtro Notch: Cable sin mallar toma 1 (izq) vs. Cable mallado sin tierra toma 2 (der). A simple vista, la medición de la derecha tuvo mejor SNR.}
+\label{fig:comparativa_sin_notch}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image104.png}
+\end{subfigure}\hfill
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image311.png}
+\end{subfigure}
+\caption{Con filtro Notch: Cable sin mallar toma 1 (izq) vs. Cable mallado sin tierra toma 2 (der). Aquí pareciera que la medición de la derecha dio mejor, a diferencia del análisis numérico. Esto se debió a que el ruido se tomaba al principio y en el cable sin mallar (izq) el ruido aumentó durante los pulsos falseando el SNR total.}
+\label{fig:comparativa_con_notch}
+\end{figure}
+
+\clearpage
+
+\subsubsection{Protocolo definitivo para la determinación de cables}
+
+Tras organizar los criterios de medición para no confiar ciegamente en datos caóticos, se diseñó una serie de experimentos mas formales enfocados en caracterizar el ruido y la pérdida de señal midiendo la SNR y su evolución en el tiempo. A partir de aquí, \textbf{todas las mallas de los cables fueron conectadas a GND}. El análisis definió variables como el \enquote{Ruido basal} (en reposo), el \enquote{Ruido Inter-pulso}, la \enquote{Amplitud Máxima} y la evolución del \enquote{SNR promedio acumulado}. 
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.18\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image379.jpg}
+\end{subfigure}\hfill
+\begin{subfigure}{0.18\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image364.jpg}
+\end{subfigure}\hfill
+\begin{subfigure}{0.18\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image18.jpg}
+\end{subfigure}\hfill
+\begin{subfigure}{0.18\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image71.jpg}
+\end{subfigure}\hfill
+\begin{subfigure}{0.18\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image325.jpg}
+\end{subfigure}
+\caption{Set experimental utilizado en las pruebas formales para evaluar exhaustivamente el rendimiento de los cables.}
+\label{fig:set_experimental_cables}
+\end{figure}
+
+\textbf{Experimento 0 (Temporalidad inicial):} El objetivo era evaluar si la primera medición siempre resultaba muy alta y decaía. Se realizaron 5 mediciones de 20 pulsos en intervalos de 1 minuto usando el cable Trenzado Mallado con GND. En esta primera instancia no se apoyó la mano sobre la PC (no nos dimos cuenta), por lo que hubo mucho ruido de línea.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.7\textwidth]{insumos_ia/cuaderno_de_labo/images/image140.png}
+\caption{Archivos de referencia generados para el Experimento 0.}
+\label{fig:exp0_archivos}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.7\textwidth]{insumos_ia/cuaderno_de_labo/images/image267.png}
+\caption{Overlay de pulsos promedio de cada medición para el Experimento 0.}
+\label{fig:exp0_overlay}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.5\textwidth]{insumos_ia/cuaderno_de_labo/images/image508.png}
+\caption{Gráfico de barras de las amplitudes en orden cronológico (Experimento 0).}
+\label{fig:exp0_barras}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.5\textwidth]{insumos_ia/cuaderno_de_labo/images/image538.png}\\
+\vspace{2mm}
+\includegraphics[width=0.5\textwidth]{insumos_ia/cuaderno_de_labo/images/image207.png}
+\caption{Evolución del Ruido y el SNR a lo largo de la sesión para el Experimento 0.}
+\label{fig:exp0_evolucion}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image322.png}
+\caption{Tabla de resultados del Experimento 0, ordenados según SNR. Fueron aproximadamente 7 minutos de medición: la amplitud promedio decayó, pero el SNR se mantuvo estable ya que el ruido también disminuyó.}
+\label{fig:exp0_tabla_snr}
+\end{figure}
+
+\clearpage
+
+\textbf{Experimento 1 (Temporalidad rigurosa):} Se evaluó cómo se reproducía la medición con el paso del tiempo utilizando el mismo cable Trenzado Mallado GND, midiendo a $t = 0, 5, 10, 15$ minutos (con descansos intercalados), tomando 40 pulsos por iteración.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.7\textwidth]{insumos_ia/cuaderno_de_labo/images/image282.png}
+\caption{Archivos de referencia generados para el Experimento 1.}
+\label{fig:exp1_archivos}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.7\textwidth]{insumos_ia/cuaderno_de_labo/images/image397.png}
+\caption{Overlay de pulsos promedio de cada medición para el Experimento 1.}
+\label{fig:exp1_overlay}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image264.png}
+\end{subfigure}\hfill
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image409.png}
+\end{subfigure}
+\caption{Gráficos de barras de amplitud y evolución de ruidos para el Experimento 1.}
+\label{fig:exp1_graficos}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.5\textwidth]{insumos_ia/cuaderno_de_labo/images/image36.png}
+\caption{Evolución del SNR en el tiempo para el Experimento 1 (15 minutos totales).}
+\label{fig:exp1_snr_evolucion}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image356.png}
+\caption{Tabla de SNR ordenado para el Experimento 1. Las amplitudes decaen temporalmente tal como se observaba anteriormente.}
+\label{fig:exp1_tabla}
+\end{figure}
+
+\clearpage
+
+\textbf{Experimentos 2, 3 y 4 (Comparación directa):} Posteriormente, se realizaron los experimentos comparando "Trenzado Mallado GND" contra "Mallado GND" (Experimento 2), repitiendo lo mismo con un sujeto alternativo (Experimento 3, debido a que en el 2 se desoldó un pin del cable trenzado) y luego contra un cable "Sin trenzar ni mallar - None" (Experimento 4). Las imágenes del setup experimental con el nuevo sujeto se muestran a continuación:
+
+\begin{figure}[htbp]
+\centering
+\begin{subfigure}{0.4\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image524.jpg}
+\end{subfigure}\hfill
+\begin{subfigure}{0.4\textwidth}
+    \centering
+    \includegraphics[width=0.7\textwidth]{insumos_ia/cuaderno_de_labo/images/image328.jpg}
+\end{subfigure}
+\caption{Imágenes del set experimental utilizando al sujeto alternativo para los experimentos 3 y 4.}
+\label{fig:exp3_setup}
+\end{figure}
+
+\newpage
+
+\subsubsection{Comparación de ruidos iniciales en los últimos experimentos}
+
+El objetivo de esta sección final de análisis es estudiar en detalle qué cable presentó el nivel de ruido más bajo, según los experimentos que se realizaron.
+
+Para el Experimento 0 y 1, tenemos los siguientes gráficos, correspondientes ambos a un cable trenzado mallado.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.8\textwidth]{insumos_ia/cuaderno_de_labo/images/image179.png}\\[2ex]
+\includegraphics[width=0.8\textwidth]{insumos_ia/cuaderno_de_labo/images/image549.png}
+\caption{Ruidos iniciales para el Experimento 0.}
+\label{fig:ruido_exp0}
+\end{figure}
+
+Lo que estudiamos como \enquote{Ruido Inter-pulso}, sería la amplitud de la señal entre pulsos. Puede dar valores raros, se puede ver en los datos crudos. Lo asociamos a qué \enquote{tan bien} realizamos el movimiento. Es una señal muscular entre activación, se puede tener un espasmo intermedio. Que den todos los valores coincidentes, habla de que se hicieron bien las mediciones.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.8\textwidth]{insumos_ia/cuaderno_de_labo/images/image458.png}
+\caption{Ruidos iniciales para el Experimento 1.}
+\label{fig:ruido_exp1}
+\end{figure}
+
+La diferencia en el E0 tiene que ver seguro con que no apoyamos la mano en la compu y no matamos la señal de \qty{50}{\hertz}. Apoyamos la mano en la compu porque no queremos lidiar con ruidos raros, solo con ver qué cable elegimos.
+
+\newpage
+
+Vamos con la comparación del Experimento 2:
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.75\textwidth]{insumos_ia/cuaderno_de_labo/images/image129.png}\\[2ex]
+\includegraphics[width=0.75\textwidth]{insumos_ia/cuaderno_de_labo/images/image111.png}
+\caption{Ruidos iniciales para el Experimento 2. Cable Trenzado Mallado (arriba) vs. Cable Mallado sin trenzar (abajo).}
+\label{fig:ruido_exp2}
+\end{figure}
+
+Este fue el experimento en que la última medición (la 4) se desoldó justo después de tomar la medición, por lo tanto, es probable que esta medición no aporte mucho a la cuestión. Pero lo que se ve, es que el sin trenzar dio mejor.
+
+\newpage
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.8\textwidth]{insumos_ia/cuaderno_de_labo/images/image442.png}\\[2ex]
+\includegraphics[width=0.8\textwidth]{insumos_ia/cuaderno_de_labo/images/image302.png}
+\caption{Ruidos iniciales para el Experimento 3 (con sujeto alternativo). Cable Trenzado Mallado (arriba) vs. Cable Mallado sin trenzar (abajo).}
+\label{fig:ruido_exp3}
+\end{figure}
+
+Este experimento se hizo sobre Santi. Acá sí se podría decir que el trenzado redujo el ruido. Principalmente en la toma 4.
+
+Vamos con el Experimento 4, quizás el más revelador:
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.8\textwidth]{insumos_ia/cuaderno_de_labo/images/image272.png}
+\caption{Comparación de ruidos iniciales en el Experimento 4. Cable Trenzado Mallado vs. None.}
+\label{fig:ruido_exp4}
+\end{figure}
+
+Vamos a fijarnos solo en los sin Notch. Como se ve, la primera toma del trenzado aumentó el ruido, la segunda lo redujo y le \enquote{ganó} al cable sin nada.
+
+Por ahora, vamos con cable trenzado mallado. Si bien no obtuvimos resultados absolutamente contundentes en cuanto a si es mejor el cable mallado sin trenzar o el trenzado en todos los escenarios, sabemos de entrada (y confirmamos con estos indicios empíricos) que debería ser mejor el \textbf{cables trenzados y mallados con conexión a GND} para el sistema de adquisición.
+
+
+\clearpage
+
+\subsubsection{Ensamblado de los cables definitivos}
+
+Habiendo determinado que la mejor configuración para la transmisión de las débiles señales musculares era utilizar pares trenzados y mallados con conexión a tierra, se procedió a la fabricación de los cables finales.
+
+\textbf{Trenzado y refuerzo mecánico:} 
+Primero, se trenzaron cuidadosamente los cables buscando dejar aproximadamente \qty{2}{\centi\meter} de separación entre cada vuelta, fijando temporalmente los extremos con cinta de papel para no perder la tensión. Para combatir la rotura de los cables cerca de los conectores debido al uso continuo, se utilizó un producto químico laminador (\enquote{coating}) para bañar y endurecer las puntas. 
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image120.jpg}
+\end{subfigure}\hfill
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/image295.jpg}
+\end{subfigure}
+\caption{Proceso de trenzado manual de los pares, manteniendo consistencia en la torsión.}
+\label{fig:trenzado_cables}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[height=5cm]{insumos_ia/cuaderno_de_labo/images/image443.jpg}
+\end{subfigure}\hfill
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[height=5cm]{insumos_ia/cuaderno_de_labo/images/image498.jpg}
+\end{subfigure}
+\caption{Aplicación del \enquote{coating} en las terminaciones de los cables para reforzar la conexión.}
+\label{fig:coating_cables}
+\end{figure}
+
+\begin{quote}
+\textbf{Detalle importante:} El \enquote{coating} utilizado es tóxico. Es sumamente importante mantenerlo sellado en la heladera cuando no está en uso y lavarse muy bien las manos inmediatamente después de aplicarlo.
+\end{quote}
+
+Además, siguiendo recomendaciones para darle robustez, se cubrieron los delicados botones a presión de los electrodos con resina epoxi (Poxipol), asegurándose de colocar pegamento en exceso (sobresaliendo un poco de los bordes) para encapsular las soldaduras por completo. 
+
+\begin{quote}
+\textbf{Detalle importante:} El Poxipol puede endurecer accidentalmente los resortes internos de los botones a presión, haciendo que cueste mucho abrocharlos sin empujar el gel. En estos casos, se debió usar una pinza fórceps para volver a abrir milimétricamente los resortes.    
+\end{quote}
+
+
+\textbf{Mallado y soldado de las tierras:} 
+Para el blindaje electromagnético, se envolvió todo el largo de los cables con una sola capa de papel aluminio bien apretada, con el fin de preservar la maleabilidad del cable. Se debatió en su momento cómo \enquote{forrar} estos cables externamente, ya que el aluminio expuesto tendía a desgarrarse fácilmente con la fricción.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.6\textwidth]{insumos_ia/cuaderno_de_labo/images/image133.jpg}
+\caption{Aplicación de la capa de papel aluminio alrededor del trenzado para crear la malla de Faraday.}
+\label{fig:mallado_aluminio}
+\end{figure}
+
+Al intentar conectar este blindaje a masa, surgió un contratiempo: los pines correspondientes a GND de las fichas hembras alojadas en el gabinete de los últimos dos canales habían quedado sin soldar internamente. Para solucionarlo, se soldó un cable que se ramificaba a las fichas hembra por dentro del gabinete. Fue una soldadura de riesgo que requirió mucha precaución debido a lo estrecho y ensamblado que estaba el circuito interno.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.4\textwidth, angle=90]{insumos_ia/cuaderno_de_labo/images/image447.jpg}
+\caption{Detalle de la conexión interna de las tierras de los conectores que habían quedado flotantes.}
+\label{fig:tierra_interna}
+\end{figure}
+
+Una vez asegurada la tierra en el gabinete, a cada ficha macho (en su pin de masa) se le soldó un cable de cobre de un solo hilo que se empalmó superficialmente a lo largo de toda la malla de aluminio. Adicionalmente, para asegurar una gran superficie de contacto, se interconectó físicamente el papel aluminio con la carcasa metálica de la ficha empleando los tornillos de retención de la misma.
+
+\newpage
+
+\subsection{Imágenes del resultado final del Hardware Ñandú LSD}
+
+A continuación, se aprecia el resultado final de toda la construcción del hardware, listo para conectarse a la placa de adquisición NIDAQ. Es importante destacar
+que este equipo necesita de otro equipos para poder medir.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{insumos_ia/cuaderno_de_labo/images/hardware_figure1.pdf}
+\caption{Visualización del sistema de adquisición EMG completo, con el amplificador finalizado, sus conectores identificados y los cables definitivos revestidos, trenzados y conectados.}
+\label{fig:hardware_final}
+\end{figure}

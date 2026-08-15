@@ -1,0 +1,757 @@
+\documentclass[11pt, letterpaper]{article}
+
+%margenes y espacio entre columnas
+\usepackage[left=1.7cm,right=1.7cm,top=2cm,bottom=2.5cm, columnsep=0.75cm]{geometry}
+\usepackage[utf8]{inputenc}
+
+%\usepackage{breqn}
+\usepackage[spanish, es-tabla]{babel}
+%\usepackage[version=3]{mhchem}
+%\usepackage[journal=jacs]{chemstyle} Comente esto y se puso bien el captions de Tabla 1
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{makeidx}
+\usepackage{xcolor}
+\usepackage[stable]{footmisc}
+\usepackage[section]{placeins}
+%\usepackage{hyperref}
+\usepackage[normalem]{ulem}
+\usepackage{lipsum}
+
+%Modificación del formato de los captions
+\usepackage[margin=10pt,labelfont=bf]{caption}
+\captionsetup[figure]{position=bottom}
+\captionsetup[table]{position=bottom}
+\usepackage{subcaption}
+
+\usepackage{multicol}
+
+%Paquetes necesarios para tablas
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{xtab}
+\usepackage{multirow}
+%\usepackage{colortab}
+\usepackage{colortbl}
+%\usepackage{floatrow}
+
+\usepackage{stfloats}
+
+% Tabla más "cientifica"
+\usepackage{booktabs}
+
+
+%Paquete para el manejo de las unidades
+\usepackage{siunitx}
+\sisetup{mode=text, output-decimal-marker = {.}, per-mode = symbol, qualifier-mode = phrase, qualifier-phrase = { de }, list-units = brackets, range-units = brackets, range-phrase = --}
+\DeclareSIUnit[number-unit-product = \;] \atmosphere{atm}
+\DeclareSIUnit[number-unit-product = \;] \pound{lb}
+\DeclareSIUnit[number-unit-product = \;] \inch{"}
+\DeclareSIUnit[number-unit-product = \;] \foot{ft}
+\DeclareSIUnit[number-unit-product = \;] \yard{yd}
+\DeclareSIUnit[number-unit-product = \;] \mile{mi}
+\DeclareSIUnit[number-unit-product = \;] \pint{pt}
+\DeclareSIUnit[number-unit-product = \;] \quart{qt}
+\DeclareSIUnit[number-unit-product = \;] \flounce{fl-oz}
+\DeclareSIUnit[number-unit-product = \;] \ounce{oz}
+\DeclareSIUnit[number-unit-product = \;] \degreeFahrenheit{\SIUnitSymbolDegree F}
+\DeclareSIUnit[number-unit-product = \;] \degreeRankine{\SIUnitSymbolDegree R}
+\DeclareSIUnit[number-unit-product = \;] \usgallon{galón}
+\DeclareSIUnit[number-unit-product = \;] \uma{uma}
+\DeclareSIUnit[number-unit-product = \;] \ppm{ppm}
+\DeclareSIUnit[number-unit-product = \;] \eqg{eq-g}
+\DeclareSIUnit[number-unit-product = \;] \normal{\eqg\per\liter_{\text{solución}}}
+\DeclareSIUnit[number-unit-product = \;] \molal{\mole\per\kilo\gram_{\text{solvente}}}
+\decimalpoint
+\usepackage{cancel}
+%Paquetes necesarios para imágenes, pies de página, etc.
+\usepackage{graphicx}
+%\usepackage{lmodern}
+
+% Otra fuente
+\usepackage{libertinus}
+% Esto para que figuren bien la letras con tilde y la ñ en el PDF
+\usepackage[T1]{fontenc}
+
+\usepackage{fancyhdr}
+\setlength{\headheight}{13.6pt}
+%\usepackage[left=2.5cm,right=2cm,top=2cm,bottom=2.5cm]{geometry}
+%\fancyhead[L]{FCEN, UBA} % Top left header
+\fancyhead[L]{Laboratorio de Sistemas Dinámicos} % Top left header
+%\fancyhead[C]{Laboratorio 6}
+\fancyhead[R]{Braunstein - Prado Rodriguez - Labo 7} % Top right header
+\renewcommand{\headrulewidth}{0.09pt} % Rule under the header
+\fancyfoot[C]{\thepage} % Bottom center footer
+%\renewcommand{\footrulewidth}{1.4pt} % Rule under the footer
+\pagestyle{fancy} % Use the custom headers and footers throughout the document
+
+% Para que la PRIMERA PÁGINA NO tenga encabezado:
+\fancypagestyle{firstpage}{%
+  \fancyhf{} % Borra encabezado y pie de página en la primera página
+  \renewcommand{\headrulewidth}{0pt} % Sin línea en la primera página
+}
+
+%Instrucción para evitar la indentación
+%\setlength\parindent{0pt}
+
+%Paquete para poder comentar palabras en la misma linea
+\usepackage{comment}
+
+
+%Formato del título de las secciones
+
+\usepackage{titlesec}
+\usepackage{enumitem}
+\titleformat*{\section}{\bfseries\large}
+\titleformat*{\subsection}{\bfseries\normalsize}
+
+%Creación del ambiente anexos
+\usepackage{float}
+\floatstyle{plaintop}
+\newfloat{anexo}{thp}{anx}
+\floatname{anexo}{Anexo}
+\restylefloat{anexo}
+
+%Paquete para incluir comentarios
+%\usepackage{todonotes}
+
+% %Paquete para incluir hipervínculos
+% \usepackage[colorlinks=true, 
+%             linkcolor = black,
+%             urlcolor  = blue,
+%             citecolor = black,
+%             anchorcolor = black]{hyperref}
+
+\usepackage{xurl} % Para URLs que se rompen en cualquier carácter
+%Paquete para incluir hipervínculos
+\usepackage[colorlinks=true, 
+            linkcolor = orange,
+            urlcolor  = blue,
+            citecolor = red,
+            anchorcolor = orange, breaklinks]{hyperref}
+
+%Paquetes para bibliografía
+\usepackage{csquotes}
+%\usepackage[style=ieee]{biblatex}
+\usepackage[style=numeric, sorting=none, backend=biber]{biblatex}
+% Esto hace que el campo URL se vea como "[Enlace]" pero sea clicable
+\DeclareFieldFormat{url}{\href{#1}{[Enlace]}}
+\addbibresource{referencias.bib}
+%\addbibresource{refs.bib}
+
+% Opcional: para personalizar el formato de las referencias
+\DeclareFieldFormat{title}{#1} % Títulos en formato normal (no itálico)
+\DeclareFieldFormat[article]{title}{#1} % Artículos también en formato normal
+\renewcommand{\bibfont}{\normalfont\normalsize} % Fuente normal para bibliografía
+
+%Paquete para escribir las comillas
+\usepackage{dirtytalk}
+
+% Paquete para dibujar
+\usepackage{tikz}
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%
+%Inicio del documento%
+%%%%%%%%%%%%%%%%%%%%%%
+\raggedbottom % hace que si sobra espacio en una columna, el texto no se distribuya en todo el espacio sobrante sino que deje tal espacio en blanco.
+
+\setlength{\columnsep}{20pt} %separacion entre columnas
+
+\begin{document}
+\thispagestyle{firstpage} % Aplica el estilo sin encabezado solo en la primera página
+
+\renewcommand{\labelitemi}{$\checkmark$}
+
+\renewcommand{\CancelColor}{\color{red}}
+
+\newcolumntype{L}[1]{>{\raggedright\let\newline\\\arraybackslash}m{#1}}
+
+\newcolumntype{C}[1]{>{\centering\let\newline\\\arraybackslash}m{#1}}
+
+\newcolumntype{R}[1]{>{\raggedleft\let\newline\\\arraybackslash}m{#1}}
+
+\begin{center}
+	\textbf{\LARGE{Decodificación de vocales del español mediante sEMG y algoritmos de reducción de dimensionalidad}}\\
+    
+	\vspace{4mm}
+	\textbf{\large{Braunstein Lucas,  Prado Rodriguez Santiago}}\\
+    \vspace{2mm}
+	\small{braunstein.lucas@gmail.com, santiagopradorodriguez@gmail.com}\\
+    \vspace{1mm}
+    % DIRECTORES
+    \small \textbf{Directora:} Ana Amador \\
+    % Perro pidió poner "Co-directores", así que uso ese título para Fiamma y Felipe
+    \small \textbf{Colaborador:} Felipe Cignoli \\
+    \small \textbf{Profesora responsable:} Dra. Andrea Bragas \\
+    \vspace{1mm}
+	\textit{\large{Laboratorio 7 1°C 2026 - Laboratorio de Sistemas Dinámicos\\
+	Departamento de Física, FCEyN, UBA\\
+	07 de Agosto de 2026}}
+\end{center}
+
+%\vspace{7mm}
+\vspace{4mm}
+
+\begin{abstract}
+
+% En este trabajo se investigó la viabilidad de clasificar las cinco vocales del español utilizando electromiografía superficial (sEMG). Para ello, se diseñó e implementó un sistema integral de hardware y software (\textit{Ñandú LSD}) capaz de registrar sincrónicamente la actividad de tres músculos: (\textit{Orbicularis Oris}, \textit{Depressor Anguli Oris} y \textit{Mylohyoid}). Mediante un enfoque de análisis de complejidad incremental (discretización por umbrales, PCA y sUMAP), se evaluó la separabilidad del espacio fonético vocálico. Los resultados demostraron que los gestos motores extremos correspondientes a las vocales \say{A}, \say{I} y \say{U} son linealmente separables, logrando tasas predictivas de hasta el 100 \% utilizando sUMAP. Sin embargo, las vocales intermedias (\say{E} y \say{O}) evidenciaron un solapamiento persistente. Estas barreras predictivas abrieron dos interpretaciones: que es necesario explorar una triada muscular alternativa, o bien es necesaria la incorporación de un cuarto canal electromiográfico. De manera transversal, es necesario mejorar el montaje experimental con el objetivo de mitigar ruidos eléctricos y garantizar la adherencia de los electrodos, para mejorar la reproducibilidad. A pesar de estas limitaciones técnicas, el trabajo muestra exitosamente la factibilidad de extraer identidades fonéticas discretas a partir de dinámicas musculares continuas.
+En este trabajo se investigó la viabilidad de clasificar las cinco vocales del español utilizando electromiografía superficial (sEMG). Para ello, se diseñó e implementó un sistema integral de hardware y software (\textit{Ñandú LSD}) capaz de registrar sincrónicamente la actividad de tres músculos: \textit{Orbicularis Oris}, \textit{Depressor Anguli Oris} y \textit{Mylohyoid}. Mediante un enfoque de análisis de complejidad incremental (discretización por umbrales, PCA y sUMAP), se evaluó la separabilidad del espacio fonético vocálico. Los resultados mostraron que el sistema posee la sensibilidad suficiente para aislar topológicamente \textit{grandes grupos} fonéticos (\say{A}, \say{E-I} y \say{O-U}), lo que permitió clasificar con alta precisión los gestos motores extremos, \say{A}, \say{I} y \say{U}, alcanzando predicciones de hasta el 100 \% utilizando sUMAP. Sin embargo, las vocales intermedias, \say{E} y \say{O}, evidenciaron un solapamiento persistente que limitó la precisión globalmente. Estas barreras predictivas abrieron dos interpretaciones: que es necesario explorar una triada muscular alternativa, o bien es necesaria la incorporación de un cuarto canal electromiográfico. De manera transversal, es necesario mejorar el montaje experimental con el objetivo de mitigar ruidos eléctricos y garantizar la adherencia de los electrodos, para mejorar la reproducibilidad. A pesar de estas limitaciones técnicas, el trabajo confirma la factibilidad de aislar identidades fonéticas discretas a partir de dinámicas musculares continuas.
+
+\end{abstract}
+
+\vspace{7mm}
+
+\begin{multicols*}{2}
+
+\section{Introducción}
+%%-motivacion inspirada en ravnosky \cite{ratnovsky2021}.
+%%cite{meltzner2018}.
+Las tecnologías actuales de Reconocimiento Automático del Habla (RAH) dependen exclusivamente de la captura de señales acústicas. Esto impone limitaciones en escenarios con ruido de fondo adverso, en situaciones que requieren privacidad (donde el habla puede molestar o ser interceptada), y fundamentalmente, excluye a personas con discapacidades vocales o neurológicas que han perdido la capacidad de fonación. Como alternativa, las Interfaces de Habla Silenciosa (Silent Speech Interfaces, SSI) proponen decodificar el habla capturando la actividad preacústica del usuario. Entre las técnicas más viables destaca la electromiografía superficial (sEMG), un método no invasivo que registra los potenciales de activación de los músculos articulatorios faciales y del cuello (Janke et al., 2017 \cite{janke2017}; Wand et al., 2013 \cite{wand2013}).
+
+Si bien los sonidos de todos los idiomas se describen mediante un conjunto finito y discreto de símbolos, los \textit{fonemas}, estos son producidos por movimientos continuos y altamente complejos del tracto vocal (Assaneo et al., 2019 \cite{assaneo2019}). La fonética clásica ha intentado mapear las vocales en espacios de baja dimensión (como las frecuencias de los formantes acústicos o la posición de la lengua), pero asumiendo siempre la naturaleza continua de los cambios morfológicos. Trabajos recientes han propuesto una alternativa a esta visión, demostrando que la dinámica continua de los articuladores puede contraerse y describirse en un espacio de baja dimensión de \say{coordenadas motoras discretas} binarias (Assaneo et al., 2013 \cite{trevisan2013}).
+
+Por otro lado, trabajos recientes de RAH basados en sEMG han logrado clasificar palabras utilizando técnicas de reducción de dimensionalidad sobre músculos faciales específicos (Ratnovsky et al., 2021 \cite{ratnovsky2021}), pero sin profundizar en si la identidad discreta de los fonemas básicos puede extraerse directamente de la actividad eléctrica muscular subyacente.
+
+Este trabajo propone \say{tender un puente} entre ambos enfoques: investigar si es posible aislar la identidad discreta de los fonemas puramente a partir de la actividad electromiográfica continua, con la novedad de que este estudio trabaja exclusivamente la fonética del idioma español. Para ello, se registró la señal sEMG de tres músculos articulatorios (\textit{Orbicularis Oris}, \textit{Depressor Anguli Oris} y \textit{Mylohyoid}), cuya participación funcional ha sido descrita en investigaciones previas sobre el reconocimiento del habla \cite{ratnovsky2021, janke2017}, durante la fonación de las cinco vocales del español.
+
+Para posibilitar este estudio, se desarrolló un sistema integral de hardware y software denominado \say{\textit{Ñandú LSD}}. La medición de los músculos se sostiene en parte sobre este sistema que consta de un equipo amplificador sEMG de tres canales, diseñado y ensamblado en un gabinete autónomo. Este dispositivo opera en conjunto con una placa de adquisición de datos (DAQ), una interfaz de audio y un micrófono para el registro sincrónico de la voz. A su vez, el acondicionamiento, visualización y procesamiento de esta información se centralizan en una aplicación de software diseñada específicamente para este proyecto.
+
+El objetivo principal es evaluar la viabilidad de separar y clasificar estas vocales a partir de sus \say{patrones de activación muscular} o \textit{firmas musculares}. Para ello, se diseñó una metodología de complejidad algorítmica incremental que recorre tres métodos distintos de análisis: primero se aplicó un Método de Umbrales; luego se incorporó el Análisis de Componentes Principales (PCA), aumentando la complejidad hacia una reducción de dimensionalidad lineal que aún conserva una alta interpretabilidad fisiológica de los resultados; finalmente, se exploró el límite de la separabilidad mediante sUMAP (Supervised Uniform Manifold Approximation and Projection), una técnica no lineal que, si bien sacrifica la interpretabilidad directa de las variables, posee el potencial topológico de separar superposiciones en los datos que los métodos anteriores podrían no lograr. Esta progresión permite no solo buscar el mejor rendimiento en cuanto a clasificación, sino que también comprender qué nivel de procesamiento matemático es verdaderamente necesario para decodificar la actividad motora del tracto vocal.
+
+% La generacion vocal es un proceso que involucra la coordinacion de distintos procesos neurofisiologicos. Los sistemas de reconocimiento del habla RAH se han centrado en analizar la señal acustica, sin embargo, esto genera que estos métodos no sirvan para casos donde la persona no esta generando sonido. Los cual no se podrian usar en entornos ruidosos o en personas con dificultad para usar el tracto vocal. Entre las tecnicas que se han usado para el RAH, se encuentra la electromiogrfia en los musculos faciales, ya que es un proceso no invasivo y no requiere generar sonido. 
+% La electromiografıa superficial registra la actividad electrica generada por la despolarizacion defibras musculares mediante electrodos colocados sobre la piel. Se mide el potencial de activacion de las  motoneuronas,  que son parte del sistema nervioso. 
+% %%-referido al lsd \cite{fainstein2021%%
+% Desde la perpectiva neurofisiologica y de sistemas dinamicos, las investigaciones sobre la prodcuccion vocal en aves sugieren que sonidos complejos pueden modelarse  a través de un modelo motor de baja dimensión.  \cite{fainstein2021}
+% %%-motivacion de biologia y fisica del tracto vocal de trevisan
+% al extender estos modelos al habla humana trabajos recientes sugieren que la generacion  de las vocales puede mapearse en un espacio de coordenadas motoras discretas controladas por los labios , la lengua y la mandibula. Sin embargo estos radican en tecnicas distintas de la electromiografia  \cite{trevisan2013} y se centran en binarizar la amplitud de la mediciòn en vectores de 3 componentes.
+
+% En este trabajo se propone estudiar las señales al entonar las 5 vocales midiendo electromiografia en superficie de tres musculos inspirados en la estudios previos : el \textit{Orbicularis Oris}, el \textit{Depressor Anguli Oris} y el \textit{Mylohyoid}.
+
+% %%tecnicas de machine learning para decodificar
+
+% En este estudio se implementa y comparan distintas tecnicas de reducciòn  de dimensionalidad y clasificacion, con uno de los objetivos evaluar la viabilidad de separar la vocales  en coordenadas motoras discretas y estudiar la posibilidad de decoficar estas a travès de algorimtmos de reduccion de dimensionalidad no supervisados y supervisados.
+\section{Desarrollo experimental}
+
+% Una parte del desarrollo experimental estuvo enfocada en terminar de armar el amplificador diferencial de 3 canales, otra en definir el software de adquisición y procesamiento de mediciones, y otra en el armado del set y el protocolo del experimento. El \say{hardware} y el \say{software} desarrollado resultaron en un único producto que se denominó \textit{Ñandú LSD}.
+El desarrollo experimental comprendió tres etapas: la construcción y ensamblaje final de un amplificador diferencial de tres canales, la implementación del software para la adquisición y el procesamiento de mediciones, y el diseño del montaje y protocolo experimental. La integración del hardware y software desarrollado dio lugar a un sistema de registro unificado que se denominó \textit{Ñandú LSD}.
+
+\subsection{Hardware}
+\begin{figure*}[t]
+    \centering
+    \begin{tikzpicture}
+        % Cargamos la imagen ajustada al ancho total de la página (\textwidth)
+        \node[anchor=south west,inner sep=0] (image) at (0,0) {\includegraphics[width=0.65\textwidth]{desarrollo_experimental/hardware/hardware_figure1.pdf}};
+        
+        \begin{scope}[x={(image.south east)},y={(image.north west)}]
+            
+            % Como la imagen será más grande, aumentamos un poco la fuente a \large
+            \tikzset{etiqueta/.style={fill=white, draw=black, text=black, inner sep=1pt, font=\small\bfseries}}
+            
+            % Coordenadas para cada sub-imagen (esquina superior izquierda de cada panel)
+            \node [etiqueta] at (0.375, 0.97) {(a)}; % Vista superior amplificador
+            \node [etiqueta] at (0.978, 0.97) {(b)}; % Panel de entradas (arriba derecha)
+            \node [etiqueta] at (0.979, 0.744) {(c)}; % Panel BNC (medio derecha)
+            \node [etiqueta] at (0.715, 0.512) {(d)}; % Cables (abajo al medio)
+            \node [etiqueta] at (0.9785, 0.512) {(e)}; % Conector metálico (abajo a la derecha, arriba)
+            \node [etiqueta] at (0.9785, 0.295) {(f)}; % Electrodo (abajo a la derecha, abajo)
+            
+        \end{scope}
+    \end{tikzpicture}
+    \captionsetup{width=.9\linewidth}
+    \caption{Imágenes del equipo que se desarrolló.
+    \textbf{(a)} Vista superior del amplificador de 3 canales \textit{Ñandú LSD}.
+    \textbf{(b)} Vista lateral con las entradas de los electrodos, 
+    y pulsador de encendido y apagado.
+    \textbf{(c)} Vista lateral con salidas de los canales de amplificación. 
+    Código QR al repositorio del proyecto en GitHub.
+    \textbf{(d)} Juego de cables trenzados y mallados. \textbf{(e)} Extremo del cable conector
+    al amplificador. 
+    \textbf{(f)} Extremo del cable conector a los electrodos.}
+    \label{fig: hardware}
+\end{figure*}
+
+% -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+% REVISARIA ESTE PARRAFO PARA ESCRIBIRLO MEJOR, HABRIA QUE DENOTAR QUE HAY UNA PARTE DE HARDWARE DESARROLLADO POR NOS Y OTRA QUE NO.
+% -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+El montaje experimental integra tanto instrumentación comercial como electrónica de diseño propio. Respecto a esta última, la placa del amplificador diseñada en Laboratorio 6 \cite{informeLabo6} fue integrada dentro de un gabinete de contención. Dicho chasis fue modificado para agregarle conectores hembra mini-XLR (comúnmente denominados mini-canon) de tres pines, un conector \textit{jack} de 6.5~mm, un interruptor de encendido con indicador LED, y tres terminales hembra BNC. Adicionalmente, se incorporaron soportes para dos baterías de $9$ V, asegurando un dispositivo compacto y de alimentación autónoma.
+% El hardware utilizado consta de un equipo desarrollado específicamente para este trabajo y componentes que se pueden adquirir de manera comercial. En cuanto al hardware desarrollado, a la placa electrónica del amplificador realizado en Laboratorio 6 \cite{informeLabo6}, se la colocó dentro un gabinete. Este se modificó adecuadamente para agregarle fichas hembra de conectores minicanon de tres pines, una ficha plug de $6.5$ mm,  un interruptor de encendido y apagado con su respectivo led rojo, y tres fichas hembra BNC. Además se colocaron soportes para las dos baterías de 9V, asegurando un dispositivo compacto y autónomo energéticamente.
+
+Por otro lado, se ensamblaron tres cables trenzados y mallados para conectar los electrodos al amplificador (uno por canal). Se utilizaron conectores macho mini-XLR para transmitir la señal positiva ($V+$), la señal negativa ($V-$) y enlazar el recubrimiento de papel aluminio como blindaje a tierra (GND). En el extremo opuesto, el cableado de cobre fue soldado a broches a presión metálicos para facilitar el anclaje a los electrodos. La unión fue reforzada mediante un revestimiento aislante y fijada con cemento de contacto. El aspecto final del equipo ensamblado se expone en la Fig. (\ref{fig: hardware}).
+% fichas macho minicanon de 3 pines con la señal \say{positiva} del electrodo ($V+$), la señal \say{negativa} ($V-$) y un recubrimiento de papel aluminio como blindaje ($GND$). Para la conexión con los electrodos se soldaron los cables de cobre a broches a presión. Se reforzó la soldadura colocando un revestimiento aislante al cable y, luego, colocando cemento de contacto sobre la soldadura. Se pueden ver imágenes del resultado en la Fig. (\ref{fig: hardware}).
+% Por otro lado, se armaron tres cables trenzados y mallados para conectar los electrodos al amplificador, un cable por canal. Se utilizaron fichas macho minicanon de 3 pines con la señal \say{positiva} del electrodo ($V+$), la señal \say{negativa} ($V-$) y un recubrimiento de papel aluminio como blindaje ($GND$). Para la conexión con los electrodos se soldaron los cables de cobre a broches a presión. Se reforzó la soldadura colocando un revestimiento aislante al cable y, luego, colocando cemento de contacto sobre la soldadura. Se pueden ver imágenes del resultado en la Fig. (\ref{fig: hardware}).
+
+\subsection{Software}
+
+La parte que completa a \textit{Ñandú LSD} es su software. Debido a la necesidad de medir simultáneamente 4 canales de información, 3 músculos y un micrófono, se desarrolló un software propio (denominado también \textit{Ñandú LSD}) con el objetivo fundamental de poder adquirir y visualizar en tiempo real tantos canales como posea la tarjeta conversora analógico-digital (DAQ). Además, el sistema automatiza el procedimiento experimental y los procesos de grabación, %Lucas
+como también permite visualizar y analizar, asi como organizar adecuadamente en base de datos para posteriores análisis. El software se encuentra en este \href{https://github.com/santiagopradorodriguez/Nandu_SistemadeAdqusicionEMG}{repositorio} de GitHub.
+
+% -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+% Esto completaba el parrafo anterior, no pondria tantos detalles aca, siento que lo vamos a repetir a futuro. Pongo la parte que le agrego yo.
+% -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+% Para esto, usa la sincronización mediante un metrónomo y a partir de los pulsos y el bpm realiza la segmentación automática en ventanas temporales. Luego, el software permite el postprocesamiento de las señales y la organización final de los datos, listos para las etapas posteriores de análisis.
+
+\subsection{Medición de vocales con sEMG}
+
+Se midieron los músculos \textit{Depressor Anguli oris}, \textit{Orbicularis Oris} y \textit{Mylohyoid} en función del tiempo, y se grabó el sonido emitido. Se utilizaron dos electrodos (por ser una amplificación diferencial) por cada músculo, posicionando la referencia ($GND$) en la apófisis mastoides (hueso detrás de la oreja), como se puede ver en la Fig.~(\ref{fig:set_3_musculos}). Se conectaron los electrodos al equipo \textit{Ñandú LSD} y la salida de este a la placa de adquisición \textit{NI-DAQ-USB-6212} \cite{ni6212} que se conectó a una computadora. Para grabar la voz se utilizó un micrófono direccional \textit{TAKSTAR SGC 568} \cite{takstar_sgc568}, que se conectó a una placa preamplificadora de audio \textit{Behringer TUBE ULTRAGAIN MIC100} \cite{behringer_mic100}. La salida de este preamplificador fue conectada a la placa de adquisición ya mencionada (ver Fig. \ref{fig:set_3_musculos}). Los electrodos utilizados fueron los \textit{Medi-Trace} \cite{kendall_530}, que no fueron reutilizados. Se definió como \say{sesión} cada experimento que utilizó electrodos nuevos. Se realizaron tres sesiones en días y horarios diferentes sobre un único sujeto experimental varón de 25 años, hablante nativo de español rioplatense, donde se midieron, en total y con un metrónomo de 30 ~BPM (para reproducir a ritmo constante cada vocal), $118$ pronunciamientos de cada vocal: \say{A}, \say{E}, \say{I}, \say{O} y \say{U}. Todas las señales eléctricas fueron digitalizadas a una frecuencia de muestreo de $2000$~Hz.
+
+\subsubsection{Protocolo y procesamiento de datos}
+
+Se desarrolló un protocolo, tanto para la adquisición de la señal como para el procesamiento, con el objetivo de poder reproducir las mediciones considerando el ruido asociado a los electrodos \cite{informeElectrodos2025} y la variabilidad intrínseca de señales biológicas. % Voy a escribir el protocolo de medición, veremos si entra en la version final
+El protocolo constó entonces de los siguientes pasos: 
+(1)~\textbf{preparación de electrodos}, se recortaron los pares de electrodos sin despegarlos, se colocaron los broches de presión y cinta \textit{3M DURAPORE} antes de la adhesión facial; 
+(2)~\textbf{entrenamiento y calibración}, se realizó una práctica de vocales sincronizada con un metrónomo de 30 ~BPM y se ajustó la ganancia del preamplificador a un nivel promedio de -18~dB para optimizar la relación señal-ruido (SNR);
+(3)~\textbf{preparación del sujeto}, este se lavó el área con detergente especial, se secó con gasa y frotó más localizadamente con alcohol al 70\,\% para secar aún más la piel;
+(4)~\textbf{colocación de electrodos}, despegándolos primero para luego presionarlos contra los músculos;
+(5)~\textbf{configuración de captura}, se ajustó el patrón polar del micrófono en modo cardioide; y 
+(6)~\textbf{validación de canales EMG}, donde se verificó la señal solicitando al sujeto tragar saliva (para activar el músculo \textit{Mylohyoid}) y realizar una sonrisa exagerada o mostrar los dientes (para activar el \textit{Depressor} y el \textit{Orbicularis}).
+
+% ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+% Pense que habiamos quedado en utilizar envolvente de media movil, no RMS
+%------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Con respecto al procesamiento, a las cuatro señales
+%“”
+
+\noindent
+\begin{minipage}{\linewidth}
+    \centering
+    \begin{tikzpicture}
+        % Cargamos las dos imágenes apiladas en un único nodo
+        \node[anchor=south west, inner sep=0] (image) at (0,0) {%
+            \begin{tabular}{@{}c@{}}
+                \includegraphics[width=0.65\linewidth]{desarrollo_experimental/vocales/diagrama_exp_a.pdf}\\[0pt]
+                \includegraphics[width=0.65\linewidth]{desarrollo_experimental/vocales/diagrama_exp_b.pdf}
+            \end{tabular}%
+        };
+        
+        \begin{scope}[x={(image.south east)},y={(image.north west)}]
+            
+            % Estilo para las etiquetas en blanco y negro
+            \tikzset{etiqueta/.style={fill=white, draw=black, text=black, inner sep=1.5pt, font=\small\bfseries}}
+            
+            % Ubicación de las etiquetas relativas (esquina superior izquierda de cada sub-imagen)
+            \node [etiqueta, anchor=north west] at (0.408, 0.999) {(a)};
+            \node [etiqueta, anchor=north west] at (0.905, 0.9984) {(b)};
+            \node [etiqueta, anchor=north west] at (0.412, 0.755) {(c)};
+            \node [etiqueta, anchor=north west] at (0.905, 0.755) {(d)};
+            \node [etiqueta, anchor=north west] at (0.907, 0.4985) {(e)};
+            
+        \end{scope}
+    \end{tikzpicture}
+    
+    \captionof{figure}{\textbf{(a)} Se señalan los músculos medidos. \textbf{(b)}, \textbf{(c)} y \textbf{(d)} esquemas ilustrativos
+    de cómo se posicionaron los electrodos en los músculos. \textbf{(e)} Set experimental de la medición. Los electrodos
+    se conectaron al amplificador \textit{Ñandú LSD}, que fue conectado a la placa de adquisición \textit{NI DAQ USB-6212}, y esta a una computadora.
+    El micrófono \textit{TAKSTAR SGC 568}, utilizado para grabar la voz, se conectó a una placa preamplificadora \textit{Behringer TUBE ULTRAGAIN MIC100}, que fue
+    conectada a la mencionada placa de NI.}
+    \label{fig:set_3_musculos}
+\end{minipage}
+\vspace{-6mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-4mm} % Reduce el espacio antes de la línea
+
+%\vspace{0.4cm}
+
+% \begin{center}
+%     \begin{tikzpicture}
+%         % Cargamos las dos imágenes apiladas en un único nodo
+%         \node[anchor=south west, inner sep=0] (image) at (0,0) {%
+%             \begin{tabular}{@{}c@{}}
+%                 \includegraphics[width=0.65\linewidth]{desarrollo_experimental/vocales/diagrama_exp_a.pdf}\\[0pt]
+%                 \includegraphics[width=0.65\linewidth]{desarrollo_experimental/vocales/diagrama_exp_b.pdf}
+%             \end{tabular}%
+%         };
+        
+%         \begin{scope}[x={(image.south east)},y={(image.north west)}]
+            
+%             % Estilo para las etiquetas en blanco y negro
+%             \tikzset{etiqueta/.style={fill=white, draw=black, text=black, inner sep=1.5pt, font=\small\bfseries}}
+            
+%             % Ubicación de las etiquetas relativas (esquina superior izquierda de cada sub-imagen)
+%             \node [etiqueta, anchor=north west] at (0.408, 0.999) {(a)};
+%             \node [etiqueta, anchor=north west] at (0.905, 0.9984) {(b)};
+%             \node [etiqueta, anchor=north west] at (0.412, 0.755) {(c)};
+%             \node [etiqueta, anchor=north west] at (0.905, 0.755) {(d)};
+%             \node [etiqueta, anchor=north west] at (0.907, 0.4985) {(e)};
+            
+%         \end{scope}
+%     \end{tikzpicture}
+    
+%     \captionof{figure}{\textbf{(a)} Se señalan los músculos medidos. \textbf{(b)}, \textbf{(c)} y \textbf{(d)} esquemas ilustrativos
+%     de como se posicionaron los electrodos en los músculos. \textbf{(e)} Set experimental de la medición. Los electrodos
+%     se conectaron al amplificador \textit{Ñandú LSD}, que fue conectado a la placa \textit{NI DAQ USB-6212}, y esta a una computadora.
+%     El micrófono \textit{TAKSTAR SGC 568}, utilizado para grabar la voz, se conectó a una placa de audio \textit{Behringer TUBE ULTRAGAIN MIC100}, que fue
+%     conectada a la mencionada placa de NI.}
+%     \label{fig:set_3_musculos}
+% \end{center}
+\noindent (una de micrófono y tres musculares), se les aplicó un filtro \textit{notch} en $50$ Hz para eliminar el ruido de línea, un filtro \textit{pasabanda} para atenuar la componente de continua que deriva de la interfaz electrodo con piel, y un suavizado por RMS (\textit{Root Mean Square}) para calcular su envolvente. Luego se segmentó cada señal en \say{ventanas} de período dictado por el metrónomo de 30~BPM, y se calcularon los picos máximos en cada una. Así se obtuvo una triada de ventanas por cada pronunciacion. Se definió como “pulso” a cada señal dentro de cada ventana, es decir, a cada pronunciación de vocal. A partir de acá, la \say{preparación} varía según el método de análisis utilizado.
+
+\subsubsection*{Discretización por umbrales}
+% ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+% Para mi el objetivo va en la introducción, voy a comentar esto y escribirlo de otra manera...
+%------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+% Con el objetivo de analizar el correlato físico entre las señales y evaluar la viabilidad de decodificar el habla silenciosa, la información procesada se sometió a diferentes estrategias. Por un lado, se implementó el método de umbrales:
+
+El objetivo de este método es convertir la señal de cada músculo en un estado lógico binario ($1$ si supera un dado umbral y $0$ si no), generando un código discreto de activación muscular para cada vocal. Entonces, primero se descartaron los pulsos cuyo valor de SNR fue inferior a un límite preestablecido. Luego, a cada pulso se le restó el \textit{ruido basal} identificado en cada ventana. Después, la amplitud de la envolvente de cada pulso se normalizó según el músculo de mayor amplitud en cada ventana. Todo esto permitió que las mediciones de pronunciación sean comparables entre sí. 
+
+Para definir el umbral se realizó una búsqueda iterativa sobre todas las mediciones para encontrar un umbral que asocie a cada vocal con un código discreto único: si el pulso supera el umbral se le asigna un \say{1} y en caso contrario un \say{0}, definiendo la vocal mediante el vector de mayor frecuencia de aparición. Es decir, mediante un barrido sistemático de valores, el algoritmo evaluó la activación de cada músculo y seleccionó el valor de umbral que minimiza la asignación de códigos idénticos a vocales distintas. De esta manera, el éxito en la \say{separación de vocales} radica en obtener vectores binarios únicos y distinguibles para cada fonema.
+
+\subsubsection*{Preparación de datos para reducción de\\dimensionalidad}
+
+Para aplicar métodos matemáticos más complejos, PCA y sUMAP, se requirió un formateo de los datos distinto al utilizado en el método de umbrales. Se emplearon los picos de la señal del micrófono como ancla temporal para alinear todas las ventanas en el cero, preservando así los desfasajes relativos de la contracción de cada músculo. A cada ventana (previamente restada su línea base y normalizada por amplitud) se la remuestreó a una cantidad fija de $N$ puntos mediante una transformada rápida de Fourier (FFT). Finalmente, se construyó un vector de características concatenando los $N$ puntos de los tres músculos, generando un arreglo de tamaño $3$ x $N$ por medición. La concatenación de todos estos vectores conformó la matriz de datos de entrada.
+%creo que esto iria mas en umap, porque en pca no hay test y train
+
+
+\subsubsection*{Análisis de Componentes Principales (PCA)}
+  
+En congruencia con la complejidad algorítmica incremental propuesta, se evaluó en primera instancia el Análisis de Componentes Principales (PCA) \cite{jolliffe2002}. Al ser una transformación lineal, PCA es un método altamente interpretable que permite analizar qué tan separables son de por sí las firmas musculares en el espacio de mayor varianza. Sobre los datos proyectados en este espacio latente, se utilizó un algoritmo de \say{clustering} \textit{GMM} (Gaussian Mixture Models \cite{sklearn_gmm}) para agrupar los datos de forma no supervisada en 5 clases. Para poder cuantificar la tasa de aciertos, se aplicó el \textit{algoritmo húngaro} \cite{kuhn1955}, un método que encuentra el emparejamiento óptimo entre los clústeres generados por GMM y las verdaderas etiquetas de las vocales. A través de este emparejamiento se definieron las fronteras de decisión de las zonas correspondientes a cada vocal.
+% \subsubsection*{PCA}
+% %para abordar tanto el estudio del correlato físico como la decodificación ---------------------- No entiendo eso que dice 'como ancla para alinear todas las ventanas en el cero' ----- reemplacé todo lo que sea canales por músculos... No daria tantos detalles de como se resto el ruido basal. O lo pondria en el metodo de arriba
+% Adicionalmente, en orden de utilizar métodos más complejos para separar vocales, se decidió comparar un método no supervisado y un método supervisado. Para estos métodos los datos se preprocesaron de manera diferente. Se emplearon los picos de la señal del micrófono como referencia para alinear todas las ventanas en el cero, moviendo el resto de canales de la misma manera para preservar sus desfasajes. Posterior a eso, cada ventana se tomó como una medición independiente. A cada una se le restó el ruido basal, estimado a partir del promedio de la amplitud del valle entre picos anterior y posterior, y luego se normalizó la señal de cada ventana dividiendo por el pico de la señal del músculo más grande. Las señales se remuestrearon a una cantidad fija de $N$ puntos (remuestreo por FFT). Finalmente, se armó un vector de características concatenando los N puntos del primer, segundo y tercer canal, generando un arreglo de $3$ $x$ $N$ muestras por medición. El conjunto de estos vectores conformó una matriz de datos.
+% % Que es el algoritmo hungaro?
+
+% Para el enfoque no supervisado, se evaluó qué tan separables son las señales de las 5 vocales aplicando el análisis de componentes principales (PCA) \cite{scikit-learn}. Sobre estos datos proyectados en este espacio latente, se configuró un algoritmo de clustering GMM (Gaussian Mixture Models \cite{scikit-learn}) para establecer 5 clases y se aplicó el algoritmo húngaro \cite{scipy} para asignar a estas 5 clases sus etiquetas reales. A través de estas clases se definieron las fronteras de decisión que delimitan las zonas correspondientes a cada vocal, permitiendo posteriormente cuantificar los aciertos y errores de clasificación.
+
+\subsubsection*{UMAP Supervisado (sUMAP)}
+  
+Finalmente, con el propósito de explorar el límite de la separabilidad, se aplicó sUMAP (\textit{Supervised Uniform Manifold Approximation and Projection}) \cite{umap}. A diferencia de PCA, sUMAP es un método de reducción de dimensionalidad no lineal. Si bien sacrifica la interpretabilidad fisiológica directa de los ejes resultantes, posee un enorme potencial topológico para \say{desenredar} superposiciones complejas en los datos. Para garantizar la validez de los modelos y evitar la fuga de datos (\textit{data leakage}), de una muestra de 590 mediciones de vocales a lo largo de 3 sesiones (el total de mediciones), se destinó un 80\% para el conjunto de entrenamiento (\textit{training set}), y el 20 \% restante para el conjunto de prueba (\textit{test set}). El algoritmo sUMAP recibió únicamente la matriz de los datos de entrenamiento junto con sus respectivas etiquetas (método supervisado) para generar un espacio latente optimizado. Sobre dicha proyección, se configuró un clasificador \textit{K-Nearest Neighbors} (K-NN \cite{hastie2009}) para trazar las fronteras de decisión. Por último, se proyectaron los datos del conjunto de prueba (las mediciones nunca antes vistas por el algoritmo) sobre este mismo espacio para evaluar dentro de qué fronteras caían, determinando así la capacidad de predicción y generalización del modelo.
+
+Cabe destacar que, tanto para los algoritmos aplicados sobre PCA como para los de sUMAP, se ajustaron sistemáticamente los parámetros de procesamiento e hiperparámetros de configuración para maximizar la tasa de acierto en la clasificación. Este proceso de optimización determinó que el rendimiento más alto se alcanza calculando la envolvente de la señal con una ventana RMS de $90$ ms, y aplicando un remuestreo final a $N=20$ puntos por canal, lo que consolida un vector espacial de $60$ dimensiones por cada pronunciación evaluada.            
+% Cabe destacar que, tanto para los algoritmos aplicados sobre PCA como para los de sUMAP, se ajustaron sistemáticamente los parámetros (envolvente y re-muestreo) e hiperparámetros de configuración con el objetivo de maximizar la tasa de acierto en la clasificación.
+% \subsubsection*{sUMAP}
+
+% % Lo de las sesiones lo defini diferente previamente, diria de comentarlo al principio, en PCA. Y comentar que es una curaduria en realidad o algo asi.
+% Finalmente, con el propósito de evaluar si se podía alcanzar una mayor precisión en la clasificación, se aplicó un método supervisado mediante reducción de dimensionalidad (sUMAP) \cite{umap}. Para evitar la fuga de datos (\textit{data leakage}) y garantizar la validez del modelo, la selección de las mediciones se realizó a partir de sesiones de medición. Se registraron un total de 7 sesiones experimentales, realizadas en horas distintas, retirando y colocando electrodos nuevos en cada una de ellas. De estas 7 sesiones, se seleccionaron 2 exclusivamente para testeo y las 5 restantes para entrenamiento. Durante el procesamiento, el algoritmo sUMAP recibió únicamente la matriz de las sesiones de entrenamiento y sus etiquetas para generar un espacio latente. Sobre dicha proyección, se configuró un clasificador K-Nearest Neighbors (K-NN \cite{scikit-learn}) para trazar las fronteras de decisión basadas en las regiones de entrenamiento. Por ultimo, se proyectaron los datos  de prueba sobre este mismo espacio para evaluar dentro de qué fronteras caían, determinando así la capacidad de predicción del modelo. Cabe destacar que, tanto para los algoritmos aplicados sobre PCA como para los de sUMAP, se ajustaron sistemáticamente los parámetros de configuración con el objetivo de maximizar la tasa de acierto en la clasificación.
+
+\section{Resultados}
+
+La naturaleza intrínseca de las señales biológicas, sumada al ruido eléctrico y de la interfaz piel electrodo \cite{informeElectrodos2025}, supuso un gran desafío para la reproducibilidad del experimento. Sin embargo, gracias al protocolo de medición desarrollado, se lograron adquirir señales con un alto valor de (SNR). Esto permitió observar visualmente que los músculos se activan formando \say{estructuras} o \say{firmas} temporales definidas para cada vocal en particular. A modo de ejemplo, la Fig. (\ref{fig: vocal i raw}) ilustra la señal cruda y la señal suavizada, con filtros notch y pasabanda, de dos músculos durante la pronunciación de la vocal \say{I}.
+% Si bien fue necesario desarrollar un protocolo de medición, no solo por tratarse de señales biológicas sino principalmente por el ruido asociado a la línea y los electrodos, lo que denota una alta dificultad en lograr una reproducibilidad del experimento, aún asi se puede observar que los músculos se activan formando \say{estructuras definidas} para cada vocal en particular. Y esto se debe a que las señales adquiridas presentan en general un buen valor de SNR \cite{informeElectrodos2025}. Antes de ir a los resultados de cada análisis, se puede observar en la Fig. (\ref{fig: vocal i raw}) la señal medida de dos músculos en el pronunciamiento de la vocal A.
+
+\vspace{-6mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-4mm} % Reduce el espacio antes de la línea
+\noindent
+\begin{minipage}{\linewidth}
+    \centering
+    \begin{tikzpicture}
+        % Apilamos las dos imágenes en un único nodo ajustado a la columna
+        \node[anchor=south west, inner sep=0] (image) at (0,0) {%
+            \begin{tabular}{@{}c@{}}
+                \includegraphics[width=0.9\linewidth]{resultados/letra_i_raw.pdf}\\[0.5em]
+                \includegraphics[width=0.9\linewidth]{resultados/letra_i_sinmic_notch_pasabanda.pdf}
+            \end{tabular}%
+        };
+        
+        % Definimos el scope de coordenadas relativas (0,0 a 1,1)
+        \begin{scope}[x={(image.south east)},y={(image.north west)}]
+            
+            % Estilo para las etiquetas
+            \tikzset{etiqueta/.style={fill=white, draw=black, text=black, inner sep=1.5pt, font=\small\bfseries}}
+            
+            % Coordenadas para cada sub-imagen
+            \node [etiqueta, anchor=north west] at (0.02, 0.98) {(a)}; 
+            \node [etiqueta, anchor=north west] at (0.02, 0.48) {(b)}; 
+            
+        \end{scope}
+    \end{tikzpicture}
+    
+    \captionof{figure}{Muestra de señales que se obtienen en cada medición y preprocesamiento, para $20$ vocalizaciones de la vocal \say{I}. Se eligieron solo las señales de los músculos \textit{Mylohyoid} y \textit{Depressor anguli oris}.
+    \textbf{(a)} Se observan las señales sin preprocesamiento. La barra vertical de $700\,\mu\text{V}$ representa la amplitud de la señal.
+    \textbf{(b)} Se observan las señales preprocesadas: se les aplicó un filtro notch de $50\,\text{Hz}$, 
+    un filtro pasabanda con frecuencias de corte en $20\,\text{Hz}$ y $50\,\text{Hz}$, y se les aplicó un 
+    suavizado por media móvil con una ventana de, en esta figura por ejemplo, $150\,\text{ms}$ para 
+    calcular su envolvente. La barra vertical de $100\,\mu\text{V}$ representa la amplitud de la señal.}
+    \label{fig: vocal i raw}
+\end{minipage}
+
+\subsection{Discretización por umbrales}
+
+%Se muestra el resultado de haber aplicado el método de umbrales para la letra \say{O} en la Fig. (\ref{fig: metodo umbrales}).
+La Fig. (\ref{fig: metodo umbrales}) muestra el resultado tras aplicar el método de umbrales para la letra \say{O}.
+
+Al analizar la distribución de frecuencias de los vectores obtenidos para todo el conjunto de datos, se observó una notable superposición que impidió una clasificación biunívoca. En primer lugar, el vector $(1, 1, 1)$ tuvo un peso representativo en las cinco vocales: constituyó la moda principal de la vocal \say{E} ($31.7\%$) y alcanzó frecuencias elevadas en \say{I} ($36.6\%$), \say{O} ($28.8\%$), \say{U} ($28.2\%$) y \say{A} ($20.0\%$).
+
+A esta ambigüedad global se sumaron cruzamientos específicos. Por un lado, la vocal \say{O} dividió su distribución casi equitativamente entre el vector $(1, 0, 1)$ ($36.0\%$) y el $(0, 1, 1)$ ($35.2\%$), coincidiendo este último con la moda principal de la \say{U} ($51.6\%$). Por otro lado, la moda principal de la \say{I}, el vector $(0, 1, 0)$ ($53.0\%$), apareció como la segunda configuración más frecuente de la \say{E} ($30.0\%$). Esta recurrencia de vectores compartidos muestra que la discretización temporal por umbrales resulta insuficiente para diferenciar las cinco vocales en simultáneo.
+
+\vspace{-6mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-2mm} % Reduce el espacio antes de la línea 
+\noindent
+\begin{minipage}{\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{resultados/umbrales/verificacion_O_T1_Lucas2.pdf}
+    %\captionof{figure}{Resultado de aplicar el método de discretización por umbrales a una medición de la vocal O. Se define como pulso a la señal dentro de cada ventana. La normalización se calcula respecto a la mayor amplitud dentro del conjunto de la tríada de músculos medidos, de forma independiente para cada ventana. El método encuentra el valor}
+    \captionof{figure}{Discretización por umbrales para una medición de la vocal \protect\say{O}. La amplitud dentro de cada ventana (pulso) se normaliza independientemente respecto al máximo de los tres canales musculares. La línea horizontal representa el umbral optimizado por músculo para minimizar asignaciones ambiguas entre vocales. Si el pulso supera el umbral se le asigna un \protect\say{1} (verde) y en caso contrario un \protect\say{0} (rojo), definiendo la vocal mediante el vector binario de mayor frecuencia de aparición. En esta figura, el vector asociado a la \protect\say{O} es el $(1, 0, 1)$.}
+    \label{fig: metodo umbrales}
+\end{minipage}
+
+% donde la vocal \say{O} reparte su distribución casi por igual entre el vector $(1, 0, 1)$ ($36.0\%$) y el vector $(0, 1, 1)$ ($35.2\%$), coincidiendo este último directamente con la moda principal de \say{U} ($51{,}6\%$).
+
+% Asimismo, el algoritmo no pudo evitar cruzamientos entre \say{I}, \say{E} y \say{A}. El vector $(0, 1, 0)$, que representa la moda principal de la vocal \say{I} con un $53.0\%$, aparece como la segunda configuración más frecuente en \say{E} con un $30.0\%$. Por su parte, la moda principal de la \say{A}, representada por el vector $(1, 1, 0)$ ($44.0\%$), se replica de forma relevante en \say{E} ($25.0\%$). En conjunto, la recurrencia de vectores compartidos entre distintas vocales muestran que la discretización por umbrales resulta insuficiente para diferenciar las vocales de manera contundente.
+
+% HABRIA QUE CONSEGUIR UNA MUY BUENA CITA PARA LAS DECLARACIONES DE LAS VOCALES
+Una revisión fisiológica de las mediciones explica estos solapamientos \cite{ipa1999}: la activación muscular es parecida para fonemas morfológicamente similares. Por ejemplo, en la \say{O} y la \say{U} (vocales cerradas/redondeadas) predominan el \textit{Depressor} y el \textit{Orbicularis}, mientras que en la \say{E} y la \say{I} (vocales frontales/estiradas) domina el \textit{Depressor}. Esto sugiere dos hipótesis: o bien la variabilidad de amplitud de estos tres músculos no aporta la información suficiente para separar las cinco clases, requiriendo un cuarto músculo que añada una nueva dimensión geométrica al problema o simplemente cambiar de músculos; o bien es el método por umbrales el que carece de la sensibilidad necesaria.
+
+Pueden estar sucediendo ambas hipótesis. Si se restringe el problema y se retiran del análisis las vocales en conflicto (por ejemplo, omitiendo la \say{O} o la \say{U}, asi como la \say{E} o la \say{I}), la tasa de frecuencia representativa aumenta drásticamente. Es decir, el método de umbrales es funcional para diferenciar subgrupos o pares de vocales muy distintas, pero no posee la robustez necesaria para clasificar el espacio vocálico completo de forma individual.
+
+% Una revisión de las mediciones de las vocales resulta en que la \say{activación del conjunto de músculos} es parecida para la \say{O} y la \say{U}, donde se activan principalmente el \textit{Depressor} y el \textit{Orbicularis}, asi como es parecida para la \say{E} y la \say{I} donde se activa principalmente el \textit{Depressor}. Esto podría indicar que tal vez los músculos seleccionados no aporten información suficiente como para poder separar las vocales, o en la misma línea, que tres músculos no sean suficientes y falte uno que ayude a diferenciar mejor agregando otra dimensión al problema. Otra razón de la dificultad que tiene el método, puede deberse a la variabilidad de la amplitud de cada músculo en la pronunciación de vocales, notable a la hora de diferenciar la \say{O} de la \say{U}. Este punto se observa si se retira del análisis alguna de las vocales en cuestión, la \say{O} o la \say{U} asi como la \say{E} o la \say{I}, aumentando los porcentajes de frecuencia. Es decir, el método funciona para diferenciar entre pares de vocales, no para diferenciar vocales individualmente.
+% tambien puede deberse al mètodo de normalizacion local que limita poder tener el 0,0,0
+\subsection{PCA}
+
+% Se aplicó a los datos el Análisis de Componentes Principales (PCA). Sobre esta proyección, un modelo GMM (Mezcla de Gaussianas) agrupó las mediciones en 5 clases, asignándoles su etiqueta real mediante el algoritmo Húngaro. Finalmente, se trazaron las fronteras de decisión que delimitan las zonas de mayor probabilidad de ser  cada vocal, como se muestra en la siguiente figura.
+% Los resultados del análisis de PCA en 2D se muestran en la Fig. (\ref{fig:pca_2d}). Se trazaron las fronteras de decisión que delimitan las zonas de mayor probabilidad de ser cada vocal, como se muestra en la siguiente figura.
+En la Fig. (\ref{fig:pca_2d}) se observan los resultados de proyectar los datos en el espacio bidimensional de mayor varianza generado por el PCA, método lineal, junto con las fronteras de decisión trazadas por el algoritmo GMM \cite{sklearn_gmm} para los cinco \textit{clusters}. %clusters
+
+En sintonía con las limitaciones observadas en el método de umbrales, la distribución geométrica expone la formación de tres \textit{grandes grupos}: un grupo para la vocal \say{A}, otro para las vocales \say{E-I}, donde también se solapan algunas \say{A}, y un tercer grupo solapado para \say{O-U}. Una de las métricas analizables es la distancia euclidiana entre los centroides de las clases, donde valores cercanos a $1$ indican un alto grado de separabilidad y valores cercanos a $0$ reflejan un fuerte solapamiento. Mientras que la distancia promedio entre los distintos \textit{grandes grupos} ronda el $1.13$, lo que indica una clara separabilidad, la distancia se reduce a $0.75$ entre la clase \say{A} y el gran grupo \say{E-I}.
+
+Para evaluar el solapamiento entre clases como su dispersión interna, se calculó el coeficiente de \textit{Silhouette} \cite{silhouette}, una métrica que varía entre $-1$ y $1$. En esta escala, un valor cercano a \say{1} indica que los datos de una clase están muy cohesionados y perfectamente aislados, valores cercanos a \say{0} indican que los datos se ubican sobre~la
+
+% \vspace{-4mm} % Reduce el espacio antes de la línea
+% \begin{center}
+%     \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+% \end{center}
+% %\vspace{-2mm} % Reduce el espacio antes de la línea
+\noindent
+\begin{minipage}{\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{resultados/PCA/PCA_2D_Analisis_Errores.pdf}
+    \captionof{figure}{Análisis PCA en 2D de las señales EMG. Los rombos indican el centroide de cada \textit{cluster} para cada vocal. Las zonas con color de fondo muestran cómo el algoritmo GMM separa los grupos en fronteras de decisión, las cuales delimitan las zonas donde hay mayor probabilidad de que un punto pertenezca a esa vocal. Si un punto cae en una zona de distinto color a su etiqueta real, se considera un error de clasificación y se lo asume como la vocal correspondiente a dicha zona.}
+    \label{fig:pca_2d}
+\end{minipage}
+\vspace{-6mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-2mm} % Reduce el espacio antes de la línea
+
+\noindent misma frontera de decisión, y valores negativos reflejan solapamientos claros. El puntaje global obtenido para el espacio bidimensional fue de $0.20$, lo que quizás muestra que la activación muscular forma un espacio carente de \say{clústeres} compactos y totalmente aislados. Al analizarlo por vocal, los resultados reflejan lo que se observa en la Fig. (\ref{fig:pca_2d}): la clase \say{I} (0.44) es la más compacta y aislada, seguida por la \say{A} (0.24). En contraste, las vocales con mayor conflicto topológico reportan valores cercanos a cero: \say{O} (0.12), \say{U} (0.10) y \say{E} (0.01). Es decir, las mediciones de estas tres vocales no se agrupan de manera compacta, ubicándose mayoritariamente en los límites de decisión de las clases vecinas, algo particularmente evidente en la \say{E}.
+
+Estos resultados podrian sugerir que el espacio latente generado por el PCA no representa únicamente varianza eléctrica aleatoria, sino que podria estar capturando, de forma simplificada, las restricciones \say{biomecánicas} de los músculos involucrados. Las agrupaciones mejor definidas parecen corresponder a \say{gestos motores extremos} y diferenciables: la \say{A} requiere la apertura de la mandíbula (actividad asociada al \textit{Mylohyoid}); la \say{I} exige un estiramiento mediolateral de los labios (\textit{Depressor}); y la \say{U} demanda un movimiento anteroposterior o de redondeo (\textit{Orbicularis}). Por su parte, las vocales \say{E} y \say{O} presentan patrones de activación muscular, que se pueden denominar como \say{intermedios} que podrian derivar en su solapamiento algorítmico.
+
+Si bien estas observaciones deben tomarse con cautela al tratarse de los datos de un único sujeto, aparece nuevamente la hipótesis planteada en el método de umbrales. Los tres músculos medidos logran separar gestos motores extremos (los que se denominaron \textit{grandes grupos}), pero la sensibilidad a las vocales consideradas \say{intermedias} requerirían un cuarto músculo que aporte una nueva dimensión, explorar otros tres músculos, o aplicar otro tipo de algoritmo que mejore la separación.
+
+Con el objetivo de evaluar la capacidad de clasificación del método, se aplicó un modelo no supervisado GMM (Mezcla de Gaussianas) que dividió los datos geométricamente en 5 \textit{clusters}. Luego, se utilizó el algoritmo Húngaro para emparejar cada \textit{cluster} generado con la etiqueta real de la vocal correspondiente. Finalmente, se analizó el nivel de acierto de esta separación comparando la etiqueta asignada por el \textit{cluster} con la vocal realmente pronunciada (ver Tabla \ref{tab:pca_confusion}).
+
+Se observa un éxito absoluto en la separación de los \textit{grandes grupos}: existe un 0 \% de confusión entre el blo-
+
+% Una de las métricas analizables es la distancia euclidiana entre sus centroides. En ella, un valor cercano a \say{1} indica alto grado de separabilidad, mientras que valores cercanos a 0 reflejan alto solapamiento entre clases. Visualmente, se pueden identificar tres grupos de clases por su distancia la vocal: [A], el grupo [E-I] y el grupo [O-U]. La distancia más chica es de $0.75$ y es entre los grupos [A] y [E-I]. El resto de distancias son superiores a 1 (en promedio rondan 1.13). Es decir, un algoritmo de clasificación
+% A priori significaría que para un algoritmo de clasificación sería con los músculos actuales, podría diferenciar con gran precisión estos grupos, que conciden con los vértices del triángulo vocálico (por ejemplo, aislando perfectamente la A, la I y la U).
+% Esto en principio sugiere que en este espacio reducido, agregar un musculo que pueda aumentar estas distancias entre las vocales intermedias como la E con la I y la O con la U lograría separar con alta presicion las 5 vocales.
+%  Para cuantificar la calidad de las clases estos datos sse calculó el coeficiente de Silhouette ref ,el cual evalúa la distancia relativa de los datos frente a su propia clase y a las clases vecinas. Los valores obtenidos para cada clase son para A (0.33), E (0.01), I (0.33),O (0.24) y U (0.20). Estos valores muestran que para los 3 músculos medidos, las clases de la vocal [I] y la [A] están considerablemente mejor definidas que el resto, y clases como la E y la O se encuentran bastantes superpuestas .
+%  Estos resultados coinciden fisiologicamente. la pronunciación de la A implica aun movimiento de la mandibula en el eje superoinferior (relacionada al myloid) la vocal I requiere una pronunciación en el eje medio lateral de los labios, mientras que la U, se hace un movimiento en el eje antero posterior de los labios. Esto sugiere que el modelo de reducción de dimensionalidad (PCA) no se limita a un solo un análisis de varianza de variancia de la amplitud eléctrica del musculo, sino que parece estar mapeando la anatomìa real del tracto vocal. En la siguiente figura se encuentran los resultados del algoritmo clasificador GMM
+\vspace{-4mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-1mm} % Reduce el espacio antes de la línea
+\noindent
+\begin{minipage}{\columnwidth}
+    %En la siguiente tabla se muestran las matrices de confusión para el algoritmo GMM aplicado sobre los datos de PCA en el espacio 2D y 3D.
+
+    %\vspace{0.4cm}
+    \centering
+    \textbf{2D} \\ \vspace{0.2cm}
+    \resizebox{0.7\columnwidth}{!}{%
+        \begin{tabular}{lccccc}
+        \toprule
+         & \multicolumn{5}{c}{\textbf{Predicción}} \\
+         & \textbf{A} & \textbf{E} & \textbf{I} & \textbf{O} & \textbf{U} \\
+        \midrule
+        \textbf{Real A} & \cellcolor[rgb]{0.47,0.47,1.00} \color{white} 76\% & \cellcolor[rgb]{0.83,0.83,1.00}  24\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% \\
+        \textbf{Real E} & \cellcolor[rgb]{0.99,0.99,1.00}  2\% & \cellcolor[rgb]{0.53,0.53,1.00} \color{white} 67\% & \cellcolor[rgb]{0.79,0.79,1.00}  31\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% \\
+        \textbf{Real I} & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{0.93,0.93,1.00}  11\% & \cellcolor[rgb]{0.37,0.37,1.00} \color{white} 89\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% \\
+        \textbf{Real O} & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{0.59,0.59,1.00} \color{white} 59\% & \cellcolor[rgb]{0.71,0.71,1.00}  41\% \\
+        \textbf{Real U} & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{0.82,0.82,1.00}  26\% & \cellcolor[rgb]{0.48,0.48,1.00} \color{white} 74\% \\
+        \bottomrule
+        \end{tabular}%
+    }
+    
+    \vspace{0.5cm}
+    
+    \textbf{3D} \\ \vspace{0.2cm}
+    \resizebox{0.7\columnwidth}{!}{%
+        \begin{tabular}{lccccc}
+        \toprule
+         & \multicolumn{5}{c}{\textbf{Predicción}} \\
+         & \textbf{A} & \textbf{E} & \textbf{I} & \textbf{O} & \textbf{U} \\
+        \midrule
+        \textbf{Real A} & \cellcolor[rgb]{0.49,0.49,1.00} \color{white} 73\% & \cellcolor[rgb]{0.81,0.81,1.00}  27\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% \\
+        \textbf{Real E} & \cellcolor[rgb]{0.99,0.99,1.00}  2\% & \cellcolor[rgb]{0.45,0.45,1.00} \color{white} 78\% & \cellcolor[rgb]{0.86,0.86,1.00}  20\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% \\
+        \textbf{Real I} & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{0.84,0.84,1.00}  23\% & \cellcolor[rgb]{0.46,0.46,1.00} \color{white} 77\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% \\
+        \textbf{Real O} & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{0.54,0.54,1.00} \color{white} 66\% & \cellcolor[rgb]{0.76,0.76,1.00}  34\% \\
+        \textbf{Real U} & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{0.80,0.80,1.00}  28\% & \cellcolor[rgb]{0.50,0.50,1.00} \color{white} 72\% \\
+        \bottomrule
+        \end{tabular}%
+    }
+    
+    \vspace{0.2cm}
+    \captionof{table}{Matrices de confusión, 2D (arriba) y 3D (abajo), para el algoritmo GMM aplicado sobre los datos de PCA. Se comparan las clases predichas por el modelo frente a las vocales reales. Se observa que el método de PCA tiene dificultades para separar ciertos pares de vocales. En particular, se hace evidente la confusión entre las vocales \protect\say{O} y \protect\say{U}.}
+    \label{tab:pca_confusion}
+\end{minipage}
+% \vspace{-6mm} % Reduce el espacio antes de la línea
+% \begin{center}
+%     \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+% \end{center}
+% \vspace{-2mm} % Reduce el espacio antes de la línea
+
+\noindent que de vocales estiradas/abiertas (\say{A}, \say{E}, \say{I}) y el bloque de vocales redondeadas (\say{O}, \say{U}). Todo el error de clasificación se concentra exclusivamente en las fronteras internas de los clústeres. La vocal \say{O}, que presentaba uno de los peores coeficientes de solapamiento visual, es la que reporta la menor tasa de acierto (59 \%), siendo confundida un 41 \% de las veces con la \say{U}. De igual manera, el solapamiento entre la \say{E} y la \say{I} vuelve a manifestarse, con la \say{E} siendo clasificada erróneamente como \say{I} en un 31 \% de los casos.
+
+Al expandir el espacio latente a una tercera dimensión (la matriz 3D), la separación sobre las vocales intermedias mejora: la \say{E} asciende del 67 \% al 78 \%, y la \say{O} del 59 \% al 66 \%.
+
+% PONER LA REFERENCIA NUEVAMENTE
+Entonces, el PCA complementa y aporta otra perspectiva a los \say{fracasos} observados en el método de umbrales, mostrando que las similitudes en la activación muscular pueden estar respondiendo a agrupaciones fisiológicas reales. Pese a que todas las vocales superan el nivel de azar del 20 \% (alcanzando tasas de hasta el 89 \% para la \say{I}), la tasa de precisión de la vocal \say{O} y los persistentes cruzamientos internos denotan el límite de este algoritmo lineal. La incapacidad de trazar fronteras definidas dentro de los \textit{grandes grupos} \say{O-U} y \say{E-I} con los tres músculos actuales, justifica la implementación de un algoritmo de reducción de dimensionalidad no lineal capaz de asimilar esta complejidad.
+
+\subsection{sUMAP}
+
+Debido a las limitaciones espaciales y a la incapacidad de separación lineal observadas en el PCA, se implementó el método no lineal supervisado sUMAP. El objetivo fue aprovechar la información de las etiquetas durante el entrenamiento para forzar topológicamente la separación de aquellas clases que presentaban solapamiento. Para lograrlo, se realizó una búsqueda de hiperparámetros orientada a maximizar la tasa de acierto, obteniendo la mejor configuración al evaluar los 5 vecinos cercanos (\texttt{n\_neighbors} $=5$), fijando una distancia mínima de dispersión de $0.8$ (\texttt{min\_dist} $=0.8$), y asignando un peso de influencia a las etiquetas del 80 \% (\texttt{target\_weight} $=0.8$).
+
+Tal como se muestra en la Fig. (\ref{fig:umap_2d}), sobre este nuevo espacio latente se entrenó un clasificador K-NN ($K=5$) que delimitó las fronteras de decisión definitivas. Al observar la proyección geométrica, es evidente que sUMAP logra una separabilidad en la fase de entrenamiento muy superior a la del PCA. Sin embargo, al proyectar las mediciones del conjunto de prueba (\textit{test set}) sobre dichas regiones, se observa que algunos errores de clasificación persisten, coincidiendo precisamente con los pares vocálicos que presentaban menores distancias euclidianas en el espacio lineal previo.
+
+La Tabla (\ref{tab:umap_confusion}) muestra las matrices de confusión obtenidas al proyectar los datos de prueba en representaciones sUMAP de 2D y 3D.
+
+El análisis por vocal indica que el algoritmo alcanza un rendimiento superlativo en la identificación de fonemas asociados a los gestos motores extremos, logrando predecir correctamente la \say{U} en un 100 \% de los casos, la \say{I} en un 95 \% y la \say{A} en un 82 \%. Con respecto a lo que aporta una tercera dimensión, se observa una mejora exclusivamente en la vocal \say{O}.
+
+A pesar de este aumento en la predictividad respecto al PCA, el promedio global se ve mermado por el desempeño estancado en las vocales \say{E} (73 \%) y \say{O} (77 \%). Esto coincide con la problemática de solapamiento presente a lo largo de todo el estudio. El hecho de que ni siquiera un modelo no lineal supervisado logre aislar por completo la \say{E} (confundiéndola con la \say{I} y la \say{A}) puede apuntar nuevamente a la hipótesis de que los movimientos faciales requeridos para pronunciar estas vocales \say{intermedias} presentan patrones de activación muscular intrínsecamente afines a sus vocales vecinas.
+
+Entonces, esta limitación en el poder de discriminación abre dos vías principales de interpretación respecto a la configuración del sistema. Por un lado, es factible que los tres músculos seleccionados (\textit{Orbicularis Oris}, \textit{Depressor Anguli Oris} y \textit{Mylohyoid}), si bien resultaron siendo eficaces para identificar los gestos motores extremos (\say{A}, \say{I} y \say{U}), no conformen el trío óptimo para resolver el espacio fonético de las cinco vocales. Alternativamente, la persistencia algorítmica del solapamiento podría sugerir que la resolución de estas vocales exige una dimensión articulatoria ortogonal adicional, lo que implicaría la incorporación de un cuarto músculo.
+
+Finalmente, como reflexión transversal al desempeño de todos los métodos evaluados, no puede omitirse que factores físicos como la degradación de la señal por el despegue progresivo de los electrodos, cambios en la impedancia por sudoración, y variaciones en la intensidad de la contracción debido a la fatiga muscular del sujeto, introducen incertidumbre cuando se plantea la reproducibilidad de las mediciones. En consecuencia, resulta válido cuestionar en qué medida el margen de error residual en la clasificación de fonemas intermedios se debe exclusivamente a un solapamiento fisiológico intrín-
+
+\noindent
+\begin{minipage}{\columnwidth}
+    \centering
+    \includegraphics[width=0.7\linewidth, keepaspectratio]{resultados/sUMAP/UMAP_2D_Train_vs_Test.pdf}
+    \vspace{0.2cm}
+    \captionof{figure}{Proyección bidimensional del espacio latente generado mediante sUMAP y fronteras de decisión trazadas por un clasificador K-NN. \textbf{(a) Entrenamiento}: Proyección de las mediciones del \textit{training set}, utilizadas por el algoritmo para optimizar la separación topológica de las clases de forma supervisada. Las regiones sombreadas de fondo representan las fronteras de decisión aprendidas por el modelo K-NN. \textbf{(b) Testeo}: Proyección geométrica de las mediciones del \textit{test set} (datos nunca antes vistos por el algoritmo) sobre el espacio previamente calculado. El color de cada punto indica la etiqueta real del fonema pronunciado, permitiendo identificar visualmente los aciertos y las confusiones del modelo (puntos que caen fuera de su región correspondiente).}
+    %\captionof{figure}{Proyección en 2D utilizando sUMAP. En la figura (a), los puntos representan los datos de entrenamiento, que guían al algoritmo para separar mejor las vocales. El fondo con color muestra las fronteras de decisión que aprende usando el clasificador supervisado K-NN aplicado al sUMAP del entrenamiento. En la figura (b), los puntos representan los datos de testeo. Los errores de clasificación ocurren cuando un punto cae en una zona de distinto color a su etiqueta real.}
+    \label{fig:umap_2d}
+\end{minipage}
+\vspace{-6mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-2mm} % Reduce el espacio antes de la línea
+%\vspace{0.3cm}
+% \begin{center}
+%     \includegraphics[width=0.75\columnwidth, keepaspectratio]{resultados/sUMAP/UMAP_2D_Train_vs_Test.pdf}
+%     \captionof{figure}{Proyección en 2D utilizando sUMAP. En la figura (a), los puntos representan los datos de entrenamiento, que guían al algoritmo para separar mejor las vocales. El fondo con color muestra las fronteras de decisión que aprende usando el clasificador supervisado K-NN aplicado al sUMAP del entrenamiento. En la figura (b), los puntos representan los datos de testeo. Los errores de clasificación ocurren cuando un punto cae en una zona de distinto color a su etiqueta real.}
+%     \label{fig:umap_2d}
+% \end{center}
+% Al observar la proyección 2D, resulta evidente que el algoritmo logra una separabilidad muy superior a la del PCA. Esto es  esperable debido a la naturaleza supervisada del método, donde el ingreso de las etiquetas fuerza los pesos para separar los grupos.
+% Sin embargo, si bien sUMAP consigue separar las clases solapadas durante el entrenamiento, en el testeo se hace evidente que persiste la dificultad para clasificar correctamente ciertos pares de vocales cercanas (considerando la distancia entre clases en el espacio del PCA 2D). Esto sugiere que existe un límite físico dado por el solapamiento de las señales musculares que no puede ser corregido enteramente por el forzado matemático. A su vez, la presencia de señales ruidosas debido al despegue de electrodos o las variaciones por fatiga muscular introducen un factor de incertidumbre, dificultando determinar en qué medida los errores de clasificación se deben a este solapamiento fisiológico o puramente a la degradación de la señal. En la siguiente tabla se compara el rendimiento final y los aciertos de clasificación aplicando el modelo sobre los datos proyectados en 2D y 3D.
+% observadas en el PCA, se empleó el método supervisado sUMAP. El objetivo de esta implementación fue utilizar la información de las etiquetas y la proyección no lineal del algoritmo para forzar matemáticamente la separación de las clases solapadas. Cabe destacar que los parámetros de este método fueron ajustados para maximizar la tasa de acierto, obteniendo la mejor configuración al evaluar los 5 vecinos más cercanos, fijando una distancia mínima de dispersión de 0.8, y asignando un peso de influencia a las etiquetas del 80 porciento
+% Usando los datos de entrenamiento proyectados sobre este nuevo espacio, un clasificador K-Nearest Neighbors (K-NN con K:5) delimitó las fronteras de decisión, estableciendo los límites geométricos según la clase mas grande a su alrededor. Finalmente, se proyectaron los datos de testeo sobre dichas regiones para verificar su posición, considerando como acierto a los puntos que cayeron en la zona correcta, como se muestra en la siguiente figura:
+
+\noindent seco, a una selección \say{subóptima} de la musculatura, o a imperfecciones puramente técnicas del registro electromiográfico en el tiempo.
+
+% \vspace{-7mm} % Reduce el espacio antes de la línea
+% \begin{center}
+%     \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+% \end{center}
+% \vspace{-4mm} % Reduce el espacio antes de la línea
+\noindent
+\begin{minipage}{\columnwidth}
+    %En la siguiente tabla se compara el rendimiento del algoritmo K-NN aplicado sobre los datos generados por sUMAP en el espacio 2D y 3D.
+
+    %\vspace{0.4cm}
+    \centering
+    \textbf{2D} \\ \vspace{0.2cm}
+    \resizebox{0.7\columnwidth}{!}{%
+        \begin{tabular}{lccccc}
+        \toprule
+         & \multicolumn{5}{c}{\textbf{Predicción}} \\
+         & \textbf{A} & \textbf{E} & \textbf{I} & \textbf{O} & \textbf{U} \\
+        \midrule
+        \textbf{Real A} & \cellcolor[rgb]{0.43,0.43,1.00} \color{white} 82\% & \cellcolor[rgb]{0.94,0.94,1.00}  9\% & \cellcolor[rgb]{0.94,0.94,1.00}  9\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% \\
+        \textbf{Real E} & \cellcolor[rgb]{0.94,0.94,1.00}  9\% & \cellcolor[rgb]{0.49,0.49,1.00} \color{white} 73\% & \cellcolor[rgb]{0.87,0.87,1.00}  18\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% \\
+        \textbf{Real I} & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{0.97,0.97,1.00}  5\% & \cellcolor[rgb]{0.33,0.33,1.00} \color{white} 95\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% \\
+        \textbf{Real O} & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{0.49,0.49,1.00} \color{white} 73\% & \cellcolor[rgb]{0.81,0.81,1.00}  27\% \\
+        \textbf{Real U} & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{0.30,0.30,1.00} \color{white} 100\% \\
+        \bottomrule
+        \end{tabular}%
+    }
+    
+    \vspace{0.5cm}
+    
+    \textbf{3D} \\ \vspace{0.2cm}
+    \resizebox{0.7\columnwidth}{!}{%
+        \begin{tabular}{lccccc}
+        \toprule
+         & \multicolumn{5}{c}{\textbf{Predicción}} \\
+         & \textbf{A} & \textbf{E} & \textbf{I} & \textbf{O} & \textbf{U} \\
+        \midrule
+        \textbf{Real A} & \cellcolor[rgb]{0.43,0.43,1.00} \color{white} 82\% & \cellcolor[rgb]{0.94,0.94,1.00}  9\% & \cellcolor[rgb]{0.94,0.94,1.00}  9\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% \\
+        \textbf{Real E} & \cellcolor[rgb]{0.94,0.94,1.00}  9\% & \cellcolor[rgb]{0.49,0.49,1.00} \color{white} 73\% & \cellcolor[rgb]{0.87,0.87,1.00}  18\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% \\
+        \textbf{Real I} & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{0.97,0.97,1.00}  5\% & \cellcolor[rgb]{0.33,0.33,1.00} \color{white} 95\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% \\
+        \textbf{Real O} & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{0.97,0.97,1.00}  5\% & \cellcolor[rgb]{0.46,0.46,1.00} \color{white} 77\% & \cellcolor[rgb]{0.87,0.87,1.00}  18\% \\
+        \textbf{Real U} & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{0.30,0.30,1.00} \color{white} 100\% \\
+        \bottomrule
+        \end{tabular}%
+    }
+
+    \vspace{0.2cm}
+    \captionof{table}{Matrices de confusión, 2D (arriba) y 3D (abajo), para el clasificador K-NN utilizando los datos de sUMAP. Al ser un algoritmo supervisado se evidencia una mejora respecto al PCA, aunque sigue teniendo dificultades en vocales intermedias como la 'E' o la 'O'.}
+    \label{tab:umap_confusion}
+\end{minipage}
+\vspace{-7mm} % Reduce el espacio antes de la línea
+\begin{center}
+    \noindent\textcolor{gray}{\rule{0.85\linewidth}{0.1pt}} % Línea horizontal superior
+\end{center}
+\vspace{-4mm} % Reduce el espacio antes de la línea
+%\vspace{0.4cm}
+% \begin{center}
+% \vspace{0.4cm}
+%     \textbf{(a) 2D} \\ \vspace{0.2cm}
+%     \resizebox{0.75\columnwidth}{!}{\input{resultados/PCA/matriz_confusion_umap_2d}}
+    
+%     \vspace{0.5cm}
+    
+%     \textbf{(b) 3D} \\ \vspace{0.2cm}
+%     \resizebox{0.75\columnwidth}{!}{\input{resultados/PCA/matriz_confusion_umap_3d}}
+    
+%     \vspace{0.2cm}
+%     \captionof{table}{Matrices de confusión, 2D (izq.) y 3D (der.), para el clasificador K-NN utilizando los datos de sUMAP. Al ser un algoritmo supervisado se evidencia una mejora respecto al PCA, aunque sigue teniendo dificultades en vocales intermedias como la 'E' o la 'O'}
+%     \label{tab:umap_confusion}
+% \end{center}
+
+% Al analizar las matrices de confusión, se observa una leve mejora al pasar a 3 dimensiones, logrando un acierto global del 85.4\%. Si vemos el detalle por vocal, el modelo funciona excelente con la 'U' (100\% de acierto) y la 'I' (95\%).
+
+% Sin embargo, las vocales que más bajan el promedio son la 'E' (73\%) y la 'O' (77\%). Esta caída en la precisión coincide exactamente con el problema de solapamiento que vimos antes. Esta confusión  de la 'E' y la 'O' da fuerza de la hipotesìs que los movimientos faciales intermedias al pronunciar las vocales tienen señales tan similares que al modelo le resulta muy difícil separarlas. Se sugiere el agregado de un musculo mas a ver que tanto puede mejorar esto.
+
+\section{Conclusiones}
+
+En este informe se mostró la viabilidad de decodificar fonemas vocálicos del español a partir de la actividad muscular.
+%, sentando bases prácticas y experimentales para el desarrollo de Interfaces de Habla Silenciosa (SSI).
+Para ello, se diseñó e implementó exitosamente el sistema integral \textit{Ñandú LSD}, compuesto por hardware de amplificación sEMG autónomo y un software propio que garantizó el registro sincrónico, acondicionamiento y análisis topológico de las señales musculares.
+
+A través de un enfoque de complejidad algorítmica incremental, se observó que la varianza eléctrica de los tres músculos seleccionados (\textit{Orbicularis Oris}, \textit{Depressor Anguli Oris} y \textit{Mylohyoid}) podría estar mapeando la anatomía del tracto vocal. Los métodos de discretización por umbrales y Análisis de Componentes Principales (PCA) mostraron que el sistema es altamente capaz de aislar \say{gestos motores extremos}, agrupando las mediciones en tres \textit{grandes grupos} fisiológicamente distinguibles correspondientes a las vocales \say{A}, \say{I} y \say{U}.
+
+Sin embargo, el solapamiento lineal de las vocales \say{E} y \say{O} requirió la aplicación de sUMAP. Este modelo de reducción de dimensiones no lineal logró elevar el acierto predictivo de manera generalizada (alcanzando una precisión perfecta del 100 \% para la \say{U} y un 95 \% para la \say{I}) pero también tuvo dificultades con las vocales intermedias. La persistencia de este margen de error podrían sugerir que los gestos fonéticos intermedios presentan patrones de activación muscular intrínsecamente solapados en este espacio tridimensional.
+%, más allá de la degradación temporal de las señales por fatiga o variaciones en la interfaz piel electrodo, los gestos fonéticos intermedios presentan patrones de activación muscular intrínsecamente solapados en este espacio tridimensional.
+
+En conclusión, los resultados obtenidos sobre este único sujeto experimental indicaron que seria posible extraer la identidad discreta de las vocales a partir de dinámicas musculares continuas. Cabe destacar que, si bien en este estudio se utilizó la señal acústica como pivote temporal para segmentar y alinear las mediciones, esto representó solo una estrategia metodológica. Para el desarrollo de futuras Interfaces de Habla Silenciosa (donde haya ausencia total de fonación), este anclaje temporal deberá resolverse de manera autónoma, por ejemplo, detectando el inicio de la pronunciación mediante umbrales de amplitud sobre la envolvente de sEMG, o bien integrando un pulsador manual (del tipo \textit{push-to-talk}). Además, para alcanzar una mayor tasa de predicción en todo el espacio vocálico, se sugiere rediseñar el montaje experimental explorando un trío muscular alternativo, o bien incorporar un cuarto canal de medición que aporte una dimensionalidad ortogonal para resolver las ambigüedades fisiológicas observadas. Por último, es importante mejorar el montaje para reducir las incertezas asociadas al despegue de electrodos y el ruido eléctrico.
+
+\subsection*{Declaración de uso de IA}
+
+Para este trabajo se utilizó \textit{Gemini 3.1 Pro}: para sugerencias sobre estructura de código de python, para realizar algunas figuras representativas de montajes experimentales y para reformular algunos párrafos de texto, en orden de mejorar la claridad, fluidez y cohesión.
+
+
+\begingroup
+    \raggedright  % <--- Esto es clave: alinea a la izquierda y evita estirar espacios
+    \renewcommand{\bibfont}{\small}
+    %\setlength\bibitemsep{1pt} PARA ACHICAR ESPACIO ENTRE CITAS
+    \printbibliography
+\endgroup
+
+\end{multicols*}
+\end{document}

@@ -1,0 +1,22 @@
+\babel@toc {spanish}{}\relax 
+\contentsline {section}{Hardware}{3}{section*.1}%
+\contentsline {subsection}{\numberline {0.1}Diseño de circuito y consideraciones en Proteus}{3}{subsection.0.1}%
+\contentsline {subsection}{\numberline {0.2}Fabricación de la placa}{6}{subsection.0.2}%
+\contentsline {subsubsection}{\numberline {0.2.1}Impresión y planchado}{6}{subsubsection.0.2.1}%
+\contentsline {subsubsection}{\numberline {0.2.2}Ataque con ácido férrico}{7}{subsubsection.0.2.2}%
+\contentsline {subsubsection}{\numberline {0.2.3}Mecanizado y Soldadura}{8}{subsubsection.0.2.3}%
+\contentsline {subsubsection}{\numberline {0.2.4}Tabla de componentes y materiales}{9}{subsubsection.0.2.4}%
+\contentsline {subsection}{\numberline {0.3}Caracterización empírica de las resistencias ($R_g$)}{10}{subsection.0.3}%
+\contentsline {subsubsection}{\numberline {0.3.1}Pruebas con electrodos faciales}{11}{subsubsection.0.3.1}%
+\contentsline {subsubsection}{\numberline {0.3.2}Análisis de respuesta en frecuencia}{14}{subsubsection.0.3.2}%
+\contentsline {subsection}{\numberline {0.4}Armado del gabinete}{18}{subsection.0.4}%
+\contentsline {subsubsection}{\numberline {0.4.1}Soldadura de chasis y detalles finales}{18}{subsubsection.0.4.1}%
+\contentsline {subsection}{\numberline {0.5}Cables}{22}{subsection.0.5}%
+\contentsline {subsubsection}{\numberline {0.5.1}Cable de referencia original}{22}{subsubsection.0.5.1}%
+\contentsline {subsubsection}{\numberline {0.5.2}Experimentación y selección de cables}{22}{subsubsection.0.5.2}%
+\contentsline {subsubsection}{\numberline {0.5.3}Protocolo definitivo para la determinación de cables}{26}{subsubsection.0.5.3}%
+\contentsline {subsubsection}{\numberline {0.5.4}Comparación de ruidos iniciales en los últimos experimentos}{31}{subsubsection.0.5.4}%
+\contentsline {subsubsection}{\numberline {0.5.5}Ensamblado de los cables definitivos}{36}{subsubsection.0.5.5}%
+\contentsline {subsection}{\numberline {0.6}Imágenes del resultado final del Hardware Ñandú LSD}{39}{subsection.0.6}%
+\contentsline {section}{Experimentos}{40}{section*.70}%
+\contentsline {subsection}{\numberline {0.7}Experimento de Labo 6}{40}{subsection.0.7}%

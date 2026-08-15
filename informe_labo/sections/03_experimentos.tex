@@ -1,0 +1,117 @@
+\newpage
+\vspace*{2cm}
+\begin{center}
+    \Huge \textbf{Capítulo 3: Experimentos}
+\end{center}
+\vspace{2cm}
+\phantomsection
+\addcontentsline{toc}{section}{Experimentos}
+
+\subsection{Experimento de Labo 6}
+
+Para la realización del experimento principal de Laboratorio 6, el objetivo fue registrar la actividad de tres músculos faciales involucrados en el habla, de acuerdo a la bibliografía consultada. Vamos a visualizar y ubicar los músculos que nos interesan según el paper de Ratnovsky (2021); apuntamos a poner electrodos en los siguientes músculos:
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\linewidth]{insumos_ia/cuaderno_de_labo/images/image252.png}
+    \caption{Ubicación anatómica de los músculos faciales según Ratnovsky et al. (2021).}
+    \label{fig:ratnovsky2021}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\linewidth]{insumos_ia/cuaderno_de_labo/images/image541.png}
+    \caption{Detalle del músculo Orbicularis oris.}
+    \label{fig:orbicularis}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\linewidth]{insumos_ia/cuaderno_de_labo/images/image513.png}
+    \caption{Detalle anatómico del músculo Mylohyoid.}
+    \label{fig:mylohyoid}
+\end{figure}
+
+Una vez definidas las posiciones anatómicas, procedimos a colocar los electrodos sobre el sujeto de prueba (Santiago). Para evitar confusiones respecto a versiones anteriores del montaje, redefinimos varias veces el nombre de los canales. Finalmente, preferimos nombrarlos según los \textit{inputs} del NIDAQ (la placa de adquisición). La asignación definitiva fue la siguiente:
+\begin{itemize}
+    \item \textbf{CH2:} Conectado al músculo \textit{Depressor anguli oris}.
+    \item \textbf{CH1:} Conectado al músculo \textit{Orbicularis oris}.
+    \item \textbf{CH0:} Conectado al músculo \textit{Mylohyoid}.
+\end{itemize}
+
+Comenzamos probando el \textbf{CH2} en el depresor. Aplicamos un filtro notch (\SI{50}{\hertz}) y la señal mejoró drásticamente; sin el filtro se observaba excesivo ruido de línea. 
+
+A continuación, sumamos el \textbf{CH1} al orbicularis. Observamos si el sistema captaba ambas señales en simultáneo. Efectivamente, aunque se percibió un poco de ruido, la adquisición simultánea fue exitosa.
+
+Finalmente, sumamos el \textbf{CH0} al mylohyoid. El sistema capturó los tres canales correctamente. Sin embargo, notamos un problema mecánico: el formato de los electrodos (\enquote{curitas}) que usamos debajo del mentón no era el óptimo. Al tener que luchar contra la gravedad y soportar el peso adicional de las fichas cocodrilo, requerían de un mejor agarre. Como solución práctica, procedimos a armar dos electrodos de los viejos, que ofrecían mayor adherencia y estabilidad mecánica.
+
+A continuación, se muestran las imágenes del montaje final de los electrodos sobre el sujeto de prueba:
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.32\linewidth]{insumos_ia/cuaderno_de_labo/images/image97.jpg}
+    \includegraphics[width=0.32\linewidth]{insumos_ia/cuaderno_de_labo/images/image241.jpg}
+    \caption{Disposición frontal y lateral de los electrodos en el sujeto. (Imágenes extraídas del cuaderno de laboratorio).}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\linewidth]{insumos_ia/cuaderno_de_labo/images/image452.jpg}
+    \includegraphics[width=0.45\linewidth]{insumos_ia/cuaderno_de_labo/images/image362.jpg}
+    \caption{Detalle de la disposición de los electrodos debajo del mentón (músculo Mylohyoid).}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\linewidth]{insumos_ia/cuaderno_de_labo/images/image110.jpg}
+    \includegraphics[width=0.45\linewidth]{insumos_ia/cuaderno_de_labo/images/image423.jpg}
+    \caption{Vista general del cableado final hacia los tres canales.}
+\end{figure}
+
+Llevamos un registro detallado de las pruebas realizadas ese día, evaluando distintas configuraciones y pronunciaciones de palabras. A continuación, se detalla la bitácora de mediciones:
+
+\begin{table}[H]
+    \centering
+    \caption{Registro de mediciones realizadas el 02/12/2025. FS = Full Scale, GS = Ground Scale.}
+    \label{tab:mediciones_labo6}
+    \begin{tabularx}{\linewidth}{l l c l X}
+        \toprule
+        \textbf{Sujeto} & \textbf{Título} & \textbf{Temp.} & \textbf{Estado} & \textbf{Comentario} \\
+        \midrule
+        Santi & B\_Prueba1\_Santi\_sinfiltronotch & \SI{26}{\degreeCelsius} & Nuevos & Notamos que se despegó un poco el electrodo del mylohyoid. Todos los del NIDAQ en GS. \\
+        '' & B\_Prueba2\_Santi\_AI3FS-conNotch & '' & '' & Agregamos el filtro notch y pusimos el AI3 en FS, el resto en GS. \\
+        '' & B\_Prueba3\_Santi\_ALLGS-conNotch & '' & '' & Todos los canales en GS, con filtro Notch. \\
+        '' & B\_Prueba4\_Santi\_ALLFS-conNotch & '' & semana pasada & Usamos todos en FS con filtro Notch. \\
+        '' & B\_Prueba5\_Santi\_ALLFS-conNotch-conFiltro20708 & '' & este dia & Todos en FS con filtro notch y filtro pasabanda: \SI{20}{\hertz} y \SI{708}{\hertz}. \\
+        '' & NO\_Prueba1\_Santi\_ALLFS-conNotch & '' & '' & Todos en FS con filtro notch. Palabra \enquote{NO}. Cambiamos el BPM del metrónomo a 40. \\
+        '' & JERJES\_Prueba1\_Santi\_ALLFS-conNotch & '' & '' & Cambiamos la palabra a \enquote{JERJES}. \\
+        '' & NANDU\_Prueba1\_Santi\_ALLFS-conNotch & '' & '' & La palabra es \enquote{ñandu}, creemos que puede generar problemas la ñ. \\
+        '' & ARTE\_Prueba1\_Santi\_ALLFS-conNotch & '' & '' & Notamos que el electrodo inferior del orbicularis oris se habia despegado casi a la mitad. Palabra \enquote{Arte}, última medición. Los músculos parecen estar sincronizados. \\
+        '' & NANDU\_Prueba2\_Santi\_ALLFS-conNotch & '' & '' & Segunda prueba de \enquote{ñandu}, con video. \\
+        \bottomrule
+    \end{tabularx}
+\end{table}
+
+Cabe destacar que todas las grabaciones \textbf{se guardaron crudas}, sin el filtro notch aplicado por \textit{hardware} en la placa de adquisición, permitiendo el filtrado y análisis digital de manera \textit{offline}.
+
+Con la experiencia acumulada del análisis de este tipo de señales, se observó que el \enquote{ruido} predominante se correspondía con la frecuencia de red de \SI{50}{\hertz}. Por lo tanto, se propuso aplicar un \textbf{filtro notch} y un \textbf{filtro pasabanda} con frecuencias de corte de \SI{20}{\hertz} y \SI{2000}{\hertz} de manera digital. Esta utilización de filtros permite que el software de adquisición desarrollado se asemeje a los parámetros utilizados nativamente por el software \textit{Spike Recorder} de Backyard Brains.
+
+El desarrollo de una metodología robusta para diferenciar palabras forma parte del Plan de Trabajo. Como cierre del experimento, se analizaron los registros de las palabras \enquote{Arte} y \enquote{Ñandú}, extrayendo su envolvente RMS junto con la señal cruda procesada.
+
+En la palabra \enquote{Arte}, las mediciones presentaron mayor correlación entre sí, observándose además que el músculo \textit{Mylohyoid} (CH0) tuvo una señal de menor magnitud general (Figura \ref{fig:labo6_arte}).
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{insumos_ia/cuaderno_de_labo/images/plot_calibrado_ARTE_Prueba1_Santi.png}
+    \caption{Señales medidas durante la pronunciación de la palabra \enquote{Arte}. Se aprecia la sincronización general y la menor magnitud en el CH0.}
+    \label{fig:labo6_arte}
+\end{figure}
+
+Por otro lado, en la palabra \enquote{Ñandú} ambas sílabas generaron picos distinguibles en las mediciones. Cuando se pronuncia \enquote{Ñan}, se activan los tres músculos en sincronía, mientras que la sílaba \enquote{dú} activa predominantemente el \textit{Orbicularis oris}, ya que la expresión requiere una contracción labial específica. Además, la señal presenta un perfil más suave (Figura \ref{fig:labo6_nandu}).
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{insumos_ia/cuaderno_de_labo/images/plot_calibrado_NANDU_Prueba2_Santi.png}
+    \caption{Señales medidas durante la pronunciación de la palabra \enquote{Ñandú}. Se distinguen dos picos correspondientes a cada sílaba, con el \textit{Orbicularis oris} dominando el segundo pico.}
+    \label{fig:labo6_nandu}
+\end{figure}

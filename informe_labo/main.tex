@@ -57,7 +57,7 @@
 % --- ENCABEZADOS Y PIES DE PÁGINA ---
 \usepackage{fancyhdr}
 \fancyhead[L]{Laboratorio de Sistemas Dinámicos} 
-\fancyhead[R]{Braunstein - Informe Interno} % Actualizado para el informe actual
+\fancyhead[R]{Braunstein - Prado Rodriguez - Informe Interno} % Actualizado para el informe actual
 \renewcommand{\headrulewidth}{0.09pt} 
 \fancyfoot[C]{\thepage} 
 \pagestyle{fancy} 
@@ -98,20 +98,20 @@
 
 \begin{center}
     % TÍTULO
-    \textbf{\LARGE{Documentación de Hardware y Sistema}}\\
+    {\LARGE \textbf{Gran Manual del ÑANDÚ LSD}}\\
     \vspace{2mm}
-    \textbf{\LARGE{Informe Interno de Laboratorio}}\\
+    {\LARGE \textbf{Informe Interno de Laboratorio 6 y 7}}\\
     \vspace{4mm}
     
     % AUTORES
-    \textbf{\large{Braunstein Lucas}}\\
+    {\large \textbf{Braunstein Lucas}, \textbf{Prado Rodriguez Santiago}}\\
     \vspace{2mm}
-    \small{braunstein.lucas@gmail.com}\\
+    {\small braunstein.lucas@gmail.com, santiagopradorodriguez@gmail.com}\\
     
     \vspace{4mm}
     
     % INFO DEL LABO
-    \textit{\large{Laboratorio de Sistemas Dinámicos\\
+    {\large \textit{Laboratorio de Sistemas Dinámicos\\
     Departamento de Física, FCEyN, UBA\\
     \today}}
 \end{center}
@@ -124,7 +124,10 @@ Este documento constituye el informe interno detallado sobre el diseño, constru
 
 \vspace{4mm}
 
-\begin{multicols*}{2}
+\newpage
+{\hypersetup{linkcolor=black}
+\tableofcontents}
+\newpage
 
 % --- INCLUSIÓN DE SECCIONES ---
 % Antigravity/vos van a generar estos archivos por separado.
@@ -133,12 +136,9 @@ Este documento constituye el informe interno detallado sobre el diseño, constru
 
 \input{sections/02_software.tex}
 
-\input{sections/03_protocolo.tex}
-
-\input{sections/04_resultados.tex}
+\input{sections/03_experimentos.tex}
 
 % --- BIBLIOGRAFÍA ---
 \printbibliography
 
-\end{multicols*}
 \end{document}
