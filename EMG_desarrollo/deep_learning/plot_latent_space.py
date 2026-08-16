@@ -20,10 +20,13 @@ def plot_latent_space(csv_path, model_path, latent_dim=16):
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    # Cargar dataset (sin augmentation para evaluar las muestras reales)
-    dataset = EMGDataset(csv_path, target_length=100, apply_augmentation=False)
+    # El modelo fue entrenado con el pipeline comprimido: target_length=20 (20 pts/canal, 60D total)
+    target_length = 20
     
-    model = ConvAutoencoder1D(latent_dim=latent_dim).to(device)
+    # Cargar dataset (sin augmentation para evaluar las muestras reales)
+    dataset = EMGDataset(csv_path, target_length=target_length, apply_augmentation=False)
+    
+    model = ConvAutoencoder1D(latent_dim=latent_dim, target_length=target_length).to(device)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
     
@@ -176,8 +179,14 @@ def plot_latent_space(csv_path, model_path, latent_dim=16):
     plt.savefig(acc_plot_path)
     print(f"Gráficos de precisión guardados.")
     
-    # Mostrar todos los gráficos juntos de forma interactiva
-    plt.show()
+    # Cerrar las figuras de matplotlib para liberar memoria
+    plt.close('all')
+    
+    # Abrir los PNG generados con el visor del sistema (no bloqueante)
+    import subprocess
+    for img_path in [plot_path, acc_plot_path]:
+        if os.path.exists(img_path):
+            subprocess.Popen(["xdg-open", img_path])
     
 if __name__ == "__main__":
     base_dir = os.path.dirname(os.path.abspath(__file__))

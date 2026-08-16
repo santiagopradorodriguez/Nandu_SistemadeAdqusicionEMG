@@ -17,6 +17,21 @@ from sklearn.cluster import KMeans
 from scipy.optimize import linear_sum_assignment
 import umap
 
+# ==========================================
+# CONFIGURACIÓN GLOBAL DE ESTÉTICA
+# ==========================================
+plt.rcParams['font.family'] = 'sans-serif'
+plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'Arial', 'Helvetica', 'sans-serif']
+plt.rcParams['axes.titleweight'] = 'bold'
+plt.rcParams['axes.labelweight'] = 'normal'
+plt.rcParams['grid.linestyle'] = '--'
+plt.rcParams['grid.alpha'] = 0.5
+plt.rcParams['grid.color'] = '#b0b0b0'
+plt.rcParams['legend.frameon'] = True
+plt.rcParams['legend.edgecolor'] = 'black'
+plt.rcParams['legend.facecolor'] = 'white'
+# ==========================================
+
 import sys
 import os
 script_dir_abs = os.path.dirname(os.path.abspath(__file__))
@@ -73,7 +88,7 @@ def get_interpulse_noise(processed_segment, initial_noise):
         
     return curr_mean
 
-def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_ms=250, notch_q=30.0, target_len=100, return_raw_cache=False, aplicar_trevisan=False, modo_alineacion="Pico Volumen Micrófono", pre_pct=0.4, post_pct=0.6, canales_features=["canal_0", "canal_1", "canal_2"]):
+def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_ms=250, notch_q=30.0, target_len=100, return_raw_cache=False, aplicar_trevisan=False, modo_alineacion="Pico Volumen Micrófono", pre_pct=0.4, post_pct=0.6, canales_features=["canal_0", "canal_1", "canal_2"], ignorar_ventana_cero=False):
     """
     Extrae y alinea las ventanas de los canales solicitados.
     Devuelve X (matriz de features), Y (labels/vocales) y Tomas (nombres de las mediciones).
@@ -191,6 +206,9 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_
         picos_medicion = [] # para guardar el máximo de cada canal en la ventana
         
         for win_idx, pico in enumerate(picos_mic):
+            if ignorar_ventana_cero and win_idx == 0:
+                continue
+                
             # Definir ventana física simétrica basada en el pico del micrófono
             pre_samples = int(muestras_pulso * pre_pct)
             post_samples = int(muestras_pulso * post_pct)
@@ -355,9 +373,9 @@ def evaluar_clustering_no_supervisado(X, Y, nombre, algoritmo="K-Means"):
     # Encontrar clústeres ciegos
     if algoritmo == "GMM":
         from sklearn.mixture import GaussianMixture
-        model = GaussianMixture(n_components=n_clases, covariance_type='full', random_state=42, n_init=5)
+        model = GaussianMixture(n_components=n_clases, covariance_type='full', random_state=42, n_init=100, max_iter=500)
     else:
-        model = KMeans(n_clusters=n_clases, random_state=42, n_init=10)
+        model = KMeans(n_clusters=n_clases, random_state=42, n_init=100)
         
     y_pred_kmeans = model.fit_predict(X)
     
@@ -395,70 +413,616 @@ def evaluar_clustering_no_supervisado(X, Y, nombre, algoritmo="K-Means"):
     cm_optima = cm[:, col_ind]
     acc_por_vocal = cm_optima.diagonal() / cm_optima.sum(axis=1) * 100
     
+    # --- MATRIZ ÓPTIMA EN PORCENTAJES ---
+    # Convertimos cada fila en porcentajes del total de esa clase
+    cm_optima_pct = (cm_optima / cm_optima.sum(axis=1)[:, np.newaxis]) * 100
+    df_cm_optima = pd.DataFrame(cm_optima_pct, index=vocales_unicas, columns=vocales_unicas)
+    
     print(f"\n>> Desglose Accuracy Final para {nombre}:")
     for i, vocal in enumerate(vocales_unicas):
         print(f"   Vocal {vocal}: {acc_por_vocal[i]:.1f}%")
         
-    return accuracy, acc_por_vocal, vocales_unicas, df_cm_bruta, mapeo_str
+    return accuracy, acc_por_vocal, vocales_unicas, df_cm_optima, mapeo_str
 
-def plot_scatter(X_proj, Y, title, output_path, is_3d=False, variance_ratios=None, connect_points=False):
-    fig = plt.figure(figsize=(10, 8))
+def plot_scatter(X_proj, Y, title, output_path, is_3d=False, variance_ratios=None, connect_points=False, **kwargs):
+    # Estilo académico (Paper)
+    plt.style.use('default')
+    fig = plt.figure(figsize=(9, 7), facecolor='white')
     
     if is_3d:
         ax = fig.add_subplot(111, projection='3d')
+        ax.set_facecolor('white')
+        ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
+        ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
+        ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
+        # Grilla 3D sutil
+        ax.grid(color='#d3d3d3', linestyle='-', linewidth=0.5)
     else:
         ax = fig.add_subplot(111)
+        ax.set_facecolor('white')
+        ax.grid(color='#e0e0e0', linestyle='--', linewidth=0.7, alpha=0.7)
+        # Removiendo bordes innecesarios (Top y Right)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['bottom'].set_color('black')
+        ax.spines['left'].set_color('black')
+        ax.tick_params(colors='black')
         
     vocales = sorted(list(set(Y)))
+    # Paleta estándar, clara y amigable para publicaciones (Set1 o tab10)
     palette = sns.color_palette("Set1", n_colors=len(vocales))
     
     plot_points = []
     
     for i, vocal in enumerate(vocales):
         idx = Y == vocal
-        # Para cuando dibujamos solo los centroides (1 solo punto por vocal)
         if type(idx) == np.bool_ and idx == False:
             idx = np.array([True if y == vocal else False for y in Y])
-            
-        # Fix for direct arrays
         if isinstance(idx, bool):
             idx = Y == vocal
             
+        color = palette[i % len(palette)]
+            
         if is_3d:
-            ax.scatter(X_proj[idx, 0], X_proj[idx, 1], X_proj[idx, 2], label=vocal, color=palette[i], alpha=0.9, s=80)
+            # Puntos sólidos con bordes oscuros sutiles para mejorar legibilidad
+            ax.scatter(X_proj[idx, 0], X_proj[idx, 1], X_proj[idx, 2], label=vocal, color=color, alpha=1.0, s=60, edgecolors='black', linewidth=0.3, depthshade=False)
             if connect_points and len(X_proj[idx]) > 0:
                 plot_points.append(X_proj[idx][0])
         else:
-            ax.scatter(X_proj[idx, 0], X_proj[idx, 1], label=vocal, color=palette[i], alpha=0.9, s=80)
+            # Puntos sólidos
+            ax.scatter(X_proj[idx, 0], X_proj[idx, 1], label=vocal, color=color, alpha=1.0, s=60, edgecolors='black', linewidth=0.3)
             if connect_points and len(X_proj[idx]) > 0:
                 plot_points.append(X_proj[idx][0])
                 
     if connect_points and len(plot_points) > 1:
-        # Cerrar el polígono
         plot_points.append(plot_points[0])
         pts = np.array(plot_points)
         if is_3d:
-            ax.plot(pts[:, 0], pts[:, 1], pts[:, 2], color='gray', linestyle='--', alpha=0.7)
+            ax.plot(pts[:, 0], pts[:, 1], pts[:, 2], color='gray', linestyle='--', alpha=0.8, linewidth=1.5)
         else:
-            ax.plot(pts[:, 0], pts[:, 1], color='gray', linestyle='--', alpha=0.7)
+            ax.plot(pts[:, 0], pts[:, 1], color='gray', linestyle='--', alpha=0.8, linewidth=1.5)
             
-    ax.set_title(title)
+    ax.set_title(title, color='black', fontsize=28, fontweight='bold', pad=15)
+    ax.tick_params(labelsize=22)
+    
     if is_3d:
         x_label = f'Componente 1 ({variance_ratios[0]*100:.1f}%)' if variance_ratios is not None else 'Componente 1'
         y_label = f'Componente 2 ({variance_ratios[1]*100:.1f}%)' if variance_ratios is not None else 'Componente 2'
         z_label = f'Componente 3 ({variance_ratios[2]*100:.1f}%)' if variance_ratios is not None else 'Componente 3'
-        ax.set_xlabel(x_label)
-        ax.set_ylabel(y_label)
-        ax.set_zlabel(z_label)
+        ax.set_xlabel(x_label, color='black', fontsize=16, labelpad=10)
+        ax.set_ylabel(y_label, color='black', fontsize=16, labelpad=10)
+        ax.set_zlabel(z_label, color='black', fontsize=16, labelpad=10)
     else:
         x_label = f'Componente 1 ({variance_ratios[0]*100:.1f}%)' if variance_ratios is not None else 'Componente 1'
         y_label = f'Componente 2 ({variance_ratios[1]*100:.1f}%)' if variance_ratios is not None else 'Componente 2'
-        ax.set_xlabel(x_label)
-        ax.set_ylabel(y_label)
+        ax.set_xlabel(x_label, color='black', fontsize=24)
+        ax.set_ylabel(y_label, color='black', fontsize=24)
         
-    ax.legend()
+    if 'xlim' in kwargs:
+        ax.set_xlim(kwargs['xlim'])
+    if 'ylim' in kwargs:
+        ax.set_ylim(kwargs['ylim'])
+        
+    if not kwargs.get('ocultar_leyenda', False):
+        legend = ax.legend(frameon=True, facecolor='white', edgecolor='gray', labelcolor='black', fontsize=24)
     plt.tight_layout()
-    plt.savefig(output_path, dpi=300)
+    plt.savefig(output_path, dpi=300, facecolor=fig.get_facecolor(), edgecolor='none', bbox_inches='tight')
+    plt.close()
+
+def plot_analisis_errores_3d_proyecciones_2d(X_proj, Y, title, output_path, variance_ratios=None, algoritmo="GMM", **kwargs):
+    plt.style.use('default')
+    fig = plt.figure(figsize=(26, 8.5), facecolor='white')
+    
+    vocales = sorted(list(set(Y)))
+    palette = sns.color_palette("Set1", n_colors=len(vocales))
+    import matplotlib.colors as mc
+    import colorsys
+    cmap_bg = mc.ListedColormap([palette[i] for i in range(len(vocales))])
+    
+    axes = []
+    for i in range(3):
+        ax = fig.add_subplot(1, 3, i+1)
+        ax.set_facecolor('white')
+        ax.grid(color='#d3d3d3', linestyle='-', linewidth=0.5)
+        axes.append(ax)
+        
+    projections = [(0, 1), (0, 2), (1, 2)]
+    labels = [
+        (f'Componente 1 ({variance_ratios[0]*100:.1f}%)' if variance_ratios is not None else 'Componente 1',
+         f'Componente 2 ({variance_ratios[1]*100:.1f}%)' if variance_ratios is not None else 'Componente 2'),
+        (f'Componente 1 ({variance_ratios[0]*100:.1f}%)' if variance_ratios is not None else 'Componente 1',
+         f'Componente 3 ({variance_ratios[2]*100:.1f}%)' if variance_ratios is not None else 'Componente 3'),
+        (f'Componente 2 ({variance_ratios[1]*100:.1f}%)' if variance_ratios is not None else 'Componente 2',
+         f'Componente 3 ({variance_ratios[2]*100:.1f}%)' if variance_ratios is not None else 'Componente 3')
+    ]
+    
+    for ax, proj, (xl, yl) in zip(axes, projections, labels):
+        X_2d = X_proj[:, [proj[0], proj[1]]]
+        
+        # Entrenar un modelo 2D para esta cara para dibujar el fondo
+        n_clases = len(vocales)
+        if algoritmo == "GMM":
+            from sklearn.mixture import GaussianMixture
+            model = GaussianMixture(n_components=n_clases, covariance_type='full', random_state=42)
+        else:
+            from sklearn.cluster import KMeans
+            model = KMeans(n_clusters=n_clases, random_state=42, n_init=10)
+        
+        model.fit(X_2d)
+        
+        x_min, x_max = X_2d[:, 0].min() - 0.5, X_2d[:, 0].max() + 0.5
+        y_min, y_max = X_2d[:, 1].min() - 0.5, X_2d[:, 1].max() + 0.5
+        xx, yy = np.meshgrid(np.linspace(x_min, x_max, 200), np.linspace(y_min, y_max, 200))
+        grid = np.c_[xx.ravel(), yy.ravel()]
+        
+        Z = model.predict(grid)
+        
+        # Mapeo de clusters a vocales para alinear colores con Y_true (Húngaro)
+        y_pred = model.predict(X_2d)
+        y_true_int = np.array([vocales.index(v) for v in Y])
+        from sklearn.metrics import confusion_matrix
+        cm = confusion_matrix(y_true_int, y_pred)
+        from scipy.optimize import linear_sum_assignment
+        row_ind, col_ind = linear_sum_assignment(-cm)
+        cluster_to_vocal = {col: row for row, col in zip(row_ind, col_ind)}
+        
+        Z_mapped = np.vectorize(cluster_to_vocal.get)(Z)
+        Z_mapped = Z_mapped.reshape(xx.shape)
+        
+        ax.pcolormesh(xx, yy, Z_mapped, cmap=cmap_bg, alpha=0.2, zorder=0)
+        ax.contour(xx, yy, Z_mapped, colors='k', linewidths=0.5, alpha=0.5, zorder=1)
+        
+        for i, vocal in enumerate(vocales):
+            idx = np.where(np.array(Y) == vocal)[0]
+            color = palette[i]
+            ax.scatter(X_2d[idx, 0], X_2d[idx, 1], label=vocal, color=color, alpha=1.0, s=80, edgecolors='black', linewidth=0.5, zorder=4)
+            
+        ax.set_xlabel(xl, color='black', fontsize=16)
+        ax.set_ylabel(yl, color='black', fontsize=16)
+            
+    fig.suptitle(title, color='black', fontsize=24, fontweight='bold', y=0.98)
+    
+    if not kwargs.get('ocultar_leyenda', False):
+        axes[2].legend(frameon=True, facecolor='white', edgecolor='gray', labelcolor='black', fontsize=15, loc='upper right')
+        
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=300, facecolor=fig.get_facecolor(), edgecolor='none', bbox_inches='tight')
+    plt.close()
+
+
+def plot_scatter_3d_multi_angle(X_proj, Y, title, output_path, variance_ratios=None, **kwargs):
+    plt.style.use('default')
+    fig = plt.figure(figsize=(26, 8.5), facecolor='white')
+    
+    vocales = sorted(list(set(Y)))
+    palette = sns.color_palette("Set1", n_colors=len(vocales))
+    
+    axes = []
+    for i in range(3):
+        ax = fig.add_subplot(3, 1, i+1, projection='3d')
+        ax.set_facecolor('white')
+        ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
+        ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
+        ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
+        ax.grid(color='#d3d3d3', linestyle='-', linewidth=0.5)
+        axes.append(ax)
+        
+    for i, vocal in enumerate(vocales):
+        idx = np.where(np.array(Y) == vocal)[0]
+        color = palette[i]
+        for ax in axes:
+            ax.scatter(X_proj[idx, 0], X_proj[idx, 1], X_proj[idx, 2], label=vocal, color=color, alpha=1.0, s=60, edgecolors='black', linewidth=0.3, depthshade=False)
+            
+    fig.suptitle(title, color='black', fontsize=28, fontweight='bold', y=0.98)
+    
+    for ax in axes:
+        x_label = f'PC1 ({variance_ratios[0]*100:.1f}%)' if variance_ratios is not None else 'PC1'
+        y_label = f'PC2 ({variance_ratios[1]*100:.1f}%)' if variance_ratios is not None else 'PC2'
+        z_label = f'PC3 ({variance_ratios[2]*100:.1f}%)' if variance_ratios is not None else 'PC3'
+        ax.set_xlabel(x_label, color='black', fontsize=16, labelpad=12)
+        ax.set_ylabel(y_label, color='black', fontsize=16, labelpad=12)
+        ax.set_zlabel(z_label, color='black', fontsize=16, labelpad=12)
+    
+    # Set angles
+    axes[0].view_init(elev=20, azim=-60)  # Default Frontal
+    axes[1].view_init(elev=20, azim=30)   # Rotated +90 degrees
+    axes[2].view_init(elev=20, azim=120)  # Rotated +180 degrees
+    
+    axes[0].set_title("Vista Frontal", fontsize=19, fontweight='bold', pad=25)
+    axes[1].set_title("Vista Lateral (+90°)", fontsize=19, fontweight='bold', pad=25)
+    axes[2].set_title("Vista Posterior (+180°)", fontsize=19, fontweight='bold', pad=25)
+    
+    # Legend
+    if not kwargs.get('ocultar_leyenda', False):
+        handles, labels = axes[0].get_legend_handles_labels()
+        fig.legend(handles, labels, loc='upper center', bbox_to_anchor=(0.5, 0.94), ncol=len(vocales), frameon=True, facecolor='white', edgecolor='gray', title="Vocales", title_fontsize=24, fontsize=18)
+    
+    plt.subplots_adjust(hspace=0.1)
+    plt.tight_layout(rect=[0, 0, 1, 0.92], h_pad=2.0) 
+    plt.savefig(output_path, dpi=300, facecolor=fig.get_facecolor(), edgecolor='none', bbox_inches='tight')
+    plt.close()
+
+
+def plot_analisis_errores_2d(X, Y, Tomas, title, output_path, variance_ratios=None, algoritmo="K-Means", is_umap=False, ocultar_leyenda=False, estilo_visual="Elipses", **kwargs):
+    from scipy.optimize import linear_sum_assignment
+    import matplotlib.patches as patches
+    import matplotlib.patheffects as pe
+    
+    sns.set_theme(style="white", rc={"axes.facecolor": (0, 0, 0, 0)})
+    fig = plt.figure(figsize=(11, 8.5), facecolor='white')
+    ax = fig.add_subplot(111)
+    
+    ax.grid(color='#f0f0f0', linestyle='-', linewidth=1.5, alpha=0.8, zorder=0)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_color('#dddddd')
+    ax.spines['bottom'].set_color('#dddddd')
+    ax.spines['left'].set_linewidth(1.5)
+    ax.spines['bottom'].set_linewidth(1.5)
+    
+    vocales_unicas = sorted(list(set(Y)))
+    n_clases = len(vocales_unicas)
+    import collections
+    print(f"\nDistribución real de vocales en los datos ({len(Y)} total):")
+    for k, v in sorted(collections.Counter(Y).items()):
+        print(f"  {k}: {v} muestras")
+
+    if algoritmo == "GMM":
+        from sklearn.mixture import GaussianMixture
+        model = GaussianMixture(n_components=n_clases, covariance_type='full', random_state=42, n_init=100, max_iter=500)
+        y_pred_kmeans = model.fit_predict(X)
+        centroids = model.means_
+    else:
+        from sklearn.cluster import KMeans
+        model = KMeans(n_clusters=n_clases, random_state=42, n_init=100)
+        y_pred_kmeans = model.fit_predict(X)
+        centroids = model.cluster_centers_
+    
+    y_true_int = np.array([vocales_unicas.index(v) for v in Y])
+    from sklearn.metrics import confusion_matrix
+    cm = confusion_matrix(y_true_int, y_pred_kmeans)
+    row_ind, col_ind = linear_sum_assignment(-cm)
+    
+    cluster_to_vocal_idx = {kmeans_idx: real_idx for real_idx, kmeans_idx in zip(row_ind, col_ind)}
+    y_pred_mapped_idx = np.array([cluster_to_vocal_idx.get(c, 0) for c in y_pred_kmeans])
+    
+    acc_global = np.sum(y_pred_mapped_idx == y_true_int) / len(y_true_int) * 100
+    
+    import matplotlib.colors as mc
+    import colorsys
+
+    def adjust_lightness(color, amount=0.5):
+        try:
+            c = mc.cnames[color]
+        except:
+            c = color
+        c = colorsys.rgb_to_hls(*mc.to_rgb(c))
+        return colorsys.hls_to_rgb(c[0], max(0, min(1, amount * c[1])), c[2])
+
+    palette = sns.color_palette("Set1", n_colors=n_clases)
+    
+    # --- RENDERIZADO AVANZADO (Fondo) ---
+    if algoritmo == "GMM" and estilo_visual in ["Sombreado", "Fronteras"]:
+        x_min, x_max = X[:, 0].min() - (X[:, 0].max() - X[:, 0].min())*0.1, X[:, 0].max() + (X[:, 0].max() - X[:, 0].min())*0.1
+        y_min, y_max = X[:, 1].min() - (X[:, 1].max() - X[:, 1].min())*0.1, X[:, 1].max() + (X[:, 1].max() - X[:, 1].min())*0.1
+        ax.set_xlim(x_min, x_max)
+        ax.set_ylim(y_min, y_max)
+        
+        xx, yy = np.meshgrid(np.linspace(x_min, x_max, 800), np.linspace(y_min, y_max, 800))
+        grid = np.c_[xx.ravel(), yy.ravel()]
+        
+        if estilo_visual == "Fronteras":
+            Z_cluster = model.predict(grid)
+            Z_mapped = np.array([cluster_to_vocal_idx.get(c, 0) for c in Z_cluster])
+            Z_mapped = Z_mapped.reshape(xx.shape)
+            cmap = mc.ListedColormap([palette[i] for i in range(n_clases)])
+            ax.pcolormesh(xx, yy, Z_mapped, cmap=cmap, alpha=0.3, zorder=0, shading='auto', vmin=0, vmax=n_clases-1)
+            ax.contour(xx, yy, Z_mapped, levels=np.arange(0.5, n_clases - 0.5, 1), colors='k', linewidths=0.5, alpha=0.5, zorder=0, antialiased=True)
+            
+        elif estilo_visual == "Sombreado":
+            from scipy.stats import multivariate_normal
+            for cluster_id in range(n_clases):
+                real_idx = cluster_to_vocal_idx.get(cluster_id, 0)
+                color = palette[real_idx]
+                cov = model.covariances_[cluster_id]
+                mean = model.means_[cluster_id]
+                rv = multivariate_normal(mean, cov)
+                Z = rv.pdf(grid).reshape(xx.shape)
+                if Z.max() > 0:
+                    Z = Z / Z.max()
+                cmap_custom = mc.LinearSegmentedColormap.from_list("", [(1,1,1,0), mc.to_rgba(color, 0.4)])
+                ax.contourf(xx, yy, Z, levels=12, cmap=cmap_custom, zorder=0)
+    
+    print("\n--- DETALLE DE MEDICIONES MAL CLASIFICADAS (PCA 2D) ---")
+    errores_encontrados = False
+    legend_elements = []
+    
+    for real_idx, vocal in enumerate(vocales_unicas):
+        color = palette[real_idx]
+        
+        idx_true = (y_true_int == real_idx)
+        X_true = X[idx_true]
+        # Determinar si el punto fue clasificado correctamente
+        Y_pred_for_this = y_pred_mapped_idx[idx_true]
+        idx_error = (Y_pred_for_this != real_idx)
+        idx_correct = ~idx_error
+
+        # Puntos Correctos (Círculos sólidos del color original)
+        if np.any(idx_correct):
+            ax.scatter(X_true[idx_correct, 0], X_true[idx_correct, 1], 
+                       c=[color], marker='o', s=80, edgecolors='black', linewidth=0.5, alpha=1.0, zorder=4)
+        
+        # Puntos Incorrectos (ya no se sombrean)
+        if np.any(idx_error):
+            ax.scatter(X_true[idx_error, 0], X_true[idx_error, 1], 
+                       c=[color], marker='o', s=80, edgecolors='black', linewidth=0.5, alpha=1.0, zorder=3)
+        
+        # Centroide y Elipse de confianza (asociados a la vocal predecida por el cluster)
+        cluster_id = col_ind[real_idx]
+        centroid = centroids[cluster_id]
+        
+        dark_color = adjust_lightness(color, 0.65)
+        ax.scatter(centroid[0], centroid[1], c=[dark_color], marker='D', s=250, edgecolors='black', linewidth=1.5, zorder=5,
+                   path_effects=[pe.withStroke(linewidth=4, foreground="white", alpha=0.8)])
+        
+        if estilo_visual == "Elipses":
+            puntos_en_cluster = X[y_pred_kmeans == cluster_id]
+            if len(puntos_en_cluster) > 2:
+                cov = np.cov(puntos_en_cluster.T)
+                eigenvalues, eigenvectors = np.linalg.eigh(cov)
+                angle = np.degrees(np.arctan2(*eigenvectors[:, 0][::-1]))
+                width, height = 2 * np.sqrt(eigenvalues) * 2 
+                ellipse = patches.Ellipse(xy=centroid, width=width, height=height, angle=angle, 
+                                          edgecolor=color, facecolor=color, alpha=0.15, linewidth=2, linestyle='-', zorder=1)
+                ax.add_patch(ellipse)
+            
+        # Loggear errores en consola (ya no se dibujan líneas ni cruces)
+        Y_pred_for_this = y_pred_mapped_idx[idx_true]
+        idx_error = (Y_pred_for_this != real_idx)
+        
+        for point_idx, is_error in enumerate(idx_error):
+            if is_error:
+                global_idx = np.where(idx_true)[0][point_idx]
+                toma_fallida = Tomas[global_idx]
+                wrong_cluster_id = y_pred_kmeans[global_idx]
+                vocal_predicha = vocales_unicas[cluster_to_vocal_idx[wrong_cluster_id]]
+                
+            
+    # ax.set_title(title, color='black', fontsize=24, fontweight='bold', pad=15)
+    ax.tick_params(labelsize=18)
+    x_label = 'UMAP1' if is_umap else 'PC1'
+    y_label = 'UMAP2' if is_umap else 'PC2'
+    ax.set_xlabel(x_label, color='black', fontsize=22, fontweight='bold', labelpad=10)
+    ax.set_ylabel(y_label, color='black', fontsize=22, fontweight='bold', labelpad=10)
+    
+    from sklearn.metrics import silhouette_score
+    sil_score = silhouette_score(X, y_pred_kmeans)
+    
+    for i, v in enumerate(vocales_unicas):
+        legend_elements.append(plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=palette[i], 
+                                          markersize=12, markeredgecolor='black', markeredgewidth=0.5, label=f'{v}'))
+    
+    # Explicación de formas y tonos usando un color neutro (Gris)
+    legend_elements.append(plt.Line2D([0], [0], marker='D', color='w', markerfacecolor='gray', markersize=12, markeredgecolor='black', label='Centroide'))
+    
+    if estilo_visual == "Elipses":
+        legend_elements.append(plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='gray', alpha=0.15, markersize=16, markeredgecolor='gray', markeredgewidth=2, label=r'Elipse (2$\sigma$)'))
+    elif estilo_visual == "Sombreado":
+        legend_elements.append(plt.Line2D([0], [0], marker='s', color='w', markerfacecolor='gray', alpha=0.4, markersize=16, markeredgecolor='none', label='Densidad GMM'))
+    elif estilo_visual == "Fronteras":
+        legend_elements.append(plt.Line2D([0], [0], marker='s', color='w', markerfacecolor='gray', alpha=0.4, markersize=16, markeredgecolor='black', markeredgewidth=1, label='Fronteras de Decisión'))
+        
+    if not ocultar_leyenda:
+        legend = ax.legend(handles=legend_elements, loc='best', 
+                           title="Vocal", borderaxespad=0., fontsize=16, title_fontsize=20,
+                           frameon=True, edgecolor='#dddddd', facecolor='white')
+    
+    plt.tight_layout()
+    if output_path.endswith('.pdf'):
+        plt.savefig(output_path[:-4] + '.png', dpi=300, facecolor='white', bbox_inches='tight')
+    elif output_path.endswith('.png'):
+        plt.savefig(output_path[:-4] + '.pdf', dpi=300, facecolor='white', bbox_inches='tight')
+    plt.savefig(output_path, dpi=300, facecolor='white', bbox_inches='tight')
+    plt.close()
+
+def plot_analisis_errores_3d(X, Y, Tomas, title, output_path, variance_ratios=None, algoritmo="K-Means", is_umap=False, ocultar_leyenda=False, **kwargs):
+    from scipy.optimize import linear_sum_assignment
+    import matplotlib.patheffects as pe
+    import matplotlib.patches as patches
+    
+    sns.set_theme(style="white", rc={"axes.facecolor": (0, 0, 0, 0)})
+    fig = plt.figure(figsize=(12, 9), facecolor='white')
+    ax = fig.add_subplot(111, projection='3d')
+    ax.set_facecolor('white')
+    ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
+    ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
+    ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
+    ax.grid(color='#f0f0f0', linestyle='-', linewidth=1.5, alpha=0.8)
+    
+    import matplotlib.colors as mc
+    import colorsys
+
+    def adjust_lightness(color, amount=0.5):
+        try:
+            c = mc.cnames[color]
+        except:
+            c = color
+        c = colorsys.rgb_to_hls(*mc.to_rgb(c))
+        return colorsys.hls_to_rgb(c[0], max(0, min(1, amount * c[1])), c[2])
+    
+    vocales_unicas = sorted(list(set(Y)))
+    n_clases = len(vocales_unicas)
+    
+    if algoritmo == "GMM":
+        from sklearn.mixture import GaussianMixture
+        model = GaussianMixture(n_components=n_clases, covariance_type='full', random_state=42, n_init=100, max_iter=500)
+        y_pred_kmeans = model.fit_predict(X)
+        centroids = model.means_
+    else:
+        from sklearn.cluster import KMeans
+        model = KMeans(n_clusters=n_clases, random_state=42, n_init=100)
+        y_pred_kmeans = model.fit_predict(X)
+        centroids = model.cluster_centers_
+    
+    y_true_int = np.array([vocales_unicas.index(v) for v in Y])
+    from sklearn.metrics import confusion_matrix
+    cm = confusion_matrix(y_true_int, y_pred_kmeans)
+    row_ind, col_ind = linear_sum_assignment(-cm)
+    
+    cluster_to_vocal_idx = {kmeans_idx: real_idx for real_idx, kmeans_idx in zip(row_ind, col_ind)}
+    y_pred_mapped_idx = np.array([cluster_to_vocal_idx.get(c, 0) for c in y_pred_kmeans])
+    acc_global = np.sum(y_pred_mapped_idx == y_true_int) / len(y_true_int) * 100
+    
+    palette = sns.color_palette("Set1", n_colors=n_clases)
+    
+    print("\n--- DETALLE DE MEDICIONES MAL CLASIFICADAS (PCA 3D) ---")
+    errores_encontrados = False
+    legend_elements = []
+    
+    for real_idx, vocal in enumerate(vocales_unicas):
+        color = palette[real_idx]
+        
+        idx_true = (y_true_int == real_idx)
+        X_true = X[idx_true]
+        
+        Y_pred_for_this = y_pred_mapped_idx[idx_true]
+        idx_error = (Y_pred_for_this != real_idx)
+        
+        # Puntos Reales Correctos
+        if np.any(~idx_error):
+            idx_correct = ~idx_error
+            ax.scatter(X_true[idx_correct, 0], X_true[idx_correct, 1], X_true[idx_correct, 2],
+                       c=[color], marker='o', s=80, edgecolors='white', linewidth=1.2, alpha=1.0, zorder=3)
+        
+        # Centroide (Predicción)
+        cluster_id = col_ind[real_idx]
+        centroid = centroids[cluster_id]
+        ax.scatter(centroid[0], centroid[1], centroid[2], 
+                   c=[color], marker='D', s=250, edgecolors='black', linewidth=1.5, zorder=5,
+                   path_effects=[pe.withStroke(linewidth=4, foreground="white", alpha=0.8)])
+                   
+        # Elipsoide 3D (3 Desviaciones Estándar)
+        try:
+            cov = np.cov(X_true, rowvar=False)
+            evals, evecs = np.linalg.eigh(cov)
+            idx_sort = evals.argsort()[::-1]
+            evals = evals[idx_sort]
+            evecs = evecs[:, idx_sort]
+            radii = np.sqrt(evals) * 3
+            u = np.linspace(0, 2 * np.pi, 20)
+            v = np.linspace(0, np.pi, 20)
+            x_sphere = np.outer(np.cos(u), np.sin(v))
+            y_sphere = np.outer(np.sin(u), np.sin(v))
+            z_sphere = np.outer(np.ones_like(u), np.cos(v))
+            x_sphere *= radii[0]
+            y_sphere *= radii[1]
+            z_sphere *= radii[2]
+            points_sphere = np.vstack((x_sphere.flatten(), y_sphere.flatten(), z_sphere.flatten()))
+            points_rot = evecs @ points_sphere
+            x_ell = points_rot[0, :].reshape(x_sphere.shape) + centroid[0]
+            y_ell = points_rot[1, :].reshape(y_sphere.shape) + centroid[1]
+            z_ell = points_rot[2, :].reshape(z_sphere.shape) + centroid[2]
+            ax.plot_wireframe(x_ell, y_ell, z_ell, color=color, alpha=0.15, linewidth=0.6, zorder=2)
+        except Exception as e:
+            pass
+                   
+        Y_pred_for_this = y_pred_mapped_idx[idx_true]
+        idx_error = (Y_pred_for_this != real_idx)
+        
+        # Puntos incorrectos ya no se sombrean ni se les dibuja línea
+        if np.any(idx_error):
+            ax.scatter(X_true[idx_error, 0], X_true[idx_error, 1], X_true[idx_error, 2],
+                       c=[color], marker='o', s=80, edgecolors='white', linewidth=0.5, alpha=1.0, zorder=2)
+        
+        for point_idx, is_error in enumerate(idx_error):
+            if is_error:
+                global_idx = np.where(idx_true)[0][point_idx]
+                toma_fallida = Tomas[global_idx]
+                wrong_cluster_id = y_pred_kmeans[global_idx]
+                vocal_predicha = vocales_unicas[cluster_to_vocal_idx[wrong_cluster_id]]
+                
+                print(f"❌ Error 3D en Toma '{toma_fallida}': Pronunció '{vocal}' pero cayó cerca del centroide de '{vocal_predicha}'.")
+                errores_encontrados = True
+                
+    if not errores_encontrados:
+        print("✅ ¡Clasificación 3D perfecta! Ningún error en esta prueba.")
+    print("-------------------------------------------------------")
+            
+    # ax.set_title(title, color='#2c3e50', fontsize=22, fontweight='900', fontfamily='sans-serif', pad=20)
+    ax.set_xlabel('PC1', color='#34495e', fontsize=15, fontweight='bold', labelpad=10)
+    ax.set_ylabel('PC2', color='#34495e', fontsize=15, fontweight='bold', labelpad=10)
+    ax.set_zlabel('PC3', color='#34495e', fontsize=15, fontweight='bold', labelpad=10)
+    
+    for i, v in enumerate(vocales_unicas):
+        legend_elements.append(plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=palette[i], 
+                                          markersize=9, markeredgecolor='white', label=f'{v}'))
+    
+    # Explicación de formas y tonos usando un color neutro (Gris)
+    legend_elements.append(plt.Line2D([0], [0], marker='', color='w', label='')) # Espaciador
+    legend_elements.append(plt.Line2D([0], [0], marker='D', color='w', markerfacecolor='gray', markersize=9, markeredgecolor='black', label='Centroide'))
+    legend_elements.append(plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='gray', alpha=0.15, markersize=14, markeredgecolor='gray', markeredgewidth=2, label=r'Elipse (3$\sigma$)'))
+        
+    if not ocultar_leyenda:
+        legend = ax.legend(handles=legend_elements, loc='best', 
+                           title="Vocal", borderaxespad=0., fontsize=15, title_fontsize=20,
+                           frameon=True, edgecolor='#dddddd', facecolor='white')
+              
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=300, facecolor='white', bbox_inches='tight')
+    plt.close()
+
+
+def plot_recognition_rates_bar_chart(accuracies, labels, title, output_path, acc_vocales_list=None, vocales=None, **kwargs):
+    plt.style.use('default')
+    
+    if acc_vocales_list is not None and vocales is not None:
+        fig, ax = plt.subplots(figsize=(12, 6), facecolor='white')
+        n_groups = len(labels)
+        n_vocales = len(vocales)
+        total_bars = 1 + n_vocales
+        width = 0.8 / total_bars
+        x = np.arange(n_groups)
+        
+        palette = sns.color_palette("Set1", n_colors=n_vocales)
+        
+        # Global bar (dark gray/blue)
+        offset_global = - (total_bars / 2) * width + width / 2
+        bars_global = ax.bar(x + offset_global, accuracies, width, color='#34495e', edgecolor='black', linewidth=1.0, label='Global')
+        for bar in bars_global:
+            yval = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2, yval + 1.5, f"{yval:.1f}%", ha='center', va='bottom', fontsize=13, fontweight='bold', color='black', rotation=90)
+            
+        for i, vocal in enumerate(vocales):
+            vocal_accs = [acc_voc[i] for acc_voc in acc_vocales_list]
+            offset = offset_global + (i + 1) * width
+            bars_vocal = ax.bar(x + offset, vocal_accs, width, color=palette[i], edgecolor='black', linewidth=1.0, label=f'Vocal {vocal}')
+            for bar in bars_vocal:
+                yval = bar.get_height()
+                ax.text(bar.get_x() + bar.get_width()/2, yval + 1.5, f"{yval:.0f}", ha='center', va='bottom', fontsize=12, color='black', rotation=90)
+                
+        ax.set_xticks(x)
+        ax.set_xticklabels(labels, fontsize=16, fontweight='bold', color='black')
+    if not kwargs.get('ocultar_leyenda', False):
+        ax.legend(loc='center left', bbox_to_anchor=(1.02, 0.5), title="Precisión", title_fontsize=20, fontsize=15, frameon=True, edgecolor='gray')
+    else:
+        fig, ax = plt.subplots(figsize=(8, 6), facecolor='white')
+        x = np.arange(len(labels))
+        width = 0.6
+        bars = ax.bar(x, accuracies, width, color='#4A90E2', edgecolor='black', linewidth=1.2)
+        for i, bar in enumerate(bars):
+            yval = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2, yval + 1.5, f"{yval:.1f}%", ha='center', va='bottom', fontsize=15, fontweight='bold', color='black')
+        ax.set_xticks(x)
+        ax.set_xticklabels(labels, fontsize=16, fontweight='bold', color='black')
+        
+    ax.set_ylabel('Tasa de reconocimiento [%]', fontsize=17, fontweight='bold', color='black')
+    ax.set_title(title, fontsize=18, fontweight='bold', pad=15, color='black')
+    ax.set_ylim(0, 119) # Extra space for texts
+    ax.grid(axis='y', linestyle='-', alpha=0.3, color='gray')
+    
+    ax.set_facecolor('white')
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='white')
     plt.close()
     
 def calcular_centroides_y_distancias(X_proj, Y):
@@ -477,57 +1041,78 @@ def calcular_centroides_y_distancias(X_proj, Y):
     return centroides, dist_matrix, vocales
 
 def plot_distance_heatmap(dist_matrix, vocales, title, output_path):
-    plt.figure(figsize=(6, 5))
-    plt.style.use('dark_background')
-    sns.heatmap(dist_matrix, annot=True, cmap="YlGnBu", xticklabels=vocales, yticklabels=vocales, fmt=".2f", cbar_kws={'label': 'Distancia Euclidiana'})
-    plt.title(title, color="white", pad=15)
+    plt.style.use('default')
+    fig = plt.figure(figsize=(7, 6), facecolor='white')
+    ax = fig.add_subplot(111)
+    ax.set_facecolor('white')
+    
+    # Paleta clásica para publicaciones (YlGnBu o Blues)
+    sns.heatmap(dist_matrix, annot=True, cmap="YlGnBu", xticklabels=vocales, yticklabels=vocales, 
+                fmt=".2f", cbar_kws={'label': 'Distancia Euclidiana'}, ax=ax,
+                linewidths=0.5, linecolor='gray', 
+                annot_kws={"size": 11, "color": "black"})
+                
+    ax.set_title(title, color="black", pad=15, fontsize=17, fontweight='bold')
+    ax.tick_params(colors='black', labelsize=11)
+    
+    # Colorbar tweaks
+    cbar = ax.collections[0].colorbar
+    cbar.ax.yaxis.set_tick_params(color='black')
+    cbar.ax.yaxis.set_tick_params(labelcolor='black')
+    cbar.set_label('Distancia Euclidiana', color='black', fontsize=15)
+    
     plt.tight_layout()
-    plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='#0B0C10')
+    plt.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='white')
     plt.close()
 
-def ejecutar_procesamiento(
-    mediciones, 
-    base_dir, 
-    alpha_ruido, 
-    snr_threshold, 
-    outlier_contamination, 
-    smooth_ms, 
-    target_length, 
-    notch_q,
-    umap_n_neighbors,
-    umap_min_dist,
-    umap_metric,
-    pca_comps=[1, 2, 3],
-    aplicar_trevisan=False,
-    algoritmo_clustering="K-Means",
-    modo_alineacion="Pico Volumen Micrófono",
-    pre_pct=0.4,
-    post_pct=0.6,
-    canales_features=["canal_0", "canal_1", "canal_2"]
-):
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    out_dir = os.path.join(script_dir, "resultados_pca_umap")
-    os.makedirs(out_dir, exist_ok=True)
+def calcular_y_guardar_silhouette_por_vocal(X_proj, Y_true, title, filepath):
+    from sklearn.metrics import silhouette_samples, silhouette_score
+    import pandas as pd
     
-    print(f"\n2. Extracción y concatenación de características de {len(mediciones)} mediciones (Trevisan={aplicar_trevisan}, Alineación={modo_alineacion})...")
-    print(f"   -> Canales incluidos en PCA: {', '.join(canales_features)}")
-    print(f"   -> Recorte de ventana configurado: Pre={pre_pct*100:.1f}%, Post={post_pct*100:.1f}% del período.")
-    X, Y, Tomas, SNRs = extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=alpha_ruido, smooth_ms=smooth_ms, notch_q=notch_q, target_len=target_length, aplicar_trevisan=aplicar_trevisan, modo_alineacion=modo_alineacion, pre_pct=pre_pct, post_pct=post_pct, canales_features=canales_features)
+    sil_global = silhouette_score(X_proj, Y_true)
+    sil_samples = silhouette_samples(X_proj, Y_true)
+    
+    vocales = sorted(list(set(Y_true)))
+    resultados = []
+    
+    for vocal in vocales:
+        idx = np.array(Y_true) == vocal
+        sil_mean = np.mean(sil_samples[idx])
+        resultados.append({'Vocal': vocal, 'Silhouette Score': f"{sil_mean:.3f}"})
+        
+    resultados.append({'Vocal': 'Global', 'Silhouette Score': f"{sil_global:.3f}"})
+    
+    df = pd.DataFrame(resultados)
+    
+    latex_code = df.to_latex(index=False, column_format='lc', escape=False)
+    latex_code = latex_code.replace('\\toprule', '\\toprule\n\\rowcolor{col01}')
+    with open(filepath, 'w', encoding='utf-8') as f:
+        f.write(latex_code)
+        
+    return sil_global
+
+def extraer_y_filtrar(mediciones, base_dir, params, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=False):
+    print(f"\n--- Extrayendo Características ---")
+    print(f"    Parámetros: Alpha={params['alpha_ruido']}, Smooth={params['smooth_ms']}ms, Puntos={params['target_length']}, SNR>={params['snr_threshold']}, Outliers={params['outlier_contamination']}")
+    
+    X, Y, Tomas, SNRs = extraer_features_concatenadas(
+        base_dir, mediciones, 
+        alpha_ruido=params['alpha_ruido'], 
+        smooth_ms=params['smooth_ms'], 
+        notch_q=params['notch_q'], 
+        target_len=params['target_length'], 
+        aplicar_trevisan=aplicar_trevisan, 
+        modo_alineacion=modo_alineacion, 
+        pre_pct=pre_pct, 
+        post_pct=post_pct, 
+        canales_features=canales_features,
+        ignorar_ventana_cero=ignorar_ventana_cero
+    )
     
     if len(X) == 0:
-        print("Error: No se obtuvieron datos válidos para procesar.")
-        return
+        return [], [], [], []
         
-    print(f"\nDatos recolectados: {X.shape[0]} repeticiones (pulsos), Dimensión de cada feature: {X.shape[1]}")
     X = np.array(X)
-    
-    # Guardamos los originales SIN FILTRAR para exportarlos al final
-    X_orig = X.copy()
-    Y_orig = np.array(Y).copy()
-    Tomas_orig = np.array(Tomas).copy()
-    
-    # ------------------ Filtro de Outliers ------------------
-    print("\n3. Aplicando filtro de Outliers (Isolation Forest)...")
     from sklearn.ensemble import IsolationForest
     
     X_clean = []
@@ -536,32 +1121,24 @@ def ejecutar_procesamiento(
     outliers_detectados = 0
     descartados = []
     
-    # Filtramos por clase (vocal) para no eliminar varianza válida inter-clase
     for vocal in np.unique(Y):
         mask = Y == vocal
         X_vocal = X[mask]
-        Tomas_vocal = Tomas[mask]
-        SNRs_vocal = SNRs[mask]
+        Tomas_vocal = np.array(Tomas)[mask]
+        SNRs_vocal = np.array(SNRs)[mask]
         
-        # 1. Filtro duro por SNR
-        valid_snr_mask = SNRs_vocal >= snr_threshold
+        valid_snr_mask = SNRs_vocal >= params['snr_threshold']
         for i, is_valid in enumerate(valid_snr_mask):
             if not is_valid:
                 outliers_detectados += 1
-                razon = f"SNR muy bajo (<{snr_threshold})"
-                print(f"  [!] Descartado por {razon}: {Tomas_vocal[i]} (Vocal {vocal}) | SNR: {SNRs_vocal[i]:.2f}")
-                descartados.append({"Toma": Tomas_vocal[i], "Vocal": vocal, "SNR": SNRs_vocal[i], "Motivo": razon})
+                descartados.append({"Toma": Tomas_vocal[i], "Vocal": vocal, "SNR": SNRs_vocal[i], "Motivo": "SNR muy bajo"})
                 
-        # Quedarse solo con los que pasaron el filtro SNR
         X_vocal_snr = X_vocal[valid_snr_mask]
         Tomas_vocal_snr = Tomas_vocal[valid_snr_mask]
         SNRs_vocal_snr = SNRs_vocal[valid_snr_mask]
         
-        # 2. Filtro estadístico (Isolation Forest)
-        # Necesitamos un mínimo de muestras para aislar
-        if len(X_vocal_snr) > 5 and outlier_contamination > 0:
-            # Porcentaje de contaminación esperada (outliers)
-            iso = IsolationForest(contamination=outlier_contamination, random_state=42)
+        if len(X_vocal_snr) > 5 and params['outlier_contamination'] > 0:
+            iso = IsolationForest(contamination=params['outlier_contamination'], random_state=42)
             preds = iso.fit_predict(X_vocal_snr)
             
             for i, is_inlier in enumerate(preds):
@@ -571,323 +1148,248 @@ def ejecutar_procesamiento(
                     Tomas_clean.append(Tomas_vocal_snr[i])
                 else:
                     outliers_detectados += 1
-                    razon = "Outlier estadístico (IsolationForest)"
-                    print(f"  [!] {razon} removido: {Tomas_vocal_snr[i]} (Vocal {vocal}) | SNR: {SNRs_vocal_snr[i]:.2f}")
-                    descartados.append({"Toma": Tomas_vocal_snr[i], "Vocal": vocal, "SNR": SNRs_vocal_snr[i], "Motivo": razon})
+                    descartados.append({"Toma": Tomas_vocal_snr[i], "Vocal": vocal, "SNR": SNRs_vocal_snr[i], "Motivo": "Outlier estadístico"})
         else:
             for i in range(len(X_vocal_snr)):
                 X_clean.append(X_vocal_snr[i])
                 Y_clean.append(vocal)
                 Tomas_clean.append(Tomas_vocal_snr[i])
                 
-    X = np.array(X_clean)
-    Y = np.array(Y_clean)
-    Tomas = np.array(Tomas_clean)
-    print(f"  -> Total outliers removidos: {outliers_detectados}")
-    print(f"  -> Repeticiones finales válidas: {len(X)}")
-    Y = np.array(Y)
+    print(f"    Total outliers/SNR removidos: {outliers_detectados}")
+    print(f"    Repeticiones finales válidas: {len(X_clean)}")
     
-    # La normalización por pulso ya se aplicó dentro del bucle
-    X_scaled = X
+    return np.array(X_clean), np.array(Y_clean), np.array(Tomas_clean), descartados
 
-    print(f"\nAplicando PCA y UMAP...")
+def ejecutar_procesamiento(
+    mediciones, 
+    base_dir, 
+    params_2d=None, 
+    params_3d=None, 
+    params_umap=None, 
+    proc_pca_2d=False, 
+    proc_pca_3d=False, 
+    proc_umap_2d=False, 
+    proc_umap_3d=False, 
+    umap_n_neighbors=15, 
+    umap_min_dist=0.1, 
+    umap_metric='euclidean',
+    aplicar_trevisan=False,
+    algoritmo_clustering_pca="K-Means",
+    algoritmo_clustering_umap="GMM",
+    modo_alineacion="Pico Volumen Micrófono",
+    pre_pct=0.4,
+    post_pct=0.6,
+    canales_features=["canal_0", "canal_1", "canal_2"],
+    ocultar_leyenda=False,
+    estilo_visual="Elipses",
+    ignorar_ventana_cero=False,
+    out_dir=None
+):
+    if out_dir is None:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        out_dir = os.path.join(script_dir, "resultados_pca_umap")
+    os.makedirs(out_dir, exist_ok=True)
     
-    # ------------------ PCA ------------------
-    try:
-        req_comps_0 = [c - 1 for c in pca_comps]
-        max_c = max(req_comps_0)
-        
-        # Calcular PCA base con suficientes componentes
-        pca_base = PCA(n_components=max_c + 1)
-        X_pca_base = pca_base.fit_transform(X_scaled)
-        
-        # --- PCA N-Dimensional Completo (para clustering y UMAP) ---
-        X_pca_selected = X_pca_base[:, req_comps_0]
-        
-        # --- PCA 2D (Para Graficar) ---
-        if len(req_comps_0) >= 2:
-            idx_2d = req_comps_0[:2]
-        else:
-            idx_2d = req_comps_0 + [0] * (2 - len(req_comps_0))
-            
-        X_pca_2d = X_pca_base[:, idx_2d]
-        var_ratios_2d = pca_base.explained_variance_ratio_[idx_2d]
-        
-        # --- PCA 3D (Para Graficar) ---
-        if len(req_comps_0) >= 3:
-            idx_3d = req_comps_0[:3]
-        else:
-            idx_3d = req_comps_0 + [0] * (3 - len(req_comps_0))
-            
-        X_pca_3d = X_pca_base[:, idx_3d]
-        var_ratios_3d = pca_base.explained_variance_ratio_[idx_3d]
-        
-        var_exp_total = np.sum(pca_base.explained_variance_ratio_[req_comps_0])
-        print(f"Varianza explicada por las componentes PCA seleccionadas {pca_comps}: {var_exp_total*100:.2f}%")
-        
-        plot_scatter(X_pca_2d, Y, f"PCA 2D (Comps: {pca_comps[:2]}) - Vocales EMG", os.path.join(out_dir, "PCA_2D.png"), is_3d=False, variance_ratios=var_ratios_2d)
-        plot_scatter(X_pca_3d, Y, f"PCA 3D (Comps: {pca_comps[:3]}) - Vocales EMG", os.path.join(out_dir, "PCA_3D.png"), is_3d=True, variance_ratios=var_ratios_3d)
-        
-    except Exception as e:
-        print(f"Error en el filtrado de componentes PCA: {e}")
-        return
+    import numpy as np
+    from sklearn.decomposition import PCA
+    import umap
+    from sklearn.metrics import silhouette_score
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import seaborn as sns
     
-    # --- PCA 2D Centroides ---
-    cent_pca_2d, _, vocales_pca_2d = calcular_centroides_y_distancias(X_pca_2d, Y)
-    X_cent_2d = np.array([cent_pca_2d[v] for v in vocales_pca_2d])
-    Y_cent_2d = np.array(vocales_pca_2d)
-    plot_scatter(X_cent_2d, Y_cent_2d, f"PCA 2D (Comps: {pca_comps[:2]}) - Promedio de Vocales", os.path.join(out_dir, "PCA_2D_Centroides.png"), is_3d=False, variance_ratios=var_ratios_2d, connect_points=True)
+    print(f"\nIniciando Procesamiento. Canales: {', '.join(canales_features)}")
     
-    # --- PCA 3D Centroides ---
-    cent_pca, _, vocales_pca = calcular_centroides_y_distancias(X_pca_3d, Y)
-    X_cent = np.array([cent_pca[v] for v in vocales_pca])
-    Y_cent = np.array(vocales_pca)
-    plot_scatter(X_cent, Y_cent, f"PCA 3D (Comps: {pca_comps[:3]}) - Promedio de Vocales", os.path.join(out_dir, "PCA_3D_Centroides.png"), is_3d=True, variance_ratios=var_ratios_3d, connect_points=True)
-    
-    # ------------------ UMAP ------------------
-    print(f"\n5. Aplicando UMAP (n_neighbors={umap_n_neighbors}, min_dist={umap_min_dist}, metric={umap_metric})...")
-    
-    # Asegurar que n_neighbors no sea mayor que el número de muestras
-    if umap_n_neighbors >= len(X):
-        umap_n_neighbors = max(2, len(X) - 1)
-        print(f"  [Aviso] n_neighbors ajustado a {umap_n_neighbors} por falta de muestras.")
-        
-    print("  [INFO] Alimentando UMAP con los datos originales (crudos).")
-        
-    np.random.seed(42)
-    umap_2d = umap.UMAP(n_neighbors=umap_n_neighbors, min_dist=umap_min_dist, metric=umap_metric, n_components=2, random_state=42)
-    X_umap_2d = umap_2d.fit_transform(X_scaled)
-    
-    np.random.seed(42)
-    umap_3d = umap.UMAP(n_neighbors=umap_n_neighbors, min_dist=umap_min_dist, metric=umap_metric, n_components=3, random_state=42)
-    X_umap_3d = umap_3d.fit_transform(X_scaled)
-    
-    plot_scatter(X_umap_2d, Y, "UMAP 2D (Señal Cruda) - Vocales EMG", os.path.join(out_dir, "UMAP_2D.png"), is_3d=False)
-    plot_scatter(X_umap_3d, Y, "UMAP 3D (Señal Cruda) - Vocales EMG", os.path.join(out_dir, "UMAP_3D.png"), is_3d=True)
-    
-    # ------------------ MÉTRICAS ------------------
-    print("\n5. Calculando distancias (Euclidiana) y Silhouette Scores...")
-    sil_pca_2d = silhouette_score(X_pca_2d, Y, metric='euclidean')
-    sil_pca_nd = silhouette_score(X_pca_selected, Y, metric='euclidean')
-    
-    sil_umap_2d = silhouette_score(X_umap_2d, Y, metric='euclidean')
-    sil_umap_3d = silhouette_score(X_umap_3d, Y, metric='euclidean')
-    
-    print(f"Silhouette Score (PCA 2D): {sil_pca_2d:.4f}")
-    print(f"Silhouette Score (PCA {len(pca_comps)}D): {sil_pca_nd:.4f}")
-    print(f"Silhouette Score (UMAP 2D): {sil_umap_2d:.4f}")
-    print(f"Silhouette Score (UMAP 3D): {sil_umap_3d:.4f}")
-    
-    print(f"\n--- Distancias entre centroides (PCA {len(pca_comps)}D) ---")
-    cent_pca, dist_mat_pca, vocales_pca = calcular_centroides_y_distancias(X_pca_selected, Y)
-    df_dist_pca = pd.DataFrame(dist_mat_pca, index=vocales_pca, columns=vocales_pca)
-    print(df_dist_pca.to_string())
-    
-    print("\n--- Distancias entre centroides (UMAP 3D) ---")
-    cent, dist_mat, vocales = calcular_centroides_y_distancias(X_umap_3d, Y)
-    
-    df_dist = pd.DataFrame(dist_mat, index=vocales, columns=vocales)
-    print(df_dist.to_string())
-    
-    plot_distance_heatmap(dist_mat_pca, vocales_pca, f"Matriz de Distancias - Centroides (PCA {len(pca_comps)}D)", os.path.join(out_dir, "heatmap_distancias_pca.png"))
-    plot_distance_heatmap(dist_mat, vocales, "Matriz de Distancias - Centroides (UMAP 3D)", os.path.join(out_dir, "heatmap_distancias_umap.png"))
-    
-    # ------------------ CLUSTERING NO SUPERVISADO ------------------
-    print(f"\n--- Evaluando Clustering No Supervisado ({algoritmo_clustering} + Húngaro) ---")
-    
-    pca_name = f"PCA {len(pca_comps)}D"
-    acc_pca_2d, acc_vocales_pca_2d, voc_pca_2d, df_cm_pca_2d, mapeo_pca_2d = evaluar_clustering_no_supervisado(X_pca_2d, Y, "PCA 2D", algoritmo_clustering)
-    acc_pca_nd, acc_vocales_pca, voc_pca, df_cm_pca, mapeo_pca = evaluar_clustering_no_supervisado(X_pca_selected, Y, pca_name, algoritmo_clustering)
-    
-    acc_umap_2d, acc_vocales_umap_2d, voc_umap_2d, df_cm_umap_2d, mapeo_umap_2d = evaluar_clustering_no_supervisado(X_umap_2d, Y, "UMAP 2D", algoritmo_clustering)
-    acc_umap_3d, acc_vocales_umap, voc_umap, df_cm_umap, mapeo_umap = evaluar_clustering_no_supervisado(X_umap_3d, Y, "UMAP 3D", algoritmo_clustering)
-    
-    print(f"\n=> TOTAL Accuracy Clustering No Supervisado (PCA 2D) : {acc_pca_2d:.2f}%")
-    print(f"=> TOTAL Accuracy Clustering No Supervisado ({pca_name}) : {acc_pca_nd:.2f}%")
-    print(f"=> TOTAL Accuracy Clustering No Supervisado (UMAP 2D): {acc_umap_2d:.2f}%")
-    print(f"=> TOTAL Accuracy Clustering No Supervisado (UMAP 3D): {acc_umap_3d:.2f}%")
-    
-    # Guardar métricas
-    with open(os.path.join(out_dir, "metricas.txt"), "w") as f:
-        f.write("========================================================\n")
-        f.write("      INFO OCULTA DE CLUSTERING (PARA EL PROFESOR)\n")
-        f.write("========================================================\n\n")
-        f.write(f"--- MATRIZ BRUTA {pca_name} ---\n")
-        f.write(df_cm_pca.to_string() + "\n")
-        f.write("Mapeo Húngaro: " + " | ".join(mapeo_pca) + "\n\n")
-        
-        f.write("--- MATRIZ BRUTA UMAP 3D ---\n")
-        f.write(df_cm_umap.to_string() + "\n")
-        f.write("Mapeo Húngaro: " + " | ".join(mapeo_umap) + "\n\n")
-        f.write("========================================================\n\n")
-        
-        f.write(f"Silhouette Score (PCA 2D): {sil_pca_2d:.4f}\n")
-        f.write(f"Silhouette Score ({pca_name}): {sil_pca_nd:.4f}\n")
-        f.write(f"Silhouette Score (UMAP 2D): {sil_umap_2d:.4f}\n")
-        f.write(f"Silhouette Score (UMAP 3D): {sil_umap_3d:.4f}\n\n")
-        
-        f.write(f"Accuracy No Supervisado (PCA 2D): {acc_pca_2d:.2f}%\n")
-        f.write(f"Accuracy No Supervisado ({pca_name}): {acc_pca_nd:.2f}%\n")
-        for i, v in enumerate(voc_pca):
-            f.write(f"  - Vocal {v}: {acc_vocales_pca[i]:.2f}%\n")
-            
-        f.write(f"\nAccuracy No Supervisado (UMAP 2D): {acc_umap_2d:.2f}%\n")
-        f.write(f"Accuracy No Supervisado (UMAP 3D): {acc_umap_3d:.2f}%\n")
-        for i, v in enumerate(voc_umap):
-            f.write(f"  - Vocal {v}: {acc_vocales_umap[i]:.2f}%\n")
-            
-        f.write(f"\nMatriz de Distancias ({pca_name}):\n")
-        f.write(df_dist_pca.to_string() + "\n\n")
-        f.write("Matriz de Distancias (UMAP 3D):\n")
-        f.write(df_dist.to_string())
-        
-    # Guardar reporte de mediciones descartadas
-    if descartados:
-        df_desc = pd.DataFrame(descartados)
-        desc_path = os.path.join(out_dir, "reporte_mediciones_descartadas.csv")
-        df_desc.to_csv(desc_path, index=False)
-        print(f"\n[!] Guardado reporte de {len(descartados)} mediciones descartadas en {desc_path}")
-        
-    # Guardar reporte de mediciones PROCESADAS exitosamente
-    if Tomas_clean:
-        df_procesadas = pd.DataFrame({'Toma': Tomas_clean, 'Vocal': Y_clean})
-        proc_path = os.path.join(out_dir, "reporte_mediciones_procesadas.csv")
-        df_procesadas.to_csv(proc_path, index=False)
-        print(f"[!] Guardado reporte de {len(Tomas_clean)} mediciones exitosamente procesadas en {proc_path}")
-        
-    # --- NUEVO: GUARDAR TABLAS COMO IMAGEN ---
-    print("\n[INFO] Generando tablas en formato Imagen (.png) para el cuaderno...")
-    def guardar_tabla_imagen(df, title, filepath, col_width=2.5, row_height=0.625, font_size=12):
-        # Crear figura
-        fig, ax = plt.subplots(figsize=(df.shape[1]*col_width, (df.shape[0]+1)*row_height))
+    def guardar_tabla_imagen(df, title, filepath, col_width=2.2, row_height=0.6, font_size=11):
+        plt.style.use('default')
+        fig, ax = plt.subplots(figsize=(df.shape[1]*col_width, (df.shape[0]+1)*row_height), facecolor='white')
         ax.axis('off')
         ax.axis('tight')
-        
-        # Redondear correctamente solo columnas numéricas sin fallar por tipos StringDtype
         df_str = df.copy()
         num_cols = df_str.select_dtypes(include=['number']).columns
         if len(num_cols) > 0:
             df_str[num_cols] = df_str[num_cols].round(2)
-        
         table = ax.table(cellText=df_str.values, colLabels=df_str.columns, rowLabels=df_str.index, loc='center', cellLoc='center')
         table.auto_set_font_size(False)
         table.set_fontsize(font_size)
         table.scale(1, 1.5)
-        
-        plt.title(title, pad=20, fontsize=font_size+2, fontweight='bold')
+        for (row, col), cell in table.get_celld().items():
+            cell.set_edgecolor('#cccccc')
+            cell.visible_edges = 'horizontal' 
+            if row == 0 or col == -1:
+                cell.set_facecolor('#f2f2f2')
+                cell.get_text().set_fontweight('bold')
+            else:
+                cell.set_facecolor('#ffffff' if row % 2 == 0 else '#fafafa')
+            if row == 0 or row == len(df_str):
+                cell.set_linewidth(1.5)
+        plt.title(title, pad=15, fontsize=font_size+2, fontweight='bold', color='black')
         plt.tight_layout()
-        plt.savefig(filepath, dpi=300, bbox_inches='tight')
+        plt.savefig(filepath, dpi=300, bbox_inches='tight', facecolor='white')
         plt.close()
 
-    try:
-        # Guardar Tablas de Distancia
-        guardar_tabla_imagen(df_dist_pca, "Matriz de Distancias - PCA 3D", os.path.join(out_dir, "tabla_distancias_pca.png"))
-        guardar_tabla_imagen(df_dist, "Matriz de Distancias - UMAP 3D", os.path.join(out_dir, "tabla_distancias_umap.png"))
-        
-        # Guardar Tablas de Confusión (Mapeo Húngaro)
-        guardar_tabla_imagen(df_cm_pca, "Matriz de Clustering (K-Means vs Real) - PCA 3D", os.path.join(out_dir, "tabla_clustering_pca.png"))
-        guardar_tabla_imagen(df_cm_umap, "Matriz de Clustering (K-Means vs Real) - UMAP 3D", os.path.join(out_dir, "tabla_clustering_umap.png"))
-        
-        # Guardar Resumen de Procesamiento
-        if descartados:
-            df_resumen_desc = df_desc.groupby('Vocal').size().to_frame('Cant. Descartada')
-        else:
-            vocales_presentes = sorted(list(set(Y_orig)))
-            df_resumen_desc = pd.DataFrame({'Cant. Descartada': [0]*len(vocales_presentes)}, index=vocales_presentes)
+    def guardar_matriz_latex(df, title, filepath):
+        latex_code = [
+            "\\begin{tabular}{lccccc}",
+            "\\toprule",
+            " & \\multicolumn{5}{c}{\\textbf{Predicción}} \\\\",
+            " & \\textbf{A} & \\textbf{E} & \\textbf{I} & \\textbf{O} & \\textbf{U} \\\\",
+            "\\midrule"
+        ]
+        for i, row_name in enumerate(df.index):
+            line_parts = [f"\\textbf{{Real {str(row_name).replace('Real ', '')}}}"]
+            for val in df.iloc[i]:
+                intensity = val / 100.0
+                r = 1.0 - 0.7 * intensity
+                g = 1.0 - 0.7 * intensity
+                b = 1.0
+                text_color = "\\color{white}" if val >= 50 else ""
+                line_parts.append(f"\\cellcolor[rgb]{{{r:.2f},{g:.2f},{b:.2f}}} {text_color} {val:.0f}\\%")
+            latex_code.append(" & ".join(line_parts) + " \\\\")
             
-        df_resumen_proc = df_procesadas.groupby('Vocal').size().to_frame('Cant. Procesada')
-        df_resumen = df_resumen_proc.join(df_resumen_desc, how='outer').fillna(0).astype(int)
-        df_resumen['Total'] = df_resumen['Cant. Procesada'] + df_resumen['Cant. Descartada']
-        
-        guardar_tabla_imagen(df_resumen, "Resumen de Mediciones por Vocal", os.path.join(out_dir, "tabla_resumen_mediciones.png"))
-        
-        # --- TABLA DETALLADA DE MEDICIONES ---
-        detalle_procesadas = df_procesadas.copy()
-        detalle_procesadas['Estado'] = 'Procesada'
-        detalle_procesadas['Motivo / SNR'] = '-'
-        
-        if descartados:
-            detalle_descartadas = df_desc.copy()
-            detalle_descartadas['Estado'] = 'Descartada'
-            detalle_descartadas['Motivo / SNR'] = detalle_descartadas['Motivo'] + " (SNR: " + detalle_descartadas['SNR'].round(2).astype(str) + ")"
-            detalle_descartadas = detalle_descartadas[['Toma', 'Vocal', 'Estado', 'Motivo / SNR']]
-        else:
-            detalle_descartadas = pd.DataFrame(columns=['Toma', 'Vocal', 'Estado', 'Motivo / SNR'])
-            
-        df_detalle = pd.concat([detalle_procesadas, detalle_descartadas], ignore_index=True)
-        # Ordenar alfabéticamente por Toma para que queden A_T1, A_T2...
-        df_detalle = df_detalle.sort_values(by=['Vocal', 'Toma']).set_index('Toma')
-        
-        # Al ser una tabla larga (35 filas), achicamos un poco la altura de fila para que entre en la imagen sin que sea gigante
-        guardar_tabla_imagen(df_detalle, "Detalle Exacto por Toma", os.path.join(out_dir, "tabla_detalle_mediciones.png"), col_width=3.0, row_height=0.35, font_size=9)
-        
-        # --- TABLAS DE PARÁMETROS ---
-        df_params_dsp = pd.DataFrame({
-            "Parámetro": ["Agresividad Resta Ruido (Alpha)", "Filtro Notch (Q)", "Envolvente (Smooth ms)", "Remuestreo (Longitud)", "Filtro de SNR", "Filtro Isolation Forest"],
-            "Valor": [str(alpha_ruido), str(notch_q), f"{smooth_ms} ms", f"{target_length} pts", f">= {snr_threshold}", f"{outlier_contamination*100}% outliers"]
-        }).set_index("Parámetro")
-        
-        df_params_umap = pd.DataFrame({
-            "Parámetro": ["Nº Vecinos (n_neighbors)", "Distancia Mín. (min_dist)", "Métrica de Distancia", "Dimensiones UMAP"],
-            "Valor": [str(umap_n_neighbors), str(umap_min_dist), str(umap_metric).capitalize(), "3D"]
-        }).set_index("Parámetro")
-        
-        guardar_tabla_imagen(df_params_dsp, "Parámetros de Filtrado y DSP", os.path.join(out_dir, "tabla_parametros_dsp.png"), col_width=4.0)
-        guardar_tabla_imagen(df_params_umap, "Hiperparámetros UMAP Topológico", os.path.join(out_dir, "tabla_parametros_umap.png"), col_width=4.0)
-        
-        # --- TABLA DE ACCURACY COMPARATIVA ---
-        metricas_nombres = ["Silhouette Score", "Accuracy Global"] + [f"Accuracy Vocal {v}" for v in voc_pca]
-        
-        pca_2d_vals = [f"{sil_pca_2d:.4f}", f"{acc_pca_2d:.2f}%"] + [f"{acc:.2f}%" for acc in acc_vocales_pca_2d]
-        pca_nd_vals = [f"{sil_pca_nd:.4f}", f"{acc_pca_nd:.2f}%"] + [f"{acc:.2f}%" for acc in acc_vocales_pca]
-        umap_2d_vals = [f"{sil_umap_2d:.4f}", f"{acc_umap_2d:.2f}%"] + [f"{acc:.2f}%" for acc in acc_vocales_umap_2d]
-        umap_3d_vals = [f"{sil_umap_3d:.4f}", f"{acc_umap_3d:.2f}%"] + [f"{acc:.2f}%" for acc in acc_vocales_umap]
-        
-        df_accuracy = pd.DataFrame({
-            "Métrica": metricas_nombres,
-            "PCA 2D": pca_2d_vals,
-            f"{pca_name}": pca_nd_vals,
-            "UMAP 2D": umap_2d_vals,
-            "UMAP 3D": umap_3d_vals
-        }).set_index("Métrica")
-        
-        guardar_tabla_imagen(df_accuracy, "Comparativa de Precisión (Accuracy) y Silhouette", os.path.join(out_dir, "tabla_accuracy_comparativa.png"), col_width=2.5, row_height=0.45, font_size=11)
-        
-        print("  -> ¡Tablas en imagen guardadas exitosamente!")
-    except Exception as e:
-        print(f"  -> Error al generar imágenes de tablas: {e}")
+        latex_code.extend([
+            "\\bottomrule",
+            "\\end{tabular}"
+        ])
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write("\n".join(latex_code))
 
-    # Exportar DataFrame de características para visor_features.py
-    print("\n6. Exportando características (SIN FILTRAR) a CSV para auditoría visual...")
-    n_features = X_orig.shape[1]
-    cols = []
-    
-    num_canales = len(canales_features)
-    puntos_por_canal = n_features // num_canales
-    
-    for ch_name in canales_features:
-        ch_idx = ch_name.split('_')[-1]
-        for t in range(puntos_por_canal):
-            cols.append(f"Ch{ch_idx}_T{t}")
-            
-    # Exportamos las limpias (después de SNR y Outliers) para que el autoencoder no entrene con basura
-    df_export = pd.DataFrame(X_clean, columns=cols)
-    df_export.insert(0, 'Toma', Tomas_clean)
-    df_export.insert(0, 'Vocal', Y_clean)
-    
-    csv_out_path = os.path.join(out_dir, "caracteristicas_exportadas.csv")
-    df_export.to_csv(csv_out_path, index=False)
-    print(f"Dataset LIMPIO exportado exitosamente a: {csv_out_path}")
-    
-    # Exportamos también las sin filtrar
-    df_sucio = pd.DataFrame(X_orig, columns=cols)
-    df_sucio.insert(0, 'Toma', Tomas_orig)
-    df_sucio.insert(0, 'Vocal', Y_orig)
-    
-    csv_sucio_path = os.path.join(out_dir, "caracteristicas_sin_filtrar.csv")
-    df_sucio.to_csv(csv_sucio_path, index=False)
+    def plot_confusion_matrix_heatmap(df_cm, title, filepath):
+        plt.style.use('default')
+        # Usar fuente Serif para simular LaTeX
+        plt.rcParams['font.family'] = 'serif'
         
-    print(f"\nProceso completado. Resultados guardados en {out_dir}")
+        fig, ax = plt.subplots(figsize=(7, 5), facecolor='white')
+        
+        # Formato de matriz con porcentajes
+        annot = np.array([[f"{v:.0f}%" for v in row] for row in df_cm.values])
+        # Usar un colormap azul puro claro a oscuro
+        cmap = sns.light_palette("blue", as_cmap=True)
+        sns.heatmap(df_cm, annot=annot, fmt="", cmap=cmap, cbar=False, ax=ax, vmin=0, vmax=100, annot_kws={"fontsize": 12, "fontweight": "normal"})
+        
+        # Etiquetas estilo LaTeX
+        ax.set_yticklabels([f"Real {str(v).replace('Real ', '')}" for v in df_cm.index], rotation=0, fontweight='bold', fontsize=18)
+        ax.set_xticklabels([str(c).replace('Real ', '') for c in df_cm.columns], fontweight='bold', fontsize=18)
+        ax.xaxis.tick_top() # Poner letras arriba
+        
+        # Ejes "Real vs Predicción"
+        ax.set_ylabel("Real", fontsize=16, fontweight='bold', labelpad=10)
+        ax.set_xlabel("Predicción", fontsize=16, fontweight='bold', labelpad=15)
+        ax.xaxis.set_label_position('top')
+        
+        # Limpiar bordes por defecto
+        for _, spine in ax.spines.items():
+            spine.set_visible(False)
+        ax.tick_params(left=False, top=False) # quitar rayitas de los ticks
+        
+        # Líneas tipo booktabs (toprule, midrule, bottomrule)
+        ax.axhline(0, color='black', linewidth=1)
+        ax.axhline(len(df_cm), color='black', linewidth=2)
+        ax.plot([0, 1], [1.13, 1.13], transform=ax.transAxes, color='black', linewidth=2, clip_on=False)
+        
+        plt.title(title, pad=50, fontsize=18, fontweight='bold')
+        plt.tight_layout()
+        plt.savefig(filepath, dpi=300, bbox_inches='tight', facecolor='white')
+        plt.close()
+
+    resultados_ejecucion = {}
+    if proc_pca_2d:
+        print("\n=== PROCESANDO PCA 2D ===")
+        X_2d, Y_2d, Tomas_2d, desc_2d = extraer_y_filtrar(mediciones, base_dir, params_2d, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=ignorar_ventana_cero)
+        resultados_ejecucion['X_2d'] = X_2d
+        resultados_ejecucion['Y_2d'] = Y_2d
+        if len(X_2d) > 0:
+            pca_2d = PCA(n_components=2)
+            X_pca_2d = pca_2d.fit_transform(X_2d)
+            var_ratios_2d = pca_2d.explained_variance_ratio_
+            plot_scatter(X_pca_2d, Y_2d, "PCA 2D - Vocales EMG", os.path.join(out_dir, "PCA_2D.png"), is_3d=False, variance_ratios=var_ratios_2d, ocultar_leyenda=ocultar_leyenda, xlim=(-0.85, 1.4), ylim=(-0.7, 1.4))
+            plot_analisis_errores_2d(X_pca_2d, Y_2d, Tomas_2d, f"Análisis de Aciertos y Errores (PCA 2D) - {algoritmo_clustering_pca}", os.path.join(out_dir, "PCA_2D_Analisis_Errores.png"), variance_ratios=var_ratios_2d, algoritmo=algoritmo_clustering_pca, is_umap=False, ocultar_leyenda=ocultar_leyenda, estilo_visual=estilo_visual)
+            acc_pca_2d, acc_vocales_pca_2d, voc_pca_2d, df_cm_pca_2d, mapeo_pca_2d = evaluar_clustering_no_supervisado(X_pca_2d, Y_2d, "PCA 2D", algoritmo_clustering_pca)
+            print(f"=> TOTAL Accuracy Clustering No Supervisado (PCA 2D) : {acc_pca_2d:.2f}%")
+            plot_confusion_matrix_heatmap(df_cm_pca_2d, "Matriz de Confusión - PCA 2D", os.path.join(out_dir, "heatmap_confusion_pca_2d.png"))
+            guardar_matriz_latex(df_cm_pca_2d, "Matriz de Confusión - PCA 2D", os.path.join(out_dir, "matriz_confusion_pca_2d.tex"))
+            
+            cent_pca_2d, dist_mat_pca_2d, vocales_pca_2d = calcular_centroides_y_distancias(X_pca_2d, Y_2d)
+            df_dist_pca_2d = pd.DataFrame(dist_mat_pca_2d, index=vocales_pca_2d, columns=vocales_pca_2d)
+            # Add distance matrix latex export
+            latex_dist_2d = df_dist_pca_2d.to_latex(index=True, column_format='l' + 'c'*len(vocales_pca_2d), float_format="%.2f")
+            latex_dist_2d = latex_dist_2d.replace('\\toprule', '\\toprule\n\\rowcolor{col01}')
+            with open(os.path.join(out_dir, "matriz_distancias_pca_2d.tex"), 'w', encoding='utf-8') as f:
+                f.write(latex_dist_2d)
+                
+            calcular_y_guardar_silhouette_por_vocal(X_pca_2d, Y_2d, "Silhouette Score - PCA 2D", os.path.join(out_dir, "silhouette_pca_2d.tex"))
+
+            if desc_2d:
+                pd.DataFrame(desc_2d).to_csv(os.path.join(out_dir, "reporte_mediciones_descartadas_PCA_2D.csv"), index=False)
+
+    if proc_umap_2d:
+        print("\n=== PROCESANDO UMAP 2D ===")
+        X_2d_u, Y_2d_u, Tomas_2d_u, desc_2d_u = extraer_y_filtrar(mediciones, base_dir, params_umap, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=ignorar_ventana_cero)
+        if len(X_2d_u) > 0:
+            umap_2d = umap.UMAP(n_neighbors=min(umap_n_neighbors, len(X_2d_u)-1), min_dist=umap_min_dist, metric=umap_metric, n_components=2, random_state=42)
+            X_umap_2d = umap_2d.fit_transform(X_2d_u)
+            plot_scatter(X_umap_2d, Y_2d_u, "UMAP 2D - Vocales EMG", os.path.join(out_dir, "UMAP_2D.png"), is_3d=False)
+            plot_analisis_errores_2d(X_umap_2d, Y_2d_u, Tomas_2d_u, f"Análisis de Aciertos y Errores (UMAP 2D) - {algoritmo_clustering_umap}", os.path.join(out_dir, "UMAP_2D_Analisis_Errores.png"), variance_ratios=None, algoritmo=algoritmo_clustering_umap, is_umap=True, estilo_visual=estilo_visual)
+            acc_umap_2d, acc_vocales_umap_2d, voc_umap_2d, df_cm_umap_2d, mapeo_umap_2d = evaluar_clustering_no_supervisado(X_umap_2d, Y_2d_u, "UMAP 2D", algoritmo_clustering_umap)
+            print(f"=> TOTAL Accuracy Clustering No Supervisado (UMAP 2D): {acc_umap_2d:.2f}%")
+            plot_confusion_matrix_heatmap(df_cm_umap_2d, "Matriz de Confusión - UMAP 2D", os.path.join(out_dir, "heatmap_confusion_umap_2d.png"))
+            guardar_matriz_latex(df_cm_umap_2d, "Matriz de Confusión - UMAP 2D", os.path.join(out_dir, "matriz_confusion_umap_2d.tex"))
+            if desc_2d_u:
+                pd.DataFrame(desc_2d_u).to_csv(os.path.join(out_dir, "reporte_mediciones_descartadas_UMAP_2D.csv"), index=False)
+
+    if proc_pca_3d:
+        print("\n=== PROCESANDO PCA 3D ===")
+        X_3d, Y_3d, Tomas_3d, desc_3d = extraer_y_filtrar(mediciones, base_dir, params_3d, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=ignorar_ventana_cero)
+        resultados_ejecucion['X_3d'] = X_3d
+        resultados_ejecucion['Y_3d'] = Y_3d
+        if len(X_3d) > 0:
+            pca_3d = PCA(n_components=3)
+            X_pca_3d = pca_3d.fit_transform(X_3d)
+            var_ratios_3d = pca_3d.explained_variance_ratio_
+            plot_scatter_3d_multi_angle(X_pca_3d, Y_3d, "PCA 3D - Vocales EMG", os.path.join(out_dir, "PCA_3D.png"), variance_ratios=var_ratios_3d)
+            plot_analisis_errores_3d_proyecciones_2d(X_pca_3d, Y_3d, f"Análisis de Aciertos y Errores (PCA 3D) - {algoritmo_clustering_pca}", os.path.join(out_dir, "PCA_3D_Analisis_Errores.png"), variance_ratios=var_ratios_3d, algoritmo=algoritmo_clustering_pca)
+            acc_pca_3d, acc_vocales_pca_3d, voc_pca_3d, df_cm_pca_3d, mapeo_pca_3d = evaluar_clustering_no_supervisado(X_pca_3d, Y_3d, "PCA 3D", algoritmo_clustering_pca)
+            print(f"=> TOTAL Accuracy Clustering No Supervisado (PCA 3D) : {acc_pca_3d:.2f}%")
+            plot_confusion_matrix_heatmap(df_cm_pca_3d, "Matriz de Confusión - PCA 3D", os.path.join(out_dir, "heatmap_confusion_pca_3d.png"))
+            guardar_matriz_latex(df_cm_pca_3d, "Matriz de Confusión - PCA 3D", os.path.join(out_dir, "matriz_confusion_pca_3d.tex"))
+            
+            cent_pca_3d, dist_mat_pca_3d, vocales_pca_3d = calcular_centroides_y_distancias(X_pca_3d, Y_3d)
+            df_dist_pca_3d = pd.DataFrame(dist_mat_pca_3d, index=vocales_pca_3d, columns=vocales_pca_3d)
+            guardar_tabla_imagen(df_dist_pca_3d, "Matriz de Distancias - PCA 3D", os.path.join(out_dir, "tabla_distancias_pca_3d.png"))
+            
+            # Add distance matrix latex export
+            latex_dist_3d = df_dist_pca_3d.to_latex(index=True, column_format='l' + 'c'*len(vocales_pca_3d), float_format="%.2f")
+            latex_dist_3d = latex_dist_3d.replace('\\toprule', '\\toprule\n\\rowcolor{col01}')
+            with open(os.path.join(out_dir, "matriz_distancias_pca_3d.tex"), 'w', encoding='utf-8') as f:
+                f.write(latex_dist_3d)
+                
+            calcular_y_guardar_silhouette_por_vocal(X_pca_3d, Y_3d, "Silhouette Score - PCA 3D", os.path.join(out_dir, "silhouette_pca_3d.tex"))
+
+            if desc_3d:
+                pd.DataFrame(desc_3d).to_csv(os.path.join(out_dir, "reporte_mediciones_descartadas_PCA_3D.csv"), index=False)
+
+    if proc_umap_3d:
+        print("\n=== PROCESANDO UMAP 3D ===")
+        X_3d_u, Y_3d_u, Tomas_3d_u, desc_3d_u = extraer_y_filtrar(mediciones, base_dir, params_umap, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=ignorar_ventana_cero)
+        if len(X_3d_u) > 0:
+            umap_3d = umap.UMAP(n_neighbors=min(umap_n_neighbors, len(X_3d_u)-1), min_dist=umap_min_dist, metric=umap_metric, n_components=3, random_state=42)
+            X_umap_3d = umap_3d.fit_transform(X_3d_u)
+            plot_scatter(X_umap_3d, Y_3d_u, "UMAP 3D - Vocales EMG", os.path.join(out_dir, "UMAP_3D.png"), is_3d=True)
+            plot_analisis_errores_3d(X_umap_3d, Y_3d_u, Tomas_3d_u, f"Análisis de Aciertos y Errores (UMAP 3D) - {algoritmo_clustering_umap}", os.path.join(out_dir, "UMAP_3D_Analisis_Errores.png"), variance_ratios=None, algoritmo=algoritmo_clustering_umap, is_umap=True)
+            acc_umap_3d, acc_vocales_umap_3d, voc_umap_3d, df_cm_umap_3d, mapeo_umap_3d = evaluar_clustering_no_supervisado(X_umap_3d, Y_3d_u, "UMAP 3D", algoritmo_clustering_umap)
+            print(f"=> TOTAL Accuracy Clustering No Supervisado (UMAP 3D): {acc_umap_3d:.2f}%")
+            plot_confusion_matrix_heatmap(df_cm_umap_3d, "Matriz de Confusión - UMAP 3D", os.path.join(out_dir, "heatmap_confusion_umap_3d.png"))
+            guardar_matriz_latex(df_cm_umap_3d, "Matriz de Confusión - UMAP 3D", os.path.join(out_dir, "matriz_confusion_umap_3d.tex"))
+            
+            cent_umap_3d, dist_mat_umap_3d, vocales_umap_3d = calcular_centroides_y_distancias(X_umap_3d, Y_3d_u)
+            df_dist_umap_3d = pd.DataFrame(dist_mat_umap_3d, index=vocales_umap_3d, columns=vocales_umap_3d)
+            guardar_tabla_imagen(df_dist_umap_3d, "Matriz de Distancias - UMAP 3D", os.path.join(out_dir, "tabla_distancias_umap_3d.png"))
+            if desc_3d_u:
+                pd.DataFrame(desc_3d_u).to_csv(os.path.join(out_dir, "reporte_mediciones_descartadas_UMAP_3D.csv"), index=False)
+
+    return resultados_ejecucion
+
+    print("\nProcesamiento Finalizado Correctamente.")
 
 class GeneradorPCAGUI:
     def __init__(self, root):
@@ -917,94 +1419,161 @@ class GeneradorPCAGUI:
         ch_frame.pack(fill="x", pady=(0,5))
         
         self.var_ch0 = tk.BooleanVar(value=True)
-        tk.Checkbutton(ch_frame, text="Canal 0 (Masetero)", variable=self.var_ch0, bg="#1F2833", fg="white", selectcolor="#0B0C10").pack(side="left", padx=10)
+        tk.Checkbutton(ch_frame, text="Canal 0 (Milohioideo)", variable=self.var_ch0, bg="#1F2833", fg="white", selectcolor="#0B0C10").pack(side="left", padx=10)
         
         self.var_ch1 = tk.BooleanVar(value=True)
-        tk.Checkbutton(ch_frame, text="Canal 1 (Orbicular)", variable=self.var_ch1, bg="#1F2833", fg="white", selectcolor="#0B0C10").pack(side="left", padx=10)
+        tk.Checkbutton(ch_frame, text="Canal 1 (Depresor)", variable=self.var_ch1, bg="#1F2833", fg="white", selectcolor="#0B0C10").pack(side="left", padx=10)
         
         self.var_ch2 = tk.BooleanVar(value=True)
-        tk.Checkbutton(ch_frame, text="Canal 2 (Depresor)", variable=self.var_ch2, bg="#1F2833", fg="white", selectcolor="#0B0C10").pack(side="left", padx=10)
+        tk.Checkbutton(ch_frame, text="Canal 2 (Orbicular)", variable=self.var_ch2, bg="#1F2833", fg="white", selectcolor="#0B0C10").pack(side="left", padx=10)
         
-        # --- Parámetros Configurables ---
-        params_frame = tk.LabelFrame(main_frame, text="Parámetros DSP y Limpieza", padx=5, pady=5, bg="#1F2833", fg="#66FCF1")
-        params_frame.pack(fill="x", pady=(0,5))
+        # --- Modos de Procesamiento ---
+        modos_frame = tk.LabelFrame(main_frame, text="Procesar Gráficos", padx=5, pady=5, bg="#1F2833", fg="#66FCF1")
+        modos_frame.pack(fill="x", pady=(0,5))
         
-        # Row 0: Alpha y SNR
-        tk.Label(params_frame, text="Agresividad Ruido (Alpha):", width=22, anchor="w", bg="#1F2833", fg="white").grid(row=0, column=0, padx=2, pady=2)
-        self.ent_alpha = tk.Entry(params_frame, width=8, bg="#0B0C10", fg="white", insertbackground="white")
-        self.ent_alpha.grid(row=0, column=1, padx=2, pady=2)
-        self.ent_alpha.insert(0, "1.0")
+        self.var_proc_pca_2d = tk.BooleanVar(value=False)
+        tk.Checkbutton(modos_frame, text="PCA 2D", variable=self.var_proc_pca_2d, bg="#1F2833", fg="white", selectcolor="#0B0C10").pack(side="left", padx=5)
         
-        tk.Label(params_frame, text="Filtro SNR Mínimo:", width=22, anchor="w", bg="#1F2833", fg="white").grid(row=0, column=2, padx=2, pady=2)
-        self.ent_snr = tk.Entry(params_frame, width=8, bg="#0B0C10", fg="white", insertbackground="white")
-        self.ent_snr.grid(row=0, column=3, padx=2, pady=2)
-        self.ent_snr.insert(0, "0.5")
+        self.var_proc_pca_3d = tk.BooleanVar(value=False)
+        tk.Checkbutton(modos_frame, text="PCA 3D", variable=self.var_proc_pca_3d, bg="#1F2833", fg="white", selectcolor="#0B0C10").pack(side="left", padx=5)
+
+        self.var_proc_umap_2d = tk.BooleanVar(value=False)
+        tk.Checkbutton(modos_frame, text="UMAP 2D", variable=self.var_proc_umap_2d, bg="#1F2833", fg="white", selectcolor="#0B0C10").pack(side="left", padx=5)
+
+        self.var_proc_umap_3d = tk.BooleanVar(value=False)
+        tk.Checkbutton(modos_frame, text="UMAP 3D", variable=self.var_proc_umap_3d, bg="#1F2833", fg="white", selectcolor="#0B0C10").pack(side="left", padx=5)
         
-        # Row 1: Outliers y Smooth
-        tk.Label(params_frame, text="Outliers (0.05=5%):", width=22, anchor="w", bg="#1F2833", fg="white").grid(row=1, column=0, padx=2, pady=2)
-        self.ent_outliers = tk.Entry(params_frame, width=8, bg="#0B0C10", fg="white", insertbackground="white")
-        self.ent_outliers.grid(row=1, column=1, padx=2, pady=2)
-        self.ent_outliers.insert(0, "0.05")
+        self.var_ocultar_leyenda = tk.BooleanVar(value=False)
+        tk.Checkbutton(modos_frame, text="Ocultar Leyenda", variable=self.var_ocultar_leyenda, bg="#1F2833", fg="#FF4C4C", selectcolor="#0B0C10").pack(side="left", padx=5)
         
-        tk.Label(params_frame, text="Suavizado Env RMS (ms):", width=22, anchor="w", bg="#1F2833", fg="white").grid(row=1, column=2, padx=2, pady=2)
-        self.ent_smooth = tk.Entry(params_frame, width=8, bg="#0B0C10", fg="white", insertbackground="white")
-        self.ent_smooth.grid(row=1, column=3, padx=2, pady=2)
-        self.ent_smooth.insert(0, "90")
+        # --- Parámetros Configurables 2D ---
+        params_2d_frame = tk.LabelFrame(main_frame, text="Parámetros DSP y Limpieza (2D)", padx=5, pady=5, bg="#1F2833", fg="#66FCF1")
+        params_2d_frame.pack(fill="x", pady=(0,5))
         
-        # Row 2: Target Len y Notch
-        tk.Label(params_frame, text="Pts Remuestreo (LEN):", width=22, anchor="w", bg="#1F2833", fg="white").grid(row=2, column=0, padx=2, pady=2)
-        self.ent_target_len = tk.Entry(params_frame, width=8, bg="#0B0C10", fg="white", insertbackground="white")
-        self.ent_target_len.grid(row=2, column=1, padx=2, pady=2)
-        self.ent_target_len.insert(0, "20")
+        tk.Label(params_2d_frame, text="Alpha:", width=5, anchor="w", bg="#1F2833", fg="white").grid(row=0, column=0, padx=2, pady=2)
+        self.ent_alpha_2d = tk.Entry(params_2d_frame, width=5, bg="#0B0C10", fg="white", insertbackground="white")
+        self.ent_alpha_2d.grid(row=0, column=1, padx=2, pady=2)
+        self.ent_alpha_2d.insert(0, "0.5")
         
-        tk.Label(params_frame, text="Filtro Notch Q Factor:", width=22, anchor="w", bg="#1F2833", fg="white").grid(row=2, column=2, padx=2, pady=2)
-        self.ent_notch = tk.Entry(params_frame, width=8, bg="#0B0C10", fg="white", insertbackground="white")
-        self.ent_notch.grid(row=2, column=3, padx=2, pady=2)
-        self.ent_notch.insert(0, "2.0")
+        tk.Label(params_2d_frame, text="Smooth:", width=8, anchor="w", bg="#1F2833", fg="white").grid(row=0, column=2, padx=2, pady=2)
+        self.ent_smooth_2d = tk.Entry(params_2d_frame, width=5, bg="#0B0C10", fg="white", insertbackground="white")
+        self.ent_smooth_2d.grid(row=0, column=3, padx=2, pady=2)
+        self.ent_smooth_2d.insert(0, "90")
         
-        # --- Parámetros PCA ---
-        pca_frame = tk.LabelFrame(main_frame, text="Parámetros PCA", padx=5, pady=5, bg="#1F2833", fg="#66FCF1")
-        pca_frame.pack(fill="x", pady=(0,5))
+        tk.Label(params_2d_frame, text="Pts:", width=4, anchor="w", bg="#1F2833", fg="white").grid(row=0, column=4, padx=2, pady=2)
+        self.ent_target_len_2d = tk.Entry(params_2d_frame, width=5, bg="#0B0C10", fg="white", insertbackground="white")
+        self.ent_target_len_2d.grid(row=0, column=5, padx=2, pady=2)
+        self.ent_target_len_2d.insert(0, "20")
         
-        tk.Label(pca_frame, text="Componentes a retener (ej: 1,2,3):", width=30, anchor="w", bg="#1F2833", fg="white").pack(side="left")
-        self.ent_pca_comps = tk.Entry(pca_frame, width=15, bg="#0B0C10", fg="white", insertbackground="white")
-        self.ent_pca_comps.pack(side="left")
-        self.ent_pca_comps.insert(0, "1,2,3")
+        tk.Label(params_2d_frame, text="SNR:", width=4, anchor="w", bg="#1F2833", fg="white").grid(row=0, column=6, padx=2, pady=2)
+        self.ent_snr_2d = tk.Entry(params_2d_frame, width=5, bg="#0B0C10", fg="white", insertbackground="white")
+        self.ent_snr_2d.grid(row=0, column=7, padx=2, pady=2)
+        self.ent_snr_2d.insert(0, "0.5")
+        
+        tk.Label(params_2d_frame, text="Outliers:", width=7, anchor="w", bg="#1F2833", fg="white").grid(row=0, column=8, padx=2, pady=2)
+        self.ent_outliers_2d = tk.Entry(params_2d_frame, width=5, bg="#0B0C10", fg="white", insertbackground="white")
+        self.ent_outliers_2d.grid(row=0, column=9, padx=2, pady=2)
+        self.ent_outliers_2d.insert(0, "0.10")
+        
+        # --- Parámetros Configurables 3D ---
+        params_3d_frame = tk.LabelFrame(main_frame, text="Parámetros DSP y Limpieza (3D)", padx=5, pady=5, bg="#1F2833", fg="#66FCF1")
+        params_3d_frame.pack(fill="x", pady=(0,5))
+        
+        tk.Label(params_3d_frame, text="Alpha:", width=5, anchor="w", bg="#1F2833", fg="white").grid(row=0, column=0, padx=2, pady=2)
+        self.ent_alpha_3d = tk.Entry(params_3d_frame, width=5, bg="#0B0C10", fg="white", insertbackground="white")
+        self.ent_alpha_3d.grid(row=0, column=1, padx=2, pady=2)
+        self.ent_alpha_3d.insert(0, "0.5")
+        
+        tk.Label(params_3d_frame, text="Smooth:", width=8, anchor="w", bg="#1F2833", fg="white").grid(row=0, column=2, padx=2, pady=2)
+        self.ent_smooth_3d = tk.Entry(params_3d_frame, width=5, bg="#0B0C10", fg="white", insertbackground="white")
+        self.ent_smooth_3d.grid(row=0, column=3, padx=2, pady=2)
+        self.ent_smooth_3d.insert(0, "125")
+        
+        tk.Label(params_3d_frame, text="Pts:", width=4, anchor="w", bg="#1F2833", fg="white").grid(row=0, column=4, padx=2, pady=2)
+        self.ent_target_len_3d = tk.Entry(params_3d_frame, width=5, bg="#0B0C10", fg="white", insertbackground="white")
+        self.ent_target_len_3d.grid(row=0, column=5, padx=2, pady=2)
+        self.ent_target_len_3d.insert(0, "20")
+        
+        tk.Label(params_3d_frame, text="SNR:", width=4, anchor="w", bg="#1F2833", fg="white").grid(row=0, column=6, padx=2, pady=2)
+        self.ent_snr_3d = tk.Entry(params_3d_frame, width=5, bg="#0B0C10", fg="white", insertbackground="white")
+        self.ent_snr_3d.grid(row=0, column=7, padx=2, pady=2)
+        self.ent_snr_3d.insert(0, "0.5")
+        
+        tk.Label(params_3d_frame, text="Outliers:", width=7, anchor="w", bg="#1F2833", fg="white").grid(row=0, column=8, padx=2, pady=2)
+        self.ent_outliers_3d = tk.Entry(params_3d_frame, width=5, bg="#0B0C10", fg="white", insertbackground="white")
+        self.ent_outliers_3d.grid(row=0, column=9, padx=2, pady=2)
+        self.ent_outliers_3d.insert(0, "0.10")
         
         # --- Parámetros UMAP ---
         umap_frame = tk.LabelFrame(main_frame, text="Parámetros UMAP", padx=5, pady=5, bg="#1F2833", fg="#66FCF1")
         umap_frame.pack(fill="x", pady=(0,5))
         
-        tk.Label(umap_frame, text="n_neighbors:", width=15, anchor="w", bg="#1F2833", fg="white").grid(row=0, column=0, padx=2, pady=2)
-        self.ent_umap_nn = tk.Entry(umap_frame, width=8, bg="#0B0C10", fg="white", insertbackground="white")
-        self.ent_umap_nn.grid(row=0, column=1, padx=2, pady=2)
+        # ROW 0: Algoritmo UMAP Specs
+        tk.Label(umap_frame, text="Alpha:", width=6, anchor="w", bg="#1F2833", fg="white").grid(row=0, column=0, padx=2, pady=2)
+        self.ent_alpha_umap = tk.Entry(umap_frame, width=5, bg="#0B0C10", fg="white", insertbackground="white")
+        self.ent_alpha_umap.grid(row=0, column=1, padx=2, pady=2)
+        self.ent_alpha_umap.insert(0, "1.0")
+
+        tk.Label(umap_frame, text="n_neighbors:", width=12, anchor="w", bg="#1F2833", fg="white").grid(row=0, column=2, padx=2, pady=2)
+        self.ent_umap_nn = tk.Entry(umap_frame, width=5, bg="#0B0C10", fg="white", insertbackground="white")
+        self.ent_umap_nn.grid(row=0, column=3, padx=2, pady=2)
         self.ent_umap_nn.insert(0, "10")
         
-        tk.Label(umap_frame, text="min_dist:", width=10, anchor="w", bg="#1F2833", fg="white").grid(row=0, column=2, padx=2, pady=2)
+        tk.Label(umap_frame, text="min_dist:", width=10, anchor="w", bg="#1F2833", fg="white").grid(row=0, column=4, padx=2, pady=2)
         self.ent_umap_md = tk.Entry(umap_frame, width=8, bg="#0B0C10", fg="white", insertbackground="white")
-        self.ent_umap_md.grid(row=0, column=3, padx=2, pady=2)
+        self.ent_umap_md.grid(row=0, column=5, padx=2, pady=2)
         self.ent_umap_md.insert(0, "0.1")
         
-        tk.Label(umap_frame, text="Métrica:", width=10, anchor="w", bg="#1F2833", fg="white").grid(row=0, column=4, padx=2, pady=2)
+        tk.Label(umap_frame, text="Métrica:", width=10, anchor="w", bg="#1F2833", fg="white").grid(row=0, column=6, padx=2, pady=2)
         self.combo_metric = ttk.Combobox(umap_frame, values=["euclidean", "cosine", "manhattan", "correlation"], width=12)
-        self.combo_metric.grid(row=0, column=5, padx=2, pady=2)
+        self.combo_metric.grid(row=0, column=7, padx=2, pady=2)
+        self.combo_metric.set("cosine")
+        
+        # ROW 1: DSP Specs for UMAP
+        tk.Label(umap_frame, text="Smooth:", width=7, anchor="w", bg="#1F2833", fg="white").grid(row=1, column=0, padx=2, pady=2)
+        self.ent_smooth_umap = tk.Entry(umap_frame, width=5, bg="#0B0C10", fg="white", insertbackground="white")
+        self.ent_smooth_umap.grid(row=1, column=1, padx=2, pady=2)
+        self.ent_smooth_umap.insert(0, "125")
+        
+        tk.Label(umap_frame, text="Pts:", width=4, anchor="w", bg="#1F2833", fg="white").grid(row=1, column=2, padx=2, pady=2)
+        self.ent_target_len_umap = tk.Entry(umap_frame, width=5, bg="#0B0C10", fg="white", insertbackground="white")
+        self.ent_target_len_umap.grid(row=1, column=3, padx=2, pady=2)
+        self.ent_target_len_umap.insert(0, "20")
+        
+        tk.Label(umap_frame, text="SNR:", width=5, anchor="w", bg="#1F2833", fg="white").grid(row=1, column=4, padx=2, pady=2)
+        self.ent_snr_umap = tk.Entry(umap_frame, width=5, bg="#0B0C10", fg="white", insertbackground="white")
+        self.ent_snr_umap.grid(row=1, column=5, padx=2, pady=2)
+        self.ent_snr_umap.insert(0, "0.5")
+        
+        tk.Label(umap_frame, text="Outliers:", width=8, anchor="w", bg="#1F2833", fg="white").grid(row=1, column=6, padx=2, pady=2)
+        self.ent_outliers_umap = tk.Entry(umap_frame, width=5, bg="#0B0C10", fg="white", insertbackground="white")
+        self.ent_outliers_umap.grid(row=1, column=7, padx=2, pady=2)
+        self.ent_outliers_umap.insert(0, "0.10")
         self.combo_metric.set("cosine")
         
         # --- Clustering ---
         cluster_frame = tk.LabelFrame(main_frame, text="Algoritmo de Agrupamiento", padx=5, pady=5, bg="#1F2833", fg="#66FCF1")
         cluster_frame.pack(fill="x", pady=(0,5))
         
-        tk.Label(cluster_frame, text="Seleccionar algoritmo:", width=25, anchor="w", bg="#1F2833", fg="white").pack(side="left")
-        self.combo_cluster = ttk.Combobox(cluster_frame, values=["K-Means", "GMM"], width=15)
-        self.combo_cluster.pack(side="left")
-        self.combo_cluster.set("K-Means")
+        tk.Label(cluster_frame, text="Evaluar PCA:", anchor="w", bg="#1F2833", fg="white").pack(side="left", padx=(0,5))
+        self.combo_cluster_pca = ttk.Combobox(cluster_frame, values=["K-Means", "GMM"], width=10)
+        self.combo_cluster_pca.pack(side="left", padx=(0, 15))
+        self.combo_cluster_pca.set("GMM")
+        
+        tk.Label(cluster_frame, text="Evaluar UMAP:", anchor="w", bg="#1F2833", fg="white").pack(side="left", padx=(0,5))
+        self.combo_cluster_umap = ttk.Combobox(cluster_frame, values=["K-Means", "GMM"], width=10)
+        self.combo_cluster_umap.pack(side="left")
+        self.combo_cluster_umap.set("K-Means")
         
         # --- Normalización Avanzada (DSP y Trevisan) ---
-        trev_frame = tk.LabelFrame(main_frame, text="DSP Avanzado y Normalización", padx=5, pady=5, bg="#1F2833", fg="#66FCF1")
+        trev_frame = tk.LabelFrame(main_frame, text="DSP Avanzado y Normalización", padx=5, pady=5, bg="#1F2833", fg="white")
         trev_frame.pack(fill="x", pady=(0,5))
         
         self.var_aplicar_trevisan = tk.BooleanVar(value=False)
         tk.Checkbutton(trev_frame, text="Aplicar Corrección Trevisan (Mediana Móvil + Detrending)", variable=self.var_aplicar_trevisan, bg="#1F2833", fg="white", selectcolor="#0B0C10").grid(row=0, column=0, columnspan=2, sticky="w")
+        
+        self.var_ignorar_win0 = tk.BooleanVar(value=False)
+        tk.Checkbutton(trev_frame, text="Ignorar Ventana 0 (Artefactos)", variable=self.var_ignorar_win0, bg="#1F2833", fg="white", selectcolor="#0B0C10").grid(row=0, column=2, columnspan=2, sticky="w")
         
         tk.Label(trev_frame, text="Pre-Ventana (%):", width=15, anchor="w", bg="#1F2833", fg="white").grid(row=1, column=0, padx=2, pady=2)
         self.ent_pre_pct = tk.Entry(trev_frame, width=8, bg="#0B0C10", fg="white", insertbackground="white")
@@ -1025,6 +1594,15 @@ class GeneradorPCAGUI:
         self.combo_align.pack(side="left")
         self.combo_align.set("Pico Volumen Micrófono")
         
+        # --- Estilo Visual GMM ---
+        visual_frame = tk.LabelFrame(main_frame, text="Estilo Visual (Solo GMM)", padx=5, pady=5, bg="#1F2833", fg="#66FCF1")
+        visual_frame.pack(fill="x", pady=(0,5))
+        
+        self.var_estilo_visual = tk.StringVar(value="Elipses")
+        tk.Radiobutton(visual_frame, text="Elipses", variable=self.var_estilo_visual, value="Elipses", bg="#1F2833", fg="white", selectcolor="#0B0C10").pack(side="left", padx=5)
+        tk.Radiobutton(visual_frame, text="Sombreado", variable=self.var_estilo_visual, value="Sombreado", bg="#1F2833", fg="white", selectcolor="#0B0C10").pack(side="left", padx=5)
+        tk.Radiobutton(visual_frame, text="Fronteras", variable=self.var_estilo_visual, value="Fronteras", bg="#1F2833", fg="white", selectcolor="#0B0C10").pack(side="left", padx=5)
+        
         # --- Botón Procesar ---
         self.btn_procesar = tk.Button(main_frame, text="Generar Dataset y Visualizar", command=self.iniciar_procesamiento, bg="#45A29E", fg="white", font=("Arial", 12, "bold"))
         self.btn_procesar.pack(fill="x", pady=5)
@@ -1044,28 +1622,53 @@ class GeneradorPCAGUI:
             return
             
         try:
-            val_alpha = float(self.ent_alpha.get())
-            val_snr = float(self.ent_snr.get())
-            val_outliers = float(self.ent_outliers.get())
-            val_smooth = int(self.ent_smooth.get())
-            val_target_len = int(self.ent_target_len.get())
-            val_notch_q = float(self.ent_notch.get())
+            proc_pca_2d = self.var_proc_pca_2d.get()
+            proc_pca_3d = self.var_proc_pca_3d.get()
+            proc_umap_2d = self.var_proc_umap_2d.get()
+            proc_umap_3d = self.var_proc_umap_3d.get()
+            
+            if not (proc_pca_2d or proc_pca_3d or proc_umap_2d or proc_umap_3d):
+                messagebox.showwarning("Advertencia", "Debe seleccionar al menos un procesamiento.")
+                return
+                
+            params_2d = {
+                "alpha_ruido": float(self.ent_alpha_2d.get()),
+                "snr_threshold": float(self.ent_snr_2d.get()),
+                "outlier_contamination": float(self.ent_outliers_2d.get()),
+                "smooth_ms": int(self.ent_smooth_2d.get()),
+                "target_length": int(self.ent_target_len_2d.get()),
+                "notch_q": float(self.ent_notch.get()) if hasattr(self, 'ent_notch') and isinstance(self.ent_notch, tk.Entry) else 2.0
+            }
+            
+            params_3d = {
+                "alpha_ruido": float(self.ent_alpha_3d.get()),
+                "snr_threshold": float(self.ent_snr_3d.get()),
+                "outlier_contamination": float(self.ent_outliers_3d.get()),
+                "smooth_ms": int(self.ent_smooth_3d.get()),
+                "target_length": int(self.ent_target_len_3d.get()),
+                "notch_q": float(self.ent_notch.get()) if hasattr(self, 'ent_notch') and isinstance(self.ent_notch, tk.Entry) else 2.0
+            }
+            
+            params_umap = {
+                "alpha_ruido": float(self.ent_alpha_umap.get()),
+                "snr_threshold": float(self.ent_snr_umap.get()),
+                "outlier_contamination": float(self.ent_outliers_umap.get()),
+                "smooth_ms": int(self.ent_smooth_umap.get()),
+                "target_length": int(self.ent_target_len_umap.get()),
+                "notch_q": float(self.ent_notch.get()) if hasattr(self, 'ent_notch') and isinstance(self.ent_notch, tk.Entry) else 2.0
+            }
             
             val_umap_nn = int(self.ent_umap_nn.get())
             val_umap_md = float(self.ent_umap_md.get())
             val_umap_metric = self.combo_metric.get()
             
-            pca_comps_str = self.ent_pca_comps.get()
-            val_pca_comps = [int(x.strip()) for x in pca_comps_str.split(',')]
-            if len(val_pca_comps) < 2:
-                messagebox.showwarning("Advertencia", "Debe ingresar al menos 2 componentes PCA.")
-                return
-            
             val_trevisan = self.var_aplicar_trevisan.get()
             val_pre_pct = float(self.ent_pre_pct.get())
             val_post_pct = float(self.ent_post_pct.get())
-            val_algoritmo = self.combo_cluster.get()
+            val_algoritmo_pca = self.combo_cluster_pca.get()
+            val_algoritmo_umap = self.combo_cluster_umap.get()
             val_align = self.combo_align.get()
+            val_estilo_visual = self.var_estilo_visual.get() if hasattr(self, 'var_estilo_visual') else "Elipses"
             
             canales_sel = []
             if self.var_ch0.get(): canales_sel.append("canal_0")
@@ -1084,22 +1687,26 @@ class GeneradorPCAGUI:
         ejecutar_procesamiento(
             seleccionadas, 
             self.base_dir, 
-            val_alpha, 
-            val_snr, 
-            val_outliers, 
-            val_smooth, 
-            val_target_len, 
-            notch_q=val_notch_q,
+            params_2d=params_2d,
+            params_3d=params_3d,
+            params_umap=params_umap,
+            proc_pca_2d=proc_pca_2d,
+            proc_pca_3d=proc_pca_3d,
+            proc_umap_2d=proc_umap_2d,
+            proc_umap_3d=proc_umap_3d,
             umap_n_neighbors=val_umap_nn,
             umap_min_dist=val_umap_md,
             umap_metric=val_umap_metric,
-            pca_comps=val_pca_comps,
             aplicar_trevisan=val_trevisan,
-            algoritmo_clustering=val_algoritmo,
+            algoritmo_clustering_pca=val_algoritmo_pca,
+            algoritmo_clustering_umap=val_algoritmo_umap,
             modo_alineacion=val_align,
             pre_pct=val_pre_pct,
             post_pct=val_post_pct,
-            canales_features=canales_sel
+            canales_features=canales_sel,
+            ocultar_leyenda=self.var_ocultar_leyenda.get(),
+            estilo_visual=val_estilo_visual,
+            ignorar_ventana_cero=self.var_ignorar_win0.get()
         )
 
 def main():

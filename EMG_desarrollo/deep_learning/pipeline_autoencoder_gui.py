@@ -6,10 +6,9 @@ import os
 
 # Agregamos rutas para poder importar los módulos
 script_dir_abs = os.path.dirname(os.path.abspath(__file__))
-if script_dir_abs not in sys.path:
-    sys.path.append(script_dir_abs)
-if os.path.join(script_dir_abs, "dataset_tools") not in sys.path:
-    sys.path.append(os.path.join(script_dir_abs, "dataset_tools"))
+parent_dir = os.path.dirname(script_dir_abs)
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
 
 import threading
 import subprocess
