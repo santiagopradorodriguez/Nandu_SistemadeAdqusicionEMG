@@ -4,8 +4,8 @@
     \Huge \textbf{Capítulo 1: Hardware}
 \end{center}
 \vspace{2cm}
-\phantomsection
-\addcontentsline{toc}{section}{Hardware}
+\stepcounter{section}
+\addcontentsline{toc}{section}{\protect\numberline{\thesection}Hardware}
 
 \subsection{Diseño de circuito y consideraciones en Proteus}
 
@@ -458,8 +458,14 @@ Para estas nuevas pruebas, se utilizaron apósitos de la marca Curitas. Estas pr
 
 \subsubsection{Análisis de respuesta en frecuencia}
 
-Posteriormente, se decidió caracterizar la ganancia del sistema en función de la frecuencia, realizando barridos con un generador de funciones (Agilent 33120A) y un osciloscopio (Tektronix TBS 1052B). Dado que las ganancias esperadas para resistencias muy pequeñas llegaban a ser de \num{1500}, fue necesario utilizar un divisor resistivo a la entrada ($R_1 = \qty{1.5}{\kilo\ohm}$, $R_2 = \qty{100}{\ohm}$) para evitar que la tensión mínima provista por el generador saturara la placa.
+Posteriormente, se decidió caracterizar la ganancia del sistema en función de la frecuencia, realizando barridos con un generador de funciones (Agilent 33120A) y un osciloscopio (Tektronix TBS 1052B). Se conectó el generador de señales a la entrada de la placa y al CH1 del osciloscopio. La salida de la placa se conectó al CH2 del osciloscopio, el cual a su vez se comunicaba con la computadora (ver esquema en Figura \ref{fig:esquema_barrido}). Dado que las ganancias esperadas para resistencias muy pequeñas llegaban a ser de \num{1500}, fue necesario utilizar un divisor resistivo a la entrada ($R_1 = \qty{1.5}{\kilo\ohm}$, $R_2 = \qty{100}{\ohm}$) para evitar que la tensión mínima provista por el generador saturara la placa.
 
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.7\textwidth]{insumos_ia/cuaderno_de_labo/images/esquema_barrido.png}
+    \caption{Esquema del montaje experimental para caracterización de la amplificación con un barrido de frecuencias.}
+    \label{fig:esquema_barrido}
+\end{figure}
 \begin{figure}[htbp]
 \centering
 \begin{subfigure}{0.4\textwidth}

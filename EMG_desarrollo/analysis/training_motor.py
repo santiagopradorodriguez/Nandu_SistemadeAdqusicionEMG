@@ -168,7 +168,7 @@ def plot_results_table(resultados_tabla, umbral_optimo, out_dir, filtro_snr_tipo
     print(f"\n[+] Tabla exportada como Imagen: {out_file}")
     print(f"[+] Tabla exportada en LaTeX: {tex_file}")
 
-def ejecutar_entrenamiento(asignaciones_vocales, canales_seleccionados, mapped_names, filtro_snr_activo, filtro_snr_limite, filtro_snr_tipo, tipo_barrido, paso_barrido, logger=print):
+def ejecutar_entrenamiento(asignaciones_vocales, canales_seleccionados, mapped_names, filtro_snr_activo, filtro_snr_limite, filtro_snr_tipo, tipo_barrido, paso_barrido, estetica_config=None, logger=print):
     import os
     import json
     import numpy as np
@@ -343,7 +343,7 @@ def ejecutar_entrenamiento(asignaciones_vocales, canales_seleccionados, mapped_n
         logger(f"  [+] Mejor distinción lograda: {max_distincion} vocales aisladas (Umbral: {umbral_final:.2f}).")
         
     plot_results_table(mejores_resultados, umbral_final, out_dir_final, filtro_snr_tipo, filtro_snr_limite, asignaciones_vocales, folder_name)
-    _plot_training_verification(mediciones_para_verificacion, umbral_final, out_dir_final, folder_name)
+    _plot_training_verification(mediciones_para_verificacion, umbral_final, out_dir_final, folder_name, estetica_config)
     
     # Guardar JSON
     out_json = os.path.join(out_dir_final, "umbrales_optimos.json")
@@ -394,11 +394,19 @@ def evaluar_umbral(datos_por_vocal, num_canales, umbral):
         })
     return resultados
 
-def _plot_training_verification(mediciones_para_verificacion, umbral_optimo, out_dir, sufijo):
+def _plot_training_verification(mediciones_para_verificacion, umbral_optimo, out_dir, sufijo, estetica_config=None):
     """
     Genera un gráfico por medición mostrando los canales, el umbral elegido, 
     sombrea el área sobre el umbral y anota el valor binario resultante (1 o 0).
     """
+    if estetica_config is None:
+        estetica_config = {'hide_title': False, 'lw': 1.0, 'f_title': 14, 'f_tick': 10, 'f_leg': 10}
+        
+    f_tit = estetica_config.get('f_title', 14)
+    f_tk = estetica_config.get('f_tick', 10)
+    f_lg = estetica_config.get('f_leg', 10)
+    lw_val = estetica_config.get('lw', 1.0)
+    
     for path, data in mediciones_para_verificacion.items():
         recortes = data['recortes']
         canales = data['canales']
@@ -426,7 +434,7 @@ def _plot_training_verification(mediciones_para_verificacion, umbral_optimo, out
                 th = umbral_optimo
                 
             # Graficar señal
-            ax.plot(time_axis, sig, color='black', alpha=0.8, linewidth=1.0)
+            ax.plot(time_axis, sig, color='black', alpha=0.8, linewidth=lw_val)
             
             # Sombrear área sobre el umbral
             ax.fill_between(time_axis, th, sig, where=(sig > th), color='green', alpha=0.3, label='Señal > Umbral (1)')
@@ -446,21 +454,26 @@ def _plot_training_verification(mediciones_para_verificacion, umbral_optimo, out
                     binario = 1 if max_val > th else 0
                     
                     color_txt = 'green' if binario == 1 else 'red'
-                    ax.text(p + 0.5, 1.05, str(binario), color=color_txt, fontweight='bold', fontsize=12, ha='center')
+                    ax.text(p + 0.5, 1.05, str(binario), color=color_txt, fontweight='bold', fontsize=f_lg, ha='center')
                     
-            ax.set_ylabel('Amplitud Norm.')
+            ax.set_ylabel('Amplitud Norm.', fontsize=f_tit)
             ax.set_ylim(-0.1, 1.2)
             
             nombre_musculo = data['mapped_names'].get(ch, ch)
-            ax.set_title(f"Músculo: {nombre_musculo} ({ch}) | Vocal: {vocal}", fontweight='bold')
+            ax.set_title(f"Músculo: {nombre_musculo} ({ch}) | Vocal: {vocal}", fontweight='bold', fontsize=f_tit)
+            ax.tick_params(axis='both', labelsize=f_tk)
             
             for i in range(num_pulsos + 1):
                 ax.axvline(i, color='gray', linestyle='--', alpha=0.3)
                 
-            ax.legend(loc='upper right')
+            if estetica_config.get('show_leg', True):
+                ax.legend(loc='upper right', fontsize=f_lg)
                 
-        axes[-1].set_xlabel('Pulsos')
-        fig.suptitle(f"Validación de Umbrales - {os.path.basename(path)}", fontweight='bold')
+        axes[-1].set_xlabel('Pulsos', fontsize=f_tit)
+        
+        if not estetica_config.get('hide_title', False):
+            fig.suptitle(f"Validación de Umbrales - {os.path.basename(path)}", fontweight='bold', fontsize=f_tit)
+            
         plt.tight_layout()
         out_file = os.path.join(out_dir, f"verificacion_{os.path.basename(path)}.png")
         plt.savefig(out_file, dpi=300, bbox_inches='tight')

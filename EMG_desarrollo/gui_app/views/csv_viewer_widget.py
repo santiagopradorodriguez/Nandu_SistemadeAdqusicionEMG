@@ -622,6 +622,10 @@ class CsvViewerWidget(QWidget):
                 ax_bottom.setLabel(orig_bottom_label, units=orig_bottom_units, **{'font-size': '18pt', 'color': '#000000', 'font-weight': 'bold'})
                 ax_left.setLabel(orig_left_label, units=orig_left_units, **{'font-size': '18pt', 'color': '#000000', 'font-weight': 'bold'})
                 
+                # Force Qt to recalculate auto-margins with new fonts before taking the picture
+                from PySide6.QtWidgets import QApplication
+                QApplication.processEvents()
+                
                 # Light theme colors mapping with thicker lines
                 light_colors = ['#1f77b4', '#800080', '#ff7f0e', '#2ca02c', '#d62728', '#8c564b']
                 

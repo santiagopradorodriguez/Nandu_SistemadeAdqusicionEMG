@@ -4,11 +4,36 @@
     \Huge \textbf{Capítulo 3: Experimentos}
 \end{center}
 \vspace{2cm}
-\phantomsection
-\addcontentsline{toc}{section}{Experimentos}
+\stepcounter{section}
+\addcontentsline{toc}{section}{\protect\numberline{\thesection}Experimentos}
 
 \subsection{Experimento de Labo 6}
 
+\subsubsection{Set experimental}
+
+Se conectaron los electrodos a la placa de amplificación y la salida de esta a la placa de adquisición \textit{NI-DAQ-USB-6252} que va a la computadora. 
+El montaje experimental se muestra a continuación.
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\linewidth]{insumos_ia/cuaderno_de_labo/images/esquema_medicion_electrodo.png}
+    \caption{Montaje de medición de electrodos sobre músculos faciales.}
+    \label{fig:montaje_medicion_electrodo}
+\end{figure}
+
+\subsubsection{Protocolo de preparación de la piel}
+Durante las primeras sesiones (ej. Clase 8), se desarrolló un protocolo preliminar de limpieza, aunque de carácter bastante informal. Se observó que era crucial lavarse el área donde va el electrodo con un detergente especial para remover la grasa de la piel. En particular, se utilizó jabón líquido \textbf{LACLORHEX} (Digluconato de Clorhexidina 4\%), debido a su efectividad superior frente a un jabón convencional.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.2\linewidth]{insumos_ia/cuaderno_de_labo/images/image224.jpg}
+    \caption{Jabón líquido LACLORHEX, utilizado para la limpieza y desengrase de la piel previo a la colocación de los electrodos.}
+    \label{fig:laclorhex}
+\end{figure}
+
+Luego del lavado, se procedía a pasar alcohol al 70 \% por la zona para secar y limpiar aún más la superficie. Este procedimiento garantizó que los electrodos permanecieran adheridos por mayor tiempo. Asimismo, se concluyó que es indispensable el afeitado previo de la zona, ya que el vello facial impide que el electrodo se asiente completamente sobre la piel y degrada el contacto.
+
+
+\subsubsection{Montaje de electrodos y mediciones}
 Para la realización del experimento principal de Laboratorio 6, el objetivo fue registrar la actividad de tres músculos faciales involucrados en el habla, de acuerdo a la bibliografía consultada. Vamos a visualizar y ubicar los músculos que nos interesan según el paper de Ratnovsky (2021); apuntamos a poner electrodos en los siguientes músculos:
 
 \begin{figure}[H]
@@ -72,11 +97,12 @@ Llevamos un registro detallado de las pruebas realizadas ese día, evaluando dis
 
 \begin{table}[H]
     \centering
+    \footnotesize
     \caption{Registro de mediciones realizadas el 02/12/2025. FS = Full Scale, GS = Ground Scale.}
     \label{tab:mediciones_labo6}
-    \begin{tabularx}{\linewidth}{l l c l X}
+    \begin{tabularx}{\linewidth}{c >{\raggedright\arraybackslash}p{4.5cm} c c X}
         \toprule
-        \textbf{Sujeto} & \textbf{Título} & \textbf{Temp.} & \textbf{Estado} & \textbf{Comentario} \\
+        \textbf{Suj.} & \textbf{Título} & \textbf{Temp.} & \textbf{Estado} & \textbf{Comentario} \\
         \midrule
         Santi & B\_Prueba1\_Santi\_sinfiltronotch & \SI{26}{\degreeCelsius} & Nuevos & Notamos que se despegó un poco el electrodo del mylohyoid. Todos los del NIDAQ en GS. \\
         '' & B\_Prueba2\_Santi\_AI3FS-conNotch & '' & '' & Agregamos el filtro notch y pusimos el AI3 en FS, el resto en GS. \\
@@ -93,6 +119,42 @@ Llevamos un registro detallado de las pruebas realizadas ese día, evaluando dis
 \end{table}
 
 Cabe destacar que todas las grabaciones \textbf{se guardaron crudas}, sin el filtro notch aplicado por \textit{hardware} en la placa de adquisición, permitiendo el filtrado y análisis digital de manera \textit{offline}.
+
+\subsubsection{Resultados exploratorios en tiempo real}
+Durante la sesión, el software Ñandú LSD permitió capturar y visualizar en tiempo real las señales de los tres canales. Las siguientes figuras documentan las mediciones exploratorias iniciales para distintas palabras y fonemas, que sirvieron para validar la respuesta del sistema y la sincronización muscular de cara a las etapas posteriores:
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\linewidth]{insumos_ia/cuaderno_de_labo/images/image154.jpg}
+    \includegraphics[width=0.45\linewidth]{insumos_ia/cuaderno_de_labo/images/image529.png}
+    \caption{Visualización en vivo. Izquierda: Palabra \enquote{Arte}. Derecha: Palabra \enquote{NO}.}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\linewidth]{insumos_ia/cuaderno_de_labo/images/image305.png}
+    \includegraphics[width=0.45\linewidth]{insumos_ia/cuaderno_de_labo/images/image280.png}
+    \caption{Visualización en vivo. Izquierda: Palabra \enquote{Ñandú} (prueba 1). Derecha: Palabra \enquote{Ñandú} (prueba 2).}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.55\linewidth]{insumos_ia/cuaderno_de_labo/images/image63.png}
+    \caption{Visualización en vivo. Palabra \enquote{Jerjes}. Se aprecia una activación del \textit{mylohyoid} relativamente más amplia.}
+\end{figure}
+
+Finalmente, para la pronunciación sostenida y repetida de la letra \enquote{B}, se obtuvo una secuencia de registros que evidencia la activación sincrónica en los diferentes instantes:
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.32\linewidth]{insumos_ia/cuaderno_de_labo/images/image453.png}
+    \includegraphics[width=0.32\linewidth]{insumos_ia/cuaderno_de_labo/images/image398.png}
+    \includegraphics[width=0.32\linewidth]{insumos_ia/cuaderno_de_labo/images/image168.png}
+    \\[2mm]
+    \includegraphics[width=0.32\linewidth]{insumos_ia/cuaderno_de_labo/images/image46.png}
+    \includegraphics[width=0.32\linewidth]{insumos_ia/cuaderno_de_labo/images/image530.png}
+    \caption{Secuencia de visualizaciones en vivo durante la pronunciación de la letra \enquote{B}.}
+\end{figure}
 
 Con la experiencia acumulada del análisis de este tipo de señales, se observó que el \enquote{ruido} predominante se correspondía con la frecuencia de red de \SI{50}{\hertz}. Por lo tanto, se propuso aplicar un \textbf{filtro notch} y un \textbf{filtro pasabanda} con frecuencias de corte de \SI{20}{\hertz} y \SI{2000}{\hertz} de manera digital. Esta utilización de filtros permite que el software de adquisición desarrollado se asemeje a los parámetros utilizados nativamente por el software \textit{Spike Recorder} de Backyard Brains.
 
@@ -115,3 +177,455 @@ Por otro lado, en la palabra \enquote{Ñandú} ambas sílabas generaron picos di
     \caption{Señales medidas durante la pronunciación de la palabra \enquote{Ñandú}. Se distinguen dos picos correspondientes a cada sílaba, con el \textit{Orbicularis oris} dominando el segundo pico.}
     \label{fig:labo6_nandu}
 \end{figure}
+
+Cabe mencionar que los detalles pormenorizados sobre la caracterización inicial del hardware, los métodos de adquisición y el diseño primario del experimento, se encuentran documentados \textit{in extenso} en los reportes previos \enquote{Informe Electrodos de Superficie}, \enquote{Informe de Laboratorio 6} e \enquote{Informe de Laboratorio 7}, elaborados por los mismos autores.
+
+\newpage
+
+\subsection{Experimento de Labo 7}
+
+A lo largo del Laboratorio 7, el montaje experimental atravesó diversas modificaciones para resolver problemas de hardware, minimizar ruidos y optimizar la captura. A continuación, se detalla la evolución y las resoluciones tomadas hasta llegar al set experimental definitivo:
+
+\subsubsection{Evolución y Consolidación del Set Experimental}
+
+\paragraph{Cambio de locación y problemas con \textit{phantom power}:}
+La primera medición fue en el cuarto de electrónica, pero luego el espacio de medición fue trasladado a una habitación más pequeña, la del medio, donde esta la caja
+naranja. Para el registro de voz, se ensayó con el micrófono direccional \textit{TAKSTAR SGC 568} en modo cardioide conectado a una placa de audio 
+\textit{Behringer TUBEULTRA MIC 100}, y se incorporó un \textit{antipop}. Sin embargo, se detectaron fallos de tensión en la alimentación \textit{phantom power} de la
+ placa de audio. Reemplazamos la placa y funcionó todo. De paso dejamos marcados que micrófonos y placas funcionan.
+
+\paragraph{Reemplazo de NIDAQ y Consolidación del Set Final:}
+Debido a la disponibilidad de los equipos del laboratorio, se debió reemplazar la placa de adquisición original por una \textit{NI DAQ USB-6212}, un modelo más compacto. Tras iterar y resolver progresivamente estos inconvenientes de hardware a lo largo del mes, se logró conformar el set experimental definitivo (mostrado en la Figura \ref{fig:labo7_imagenes_finales} y esquematizado formalmente en la Figura \ref{fig:labo7_diagrama_final}), el cual sentó las bases robustas para el resto de las adquisiciones. 
+
+En este montaje definitivo, los electrodos se conectaron al amplificador \textit{Ñandú LSD}, que a su vez fue conectado a las entradas analógicas de la placa de adquisición \textit{NI DAQ USB-6212} (comunicada con la computadora). Simultáneamente, la señal de voz captada por el micrófono fue preamplificada por la placa de audio externa, cuya salida también se ingresó a la NIDAQ, permitiendo así sincronizar la captura electromiográfica con la acústica.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.3\linewidth]{insumos_ia/cuaderno_de_labo/images/image194.jpg}
+    \includegraphics[width=0.3\linewidth]{insumos_ia/cuaderno_de_labo/images/image334.jpg}
+    \includegraphics[width=0.3\linewidth]{insumos_ia/cuaderno_de_labo/images/image301.jpg}
+    \caption{Imágenes de la disposición final de los equipos en la mesa de trabajo.}
+    \label{fig:labo7_imagenes_finales}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.4\linewidth]{insumos_ia/cuaderno_de_labo/images/diagrama_exp_b.pdf}
+    \caption{Diagrama esquemático del set experimental definitivo. Las señales electrofisiológicas ingresan al amplificador analógico \textit{Ñandú LSD}, mientras que la señal de voz es captada y preamplificada por la placa de audio externa. Todos los flujos convergen sincrónicamente en la placa \textit{NI DAQ USB-6212}.}
+    \label{fig:labo7_diagrama_final}
+\end{figure}
+
+\subsubsection{Protocolo de Adquisición}
+
+Con el objetivo de sistematizar la toma de mediciones y minimizar la variabilidad entre sesiones, se confeccionó el siguiente protocolo experimental. El mismo fue utilizado en las mediciones de vocales aisladas (estudio enfocado en el paper de Assaneo et al.), detallando exhaustivamente los pasos requeridos desde la preparación de la piel hasta la validación de las señales obtenidas:
+
+\begin{table}[H]
+    \centering
+    \footnotesize
+    \caption{Protocolo experimental para la preparación del sujeto y adquisición de señales EMG y audio.}
+    \label{tab:protocolo_emg_labo7}
+    \renewcommand{\arraystretch}{1.5}
+    \begin{tabularx}{\linewidth}{c X}
+        \toprule
+        \textbf{Paso} & \textbf{Descripción de la Tarea} \\
+        \midrule
+        1 & \textbf{Verificación de conexiones:} Chequear la continuidad de los cables, la integridad de la malla y la correcta conexión a la referencia (GND). \\
+        2 & \textbf{Verificación de alimentación:} Comprobar con antelación el estado de las baterías del micrófono o la alimentación \textit{phantom power}. \\
+        3 & \textbf{Entrenamiento y calibración:} Antes de colocar los electrodos o lavar el rostro, realizar una práctica de vocales sincronizada con el \textit{beat}. Ajustar la ganancia de la interfaz para que el nivel promedio se sitúe en -18 dB, asegurando una óptima relación señal-ruido (SNR). \\
+        4 & \textbf{Preparación de electrodos:} Debido a la rigidez de los pines, insertarlos en los electrodos antes de la adhesión facial. Recortar el electrodo sin despegarlo, fijar con cinta adhesiva, conectar los cables y luego posicionar sobre el músculo. \\
+        5 & \textbf{Preparación del sujeto:} Lavado facial con detergente especial (LACLORHEX) y secado con gasa. Reforzar la limpieza aplicando alcohol al 70\% de forma localizada. Registrar fotográficamente el rostro del sujeto como referencia de la distribución del vello facial. \\
+        6 & \textbf{Aislamiento acústico:} Conectar auriculares al sujeto para evitar la filtración del ruido del metrónomo hacia el micrófono. \\
+        7 & \textbf{Configuración de captura:} Configurar el patrón polar del micrófono en modo cardioide. \\
+        8 & \textbf{Sincronización:} Establecer el metrónomo en 30 BPM (parámetro sujeto a ajustes durante la prueba). \\
+        9 & \textbf{Colocación y validación de canales EMG:} Colocar los electrodos de a uno y verificar la señal individualmente. \textbf{Canal 0 (Mylohyoid):} tragar saliva (separación \SI{4}{\milli\meter}). \textbf{Canal 1 (Depressor):} sonrisa exagerada o mostrar los dientes (separación \SI{4}{\milli\meter}). \textbf{Canal 2 (Orbicularis):} sonrisa exagerada o mostrar los dientes (separación \SI{7}{\milli\meter}). \\
+        \bottomrule
+    \end{tabularx}
+\end{table}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.3\linewidth]{insumos_ia/cuaderno_de_labo/images/image24.jpg}
+    \includegraphics[width=0.3\linewidth]{insumos_ia/cuaderno_de_labo/images/image25.jpg}
+    \caption{Preparación previa de los electrodos (Paso 1 del protocolo), insertando los pines y reforzando con cinta antes del montaje facial.}
+\end{figure}
+
+\subsubsection{Mediciones}
+
+Las adquisiciones fueron realizadas en cuatro jornadas distintas, ajustando parámetros y madurando el experimento con cada iteración. A continuación se presentan cronológicamente las mediciones de cada día, el posicionamiento de los electrodos y el protocolo de pronunciación empleado.
+
+\paragraph{Lunes 01/06/2026 (Clase 20) - Medición exploratoria inicial:}
+Esta fue nuestra primera medición en el nuevo set experimental. Se trató de una prueba de carácter exploratoria sin un protocolo exhaustivo. El sujeto (Lucas) limpió el área con alcohol al 70\% y los electrodos se aseguraron con cinta adhesiva a pesar de contar con vello facial. Conectamos la referencia al hueso detrás de la oreja (apófisis mastoides). Grabamos las vocales 20 veces cada una guiados por un metrónomo a 40 BPM. El objetivo principal fue realizar una captura rápida para corroborar el software. 
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.22\linewidth]{insumos_ia/cuaderno_de_labo/images/image288.jpg}
+    \includegraphics[width=0.22\linewidth]{insumos_ia/cuaderno_de_labo/images/image124.jpg}
+    \includegraphics[width=0.22\linewidth]{insumos_ia/cuaderno_de_labo/images/image518.jpg}
+    \includegraphics[width=0.22\linewidth]{insumos_ia/cuaderno_de_labo/images/image284.jpg}
+    \\[2mm]
+    \includegraphics[width=0.22\linewidth]{insumos_ia/cuaderno_de_labo/images/image338.jpg}
+    \includegraphics[width=0.22\linewidth]{insumos_ia/cuaderno_de_labo/images/image266.jpg}
+    \includegraphics[width=0.22\linewidth]{insumos_ia/cuaderno_de_labo/images/image122.jpg}
+    \includegraphics[width=0.22\linewidth]{insumos_ia/cuaderno_de_labo/images/image473.jpg}
+    \caption{Ubicación inicial exploratoria de los electrodos en el sujeto Lucas. Arriba: preparación general. Abajo: detalle de la colocación en los músculos.}
+\end{figure}
+
+\paragraph{Miércoles 03/06/2026 (Clase 21) - Incorporación del protocolo de adquisición:}
+En esta jornada pusimos en práctica el protocolo formal y establecimos distancias aproximadas entre pares de electrodos: \textbf{4\,mm para el Canal 0, 4\,mm para el Canal 1 y 7\,mm para el Canal 2}. Se utilizó como base un pulso de 30 BPM. Ese día dividimos las adquisiciones en dos grandes experimentos:
+\begin{itemize}
+    \item \textbf{Experimento 1 (Vocales separadas):} El sujeto pronunció cada vocal repetidas veces. Se realizaron \textbf{25 repeticiones por cada letra}, dejando un intervalo de 10 segundos de descanso al pasar de una letra a la siguiente. En la \textbf{Prueba 1} (orden A, I, E, O, U) descubrimos que el filtro \textit{notch} estaba activado, introduciendo ruido de línea. La \textbf{Prueba 2} debió ser cancelada porque los cables del \textit{depressor} se tocaron y generaron picos anómalos. Para la \textbf{Prueba 3} (orden U, I, E, O, A) se separaron los cables; notamos que al pronunciar la "O" el sujeto tragó saliva, lo cual quedó registrado en la señal del \textit{Mylohyoid}. Las Pruebas 4 y 5 completaron la adquisición de vocales separadas.
+    \item \textbf{Experimento 2 (Secuencias):} Se colocaron nuevos electrodos para registrar secuencias continuas de las cinco vocales (ej. a-e-i-o-u). Tomamos 5 secuencias en total: las 2 primeras fueron en orden directo, las 2 siguientes en orden inverso, y la última en orden directo. Fueron 25 pulsos en total por medición, con intervalos de 10 segundos de descanso.
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.18\linewidth]{insumos_ia/cuaderno_de_labo/images/image54.jpg}
+    \includegraphics[width=0.18\linewidth]{insumos_ia/cuaderno_de_labo/images/image57.jpg}
+    \includegraphics[width=0.18\linewidth]{insumos_ia/cuaderno_de_labo/images/image134.jpg}
+    \includegraphics[width=0.18\linewidth]{insumos_ia/cuaderno_de_labo/images/image31.jpg}
+    \includegraphics[width=0.18\linewidth]{insumos_ia/cuaderno_de_labo/images/image384.jpg}
+    \caption{Disposición de los electrodos correspondientes al Experimento 1.}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.22\linewidth]{insumos_ia/cuaderno_de_labo/images/image488.jpg}
+    \includegraphics[width=0.22\linewidth]{insumos_ia/cuaderno_de_labo/images/image192.jpg}
+    \includegraphics[width=0.22\linewidth]{insumos_ia/cuaderno_de_labo/images/image503.jpg}
+    \includegraphics[width=0.22\linewidth]{insumos_ia/cuaderno_de_labo/images/image371.jpg}
+    \caption{Disposición de los nuevos electrodos para el Experimento 2 (secuencias de vocales).}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\linewidth]{insumos_ia/cuaderno_de_labo/images/image482.png}
+    \caption{Cuadro que recopila la secuencia continua de vocales (Experimento 2).}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\linewidth]{insumos_ia/cuaderno_de_labo/images/image330.png}
+    \caption{Cuadro que recopila todas las mediciones de las vocales por separado realizadas en la jornada (Experimento 1).}
+\end{figure}
+
+\paragraph{Miércoles 10/06/2026 (Clase 23) - Consolidación y mejores mediciones:}
+Para mejorar el nivel de contacto y reducir drásticamente las impedancias, en esta ocasión las mediciones se realizaron con Lucas sin vello facial (sin bigote). Esta preparación nos brindó las mediciones con mejor relación señal-ruido. Dividimos el trabajo en dos bloques:
+\begin{itemize}
+    \item \textbf{Experimento 1 (Vocales separadas):} 
+    \begin{itemize}
+        \item \textbf{Prueba 1 y 2:} 12 repeticiones sucesivas por vocal en orden A, E, I, O, U, con 10 segundos de descanso.
+        \item \textbf{Prueba 3 y 4:} Se pronunciaron en orden inverso (U, O, I, E, A), repitiendo cada vocal 12 veces.
+    \end{itemize}
+    \item \textbf{Experimento 2 (Secuencias de vocales):} Se colocaron nuevos electrodos, pero al agotarse la cinta adhesiva médica, el canal del \textit{Orbicularis Oris} debió fijarse de forma atípica (en "triangulito").
+    \begin{itemize}
+        \item \textbf{Prueba 5:} Secuencia continua de vocales (A hasta U) sumando 125 pulsos en total.
+        \item \textbf{Prueba 6:} Secuencia inversa (U hasta A), 125 pulsos.
+        \item \textbf{Prueba 7, 8 y 9:} Secuencias de 25 vocales puramente aleatorias (ej. A-O-O-E-I-A...).
+    \end{itemize}
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.22\linewidth]{insumos_ia/cuaderno_de_labo/images/image478.jpg}
+    \includegraphics[width=0.22\linewidth]{insumos_ia/cuaderno_de_labo/images/image67.jpg}
+    \includegraphics[width=0.22\linewidth]{insumos_ia/cuaderno_de_labo/images/image533.jpg}
+    \includegraphics[width=0.22\linewidth]{insumos_ia/cuaderno_de_labo/images/image261.jpg}
+    \caption{Configuración de electrodos para el Experimento 1 sobre Lucas sin vello facial.}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.22\linewidth]{insumos_ia/cuaderno_de_labo/images/image415.jpg}
+    \includegraphics[width=0.22\linewidth]{insumos_ia/cuaderno_de_labo/images/image244.jpg}
+    \includegraphics[width=0.22\linewidth]{insumos_ia/cuaderno_de_labo/images/image178.jpg}
+    \includegraphics[width=0.22\linewidth]{insumos_ia/cuaderno_de_labo/images/image93.jpg}
+    \caption{Electrodos para el Experimento 2. Se aprecia la fijación en \enquote{triangulito} del \textit{Orbicularis Oris} debido a la falta de cinta adhesiva.}
+\end{figure}
+
+\paragraph{Lunes 22/06/2026 (Clase 25) - Medición con sujeto alternativo:}
+Finalmente, para asegurar la reproducibilidad del protocolo sobre distintos sujetos, se procedió a realizar una sesión completa midiendo sobre Santiago. Se repitieron bloques de medición individuales (Pruebas 1 y 2 en orden normal, Prueba 3 en orden invertido) repitiendo 12 veces cada vocal guiándose con el metrónomo.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.22\linewidth]{insumos_ia/cuaderno_de_labo/images/image281.jpg}
+    \includegraphics[width=0.22\linewidth]{insumos_ia/cuaderno_de_labo/images/image166.jpg}
+    \includegraphics[width=0.22\linewidth]{insumos_ia/cuaderno_de_labo/images/image355.jpg}
+    \includegraphics[width=0.22\linewidth]{insumos_ia/cuaderno_de_labo/images/image494.jpg}
+    \caption{Colocación de electrodos en el sujeto alternativo (Santiago) siguiendo el protocolo definitivo.}
+\end{figure}
+
+\subsection{Resultados y Análisis (Experimento Labo 7)}
+
+El procesamiento y análisis de las señales se realizó de forma iterativa, comenzando por enfoques más rudimentarios basados en umbrales de amplitud, para luego avanzar hacia técnicas de reducción de dimensionalidad como PCA y UMAP. A continuación se detalla el primero de estos enfoques.
+
+\subsubsection{Discretización de Vocales en Espacio 3D (Método de Umbrales)}
+
+Basándonos en la metodología propuesta por Trevisan et al. (2013), implementamos un algoritmo para discretizar las señales electromiográficas de las vocales e intentar ubicarlas como vértices en un espacio tridimensional (un cubo) definido por los tres canales musculares.
+
+El diagrama de procesamiento (Figura \ref{fig:labo7_diagrama_umbrales}) consiste en aislar los pulsos musculares útiles y acondicionar sus amplitudes. Se toma un porcentaje de la ventana de silencio inicial y final para calcular la media y desviación estándar del ruido, llevando la línea base a cero. Luego, se divide el pulso completo por su valor absoluto máximo global encontrado en ese canal para normalizar la amplitud en una escala de $[0, 1]$. Adicionalmente, se impone un filtro de Relación Señal-Ruido (SNR); si la señal no supera un umbral exigido (por ejemplo, SNR de 4.0), la ventana se descarta para evitar falsos positivos.
+
+Una vez normalizado el pulso, se lo transforma a lógica digital (1 o 0) aplicando un conjunto de umbrales (ya sea un umbral único global o umbrales independientes por canal). Así, cada ventana temporal queda definida por un vector binario de tres dimensiones, por ejemplo $[1, 0, 1]$. 
+
+Mediante un algoritmo de fuerza bruta iteramos combinaciones de umbrales desde 0.1 hasta 0.9 en pasos de 0.05. Para cada combinación, el algoritmo evalúa:
+\begin{itemize}
+    \item \textbf{Moda Global:} El vector binario más frecuente para una vocal específica.
+    \item \textbf{Frecuencia Modal (Score):} El porcentaje de veces que aparece dicha moda sobre el total de pulsos válidos.
+    \item \textbf{Colisiones:} Situación en la que dos vocales distintas terminan asignadas al mismo vector binario, lo cual invalida la capacidad de discriminación.
+\end{itemize}
+
+El algoritmo busca minimizar estrictamente el número de colisiones y, en caso de empate, maximiza el \textit{Score} de aciertos promedio.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\linewidth]{insumos_ia/cuaderno_de_labo/images/image198.png}
+    \includegraphics[width=0.35\linewidth]{insumos_ia/cuaderno_de_labo/images/image47.png}
+    \caption{Izquierda: Diagrama de flujo del procesamiento de umbrales. Derecha: Representación teórica de las vocales como vértices de un cubo en el espacio tridimensional de los tres músculos.}
+    \label{fig:labo7_diagrama_umbrales}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\linewidth]{insumos_ia/cuaderno_de_labo/images/image80.png}
+    \includegraphics[width=0.45\linewidth]{insumos_ia/cuaderno_de_labo/images/image113.png}
+    \caption{Izquierda: Señal acondicionada y normalizada (en rojo el tramo utilizado para estimar el ruido). Derecha: Visualización de la binarización de la señal al aplicar diferentes umbrales por canal.}
+\end{figure}
+
+Al aplicar un umbral global (por ejemplo, 0.65), notamos que la frecuencia modal era baja y había pérdida excesiva de datos. Al refinar el análisis permitiendo umbrales independientes por canal, logramos asignar las vocales a diferentes vértices del \enquote{cubo} tridimensional. Sin embargo, observamos que al algoritmo le costaba reconocer y diferenciar consistentemente las vocales. Si bien es posible separarlas de forma teórica, en la práctica el sistema se confunde frecuentemente entre letras de gesticulación similar; en particular confundiendo la \enquote{A} con la \enquote{E}, y la \enquote{O} con la \enquote{U}. 
+
+Esto evidenció que la sola binarización por amplitud máxima no logra diferenciar de manera robusta las sutiles dinámicas de activación entre cada vocal, motivando la exploración de métodos de análisis multivariado y de reducción de dimensionalidad.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.4\linewidth]{insumos_ia/cuaderno_de_labo/images/image177.png}
+    \includegraphics[width=0.4\linewidth]{insumos_ia/cuaderno_de_labo/images/image492.png}
+    \\[2mm]
+    \includegraphics[width=0.4\linewidth]{insumos_ia/cuaderno_de_labo/images/image205.png}
+    \includegraphics[width=0.4\linewidth]{insumos_ia/cuaderno_de_labo/images/image474.png}
+    \caption{Comparación de señales de vocales con gesticulación similar. Arriba: vocal O (izq.) vs vocal U (der.). Abajo: vocal E (izq.) vs vocal I (der.). Las estructuras y envolventes resultan visualmente muy similares, dificultando la clasificación mediante umbrales simples.}
+\end{figure}
+
+Para caracterizar el desempeño de este método, se realizó un barrido de umbrales entre 0 y 1 con un paso de 0.0005. Las tablas a continuación resumen los resultados, mostrando el desempeño global e individual de las vocales según el umbral seleccionado, así como el detalle de la moda local, la cantidad de aciertos y la probabilidad de aparición de cada vector binario.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\linewidth]{insumos_ia/cuaderno_de_labo/images/image534.png}
+    \\[2mm]
+    \includegraphics[width=0.6\linewidth]{insumos_ia/cuaderno_de_labo/images/image346.png}
+    \caption{Arriba: Desempeño general frente al barrido de umbrales. Abajo: Resumen detallado global por vocal mostrando las probabilidades modales.}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\linewidth]{insumos_ia/cuaderno_de_labo/images/image27.png}
+    \caption{Listado de los ensayos registrados indicando la moda local obtenida, la cuenta de aciertos y la probabilidad $p$.}
+\end{figure}
+
+Finalmente, se propuso una flexibilización del método permitiendo que el algoritmo no fuerce la separación en 5 coordenadas por vocal. 
+Esto contempla la variabilidad natural en los patrones de contracción muscular. Los resultados mostraron que el porcentaje de frecuencias de acierto se eleva 
+sustancialmente para varias vocales, lo que ratifica que la contracción para una misma vocal no es completamente unívoca y que flexibilizar el espacio discretizado 
+mejora la detección.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.55\linewidth]{insumos_ia/cuaderno_de_labo/images/image386.png}
+    \caption{Resultados del análisis con 4 modas, observando una elevación significativa en los porcentajes de acierto.}
+\end{figure}
+
+A la ambigüedad global observada se le sumaron cruzamientos específicos. De manera general, se identificó que la vocal \enquote{O} se confunde sistemáticamente con la \enquote{U}. Por otro lado, el algoritmo no pudo evitar cruzamientos entre la \enquote{I}, la \enquote{E} y la \enquote{A}; en particular, la \enquote{E} presenta un fuerte solapamiento con la \enquote{I}, y las activaciones de la \enquote{A} también se entremezclan en esta región. Cabe destacar que, si bien las coordenadas discretas exactas asignadas a cada vocal varían dependiendo de la parametrización específica del análisis (ajuste de umbrales), estas superposiciones morfológicas se mantienen constantes en todos los casos. Esta recurrencia de agrupaciones compartidas demuestra que la discretización temporal por umbrales resulta insuficiente para diferenciar las cinco vocales en simultáneo de manera contundente.
+
+Una revisión fisiológica de las mediciones explica estos solapamientos: la activación muscular es similar para fonemas morfológicamente afines. Por ejemplo, en la \enquote{O} y la \enquote{U} (vocales cerradas y redondeadas) predominan de forma combinada el \textit{Depressor} y el \textit{Orbicularis}, mientras que en la \enquote{E} y la \enquote{I} (vocales frontales y estiradas) domina la señal del \textit{Depressor}. Esto sugiere dos hipótesis posibles: o bien la varianza morfológica de estos tres músculos particulares no aporta la información suficiente para separar las cinco clases fonéticas de manera ortogonal (requiriendo un cuarto músculo o la sustitución de uno actual); o bien es el método puramente temporal de umbrales el que carece de la sensibilidad analítica necesaria. 
+
+En conclusión, los resultados obtenidos indicaron que el método de umbrales es funcional para aislar fisiológicamente grandes grupos y separar gestos motores extremos (logrando diferenciar de manera macroscópica la \enquote{A}, el grupo \enquote{E-I} y el grupo \enquote{O-U}), pero no posee la robustez matemática necesaria para clasificar y separar el espacio vocálico continuo completo debido al persistente solapamiento de las vocales intermedias. Sin embargo, confirmó con éxito que es factible extraer identidades fonéticas discretas a partir de las dinámicas musculares registradas.
+
+\subsection{Análisis de Componentes Principales (PCA)}
+
+Previamente a la aplicación de este y los próximos modelos de reducción de dimensionalidad, fue esencial consolidar un conjunto de datos estandarizado. Se recopilaron y re-etiquetaron las mejores mediciones extraídas de las distintas sesiones originales (correspondientes a los días 1, 3 y 10 de junio). De este proceso se obtuvo un total de 590 pulsos vocálicos (ventanas). Estas mediciones curadas se agruparon rigurosamente en un conjunto de entrenamiento (\textit{Training Set}, conformado por 470 pulsos de sesiones tempranas) y un conjunto de prueba (\textit{Test Set}, conformado por 120 pulsos de sesiones finales). Esta metodología garantiza que los algoritmos puedan evaluarse sobre datos no observados previamente durante la parametrización, dotando a los resultados de validez estadística.
+
+Para abordar las dificultades de clasificación encontradas en el método de umbrales, se optó por aplicar un Análisis de Componentes Principales (PCA), un método de reducción de dimensionalidad no supervisado. Para ello, los datos debieron ser procesados de manera diferente. Se emplearon los picos de la señal del micrófono para alinear temporalmente las ventanas de las señales de los tres músculos, y así preservar los desfasajes relativos de contracción. A cada ventana, normalizada por su amplitud máxima, se la remuestreó a una cantidad fija de puntos usando la transformada rápida de Fourier (FFT), y se concatenaron los canales formando un único vector de características de entrada por medición.
+
+Para determinar el mejor procesamiento de estas envolventes, se realizó un barrido sistemático variando el tamaño de ventana de la media móvil (smooth) y la cantidad de puntos de remuestreo.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\linewidth]{insumos_ia/cuaderno_de_labo/images/image484.png}
+    \includegraphics[width=0.45\linewidth]{insumos_ia/cuaderno_de_labo/images/image374.png}
+    \\[2mm]
+    \includegraphics[width=0.55\linewidth]{insumos_ia/cuaderno_de_labo/images/image514.png}
+    \\[2mm]
+    \includegraphics[width=0.45\linewidth]{insumos_ia/cuaderno_de_labo/images/image95.png}
+    \caption{Búsqueda de los parámetros óptimos para el análisis de PCA. Al cruzar distintas configuraciones de envolventes y remuestreos, se obtuvo que el mejor rendimiento se alcanza con una ventana de 90 ms y un remuestreo de 20 puntos por canal.}
+\end{figure}
+
+Con los datos procesados mediante estos parámetros óptimos, se los proyectó en un espacio de menor dimensión aplicando PCA. Al usar un clasificador GMM (Gaussian Mixture Models) forzando 5 clases y un algoritmo Kuhn-Munkres para asignar correctamente las vocales a cada \textit{cluster}, se pudieron visualizar las distribuciones y fronteras de decisión.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\linewidth]{insumos_ia/cuaderno_de_labo/images/PCA_2D_Analisis_Errores.pdf}
+    \caption{Análisis PCA en 2D de las señales EMG. Los rombos indican el centroide de cada \textit{cluster}. Las zonas con color de fondo muestran las fronteras de decisión trazadas por el algoritmo GMM. Nótese la formación de tres \enquote{grandes grupos}: la vocal A, el conjunto E-I y el conjunto O-U.}
+\end{figure}
+
+Para cuantificar la capacidad de clasificación del método y el grado de solapamiento interno, se obtuvieron las matrices de confusión comparando la etiqueta asignada por el \textit{cluster} con la vocal realmente pronunciada.
+
+\begin{table}[H]
+    \centering
+    \begin{minipage}{0.48\linewidth}
+        \centering
+        \textbf{2D} \\ \vspace{0.2cm}
+        \resizebox{\linewidth}{!}{%
+            \begin{tabular}{lccccc}
+            \toprule
+             & \multicolumn{5}{c}{\textbf{Predicción}} \\
+             & \textbf{A} & \textbf{E} & \textbf{I} & \textbf{O} & \textbf{U} \\
+            \midrule
+            \textbf{Real A} & \cellcolor[rgb]{0.47,0.47,1.00} \color{white} 76\% & \cellcolor[rgb]{0.83,0.83,1.00}  24\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% \\
+            \textbf{Real E} & \cellcolor[rgb]{0.99,0.99,1.00}  2\% & \cellcolor[rgb]{0.53,0.53,1.00} \color{white} 67\% & \cellcolor[rgb]{0.79,0.79,1.00}  31\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% \\
+            \textbf{Real I} & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{0.93,0.93,1.00}  11\% & \cellcolor[rgb]{0.37,0.37,1.00} \color{white} 89\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% \\
+            \textbf{Real O} & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{0.59,0.59,1.00} \color{white} 59\% & \cellcolor[rgb]{0.71,0.71,1.00}  41\% \\
+            \textbf{Real U} & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{0.82,0.82,1.00}  26\% & \cellcolor[rgb]{0.48,0.48,1.00} \color{white} 74\% \\
+            \bottomrule
+            \end{tabular}%
+        }
+    \end{minipage}\hfill
+    \begin{minipage}{0.48\linewidth}
+        \centering
+        \textbf{3D} \\ \vspace{0.2cm}
+        \resizebox{\linewidth}{!}{%
+            \begin{tabular}{lccccc}
+            \toprule
+             & \multicolumn{5}{c}{\textbf{Predicción}} \\
+             & \textbf{A} & \textbf{E} & \textbf{I} & \textbf{O} & \textbf{U} \\
+            \midrule
+            \textbf{Real A} & \cellcolor[rgb]{0.49,0.49,1.00} \color{white} 73\% & \cellcolor[rgb]{0.81,0.81,1.00}  27\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% \\
+            \textbf{Real E} & \cellcolor[rgb]{0.99,0.99,1.00}  2\% & \cellcolor[rgb]{0.45,0.45,1.00} \color{white} 78\% & \cellcolor[rgb]{0.86,0.86,1.00}  20\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% \\
+            \textbf{Real I} & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{0.84,0.84,1.00}  23\% & \cellcolor[rgb]{0.46,0.46,1.00} \color{white} 77\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% \\
+            \textbf{Real O} & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{0.54,0.54,1.00} \color{white} 66\% & \cellcolor[rgb]{0.76,0.76,1.00}  34\% \\
+            \textbf{Real U} & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{0.80,0.80,1.00}  28\% & \cellcolor[rgb]{0.50,0.50,1.00} \color{white} 72\% \\
+            \bottomrule
+            \end{tabular}%
+        }
+    \end{minipage}
+    \caption{Matrices de confusión, 2D (izquierda) y 3D (derecha), para el algoritmo GMM aplicado sobre los datos de PCA. Se comparan las clases predichas por el modelo frente a las vocales reales. Se hace evidente la confusión intrínseca entre las vocales \enquote{O} y \enquote{U}, así como \enquote{E} e \enquote{I}.}
+    \label{tab:pca_confusion}
+\end{table}
+
+El PCA permitió corroborar visual y estadísticamente el desafío propuesto: la activación simultánea de los tres músculos elegidos (\textit{Mylohyoid}, \textit{Depressor} y \textit{Orbicularis}) resulta óptima para separar gestos motores extremos como los que producen la \enquote{A}, la \enquote{I} o la \enquote{U}, pero sufre de alta confusión para distinguir gesticulaciones intermedias como la \enquote{E} de la \enquote{I}, o la \enquote{O} de la \enquote{U}.
+
+\subsubsection{Análisis PCA en Pares Musculares}
+
+Ante esto, surgió el cuestionamiento sobre si alguno de los tres músculos estaba aportando poca información (o introduciendo ruido) en la separación de ciertas vocales particulares. Para entender el nivel de información que aportaba cada músculo de forma individual a la decodificación de cada vocal, se realizaron pruebas iterando el análisis de PCA considerando los canales de a pares.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.32\linewidth]{insumos_ia/cuaderno_de_labo/images/image147.png}
+    \includegraphics[width=0.32\linewidth]{insumos_ia/cuaderno_de_labo/images/image545.png}
+    \includegraphics[width=0.32\linewidth]{insumos_ia/cuaderno_de_labo/images/image499.png}
+    \caption{Desempeño del modelo PCA al reducir la información a pares de músculos. De izquierda a derecha: canales 0 y 2 (\textit{Mylohyoid} y \textit{Orbicularis}); canales 1 y 2 (\textit{Depressor} y \textit{Orbicularis}); canales 0 y 1 (\textit{Mylohyoid} y \textit{Depressor}).}
+\end{figure}
+
+Al evaluar las proyecciones resultantes de los distintos pares, se observa el nivel de información que aporta cada canal. Por ejemplo, al considerar únicamente los canales 1 y 2 (\textit{Depressor} y \textit{Orbicularis}), se evidencia la separación en dos grandes familias vocálicas: por un lado las frontales o estiradas (\enquote{A}, \enquote{E}, \enquote{I}) y por el otro las cerradas o redondeadas (\enquote{O}, \enquote{U}), que es un resultado esperado anatómica y morfológicamente. Por su parte, la combinación de los canales 0 y 2 (\textit{Mylohyoid} y \textit{Orbicularis}) también logra seccionar el espacio en sectores diferenciados, pero con una mayor mezcla interna de las vocales. En contraste, la dupla de los canales 0 y 1 (\textit{Mylohyoid} y \textit{Depressor}) demuestra una dispersión sumamente alta, donde apenas logra asilar de forma difusa el grupo de la \enquote{A}. En definitiva, este análisis sugiere que si bien los músculos no son perfectamente ortogonales, cada uno cumple un rol parcial en la desambiguación.
+
+\subsection{Reducción de Dimensionalidad no Lineal (UMAP)}
+
+Debido a que el PCA es un algoritmo de reducción de dimensionalidad estrictamente lineal, se procedió a analizar los datos utilizando UMAP (\textit{Uniform Manifold Approximation and Projection}), el cual es capaz de conservar tanto la estructura topológica global como local del espacio de características originales de manera no lineal.
+
+Para este procesamiento, los hiperparámetros más relevantes fueron sintonizados de la siguiente manera:
+\begin{itemize}
+    \item \texttt{n\_neighbors}: Determina el tamaño del entorno local de cada punto. Se prefirieron valores altos (ej. 30 a 50+) para forzar al algoritmo a observar la estructura global y evitar que fragmente las clases en subgrupos aislados de forma \enquote{miope}.
+    \item \texttt{min\_dist}: Controla la distancia mínima permitida entre puntos en la proyección final. Se configuró con un valor alto (0.5), actuando como una fuerza de repulsión. Esto resultó útil porque el objetivo no era solo separar rígidamente las clases, sino también interpretar la varianza natural y la distribución interna de una misma vocal.
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\linewidth]{insumos_ia/cuaderno_de_labo/images/image406.png}
+    \includegraphics[width=0.45\linewidth]{insumos_ia/cuaderno_de_labo/images/image86.png}
+    \caption{Resultados del procesamiento con UMAP no supervisado. A la izquierda: proyección en 2D. A la derecha: proyección en 3D. Se observa cómo el algoritmo separa claramente a las vocales \enquote{O} y \enquote{U} en \textit{clusters} distintos del resto, aunque persiste el solapamiento interno entre \enquote{A}, \enquote{E} e \enquote{I}, y entre la \enquote{O} y la \enquote{U}.}
+\end{figure}
+
+\subsection{UMAP Supervisado (sUMAP)}
+
+Para intentar maximizar la separabilidad de las clases de vocales, se incorporaron las etiquetas temporales de los ensayos y se aplicó UMAP de forma supervisada (sUMAP). Este enfoque utiliza la información de la clase conocida durante el entrenamiento para traccionar puntos de la misma clase hacia la misma región del espacio. 
+
+Se utilizó un clasificador \textit{k-Nearest Neighbors} (KNN) ajustado sobre el espacio latente y validado con un conjunto de prueba compuesto por mediciones separadas, no observadas durante el entrenamiento.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\linewidth]{insumos_ia/cuaderno_de_labo/images/image237.png}
+    \includegraphics[width=0.45\linewidth]{insumos_ia/cuaderno_de_labo/images/image49.png}
+    \caption{Resultados en 2D aplicando sUMAP (izq. conjunto de entrenamiento, der. conjunto de prueba).}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\linewidth]{insumos_ia/cuaderno_de_labo/images/image297.png}
+    \includegraphics[width=0.45\linewidth]{insumos_ia/cuaderno_de_labo/images/image70.png}
+    \caption{Resultados en 3D aplicando sUMAP (izq. conjunto de entrenamiento, der. conjunto de prueba).}
+\end{figure}
+
+Probamos varias pasadas de sUMAP hasta encontrar la mejor. Se incluyó el cruce superpuesto de las proyecciones de entrenamiento y prueba en una misma figura.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.5\linewidth]{insumos_ia/cuaderno_de_labo/images/UMAP_2D_Train_vs_Test.pdf}
+    \caption{Proyección conjunta en 2D de sUMAP: las clases de entrenamiento (puntos de colores intensos y compactos) marcan la atracción de la red, y las de prueba (cruces difuminadas) evalúan su precisión real frente a datos nuevos.}
+\end{figure}
+
+\begin{table}[H]
+    \centering
+    \begin{minipage}{0.48\linewidth}
+        \centering
+        \textbf{2D} \\ \vspace{0.2cm}
+        \resizebox{\linewidth}{!}{%
+            \begin{tabular}{lccccc}
+            \toprule
+             & \multicolumn{5}{c}{\textbf{Predicción}} \\
+             & \textbf{A} & \textbf{E} & \textbf{I} & \textbf{O} & \textbf{U} \\
+            \midrule
+            \textbf{Real A} & \cellcolor[rgb]{0.43,0.43,1.00} \color{white} 82\% & \cellcolor[rgb]{0.94,0.94,1.00}  9\% & \cellcolor[rgb]{0.94,0.94,1.00}  9\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% \\
+            \textbf{Real E} & \cellcolor[rgb]{0.94,0.94,1.00}  9\% & \cellcolor[rgb]{0.49,0.49,1.00} \color{white} 73\% & \cellcolor[rgb]{0.87,0.87,1.00}  18\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% \\
+            \textbf{Real I} & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{0.97,0.97,1.00}  5\% & \cellcolor[rgb]{0.33,0.33,1.00} \color{white} 95\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% \\
+            \textbf{Real O} & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{0.49,0.49,1.00} \color{white} 73\% & \cellcolor[rgb]{0.81,0.81,1.00}  27\% \\
+            \textbf{Real U} & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{0.30,0.30,1.00} \color{white} 100\% \\
+            \bottomrule
+            \end{tabular}%
+        }
+    \end{minipage}\hfill
+    \begin{minipage}{0.48\linewidth}
+        \centering
+        \textbf{3D} \\ \vspace{0.2cm}
+        \resizebox{\linewidth}{!}{%
+            \begin{tabular}{lccccc}
+            \toprule
+             & \multicolumn{5}{c}{\textbf{Predicción}} \\
+             & \textbf{A} & \textbf{E} & \textbf{I} & \textbf{O} & \textbf{U} \\
+            \midrule
+            \textbf{Real A} & \cellcolor[rgb]{0.43,0.43,1.00} \color{white} 82\% & \cellcolor[rgb]{0.94,0.94,1.00}  9\% & \cellcolor[rgb]{0.94,0.94,1.00}  9\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% \\
+            \textbf{Real E} & \cellcolor[rgb]{0.94,0.94,1.00}  9\% & \cellcolor[rgb]{0.49,0.49,1.00} \color{white} 73\% & \cellcolor[rgb]{0.87,0.87,1.00}  18\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% \\
+            \textbf{Real I} & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{0.97,0.97,1.00}  5\% & \cellcolor[rgb]{0.33,0.33,1.00} \color{white} 95\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% \\
+            \textbf{Real O} & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{0.97,0.97,1.00}  5\% & \cellcolor[rgb]{0.46,0.46,1.00} \color{white} 77\% & \cellcolor[rgb]{0.87,0.87,1.00}  18\% \\
+            \textbf{Real U} & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{1.00,1.00,1.00}  0\% & \cellcolor[rgb]{0.30,0.30,1.00} \color{white} 100\% \\
+            \bottomrule
+            \end{tabular}%
+        }
+    \end{minipage}
+    \caption{Matrices de confusión, 2D (izq.) y 3D (der.), para el clasificador K-NN utilizando los datos de sUMAP del conjunto de prueba. Evidencia una clara mejora generalizada respecto al PCA.}
+    \label{tab:umap_confusion}
+\end{table}
+
+El uso de sUMAP logró compactar completamente las clases en el conjunto de entrenamiento. Sin embargo, en la validación con el \textit{Test Set} se observó que, aunque el desempeño general es significativamente superior a PCA superando métricas predictivas del 95\% y 100\% en las vocales extremas (\enquote{I} y \enquote{U} respectivamente), se mantienen las mismas confusiones fisiológicas clave detectadas desde el método de umbrales. Es decir, sigue existiendo una superposición intrínseca en la predicción entre la \enquote{O} y la \enquote{U}, y a su vez en el grupo \enquote{A-E-I}.
+
+En conclusión, este recorrido de complejidad incremental evidenció consistentemente la factibilidad metodológica de extraer la identidad discreta de las vocales a partir de las señales sEMG. Se demostró que es altamente posible distinguir de forma perfecta gestos fonéticos extremos utilizando los algoritmos adecuados. Sin embargo, las confusiones persistentes determinan que para abarcar el espacio vocálico completo será menester refinar el montaje experimental. Esto último se puede solventar identificando una triada muscular anatómicamente más ortogonal, o simplemente incorporando canales y músculos extra al esquema de adquisición de Ñandú LSD para dotar de nuevas dimensiones al problema y finalmente decodificar un habla silenciosa contundente.
+
+\subsection{Análisis de Validación Inter-Sujeto (Sujeto SANTI)}
+
+Se procesaron las mediciones correspondientes al segundo sujeto de prueba (Santiago Prado) empleando los mismos hiperparámetros y metodologías desarrolladas. Se procesaron todos los datos adquiridos, a excepción de la secuencia continua de vocales. En una primera instancia, se ajustó a la baja el parámetro de filtrado (resta del \textit{offset} o piso de ruido) a la mitad respecto a las mediciones anteriores, previniendo así eliminar parte de la señal fonética útil.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\linewidth]{insumos_ia/cuaderno_de_labo/images/image190.png}
+    \includegraphics[width=0.45\linewidth]{insumos_ia/cuaderno_de_labo/images/image33.png}
+    \caption{Comparación de los resultados de PCA 2D entre sujetos. A la izquierda: Sujeto Lucas. A la derecha: Sujeto Santi.}
+\end{figure}
+
+Si bien en un principio se observó que los patrones temporales de activación muscular de las señales en crudo eran muy diferentes a los obtenidos sobre el primer sujeto, el análisis de PCA fue capaz de replicar la misma tendencia global: separar las vocales en los mismos dos grandes grupos morfológicos. 
+
+Este resultado inter-sujeto refuerza la hipótesis de que el PCA está modelando eficazmente la complejidad del tracto vocal y sus músculos relacionados. Aunque los patrones de activación sEMG no sean idénticos entre individuos (dada la natural variabilidad de la piel, la deposición de tejido adiposo y la fisonomía), los canales seleccionados aportan información equivalente sobre la pronunciación. Esto arroja una importante conclusión sobre la decodificación del habla silenciosa: si bien la ejecución muscular exacta varía entre sujetos, los componentes principales latentes mantienen una estructura común que puede ser consistentemente extraída.

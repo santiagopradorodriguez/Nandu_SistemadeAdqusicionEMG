@@ -307,6 +307,14 @@ class ReaperStyleHub(QMainWindow):
     else:
         self._launch_external("analysis/reproductor_canal3.py")
 
+  def _run_exportador_matplotlib(self, *args):
+    """Ejecuta el exportador matplotlib pasándole la medición seleccionada"""
+    selected_paths = self.explorer_widget.get_selected_paths()
+    if selected_paths:
+        self._launch_external("gui_app/views/exportador_matplotlib.py", args=[selected_paths[0]])
+    else:
+        self._launch_external("gui_app/views/exportador_matplotlib.py")
+
   def _create_main_toolbar(self):
     """
     Ejecuta la funcionalidad de _create_main_toolbar.
@@ -334,6 +342,8 @@ class ReaperStyleHub(QMainWindow):
                 action.triggered.connect(self._run_correlacion_nativo)
             elif script == "analysis/reproductor_canal3.py":
                 action.triggered.connect(self._run_reproductor_audio)
+            elif script == "gui_app/views/exportador_matplotlib.py":
+                action.triggered.connect(self._run_exportador_matplotlib)
             else:
                 action.triggered.connect(lambda checked=False, s=script: self._launch_external(s))
             menu.addAction(action)
@@ -356,6 +366,7 @@ class ReaperStyleHub(QMainWindow):
     ])
     
     create_menu_button("Utilidades Dataset", [
+        ("Exportador Gráfico (Paper)", "gui_app/views/exportador_matplotlib.py"),
         ("Segmentador de Secuencias Continuas", "analysis/segmentador_secuencias.py"),
         ("Extractor Letras (Fase 3)", "analysis/extractor_de_datos_letras.py"),
         ("Editar Medición", "utils/editor_mediciones.py")
@@ -933,6 +944,17 @@ class ReaperStyleHub(QMainWindow):
       tipo_barrido = tab_t.cmb_tipo_barrido.currentText()
       paso_barrido = tab_t.inp_paso_barrido.value()
       
+      estetica_config = {
+          'hide_title': tab_t.chk_hide_title.isChecked(),
+          'show_leg': tab_t.chk_show_leg.isChecked(),
+          'lw': tab_t.spin_lw.value(),
+          'f_title': tab_t.spin_f_title.value(),
+          'f_tick': tab_t.spin_f_tick.value(),
+          'f_leg': tab_t.spin_f_leg.value()
+      }
+      
+      tab_t.save_aesthetics_config()
+      
       self.log_console.append(f"\n> 🎯 Iniciando Entrenamiento de Umbrales con {len(asignaciones)} mediciones...")
       
       # Función logger para que imprima en la consola de la UI y mantenga la UI responsiva
@@ -952,6 +974,7 @@ class ReaperStyleHub(QMainWindow):
               filtro_snr_tipo=filtro_snr_tipo,
               tipo_barrido=tipo_barrido,
               paso_barrido=paso_barrido,
+              estetica_config=estetica_config,
               logger=gui_logger
           )
           self.log_console.append("✅ Entrenamiento completado. Revisa la consola y los gráficos generados.")

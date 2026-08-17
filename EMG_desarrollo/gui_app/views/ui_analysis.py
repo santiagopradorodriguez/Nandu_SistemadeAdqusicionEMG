@@ -374,6 +374,43 @@ class TrainingMotorTab(QWidget):
         g_metodo.setLayout(l_metodo)
         self.layout.addWidget(g_metodo)
         
+        # 3. Estética de Exportación
+        grp_est = QGroupBox("Estética de Exportación (Paper)")
+        l_est = QFormLayout(grp_est)
+        
+        self.chk_hide_title = QCheckBox("Ocultar Título Principal")
+        self.chk_hide_title.setChecked(False)
+        l_est.addRow("", self.chk_hide_title)
+        
+        self.chk_show_leg = QCheckBox("Mostrar Leyenda")
+        self.chk_show_leg.setChecked(True)
+        l_est.addRow("", self.chk_show_leg)
+        
+        self.spin_lw = QDoubleSpinBox()
+        self.spin_lw.setRange(0.1, 5.0)
+        self.spin_lw.setSingleStep(0.1)
+        self.spin_lw.setValue(1.0)
+        l_est.addRow("Grosor de Línea:", self.spin_lw)
+        
+        self.spin_f_title = QSpinBox()
+        self.spin_f_title.setRange(8, 30)
+        self.spin_f_title.setValue(14)
+        l_est.addRow("Tamaño Títulos (X/Y):", self.spin_f_title)
+        
+        self.spin_f_tick = QSpinBox()
+        self.spin_f_tick.setRange(8, 30)
+        self.spin_f_tick.setValue(10)
+        l_est.addRow("Tamaño Números (Ticks):", self.spin_f_tick)
+        
+        self.spin_f_leg = QSpinBox()
+        self.spin_f_leg.setRange(8, 30)
+        self.spin_f_leg.setValue(10)
+        l_est.addRow("Tamaño Textos Internos:", self.spin_f_leg)
+        
+        self.layout.addWidget(grp_est)
+        
+        self.layout.addStretch()
+        
         # --- BOTON DE EJECUCION ---
         btn_layout = QHBoxLayout()
         self.btn_run_training = QPushButton("🏋️ ENTRENAR UMBRALES (TRAIN)")
@@ -390,6 +427,39 @@ class TrainingMotorTab(QWidget):
         btn_layout.addWidget(self.btn_run_training)
         
         self.layout.addLayout(btn_layout)
+        self._load_aesthetics_config()
+
+    def _load_aesthetics_config(self):
+        try:
+            from utils.config_manager import ConfigManager
+            cm = ConfigManager()
+            est = cm.get("estetica_exportacion") or {}
+            
+            if "f_title" in est: self.spin_f_title.setValue(est["f_title"])
+            if "f_tick" in est: self.spin_f_tick.setValue(est["f_tick"])
+            if "f_leg" in est: self.spin_f_leg.setValue(est["f_leg"])
+            if "lw" in est: self.spin_lw.setValue(est["lw"])
+            if "hide_title" in est: self.chk_hide_title.setChecked(est["hide_title"])
+            if "show_leg" in est: self.chk_show_leg.setChecked(est["show_leg"])
+        except Exception as e:
+            print("Error cargando estetica en TrainingMotorTab:", e)
+
+    def save_aesthetics_config(self):
+        try:
+            from utils.config_manager import ConfigManager
+            cm = ConfigManager()
+            est = cm.get("estetica_exportacion") or {}
+            
+            est["f_title"] = self.spin_f_title.value()
+            est["f_tick"] = self.spin_f_tick.value()
+            est["f_leg"] = self.spin_f_leg.value()
+            est["lw"] = self.spin_lw.value()
+            est["hide_title"] = self.chk_hide_title.isChecked()
+            est["show_leg"] = self.chk_show_leg.isChecked()
+            
+            cm.set("estetica_exportacion", est)
+        except Exception as e:
+            print("Error guardando estetica en TrainingMotorTab:", e)
 
 class PcaMotorTab(QWidget):
     """Pestaña para Análisis PCA y Reducción de Dimensionalidad"""
