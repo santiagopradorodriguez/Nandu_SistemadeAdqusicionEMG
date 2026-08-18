@@ -7,7 +7,7 @@ matplotlib.use('TkAgg')
 sys.path.append(r"/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo")
 import analysis.analisis_por_track_integrado as api
 
-mediciones = ['2026-06-10/A_Prueba1_Sujeto1']
+mediciones = ['2026-07-10/A_T1_Lucas', '2026-07-10/A_T2_Lucas']
 base_dir = r"/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos"
 
 try:
@@ -25,18 +25,18 @@ try:
   dialog.var_mostrar_recortes.set(True)
   dialog.var_mostrar_senal_cruda.set(False)
   dialog.var_mostrar_espectrograma.set(False)
-  dialog.var_frecuenciamaxima.set("5000.0")
+  dialog.var_frecuenciamaxima.set("5000")
   dialog.var_notch_filter.set(True)
   dialog.var_notch_q_factor.set("2.0")
   dialog.var_mostrar_evolucion.set(True)
-  dialog.var_evol_t_start.set("10.0")
-  dialog.var_evol_t_end.set("1000.0")
-  dialog.var_smooth_ms.set("50.0")
-  dialog.var_tipo_env.set("media_movil")
-  dialog.var_highpass_cutoff.set("20.0")
-  dialog.var_lowpass_cutoff.set("500.0")
+  dialog.var_evol_t_start.set("10")
+  dialog.var_evol_t_end.set("1000")
+  dialog.var_smooth_ms.set("50")
+  dialog.var_tipo_env.set("rms")
+  dialog.var_highpass_cutoff.set("20")
+  dialog.var_lowpass_cutoff.set("500")
   if hasattr(dialog, 'var_cyberpunk'):
-    dialog.var_cyberpunk.set(True)
+    dialog.var_cyberpunk.set(False)
 
   excl_list = []
   excl_str = ",".join(map(str, excl_list)) if excl_list else ""
@@ -44,7 +44,7 @@ try:
 
   print("\n> Orquestador Tkinter Aislado Inicializado. Ejecutando Rutina original de ProcessingOptionsDialog...")
   # Ejecutar su propia rutina que ya maneja pop-ups, metadatos y curación
-  dialog.procesar(interactivo=False)
+  dialog.procesar(interactivo=True)
 
 except Exception as e:
   import traceback

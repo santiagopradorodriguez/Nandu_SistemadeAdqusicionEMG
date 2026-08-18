@@ -1,3 +1,10 @@
+# ==============================================================================
+# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+# Autores: Lucas Braunstein y Santiago Prado
+# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+# Descripción: Generador de proyecciones y clustering PCA/UMAP con visualizaciones 2D/3D avanzadas.
+# ==============================================================================
+
 import os
 import sys
 import io
@@ -45,6 +52,32 @@ if os.path.basename(deep_learning_dir) == "deep_learning":
 # Importamos las utilidades de analisis_trevisan
 import analisis_trevisan as at
 
+def export_cluster_data(output_path, algoritmo, model, centroids, vocales_unicas, cluster_to_vocal_idx, is_3d=False):
+    import json
+    json_path = output_path.replace('.png', f'_centroides_{algoritmo}.json')
+    
+    data = {
+        "algoritmo": algoritmo,
+        "n_dimensiones": 3 if is_3d else 2,
+        "vocales": vocales_unicas,
+        "centroides_mapeados": {}
+    }
+    
+    for kmeans_idx, real_idx in cluster_to_vocal_idx.items():
+        vocal = vocales_unicas[real_idx]
+        centroid = centroids[kmeans_idx].tolist()
+        data["centroides_mapeados"][vocal] = centroid
+        
+    if algoritmo == "GMM" and hasattr(model, 'covariances_'):
+        data["covarianzas_mapeadas"] = {}
+        for kmeans_idx, real_idx in cluster_to_vocal_idx.items():
+            vocal = vocales_unicas[real_idx]
+            cov = model.covariances_[kmeans_idx].tolist()
+            data["covarianzas_mapeadas"][vocal] = cov
+            
+    with open(json_path, 'w') as f:
+        json.dump(data, f, indent=4)
+    print(f"  -> Datos exportados a {os.path.basename(json_path)}")
 
 def procesar_mediciones(base_dir):
     date_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -474,6 +507,41 @@ def plot_scatter(X_proj, Y, title, output_path, is_3d=False, variance_ratios=Non
             if connect_points and len(X_proj[idx]) > 0:
                 plot_points.append(X_proj[idx][0])
                 
+    if is_3d:
+        # Calcular límites espaciales y añadir planos de proyección 2D
+        x_min, x_max = ax.get_xlim()
+        y_min, y_max = ax.get_ylim()
+        z_min, z_max = ax.get_zlim()
+        if 'xlim' in kwargs:
+            x_min, x_max = kwargs['xlim']
+        if 'ylim' in kwargs:
+            y_min, y_max = kwargs['ylim']
+        if 'zlim' in kwargs:
+            z_min, z_max = kwargs['zlim']
+            
+        for i, vocal in enumerate(vocales):
+            idx = Y == vocal
+            if type(idx) == np.bool_ and idx == False:
+                idx = np.array([True if y == vocal else False for y in Y])
+            if isinstance(idx, bool):
+                idx = Y == vocal
+            color = palette[i % len(palette)]
+            pts = X_proj[idx]
+            if len(pts) > 0:
+                # Sombra en piso (plano XY en z_min)
+                ax.scatter(pts[:, 0], pts[:, 1], zs=z_min, zdir='z',
+                           color=color, s=25, alpha=0.20, edgecolors='none', depthshade=False, zorder=1)
+                # Sombra en pared trasera (plano XZ en y_max)
+                ax.scatter(pts[:, 0], pts[:, 2], zs=y_max, zdir='y',
+                           color=color, s=20, alpha=0.15, edgecolors='none', depthshade=False, zorder=1)
+                # Sombra en pared lateral (plano YZ en x_min)
+                ax.scatter(pts[:, 1], pts[:, 2], zs=x_min, zdir='x',
+                           color=color, s=20, alpha=0.15, edgecolors='none', depthshade=False, zorder=1)
+
+        ax.set_xlim(x_min, x_max)
+        ax.set_ylim(y_min, y_max)
+        ax.set_zlim(z_min, z_max)
+
     if connect_points and len(plot_points) > 1:
         plot_points.append(plot_points[0])
         pts = np.array(plot_points)
@@ -609,10 +677,33 @@ def plot_scatter_3d_multi_angle(X_proj, Y, title, output_path, variance_ratios=N
         
     for i, vocal in enumerate(vocales):
         idx = np.where(np.array(Y) == vocal)[0]
-        color = palette[i]
+        color = palette[i % len(palette)]
         for ax in axes:
             ax.scatter(X_proj[idx, 0], X_proj[idx, 1], X_proj[idx, 2], label=vocal, color=color, alpha=1.0, s=60, edgecolors='black', linewidth=0.3, depthshade=False)
             
+    # Proyecciones 2D en los planos de cada vista
+    for ax in axes:
+        x_min, x_max = ax.get_xlim()
+        y_min, y_max = ax.get_ylim()
+        z_min, z_max = ax.get_zlim()
+        for i, vocal in enumerate(vocales):
+            idx = np.where(np.array(Y) == vocal)[0]
+            color = palette[i % len(palette)]
+            pts = X_proj[idx]
+            if len(pts) > 0:
+                # Sombra en piso (plano XY en z_min)
+                ax.scatter(pts[:, 0], pts[:, 1], zs=z_min, zdir='z',
+                           color=color, s=25, alpha=0.20, edgecolors='none', depthshade=False, zorder=1)
+                # Sombra en pared trasera (plano XZ en y_max)
+                ax.scatter(pts[:, 0], pts[:, 2], zs=y_max, zdir='y',
+                           color=color, s=20, alpha=0.15, edgecolors='none', depthshade=False, zorder=1)
+                # Sombra en pared lateral (plano YZ en x_min)
+                ax.scatter(pts[:, 1], pts[:, 2], zs=x_min, zdir='x',
+                           color=color, s=20, alpha=0.15, edgecolors='none', depthshade=False, zorder=1)
+        ax.set_xlim(x_min, x_max)
+        ax.set_ylim(y_min, y_max)
+        ax.set_zlim(z_min, z_max)
+
     fig.suptitle(title, color='black', fontsize=28, fontweight='bold', y=0.98)
     
     for ax in axes:
@@ -687,6 +778,8 @@ def plot_analisis_errores_2d(X, Y, Tomas, title, output_path, variance_ratios=No
     y_pred_mapped_idx = np.array([cluster_to_vocal_idx.get(c, 0) for c in y_pred_kmeans])
     
     acc_global = np.sum(y_pred_mapped_idx == y_true_int) / len(y_true_int) * 100
+    
+    export_cluster_data(output_path, algoritmo, model, centroids, vocales_unicas, cluster_to_vocal_idx, is_3d=False)
     
     import matplotlib.colors as mc
     import colorsys
@@ -929,7 +1022,7 @@ def plot_analisis_errores_3d(X, Y, Tomas, title, output_path, variance_ratios=No
         Y_pred_for_this = y_pred_mapped_idx[idx_true]
         idx_error = (Y_pred_for_this != real_idx)
         
-        # Puntos incorrectos ya no se sombrean ni se les dibuja línea
+        # Puntos incorrectos
         if np.any(idx_error):
             ax.scatter(X_true[idx_error, 0], X_true[idx_error, 1], X_true[idx_error, 2],
                        c=[color], marker='o', s=80, edgecolors='white', linewidth=0.5, alpha=1.0, zorder=2)
@@ -941,11 +1034,64 @@ def plot_analisis_errores_3d(X, Y, Tomas, title, output_path, variance_ratios=No
                 wrong_cluster_id = y_pred_kmeans[global_idx]
                 vocal_predicha = vocales_unicas[cluster_to_vocal_idx[wrong_cluster_id]]
                 
-                print(f"❌ Error 3D en Toma '{toma_fallida}': Pronunció '{vocal}' pero cayó cerca del centroide de '{vocal_predicha}'.")
+                print(f"[ERROR 3D] Toma '{toma_fallida}': Pronuncio '{vocal}' pero cayo cerca del centroide de '{vocal_predicha}'.")
                 errores_encontrados = True
                 
+    # Proyecciones 2D en paredes y piso (sombras, líneas de caída, elipses 2D proyectadas)
+    x_min, x_max = ax.get_xlim()
+    y_min, y_max = ax.get_ylim()
+    z_min, z_max = ax.get_zlim()
+
+    for real_idx, vocal in enumerate(vocales_unicas):
+        color = palette[real_idx]
+        idx_true = (y_true_int == real_idx)
+        X_true = X[idx_true]
+        cluster_id = col_ind[real_idx]
+        centroid = centroids[cluster_id]
+
+        if len(X_true) > 0:
+            # Sombra en piso (plano XY en z_min)
+            ax.scatter(X_true[:, 0], X_true[:, 1], zs=z_min, zdir='z',
+                       color=color, s=25, alpha=0.20, edgecolors='none', depthshade=False, zorder=1)
+            # Sombra en pared trasera (plano XZ en y_max)
+            ax.scatter(X_true[:, 0], X_true[:, 2], zs=y_max, zdir='y',
+                       color=color, s=20, alpha=0.15, edgecolors='none', depthshade=False, zorder=1)
+            # Sombra en pared lateral (plano YZ en x_min)
+            ax.scatter(X_true[:, 1], X_true[:, 2], zs=x_min, zdir='x',
+                       color=color, s=20, alpha=0.15, edgecolors='none', depthshade=False, zorder=1)
+
+            # Línea de caída vertical desde el centroide al piso
+            ax.plot([centroid[0], centroid[0]], [centroid[1], centroid[1]], [z_min, centroid[2]],
+                    color=color, linestyle=':', linewidth=1.2, alpha=0.7, zorder=2)
+
+            # Centroide proyectado en piso
+            ax.scatter([centroid[0]], [centroid[1]], zs=z_min, zdir='z',
+                       marker='D', s=80, color=color, alpha=0.4, edgecolors='black', linewidth=0.8, zorder=2)
+
+            # Elipse 2D proyectada en el piso (XY en z_min)
+            try:
+                cov_2d = np.cov(X_true[:, :2], rowvar=False)
+                evals_2d, evecs_2d = np.linalg.eigh(cov_2d)
+                idx_sort_2d = evals_2d.argsort()[::-1]
+                evals_2d = evals_2d[idx_sort_2d]
+                evecs_2d = evecs_2d[:, idx_sort_2d]
+                radii_2d = np.sqrt(np.maximum(evals_2d, 1e-9)) * 3
+                theta = np.linspace(0, 2 * np.pi, 60)
+                ell_pts = np.array([radii_2d[0] * np.cos(theta), radii_2d[1] * np.sin(theta)])
+                ell_rot = evecs_2d @ ell_pts
+                x_ell_floor = ell_rot[0, :] + centroid[0]
+                y_ell_floor = ell_rot[1, :] + centroid[1]
+                ax.plot(x_ell_floor, y_ell_floor, zs=z_min, zdir='z',
+                        color=color, alpha=0.35, linestyle='--', linewidth=1.0, zorder=2)
+            except Exception:
+                pass
+
+    ax.set_xlim(x_min, x_max)
+    ax.set_ylim(y_min, y_max)
+    ax.set_zlim(z_min, z_max)
+
     if not errores_encontrados:
-        print("✅ ¡Clasificación 3D perfecta! Ningún error en esta prueba.")
+        print("[OK] Clasificacion 3D perfecta: Ningun error en esta prueba.")
     print("-------------------------------------------------------")
             
     # ax.set_title(title, color='#2c3e50', fontsize=22, fontweight='900', fontfamily='sans-serif', pad=20)
@@ -1091,6 +1237,98 @@ def calcular_y_guardar_silhouette_por_vocal(X_proj, Y_true, title, filepath):
         
     return sil_global
 
+def guardar_tabla_imagen(df, title, filepath, col_width=2.4, row_height=0.65, font_size=11):
+    plt.style.use('default')
+    max_col_len = max([len(str(c)) for c in df.columns] + [10])
+    max_row_len = max([len(str(r)) for r in df.index] + [10])
+    col_w = max(col_width, max_col_len * 0.16)
+    extra_left = max(0.5, max_row_len * 0.12)
+    fig_w = max(7.0, df.shape[1] * col_w + extra_left)
+    fig_h = max(2.5, (df.shape[0] + 2) * row_height)
+    
+    fig, ax = plt.subplots(figsize=(fig_w, fig_h), facecolor='white')
+    ax.axis('off')
+    ax.axis('tight')
+    df_str = df.copy()
+    num_cols = df_str.select_dtypes(include=['number']).columns
+    if len(num_cols) > 0:
+        df_str[num_cols] = df_str[num_cols].round(2)
+    table = ax.table(cellText=df_str.values, colLabels=df_str.columns, rowLabels=df_str.index, loc='center', cellLoc='center')
+    table.auto_set_font_size(False)
+    table.set_fontsize(font_size)
+    table.scale(1, 1.4)
+    for (row, col), cell in table.get_celld().items():
+        cell.set_edgecolor('#cccccc')
+        cell.visible_edges = 'horizontal' 
+        if row == 0 or col == -1:
+            cell.set_facecolor('#f2f2f2')
+            cell.get_text().set_fontweight('bold')
+        else:
+            cell.set_facecolor('#ffffff' if row % 2 == 0 else '#fafafa')
+        if row == 0 or row == len(df_str):
+            cell.set_linewidth(1.5)
+    plt.title(title, pad=20, fontsize=font_size+2, fontweight='bold', color='black')
+    plt.subplots_adjust(top=0.85, bottom=0.08, left=0.10, right=0.95)
+    plt.savefig(filepath, dpi=300, bbox_inches='tight', facecolor='white')
+    plt.close()
+
+def guardar_matriz_latex(df, title, filepath):
+    latex_code = [
+        "\\begin{tabular}{lccccc}",
+        "\\toprule",
+        " & \\multicolumn{5}{c}{\\textbf{Predicción}} \\\\",
+        " & \\textbf{A} & \\textbf{E} & \\textbf{I} & \\textbf{O} & \\textbf{U} \\\\",
+        "\\midrule"
+    ]
+    for i, row_name in enumerate(df.index):
+        line_parts = [f"\\textbf{{Real {str(row_name).replace('Real ', '')}}}"]
+        for val in df.iloc[i]:
+            intensity = val / 100.0
+            r = 1.0 - 0.7 * intensity
+            g = 1.0 - 0.7 * intensity
+            b = 1.0
+            text_color = "\\color{white}" if val >= 50 else ""
+            line_parts.append(f"\\cellcolor[rgb]{{{r:.2f},{g:.2f},{b:.2f}}} {text_color} {val:.0f}\\%")
+        latex_code.append(" & ".join(line_parts) + " \\\\")
+        
+    latex_code.extend([
+        "\\bottomrule",
+        "\\end{tabular}"
+    ])
+    with open(filepath, 'w', encoding='utf-8') as f:
+        f.write("\n".join(latex_code))
+
+def plot_confusion_matrix_heatmap(df_cm, title, filepath):
+    plt.style.use('default')
+    plt.rcParams['font.family'] = 'serif'
+    
+    fig, ax = plt.subplots(figsize=(7.5, 6), facecolor='white')
+    
+    annot = np.array([[f"{v:.0f}%" for v in row] for row in df_cm.values])
+    cmap = sns.light_palette("blue", as_cmap=True)
+    sns.heatmap(df_cm, annot=annot, fmt="", cmap=cmap, cbar=False, ax=ax, vmin=0, vmax=100, annot_kws={"fontsize": 12, "fontweight": "normal"})
+    
+    ax.set_yticklabels([f"Real {str(v).replace('Real ', '')}" for v in df_cm.index], rotation=0, fontweight='bold', fontsize=16)
+    ax.set_xticklabels([str(c).replace('Real ', '') for c in df_cm.columns], fontweight='bold', fontsize=16)
+    ax.xaxis.tick_top()
+    
+    ax.set_ylabel("Real", fontsize=15, fontweight='bold', labelpad=10)
+    ax.set_xlabel("Predicción", fontsize=15, fontweight='bold', labelpad=15)
+    ax.xaxis.set_label_position('top')
+    
+    for _, spine in ax.spines.items():
+        spine.set_visible(False)
+    ax.tick_params(left=False, top=False)
+    
+    ax.axhline(0, color='black', linewidth=1)
+    ax.axhline(len(df_cm), color='black', linewidth=2)
+    ax.plot([0, 1], [1.13, 1.13], transform=ax.transAxes, color='black', linewidth=2, clip_on=False)
+    
+    plt.title(title, pad=35, fontsize=16, fontweight='bold')
+    fig.subplots_adjust(top=0.80, bottom=0.12, left=0.18, right=0.92)
+    plt.savefig(filepath, dpi=300, bbox_inches='tight', facecolor='white')
+    plt.close()
+
 def extraer_y_filtrar(mediciones, base_dir, params, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=False):
     print(f"\n--- Extrayendo Características ---")
     print(f"    Parámetros: Alpha={params['alpha_ruido']}, Smooth={params['smooth_ms']}ms, Puntos={params['target_length']}, SNR>={params['snr_threshold']}, Outliers={params['outlier_contamination']}")
@@ -1200,98 +1438,6 @@ def ejecutar_procesamiento(
     
     print(f"\nIniciando Procesamiento. Canales: {', '.join(canales_features)}")
     
-    def guardar_tabla_imagen(df, title, filepath, col_width=2.2, row_height=0.6, font_size=11):
-        plt.style.use('default')
-        fig, ax = plt.subplots(figsize=(df.shape[1]*col_width, (df.shape[0]+1)*row_height), facecolor='white')
-        ax.axis('off')
-        ax.axis('tight')
-        df_str = df.copy()
-        num_cols = df_str.select_dtypes(include=['number']).columns
-        if len(num_cols) > 0:
-            df_str[num_cols] = df_str[num_cols].round(2)
-        table = ax.table(cellText=df_str.values, colLabels=df_str.columns, rowLabels=df_str.index, loc='center', cellLoc='center')
-        table.auto_set_font_size(False)
-        table.set_fontsize(font_size)
-        table.scale(1, 1.5)
-        for (row, col), cell in table.get_celld().items():
-            cell.set_edgecolor('#cccccc')
-            cell.visible_edges = 'horizontal' 
-            if row == 0 or col == -1:
-                cell.set_facecolor('#f2f2f2')
-                cell.get_text().set_fontweight('bold')
-            else:
-                cell.set_facecolor('#ffffff' if row % 2 == 0 else '#fafafa')
-            if row == 0 or row == len(df_str):
-                cell.set_linewidth(1.5)
-        plt.title(title, pad=15, fontsize=font_size+2, fontweight='bold', color='black')
-        plt.tight_layout()
-        plt.savefig(filepath, dpi=300, bbox_inches='tight', facecolor='white')
-        plt.close()
-
-    def guardar_matriz_latex(df, title, filepath):
-        latex_code = [
-            "\\begin{tabular}{lccccc}",
-            "\\toprule",
-            " & \\multicolumn{5}{c}{\\textbf{Predicción}} \\\\",
-            " & \\textbf{A} & \\textbf{E} & \\textbf{I} & \\textbf{O} & \\textbf{U} \\\\",
-            "\\midrule"
-        ]
-        for i, row_name in enumerate(df.index):
-            line_parts = [f"\\textbf{{Real {str(row_name).replace('Real ', '')}}}"]
-            for val in df.iloc[i]:
-                intensity = val / 100.0
-                r = 1.0 - 0.7 * intensity
-                g = 1.0 - 0.7 * intensity
-                b = 1.0
-                text_color = "\\color{white}" if val >= 50 else ""
-                line_parts.append(f"\\cellcolor[rgb]{{{r:.2f},{g:.2f},{b:.2f}}} {text_color} {val:.0f}\\%")
-            latex_code.append(" & ".join(line_parts) + " \\\\")
-            
-        latex_code.extend([
-            "\\bottomrule",
-            "\\end{tabular}"
-        ])
-        with open(filepath, 'w', encoding='utf-8') as f:
-            f.write("\n".join(latex_code))
-
-    def plot_confusion_matrix_heatmap(df_cm, title, filepath):
-        plt.style.use('default')
-        # Usar fuente Serif para simular LaTeX
-        plt.rcParams['font.family'] = 'serif'
-        
-        fig, ax = plt.subplots(figsize=(7, 5), facecolor='white')
-        
-        # Formato de matriz con porcentajes
-        annot = np.array([[f"{v:.0f}%" for v in row] for row in df_cm.values])
-        # Usar un colormap azul puro claro a oscuro
-        cmap = sns.light_palette("blue", as_cmap=True)
-        sns.heatmap(df_cm, annot=annot, fmt="", cmap=cmap, cbar=False, ax=ax, vmin=0, vmax=100, annot_kws={"fontsize": 12, "fontweight": "normal"})
-        
-        # Etiquetas estilo LaTeX
-        ax.set_yticklabels([f"Real {str(v).replace('Real ', '')}" for v in df_cm.index], rotation=0, fontweight='bold', fontsize=18)
-        ax.set_xticklabels([str(c).replace('Real ', '') for c in df_cm.columns], fontweight='bold', fontsize=18)
-        ax.xaxis.tick_top() # Poner letras arriba
-        
-        # Ejes "Real vs Predicción"
-        ax.set_ylabel("Real", fontsize=16, fontweight='bold', labelpad=10)
-        ax.set_xlabel("Predicción", fontsize=16, fontweight='bold', labelpad=15)
-        ax.xaxis.set_label_position('top')
-        
-        # Limpiar bordes por defecto
-        for _, spine in ax.spines.items():
-            spine.set_visible(False)
-        ax.tick_params(left=False, top=False) # quitar rayitas de los ticks
-        
-        # Líneas tipo booktabs (toprule, midrule, bottomrule)
-        ax.axhline(0, color='black', linewidth=1)
-        ax.axhline(len(df_cm), color='black', linewidth=2)
-        ax.plot([0, 1], [1.13, 1.13], transform=ax.transAxes, color='black', linewidth=2, clip_on=False)
-        
-        plt.title(title, pad=50, fontsize=18, fontweight='bold')
-        plt.tight_layout()
-        plt.savefig(filepath, dpi=300, bbox_inches='tight', facecolor='white')
-        plt.close()
-
     resultados_ejecucion = {}
     if proc_pca_2d:
         print("\n=== PROCESANDO PCA 2D ===")

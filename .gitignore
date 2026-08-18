@@ -22,3 +22,7 @@ venv/
 .vscode/__pycache__/
 __pycache__/
 *.patch
+build_linux/*
+!build_linux/.gitkeep
+build_windows/*
+!build_windows/.gitkeep

@@ -314,13 +314,13 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
     archivo_csv = next((os.path.join(path_medicion, f) for f in os.listdir(path_medicion) if f.lower().endswith('.csv')), None)
     
     if not archivo_csv:
-        print(f"❌ Saltando {nombre_medicion}: No hay CSV.")
+        print(f"[WARN] Saltando {nombre_medicion}: No hay CSV.")
         return
 
     try:
         df = pd.read_csv(archivo_csv)
     except Exception as e:
-        print(f"❌ Error leyendo CSV: {e}")
+        print(f"[ERROR] Error leyendo CSV: {e}")
         return
 
     # 2. Filtrar Tiempo
@@ -557,7 +557,7 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
     ruta_guardado = os.path.join(path_medicion, nombre_archivo)
     
     plt.savefig(ruta_guardado, dpi=100)
-    print(f"✅ Guardado en medición: {ruta_guardado}")
+    print(f"[OK] Guardado en medición: {ruta_guardado}")
     
     # NUEVO: Guardar copia en el historial de comparativas
     carpeta_comparativas = os.path.join(root_dir, "analisis_comparativos")
@@ -566,7 +566,7 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
         
     ruta_comparativa = os.path.join(carpeta_comparativas, nombre_archivo)
     plt.savefig(ruta_comparativa, dpi=100)
-    print(f"✅ Copia guardada en historial: {ruta_comparativa}")
+    print(f"[OK] Copia guardada en historial: {ruta_comparativa}")
     
     # --- VISUALIZACIÓN BLOQUEANTE ---
     if mostrar_plot:
@@ -581,10 +581,10 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
                 
         fig.canvas.mpl_connect('close_event', on_close)
 
-        print(f"👁️ Visualizando {nombre_medicion}. Cierra la ventana del gráfico para continuar...")
+        print(f"Visualizando {nombre_medicion}. Cierra la ventana del gráfico para continuar...")
         plt.show(block=True)      
         plt.close('all') 
-        print(f"⏭️ Pasando a la siguiente...\n")
+        print(f"Pasando a la siguiente...\n")
     else:
         plt.close(fig)
 

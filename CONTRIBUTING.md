@@ -1,100 +1,131 @@
-# Contribuir al Sistema de Adquisición EMG
+# Guia de Contribucion al Sistema de Adquisicion EMG (Nandu LSD)
 
-¡Gracias por tu interés en contribuir! Este proyecto es una herramienta científica abierta, desarrollada **por y para la comunidad**.
+Gracias por tu interes en contribuir al proyecto. Nandu LSD es una plataforma cientifica abierta, desarrollada por y para la comunidad del Laboratorio de Sistemas Dinamicos (LSD - FCEyN, UBA).
 
-El objetivo es democratizar el acceso a herramientas de electromiografía de calidad, construyendo herramientas para acelerar la creación de Datasets para Machine Learning. Cualquier ayuda, desde corregir errores ortográficos hasta optimizar algoritmos de procesamiento de señales o mejorar la interfaz gráfica, es bienvenida.
-
-## 📍 ¿Por dónde empezar?
-
-Actualmente, el proyecto ha dado un gran salto hacia su **versión 4.0** (introduciendo `Nandu_AutoForge_DAQ.py` y la migración a PySide6). Tenemos identificadas varias áreas donde necesitamos ayuda:
-
-### 🐛 Reporte de Bugs y Mejoras de UI (PySide6)
-- **Nandu AutoForge:** Ayudar a refinar la máquina de estados del protocolo AutoForge. Proponer mejoras para la visualización del Peak-Hold y la integración del metrónomo visual.
-- **Layout y Diseño:** Asegurar que la nueva interfaz `Nandu_AutoForge_DAQ.py` (con su estilo Cyberpunk) sea completamente *responsive* y se adapte sin problemas a resoluciones de pantallas pequeñas (laptops).
-- **Herramientas Legadas:** Ayudar a migrar los scripts antiguos (como `editor_mediciones.py` o `visor_csv_interactivo.py`) desde PyQt5 al nuevo estándar de PySide6 para mantener consistencia.
-
-### ⚡ Optimización y Rendimiento
-- **Gestión de Hilos y Concurrencia:** El nuevo AutoForge depende de `subprocess` para el metrónomo y de `threading` para la adquisición de datos (Micrófono o placa NI). Ayúdanos a perfilar el código para garantizar que no haya *memory leaks* en sesiones de grabación intensivas.
-- **Visor CSV Calibrado (`plotter_calibrado.py`):** Optimizar la lectura de datos (usando *chunking* con Pandas) y el renderizado rápido de filtros envolventes RMS sobre señales masivas.
-
-### 🧪 Procesamiento de Señales 
-- **Validación del Espectrograma:** En `Nandu_AutoForge_DAQ.py` calculamos una STFT rodante con la librería de SciPy. Necesitamos ayuda de expertos en DSP para validar que la escala de colores y el overlap de la ventana de Hamming sean científicamente óptimos para señales mioeléctricas.
-- **Auto-Threshold Inteligente:** Mejorar los algoritmos de cálculo de SNR en tiempo real. Actualmente usamos la desviación estándar del ruido base, pero podríamos beneficiarnos de modelos predictivos o filtros adaptativos de ruido.
-
-### 📚 Documentación
-- **Comentarios en Código:** Agregar comentarios explicativos (Docstrings) dentro de las funciones críticas de la máquina de estados de AutoForge.
-- **Metadatos y JSONs:** Siempre que se agreguen nuevas funcionalidades (como el modo Secuencia Continua que introduce el metadato `valid_words`), es imperativo documentar su estructura para no romper el pipeline de Machine Learning (`dl_data_pipeline.py`).
-- **Entorno Virtual:** Ayudar a mantener actualizada la lista de `requirements.txt` y crear una guía de instalación específica para usuarios de Linux/Mac que quieran correr el "Modo Simulador".
-
-### 💡 Lecciones de Desarrollo (Scoping en UI)
-A la hora de desarrollar o arreglar bugs en las interfaces de usuario (PySide6 / Tkinter), recuerda esta regla de oro:
-- **EVITA el uso de variables locales en `__init__` si van a ser leídas después.** Hemos tenido bugs fatales donde variables de color (como `bg_panel`) no eran accesibles fuera de `__init__`. **Siempre antepón `self.`** a cualquier configuración global de estilo o variable de estado de la ventana.
+El objetivo es democratizar el acceso a herramientas de electromiografia de alta calidad, estandarizar la captura de senales mioelectricas y acelerar la construccion de datasets para Machine Learning y Deep Learning. Cualquier aporte —desde correccion de documentacion y optimizaciones de procesamiento digital de senales (DSP) hasta nuevas arquitecturas neuronales en PyTorch o mejoras de la interfaz de usuario en PySide6— es bienvenido.
 
 ---
 
-## 📋 Lista de Tareas Pendientes (TODO)
+## 1. Por Donde Empezar
 
-Actualmente, necesitamos colaboración urgente en las siguientes áreas:
-- [ ] **Sistemas de Logs:** Reparar y estandarizar todos los `logging.info()` a lo largo del código. Actualmente, la observabilidad es irregular, y necesitamos un estándar de archivo rotativo o formato único.
-- [ ] **Empaquetado EXE:** Depurar la compilación de PyInstaller para evitar pesos excesivos e inclusión de librerías innecesarias (ignorar carpetas de base de datos grandes en el `.spec`).
-- [ ] **Integración Nativa del Metrónomo:** Incrustar el metrónomo visual (actualmente en un proceso Tkinter independiente usando `metronomo_visual.py`) de forma nativa dentro de la interfaz PySide6 de AutoForge. Esta mejora arquitectónica busca eliminar el proceso externo para mejorar drásticamente la sincronización del DAQ.
+El proyecto se encuentra en su version **v6.0**, estructurado de forma modular en torno al lanzador principal `EMG_desarrollo/gui_app/main_app.py`. A continuacion se detallan las areas principales de colaboracion:
 
-### Trabajo a futuro
-- **Botón de Pausa:** Se tiene planeado implementar un botón de pausa en la interfaz principal para permitir la interrupción temporal y reanudación de las adquisiciones de forma segura.
-- **Decodificador de Voz:** Implementar un módulo decodificador de voz basado en la adquisición principal (DAQ), utilizando los datos procesados por el Autoencoder o PCA.
+### A. Interfaz de Usuario y Experiencia (PySide6 / PyQtGraph)
+- **Visualizadores Interactivos:** Optimizar el rendimiento de renderizado en `csv_viewer_widget.py`, `calibrated_viewer_widget.py` y `electrode_viewer_widget.py` utilizando tecnicas de downsampling y actualizacion por regiones.
+- **Responsividad:** Asegurar que los paneles se adapten correctamente a resoluciones variadas (desde pantallas de laboratorio de 1366x768 hasta monitores 4K).
+- **Widgets de Analisis:** Desarrollar nuevos subpaneles para visualizacion de dinamicas motoras y representaciones graficas avanzadas.
 
----
+### B. Optimizacion y Rendimiento
+- **Concurrencia y Estabilidad de Hilos:** Fortalecer la comunicacion asincrona basada en `QThread` y `QTimer` para prevenir congelamientos de la interfaz grafica durante adquisiciones extensas o entrenamientos intensivos de Deep Learning.
+- **Eficiencia de Memoria:** Garantizar que los buffers circulares de senal y la lectura de archivos CSV masivos empleen estructuras vectorizadas eficientes con NumPy y SciPy sin fugas de memoria (*memory leaks*).
 
-## Asistencia por Inteligencia Artificial
-Este repositorio utiliza herramientas de Inteligencia Artificial para asistir en el desarrollo y estructuración del código.
-Al contribuir, ten en cuenta el flujo de trabajo asistido:
-- **Especialización**: Se utilizan asistentes especializados para tareas complejas de desarrollo.
-- **Consistencia Matemática**: Todo cambio en el procesamiento de señales es revisado exhaustivamente para asegurar la fidelidad de los datos.
+### C. Procesamiento Digital de Senales (DSP)
+- **Filtros de Fase Cero e IIR:** Validar el comportamiento de las etapas de filtrado (Notch 50 Hz, Butterworth pasabanda 20-500 Hz) y la continuidad del estado `zi` en capturas en tiempo real.
+- **Algoritmos de Calidad y Fatiga:** Desarrollar y validar metricas cuantitativas de estimacion de la Relacion Senal-Ruido (SNR) y monitoreo de la relajacion inter-pulso.
+- **Alineacion Master-Slave:** Refinar la deteccion de envolventes y metodos de correlacion cruzada para preservar los desfases fisiologicos inter-musculares.
 
-## 🛠️ Configuración del Entorno de Desarrollo
+### D. Machine Learning y Deep Learning (PyTorch)
+- **Arquitecturas Neuronales:** Implementar y evaluar variantes de Autoencoders Convolucionales 1D, modelos recurrentes (LSTM/GRU) o Transformers para series temporales de sEMG.
+- **Pipelines de Datos:** Mantener la compatibilidad del generador `dl_data_pipeline.py` y la clase `EMGDataset`, asegurando que la normalizacion y el remuestreo (500 dimensiones) operen sin sesgos ni fuga de datos (*data leakage*).
+- **Clasificadores:** Optimizar modelos de XGBoost, tecnicas de binarizacion de unidades motoras (Metodo Trevisan) y decodificadores continuos.
 
-Para asegurar que todos trabajamos bajo las mismas condiciones, sigue estos pasos:
-
-1.  **Fork del repositorio:** Crea tu propia copia del proyecto en GitHub.
-2.  **Entorno Virtual:** Es altamente recomendable usar `venv` para no romper tu instalación local de Python.
-    ```bash
-    python -m venv venv
-    # Activar en Windows:
-    .\venv\Scripts\activate
-    # Activar en Linux/Mac:
-    source venv/bin/activate
-    ```
-3.  **Instalar dependencias:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-4.  **Drivers (Importante):** Si vas a trabajar con hardware físico, necesitas instalar el driver **NI-DAQmx**. Sin embargo, la nueva arquitectura permite usar el **"Modo Micrófono"** para testear el pipeline completo utilizando la placa de sonido de tu PC sin necesidad de drivers privativos.
+### E. Documentacion y Calidad
+- **Docstrings Estandarizados:** Documentar funciones y clases siguiendo los formatos de estilo NumPy o Google Docstrings.
+- **Politica Estricta de No-Emojis:** Garantizar que todo el codigo fuente, comentarios, cadenas y archivos de documentacion permanezcan 100% libres de emojis.
 
 ---
 
-## 🔄 Flujo de Trabajo (Pull Requests)
+## 2. Reglas de Oro del Repositorio
 
-1.  Crea una nueva rama (branch) para tu contribución. Usa un nombre descriptivo:
-    ```bash
-    git checkout -b fix/autoforge-state-machine
-    # o
-    git checkout -b feature/pyside6-migration
-    ```
-2.  Realiza tus cambios.
-3.  **Comentarios:** Si modificas lógica matemática compleja o la máquina de estados, por favor añade comentarios explicando el "por qué".
-4.  Haz commit de tus cambios:
-    ```bash
-    git commit -m "Fix: Se corrige el escalado del eje Y en el modo AutoForge"
-    ```
-5.  Haz push a tu rama:
-    ```bash
-    git push origin fix/autoforge-state-machine
-    ```
-6.  Abre un **Pull Request** en este repositorio describiendo tus cambios.
+Para mantener la integridad y reproducibilidad del proyecto, todas las contribuciones deben respetar las siguientes reglas obligatorias:
 
-## 📝 Estilo de Código e Idioma
+1. **Estructura Oficial de la Base de Datos (AGENTS.md):**
+   Toda grabacion y lectura de datos debe respetar la jerarquia:
+   ```
+   base_de_datos_electrodos/<Fecha>/<Sesión>/canal_0..3/
+   ```
+   donde el archivo maestro `metadata.json` y la grabacion primaria residen obligatoriamente en `canal_0`. Ningun algoritmo debe asumir archivos planos sueltos en la raiz de la sesion.
 
-- **Idioma:** Preferimos que los comentarios, la documentación y los nombres de variables (en lo posible) se mantengan en **español** para facilitar el acceso a la comunidad científica local de Argentina y Latinoamérica.
-- **Estilo:** Intentamos seguir **PEP 8**. Mantén el código limpio y legible.
+2. **Politica de Cero Emojis:**
+   No se permite el uso de caracteres emoji en codigo Python, comentarios, cadenas de texto, mensajes de log, nombres de variables ni archivos de documentacion Markdown.
 
-¡Esperamos tus aportes!
+3. **Regla de Alcance (Scoping) en Componentes Qt:**
+   Todo objeto visual, color o estado que deba persistir o ser accedido por metodos secundarios debe asociarse explicitamente a la instancia (`self.atributo`). Evitar variables locales en `__init__` que causen caidas por `NameError` en tiempo de ejecucion.
+
+4. **Preservacion de Sinergia Fisiologica:**
+   Al sincronizar multiples canales musculares, la alineacion temporal debe realizarse exclusivamente mediante el esquema Master-Slave (usando el canal de referencia para fijar la ventana temporal de todos los canales), evitando recortar canales de forma independiente.
+
+---
+
+## 3. Configuracion del Entorno de Desarrollo
+
+Sigue estos pasos para preparar tu entorno de trabajo:
+
+```bash
+# 1. Clonar el repositorio
+git clone https://github.com/santiagopradorodriguez/Nandu_SistemadeAdqusicionEMG.git
+cd Nandu_SistemadeAdqusicionEMG
+
+# 2. Crear y activar el entorno virtual
+python -m venv venv
+
+# En Windows:
+.\venv\Scripts\activate
+# En Linux/macOS:
+source venv/bin/activate
+
+# 3. Instalar dependencias del proyecto
+# En Windows:
+pip install -r requirements.txt
+# En Linux:
+pip install -r requirements_linux.txt
+
+# 4. Modo Simulador (Sin Hardware NI)
+# Puedes ejecutar el sistema completo activando la opcion "Usar Microfono" en la aplicacion
+# para probar todo el pipeline con cualquier tarjeta de sonido convencional.
+```
+
+---
+
+## 4. Flujo de Trabajo para Contribuciones (Pull Requests)
+
+1. **Crear una rama (branch) tematica:**
+   ```bash
+   git checkout -b feature/nueva-arquitectura-autoencoder
+   # o
+   git checkout -b fix/alineacion-master-slave
+   ```
+2. **Implementar los cambios respetando las normas de estilo.**
+3. **Ejecutar pruebas de regresion y verificacion:**
+   - Verificar que el lanzador `python EMG_desarrollo/gui_app/main_app.py` inicie sin advertencias ni bloqueos de interfaz.
+   - Ejecutar los scripts de prueba en `EMG_desarrollo/tests/`.
+   - Verificar la ausencia de emojis en los archivos modificados.
+4. **Crear commits semanticos:**
+   ```bash
+   git commit -m "feat(dsp): optimizar calculo de envolvente RMS con convolucion vectorizada"
+   ```
+5. **Enviar la rama y abrir un Pull Request:**
+   ```bash
+   git push origin feature/nueva-arquitectura-autoencoder
+   ```
+   Describe en el Pull Request la motivacion del cambio, los archivos modificados y el metodo empleado para verificar su correcto funcionamiento.
+
+---
+
+## 5. Estilo de Codigo y Convenciones
+
+- **Estandar de Codigo:** Se sigue la guia de estilo **PEP 8** para codigo Python.
+- **Idioma:** Se prioriza el idioma **espanol** para comentarios tecnicos, explicaciones cientificas y documentacion de funciones, facilitando la comprension de investigadores y estudiantes de habla hispana.
+- **Tipado e Inferencia:** Se recomienda el uso de type hints en firmas de funciones criticas para mejorar la legibilidad y mantenimiento a largo plazo.
+
+---
+
+## 6. Lista de Tareas Pendientes y Roadmap (v6.0+)
+
+Areas actualmente abiertas para colaboracion:
+- [ ] **Visualizacion Anatomica de Electrodos:** Desarrollar un componente interactivo que despliegue esquemas graficos (`configuracion.jpg`) documentando la colocacion fisica de los electrodos en los grupos musculares.
+- [ ] **Decodificador en Tiempo Real:** Integrar el modelo de autoencoder o clasificador continuo directamente con el buffer de entrada del DAQ para decodificacion fonatoria en vivo.
+- [ ] **Boton de Pausa Segura:** Implementar control de pausa y reanudacion sincronizada en la maquina de estados de AutoForge.
+- [ ] **Suite de Pruebas Unitarias:** Incrementar la cobertura automatizada de pruebas para modulos DSP, loaders de datos y vistas de visualizacion.
+
+Agradecemos profundamente tu colaboracion para continuar fortaleciendo esta herramienta cientifica.

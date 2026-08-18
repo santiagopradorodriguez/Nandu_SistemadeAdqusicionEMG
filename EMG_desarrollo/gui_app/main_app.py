@@ -5,13 +5,6 @@
 # Descripción: Punto de entrada principal para la aplicación gráfica (GUI).
 # ==============================================================================
 
-# ==============================================================================
-# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
-# Autores: Lucas Braunstein y Santiago Prado
-# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
-# Descripción: Punto de entrada principal para la aplicación gráfica (GUI).
-# ==============================================================================
-
 import sys
 import os
 
@@ -82,15 +75,18 @@ if getattr(sys, 'frozen', False) and len(sys.argv) > 1 and sys.argv[1].endswith(
 
 
 import subprocess
-import matplotlib
-matplotlib.use('TkAgg') # Forzar TkAgg para que las ventanas de curación de Matplotlib pausen el script correctamente en PySide6
+try:
+  matplotlib.use('TkAgg') # Forzar TkAgg para que las ventanas de curación de Matplotlib pausen el script correctamente en PySide6
+except Exception:
+  pass
 from PySide6.QtWidgets import (
   QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
   QDockWidget, QTextEdit, QLabel, QTreeView, QTabWidget,
-  QToolBar, QPushButton, QSizePolicy, QMessageBox
+  QToolBar, QPushButton, QSizePolicy, QMessageBox, QComboBox,
+  QTableWidget, QTableWidgetItem, QScrollArea, QDialog
 )
 from PySide6.QtCore import Qt, QThreadPool, QSize
-from PySide6.QtGui import QFont, QColor, QTextCursor, QAction, QPixmap, QIcon
+from PySide6.QtGui import QFont, QColor, QTextCursor, QAction, QPixmap, QIcon, QCursor
 
 app = QApplication.instance()
 if not app:
@@ -100,7 +96,7 @@ if not app:
 
 from core.threads import EmittingStream, Worker
 from views.session_explorer import SessionExplorer
-from views.ui_analysis import AnalysisPanel
+from views.ui_analysis import AnalysisPanel, MachineLearningPanel
 
 # Importar la lógica de negocio original
 try:
@@ -118,16 +114,6 @@ except ImportError:
 class ImageLabel(QLabel):
   """QLabel especial que mantiene la relación de aspecto de la imagen al redimensionar la ventana."""
   def __init__(self, text="", parent=None):
-    """
-    Ejecuta la funcionalidad de __init__.
-
-    Args:
-      text (Any): Argumento posicional text.
-      parent (Any): Argumento posicional parent.
-
-    Returns:
-      Any: Resultado de la ejecución de la función.
-    """
     super().__init__(text, parent)
     self.setAlignment(Qt.AlignCenter)
     self._pixmap = None
@@ -135,41 +121,172 @@ class ImageLabel(QLabel):
     self.setMinimumSize(100, 100)
 
   def setPixmap(self, pixmap):
-    """
-    Ejecuta la funcionalidad de setPixmap.
-
-    Args:
-      pixmap (Any): Argumento posicional pixmap.
-
-    Returns:
-      Any: Resultado de la ejecución de la función.
-    """
     self._pixmap = pixmap
     self._update_pixmap()
 
   def resizeEvent(self, event):
-    """
-    Ejecuta la funcionalidad de resizeEvent.
-
-    Args:
-      event (Any): Argumento posicional event.
-
-    Returns:
-      Any: Resultado de la ejecución de la función.
-    """
     self._update_pixmap()
     super().resizeEvent(event)
 
   def _update_pixmap(self):
-    """
-    Ejecuta la funcionalidad de _update_pixmap.
-
-    Returns:
-      Any: Resultado de la ejecución de la función.
-    """
     if self._pixmap is not None and not self._pixmap.isNull():
       if self.width() > 0 and self.height() > 0:
         super().setPixmap(self._pixmap.scaled(self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+
+
+class ZoomableImageWidget(QWidget):
+  """Widget de visualización de imágenes de alta resolución con zoom interactivo, scroll y modal de pantalla completa."""
+  def __init__(self, placeholder="[Sin Imagen]", parent=None):
+    super().__init__(parent)
+    self.placeholder_text = placeholder
+    self._pixmap = None
+    self._filepath = None
+    self._scale_factor = 1.0
+    self._fit_mode = True
+
+    layout = QVBoxLayout(self)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(4)
+
+    # Controls toolbar
+    self.toolbar = QHBoxLayout()
+    self.toolbar.setSpacing(4)
+
+    self.btn_zoom_in = QPushButton("+ Zoom")
+    self.btn_zoom_out = QPushButton("- Zoom")
+    self.btn_zoom_fit = QPushButton("Ajustar")
+    self.btn_zoom_100 = QPushButton("100% (1:1)")
+    self.btn_fullscreen = QPushButton("Pantalla Completa")
+
+    btn_style = """
+      QPushButton {
+        background-color: #151515; color: #00ffcc; border: 1px solid #333;
+        padding: 3px 8px; font-size: 11px; font-weight: bold; border-radius: 3px;
+      }
+      QPushButton:hover { background-color: #00ffcc; color: #000; }
+    """
+    for btn in [self.btn_zoom_in, self.btn_zoom_out, self.btn_zoom_fit, self.btn_zoom_100, self.btn_fullscreen]:
+      btn.setStyleSheet(btn_style)
+      self.toolbar.addWidget(btn)
+
+    self.toolbar.addStretch()
+    self.lbl_zoom = QLabel("Ajustado")
+    self.lbl_zoom.setStyleSheet("color: #888; font-size: 11px; padding-right: 4px;")
+    self.toolbar.addWidget(self.lbl_zoom)
+    layout.addLayout(self.toolbar)
+
+    # Scroll area containing the image label
+    self.scroll_area = QScrollArea()
+    self.scroll_area.setWidgetResizable(False)
+    self.scroll_area.setAlignment(Qt.AlignCenter)
+    self.scroll_area.setStyleSheet("background-color: #0c0c0c; border: 1px solid #222;")
+
+    self.img_label = QLabel(self.placeholder_text)
+    self.img_label.setAlignment(Qt.AlignCenter)
+    self.img_label.setStyleSheet("background-color: #0c0c0c; color: #666; font-size: 13px;")
+    self.img_label.setCursor(Qt.PointingHandCursor)
+    self.scroll_area.setWidget(self.img_label)
+    layout.addWidget(self.scroll_area, stretch=1)
+
+    self.btn_zoom_in.clicked.connect(self.zoom_in)
+    self.btn_zoom_out.clicked.connect(self.zoom_out)
+    self.btn_zoom_fit.clicked.connect(self.fit_to_view)
+    self.btn_zoom_100.clicked.connect(self.reset_zoom)
+    self.btn_fullscreen.clicked.connect(self.show_fullscreen)
+    self.img_label.mouseDoubleClickEvent = lambda e: self.show_fullscreen()
+
+  def setPixmap(self, pixmap, filepath=None):
+    self._pixmap = pixmap
+    self._filepath = filepath
+    if self._pixmap is not None and not self._pixmap.isNull():
+      self.img_label.setText("")
+      if self._fit_mode:
+        self.fit_to_view()
+      else:
+        self._apply_zoom()
+    else:
+      self.img_label.setPixmap(QPixmap())
+      self.img_label.setText(self.placeholder_text)
+
+  def setText(self, text):
+    self._pixmap = None
+    self._filepath = None
+    self.img_label.setPixmap(QPixmap())
+    self.img_label.setText(text)
+    self.lbl_zoom.setText("-")
+
+  def size(self):
+    return self.scroll_area.viewport().size()
+
+  def zoom_in(self):
+    if self._pixmap is None or self._pixmap.isNull(): return
+    self._fit_mode = False
+    self._scale_factor = min(self._scale_factor * 1.25, 8.0)
+    self._apply_zoom()
+
+  def zoom_out(self):
+    if self._pixmap is None or self._pixmap.isNull(): return
+    self._fit_mode = False
+    self._scale_factor = max(self._scale_factor / 1.25, 0.1)
+    self._apply_zoom()
+
+  def reset_zoom(self):
+    if self._pixmap is None or self._pixmap.isNull(): return
+    self._fit_mode = False
+    self._scale_factor = 1.0
+    self._apply_zoom()
+
+  def fit_to_view(self):
+    if self._pixmap is None or self._pixmap.isNull(): return
+    self._fit_mode = True
+    vp_size = self.scroll_area.viewport().size()
+    w_ratio = (vp_size.width() - 10) / max(self._pixmap.width(), 1)
+    h_ratio = (vp_size.height() - 10) / max(self._pixmap.height(), 1)
+    self._scale_factor = max(0.05, min(w_ratio, h_ratio, 1.0))
+    self._apply_zoom(fit_text=True)
+
+  def _apply_zoom(self, fit_text=False):
+    if self._pixmap is None or self._pixmap.isNull(): return
+    target_w = max(10, int(self._pixmap.width() * self._scale_factor))
+    target_h = max(10, int(self._pixmap.height() * self._scale_factor))
+    scaled_pix = self._pixmap.scaled(target_w, target_h, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+    self.img_label.resize(scaled_pix.size())
+    self.img_label.setPixmap(scaled_pix)
+    if fit_text:
+      self.lbl_zoom.setText("Ajustado")
+    else:
+      self.lbl_zoom.setText(f"{int(self._scale_factor * 100)}%")
+
+  def resizeEvent(self, event):
+    super().resizeEvent(event)
+    if self._fit_mode and self._pixmap is not None and not self._pixmap.isNull():
+      self.fit_to_view()
+
+  def show_fullscreen(self):
+    if self._pixmap is None or self._pixmap.isNull(): return
+    dialog = QDialog(self)
+    dialog.setWindowTitle("NANDU LSD - Visor de Grafico de Alta Resolucion")
+    dialog.setStyleSheet("background-color: #050505; color: #fff;")
+    dlg_lyt = QVBoxLayout(dialog)
+    dlg_lyt.setContentsMargins(5, 5, 5, 5)
+    
+    scroll = QScrollArea()
+    scroll.setWidgetResizable(True)
+    scroll.setStyleSheet("border: none; background: #000;")
+    
+    lbl = QLabel()
+    lbl.setAlignment(Qt.AlignCenter)
+    lbl.setPixmap(self._pixmap)
+    scroll.setWidget(lbl)
+    dlg_lyt.addWidget(scroll)
+    
+    screen = self.screen().availableGeometry()
+    max_w = int(screen.width() * 0.95)
+    max_h = int(screen.height() * 0.95)
+    dialog.resize(min(self._pixmap.width() + 40, max_w), min(self._pixmap.height() + 40, max_h))
+    dialog.exec()
+
+  open_fullscreen = show_fullscreen
 
 class PatronMuscularViewerWidget(QWidget):
   def __init__(self):
@@ -344,33 +461,23 @@ class ReaperStyleHub(QMainWindow):
         (" Configuración General", "_internal_config"),
         ("Instrucciones y Créditos", "instrucciones_uso.py")
     ])
-    
-    create_menu_button(" Adquisición", [
+
+    create_menu_button(" Utilidades", [
+        ("Entrenamiento AutoForge", "acquisition/modulo_de_entrenamiento.py"),
         ("Metrónomo", "acquisition/metronomo_visual.py"),
-        ("Entrenamiento AutoForge", "acquisition/modulo_de_entrenamiento.py")
-    ])
-    
-    create_menu_button(" Análisis", [
-        ("Graficador", "analysis/plotter_calibrado.py"),
-        ("Análisis Correlación", "analysis/correlaciondeseñales.py")
-    ])
-    
-    create_menu_button(" Utilidades Dataset", [
         ("Segmentador de Secuencias Continuas", "analysis/segmentador_secuencias.py"),
-        ("Editar Medición", "utils/editor_mediciones.py")
+        ("Editar Medición", "utils/editor_mediciones.py"),
+        ("Reproductor de Audios", "analysis/reproductor_canal3.py")
     ])
-    
-    create_menu_button(" Deep Learning", [
-        ("Generador PCA/UMAP", "deep_learning/pca_umap_clustering/generador_pca_umap.py"),
-        ("Binarización (Trevisan)", "deep_learning/binarizacion/analisis_trevisan.py"),
-        ("Clasificador XGBoost", "deep_learning/machine_learning/analisis_xgboost.py"),
-        ("Autoencoder", "deep_learning/pipeline_autoencoder_gui.py"),
-        ("Visualizador de Features", "deep_learning/dataset_tools/visor_features.py"),
+
+    create_menu_button(" Graficar", [
+        ("Graficador", "analysis/plotter_calibrado.py"),
+        ("Análisis Correlación", "analysis/correlaciondeseñales.py"),
         ("Plot 3 Músculos (Paper)", "deep_learning/dataset_tools/plot_3_musculos_standalone.py")
     ])
-    
-    create_menu_button(" Audio", [
-        ("Reproductor de Audios", "analysis/reproductor_canal3.py")
+
+    create_menu_button(" Deep Learning", [
+        ("Visualizador de Features", "deep_learning/dataset_tools/visor_features.py")
     ])
 
   def _open_config_dialog(self):
@@ -513,48 +620,15 @@ class ReaperStyleHub(QMainWindow):
     vbox_btn.addStretch()
     vbox_btn.addWidget(btn_daq)
     
-    btn_autoforge = QPushButton("AUTOGRABADO")
-    btn_autoforge.setStyleSheet("""
+    btn_autoforge_staging = QPushButton("AUTOGRABADO")
+    btn_autoforge_staging.setStyleSheet("""
       QPushButton {
         font-family: 'Consolas', 'Courier New', monospace;
         font-size: 20px; 
         font-weight: 900; 
-        background-color: #1a001a; 
-        color: #ff00ff; 
-        padding: 30px 15px;
-        border-radius: 4px;
-        border: 2px solid #ff00ff;
-        border-right: 8px solid #00ffff;
-        border-bottom: 8px solid #00ffff;
-        margin-top: 20px;
-      }
-      QPushButton:hover {
-        background-color: #ff00ff;
-        color: #1a001a;
-        border: 2px solid #00ffff;
-        border-right: 8px solid #00ffff;
-        border-bottom: 8px solid #00ffff;
-        margin-top: 20px;
-      }
-      QPushButton:pressed {
-        background-color: #00ffff;
-        color: #000000;
-        border: 2px solid #ffffff;
-        margin-top: 20px;
-      }
-    """)
-    btn_autoforge.clicked.connect(lambda: self._launch_external("acquisition/autoforge_daq.py"))
-    vbox_btn.addWidget(btn_autoforge)
-
-    btn_autoforge_staging = QPushButton(" AUTOGRABADO 2.0\n(STAGING)")
-    btn_autoforge_staging.setStyleSheet("""
-      QPushButton {
-        font-family: 'Consolas', 'Courier New', monospace;
-        font-size: 16px; 
-        font-weight: 900; 
         background-color: #1a0d00; 
         color: #FF8800; 
-        padding: 18px 15px;
+        padding: 30px 15px;
         border-radius: 4px;
         border: 2px solid #FF8800;
         border-right: 8px solid #FFFF00;
@@ -582,7 +656,26 @@ class ReaperStyleHub(QMainWindow):
     lyt_daq.addLayout(vbox_btn, stretch=1)
     self.tabs.addTab(self.tab_daq, "1. INICIO Y ADQUISICIÓN")
     
-    # --- TAB 2: ANÁLISIS ---
+    # --- TAB 2: VISUALIZACIÓN NATIVA ---
+    self.tab_view = QWidget()
+    lyt_view = QVBoxLayout(self.tab_view)
+    self.tabs_viz = QTabWidget()
+    from views.csv_viewer_widget import CsvViewerWidget
+    self.csv_viewer = CsvViewerWidget()
+    self.tabs_viz.addTab(self.csv_viewer, " Explorador de Señales (CSV)")
+    from views.calibrated_viewer_widget import CalibratedViewerWidget
+    self.calibrated_viewer = CalibratedViewerWidget()
+    self.tabs_viz.addTab(self.calibrated_viewer, " Historial Gráficos Musculares")
+    from views.electrode_viewer_widget import ElectrodeViewerWidget
+    self.electrode_viewer = ElectrodeViewerWidget()
+    self.electrode_viewer.btn_refresh.clicked.connect(self._sync_electrode_viewer)
+    self.tabs_viz.addTab(self.electrode_viewer, " Visor de Electrodos (Grilla)")
+    self.patron_viewer = PatronMuscularViewerWidget()
+    self.tabs_viz.addTab(self.patron_viewer, " Historial Patrón Muscular")
+    lyt_view.addWidget(self.tabs_viz)
+    self.tabs.addTab(self.tab_view, "2. VISUALIZACIÓN")
+
+    # --- TAB 3: ANÁLISIS Y EXTRACCIÓN ---
     self.tab_analysis = QWidget()
     lyt_analysis = QHBoxLayout(self.tab_analysis)
     self.analysis_panel = AnalysisPanel()
@@ -591,100 +684,119 @@ class ReaperStyleHub(QMainWindow):
     self.analysis_panel.tab_comparativo.btn_run_comparativo.clicked.connect(self.run_analisis_comparativo_nativo)
     self.analysis_panel.tab_comparativo.btn_run_sesion.clicked.connect(self.run_analisis_sesion_nativo)
     lyt_analysis.addWidget(self.analysis_panel, stretch=1)
+
+    self.panel_visor = QWidget()
+    lyt_visor = QVBoxLayout(self.panel_visor)
+    lyt_visor.setContentsMargins(5, 5, 5, 5)
+    lyt_visor.setSpacing(5)
     
-    # Visor de Imágenes Integrado
-    self.img_viewer = ImageLabel("[Visor de Resultados Integrado]\nAquí aparecerán los gráficos avg.png / pulses.png generados")
-    self.img_viewer.setStyleSheet("background-color: #0c0c0c; border: 1px solid #333; color: #555;")
-    self.img_viewer.setMinimumWidth(500)
-    lyt_analysis.addWidget(self.img_viewer, stretch=2)
+    h_visor = QHBoxLayout()
+    self.cmb_resultados = QComboBox()
+    self.btn_refrescar_visor = QPushButton("Refrescar")
+    self.btn_refrescar_visor.setStyleSheet("""
+        QPushButton {
+            background-color: #1a1a1a; color: #00ffcc; border: 1px solid #00ffcc;
+            padding: 4px 12px; font-weight: bold; border-radius: 3px;
+        }
+        QPushButton:hover { background-color: #00ffcc; color: #000; }
+    """)
+    h_visor.addWidget(QLabel("Archivo / Resultado:"))
+    h_visor.addWidget(self.cmb_resultados, stretch=1)
+    h_visor.addWidget(self.btn_refrescar_visor)
+    lyt_visor.addLayout(h_visor)
     
-    self.tabs.addTab(self.tab_analysis, "2. ANÁLISIS Y EXTRACCIÓN")
+    # Sub-pestañas para visualización de gráficos vs métricas y tablas estructuradas
+    self.visor_subtabs = QTabWidget()
+    self.visor_subtabs.setStyleSheet("""
+        QTabWidget::pane { border: 1px solid #333; background: #050505; }
+        QTabBar::tab { background: #111; color: #888; border: 1px solid #333; padding: 6px 12px; font-weight: bold; }
+        QTabBar::tab:selected { background: #222; color: #00ffcc; border-color: #00ffcc; }
+    """)
     
-    # --- TAB 3: VISUALIZACIÓN NATIVA ---
-    self.tab_view = QWidget()
-    lyt_view = QVBoxLayout(self.tab_view)
+    # Sub-pestaña 1: Visor interactivo de imágenes con zoom
+    self.img_viewer = ZoomableImageWidget("[Visor de Resultados Integrado]\nAquí aparecerán los gráficos generados")
+    self.visor_subtabs.addTab(self.img_viewer, "Gráfico / Imagen")
     
-    # Sub-pestañas para visualización
-    self.tabs_viz = QTabWidget()
+    # Sub-pestaña 2: Métricas y Tablas (CSV / LaTeX / JSON / TXT)
+    self.tab_metricas_visor = QWidget()
+    lyt_metricas = QVBoxLayout(self.tab_metricas_visor)
+    lyt_metricas.setContentsMargins(4, 4, 4, 4)
     
-    # Sub-pestaña: Visor CSV (Natívo PyQtGraph)
-    from views.csv_viewer_widget import CsvViewerWidget
-    self.csv_viewer = CsvViewerWidget()
-    self.tabs_viz.addTab(self.csv_viewer, " Explorador de Señales (CSV)")
+    self.tbl_metricas_visor = QTableWidget()
+    self.tbl_metricas_visor.setStyleSheet("""
+        QTableWidget {
+            background-color: #0c0c0c; color: #eee; gridline-color: #333;
+            border: 1px solid #333; font-family: monospace; font-size: 11px;
+        }
+        QHeaderView::section {
+            background-color: #1a1a1a; color: #00ffcc; font-weight: bold;
+            padding: 4px; border: 1px solid #333;
+        }
+        QTableWidget::item:selected { background-color: #004433; color: #00ffcc; }
+    """)
+    self.txt_metricas_visor = QTextEdit()
+    self.txt_metricas_visor.setReadOnly(True)
+    self.txt_metricas_visor.setStyleSheet("""
+        QTextEdit {
+            background-color: #0c0c0c; color: #00ffcc; font-family: 'Courier New', monospace;
+            font-size: 11px; border: 1px solid #333; padding: 6px;
+        }
+    """)
+    self.txt_metricas_visor.hide()
     
-    # Sub-pestaña: Visor de Gráficos Calibrados
-    from views.calibrated_viewer_widget import CalibratedViewerWidget
-    self.calibrated_viewer = CalibratedViewerWidget()
-    self.tabs_viz.addTab(self.calibrated_viewer, " Historial Gráficos Musculares")
+    lyt_metricas.addWidget(self.tbl_metricas_visor)
+    lyt_metricas.addWidget(self.txt_metricas_visor)
+    self.visor_subtabs.addTab(self.tab_metricas_visor, "Métricas y Tablas")
     
-    # Sub-pestaña: Electrode Viewer (Nativo PySide6)
-    from views.electrode_viewer_widget import ElectrodeViewerWidget
-    self.electrode_viewer = ElectrodeViewerWidget()
-    self.electrode_viewer.btn_refresh.clicked.connect(self._sync_electrode_viewer)
-    self.tabs_viz.addTab(self.electrode_viewer, " Visor de Electrodos (Grilla)")
+    lyt_visor.addWidget(self.visor_subtabs, stretch=1)
+    self.panel_visor.setMinimumWidth(500)
+    # Remove lyt_analysis.addWidget(self.panel_visor) since it moves to TAB 4
     
-    # Sub-pestaña: Visor de Patrón Muscular
-    self.patron_viewer = PatronMuscularViewerWidget()
-    self.tabs_viz.addTab(self.patron_viewer, " Historial Patrón Muscular")
+    self.tabs.addTab(self.tab_analysis, "3. ANÁLISIS Y EXTRACCIÓN")
+
+    # --- TAB 4: MACHINE LEARNING ---
+    self.tab_dl_ml = MachineLearningPanel()
+    # Insert panel_visor as a tab inside MachineLearningPanel
+    self.tab_dl_ml.tabs.addTab(self.panel_visor, "Galería de Resultados")
     
-    lyt_view.addWidget(self.tabs_viz)
-    self.tabs.addTab(self.tab_view, "3. VISUALIZACIÓN")
+    self.btn_refrescar_visor.clicked.connect(self._refrescar_visor_imagenes)
+    self.cmb_resultados.currentIndexChanged.connect(self._cargar_imagen_visor)
+    self._refrescar_visor_imagenes()
+
+    # Connect the ML tab buttons
+    self.tab_dl_ml.tab_pca.btn_run.clicked.connect(self.run_pca_nativo)
+    self.tab_dl_ml.tab_umap.btn_run.clicked.connect(self.run_umap_nativo)
+    self.tab_dl_ml.tab_umap_sup.btn_run.clicked.connect(self.run_umap_supervisado_nativo)
+    # (Botones btn_run_motor y btn_run_training se conectarán en un futuro cuando sus respectivos scripts nativos estén implementados)
     
-    # --- TAB 4: HISTORIAL DE COMPARATIVAS ---
-    from views.comparative_explorer_widget import ComparativeViewerWidget
+    # Conectar los otros clasificadores (XGBoost, Trevisan, Autoencoders, Visor)
+    self.tab_dl_ml.btn_xgboost.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/machine_learning/analisis_xgboost.py"))
+    self.tab_dl_ml.btn_trevisan.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/binarizacion/analisis_trevisan.py"))
+    self.tab_dl_ml.btn_autoencoders.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/pipeline_autoencoder_gui.py"))
+    self.tab_dl_ml.btn_visor_features.clicked.connect(lambda: self._launch_external("deep_learning/dataset_tools/visor_features.py"))
+    
+    self.tabs.addTab(self.tab_dl_ml, "4. MACHINE LEARNING")
+
+    # --- TAB 5: HISTORIAL DE RESULTADOS ---
+    self.tab_historial = QWidget()
+    lyt_historial = QVBoxLayout(self.tab_historial)
+    self.tabs_historial = QTabWidget()
+    
     import os
+    from views.comparative_explorer_widget import ComparativeViewerWidget
     root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     comparative_path = os.path.join(root_dir, "analisis_comparativos")
-    
     self.comparative_viewer = ComparativeViewerWidget(root_path=comparative_path)
-    self.tabs.addTab(self.comparative_viewer, "4. HISTORIAL DE COMPARATIVAS")
-
-    # --- TAB 5: HISTORIAL DE SESIÓN ---
+    self.tabs_historial.addTab(self.comparative_viewer, "Historial de Comparativas")
+    
     session_path = os.path.join(root_dir, "analisis_de_sesiones")
     if not os.path.exists(session_path):
         os.makedirs(session_path)
     self.session_viewer = ComparativeViewerWidget(root_path=session_path)
-    self.tabs.addTab(self.session_viewer, "5. HISTORIAL DE SESIÓN")
-
-    # --- TAB 6: DEEP LEARNING & MACHINE LEARNING ---
-    self.tab_dl_ml = QWidget()
-    lyt_dl_ml = QVBoxLayout(self.tab_dl_ml)
+    self.tabs_historial.addTab(self.session_viewer, "Historial de Sesión")
     
-    lbl_dl_ml = QLabel("MÓDULOS DE DEEP LEARNING Y MACHINE LEARNING")
-    lbl_dl_ml.setStyleSheet("font-size: 18px; font-weight: bold; color: #00ffff;")
-    lbl_dl_ml.setAlignment(Qt.AlignCenter)
-    lyt_dl_ml.addWidget(lbl_dl_ml)
-    
-    grid_dl_ml = QGridLayout()
-    
-    # 1. PCA UMAP
-    btn_pca = QPushButton("Generar PCA y UMAP (Clustering)")
-    btn_pca.setStyleSheet("padding: 15px; font-size: 14px; background-color: #1a0033; color: #ff00ff; border: 1px solid #ff00ff;")
-    btn_pca.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/pca_umap_clustering/generador_pca_umap.py"))
-    grid_dl_ml.addWidget(btn_pca, 0, 0)
-    
-    # 2. Trevisan
-    btn_trevisan = QPushButton("Análisis de Binarización (Trevisan)")
-    btn_trevisan.setStyleSheet("padding: 15px; font-size: 14px; background-color: #001a33; color: #00ffff; border: 1px solid #00ffff;")
-    btn_trevisan.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/binarizacion/analisis_trevisan.py"))
-    grid_dl_ml.addWidget(btn_trevisan, 0, 1)
-    
-    # 3. XGBoost
-    btn_xgboost = QPushButton("Machine Learning: XGBoost")
-    btn_xgboost.setStyleSheet("padding: 15px; font-size: 14px; background-color: #331a00; color: #ff8800; border: 1px solid #ff8800;")
-    btn_xgboost.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/machine_learning/analisis_xgboost.py"))
-    grid_dl_ml.addWidget(btn_xgboost, 1, 0)
-    
-    # 4. Autoencoder
-    btn_autoencoder = QPushButton("Pipeline Maestro: Autoencoder")
-    btn_autoencoder.setStyleSheet("padding: 15px; font-size: 14px; background-color: #00331a; color: #00ffaa; border: 1px solid #00ffaa;")
-    btn_autoencoder.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/pipeline_autoencoder_gui.py"))
-    grid_dl_ml.addWidget(btn_autoencoder, 1, 1)
-    
-    lyt_dl_ml.addLayout(grid_dl_ml)
-    lyt_dl_ml.addStretch()
-    
-    self.tabs.addTab(self.tab_dl_ml, "6. DEEP LEARNING & MACHINE LEARNING")
+    lyt_historial.addWidget(self.tabs_historial)
+    self.tabs.addTab(self.tab_historial, "5. HISTORIAL DE RESULTADOS")
 
   def _create_dock_explorer(self):
     """Panel tipo 'Media Explorer' o 'Gestor de Sesiones'"""
@@ -1009,7 +1121,10 @@ finally:
           Any: Resultado de la ejecución de la función.
         """
         import subprocess
-        p = subprocess.run([sys.executable, self.spath], creationflags=subprocess.CREATE_NEW_CONSOLE)
+        run_kwargs = {}
+        if sys.platform == "win32":
+          run_kwargs["creationflags"] = subprocess.CREATE_NEW_CONSOLE
+        p = subprocess.run([sys.executable, self.spath], **run_kwargs)
         self.finished_signal.emit(p.returncode)
         
     self.comparative_thread = ComparativeRunner(script_path)
@@ -1203,7 +1318,10 @@ finally:
         self.spath = spath
       def run(self):
         import subprocess
-        p = subprocess.run([sys.executable, self.spath], creationflags=subprocess.CREATE_NEW_CONSOLE)
+        run_kwargs = {}
+        if sys.platform == "win32":
+          run_kwargs["creationflags"] = subprocess.CREATE_NEW_CONSOLE
+        p = subprocess.run([sys.executable, self.spath], **run_kwargs)
         self.finished_signal.emit(p.returncode)
         
     self.sesion_thread = SessionRunner(script_path)
@@ -1212,11 +1330,313 @@ finally:
       self.analysis_panel.tab_comparativo.btn_run_sesion.setText("LANZAR EVOLUCIÓN DE SESIÓN")
       self.analysis_panel.tab_comparativo.btn_run_sesion.setEnabled(True)
       self.log_console.append(f"> Evolución Continua de Sesión finalizada en terminal nativa.")
-      
-    self.sesion_thread.finished_signal.connect(on_sesion_finished)
+    # Start thread
+    self.log_console.append(f"Ejecutando sesión: python '{script_path}' ...\n")
     self.sesion_thread.start()
+
+  def _refrescar_visor_imagenes(self):
+    self.cmb_resultados.clear()
+    import os
+    from pathlib import Path
+    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     
-    self.log_console.append(f"> Tarea enviada exitosamente. Abriendo terminal CMD nativa...")
+    paths_to_check = [
+        os.path.join(root_dir, "resultados"),
+        os.path.join(root_dir, "deep_learning", "pca_umap_clustering", "resultados_pca_umap"),
+        os.path.join(root_dir, "deep_learning", "resultados_umap_supervisado"),
+        os.path.join(root_dir, "analisis_comparativos")
+    ]
+    
+    found_files = []
+    valid_exts = ('.png', '.jpg', '.jpeg', '.csv', '.tex', '.json', '.txt')
+    
+    for base_path in paths_to_check:
+        if os.path.exists(base_path):
+            for root, _, files in os.walk(base_path):
+                for f in files:
+                    if f.lower().endswith(valid_exts):
+                        full_path = os.path.join(root, f)
+                        rel_path = os.path.relpath(full_path, base_path)
+                        try:
+                            mtime = os.path.getmtime(full_path)
+                        except OSError:
+                            mtime = 0
+                        category = os.path.basename(base_path)
+                        display_label = f"[{category}] {rel_path}"
+                        found_files.append((mtime, display_label, full_path))
+                        
+    # Ordenar por fecha de modificación (los más recientes primero)
+    found_files.sort(key=lambda x: x[0], reverse=True)
+    for _, label, path in found_files:
+        self.cmb_resultados.addItem(label, path)
+        
+    if self.cmb_resultados.count() > 0:
+        self.cmb_resultados.setCurrentIndex(0)
+
+  def _cargar_imagen_visor(self, index):
+    if index < 0: return
+    filepath = self.cmb_resultados.itemData(index)
+    if not filepath or not os.path.exists(filepath):
+        return
+        
+    ext = os.path.splitext(filepath)[1].lower()
+    
+    if ext in ('.png', '.jpg', '.jpeg'):
+        from PySide6.QtGui import QPixmap, QPixmapCache, QImage
+        QPixmapCache.clear()
+        img = QImage(filepath)
+        pixmap = QPixmap.fromImage(img)
+        self.img_viewer.setPixmap(pixmap, filepath=filepath)
+        self.visor_subtabs.setCurrentIndex(0)
+    elif ext == '.csv':
+        try:
+            import pandas as pd
+            df = pd.read_csv(filepath)
+            self.tbl_metricas_visor.clear()
+            self.tbl_metricas_visor.setRowCount(df.shape[0])
+            self.tbl_metricas_visor.setColumnCount(df.shape[1])
+            self.tbl_metricas_visor.setHorizontalHeaderLabels([str(c) for c in df.columns])
+            for r in range(df.shape[0]):
+                for c in range(df.shape[1]):
+                    val = df.iat[r, c]
+                    item = QTableWidgetItem(f"{val:.3f}" if isinstance(val, float) else str(val))
+                    item.setTextAlignment(Qt.AlignCenter)
+                    self.tbl_metricas_visor.setItem(r, c, item)
+            self.tbl_metricas_visor.resizeColumnsToContents()
+            self.tbl_metricas_visor.show()
+            self.txt_metricas_visor.hide()
+            self.visor_subtabs.setCurrentIndex(1)
+        except Exception as e:
+            self.txt_metricas_visor.setPlainText(f"Error al leer archivo CSV:\n{e}")
+            self.tbl_metricas_visor.hide()
+            self.txt_metricas_visor.show()
+            self.visor_subtabs.setCurrentIndex(1)
+    elif ext in ('.tex', '.json', '.txt'):
+        try:
+            with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
+                content = f.read()
+            self.txt_metricas_visor.setPlainText(content)
+            self.tbl_metricas_visor.hide()
+            self.txt_metricas_visor.show()
+            self.visor_subtabs.setCurrentIndex(1)
+        except Exception as e:
+            self.txt_metricas_visor.setPlainText(f"Error al leer archivo de texto:\n{e}")
+            self.tbl_metricas_visor.hide()
+            self.txt_metricas_visor.show()
+            self.visor_subtabs.setCurrentIndex(1)
+
+  def _generar_base_dir_y_mediciones(self):
+    rutas = self.explorer_widget.get_selected_paths()
+    if not rutas:
+        self.log_console.append("\n[Error] Debe seleccionar al menos una carpeta.")
+        return None, None
+        
+    from pathlib import Path
+    import os
+    mediciones_lista = []
+    base_dir_global = ""
+    for ruta in rutas:
+        p = Path(ruta)
+        parts = p.parts
+        if "base_de_datos_electrodos" in parts:
+            idx = parts.index("base_de_datos_electrodos")
+            base_dir_global = os.path.join(*parts[:idx+1])
+            if len(parts) > idx + 2:
+                med_str = os.path.join(parts[idx+1], parts[idx+2])
+                if med_str not in mediciones_lista:
+                    mediciones_lista.append(med_str)
+    return base_dir_global, mediciones_lista
+
+  def _launch_bridge_script(self, name, title, kwargs, bridge_template, suffix=".py"):
+    base_dir, mediciones = self._generar_base_dir_y_mediciones()
+    if not base_dir: return
+
+    self.log_console.append("\n" + "="*45)
+    self.log_console.append(f"> INICIANDO {title}")
+    self.log_console.append("="*45)
+
+    import os, json, tempfile
+    temp_json = tempfile.mktemp(suffix=".json")
+    with open(temp_json, "w") as f:
+        json.dump(kwargs, f)
+        
+    script_path = os.path.join(os.getcwd(), f"temp_{name}{suffix}")
+    root_project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    
+    bridge_script = bridge_template.replace("{TEMP_JSON}", temp_json)\
+                                   .replace("{BASE_DIR}", base_dir)\
+                                   .replace("{MEDICIONES}", str(mediciones))\
+                                   .replace("{ROOT_PROJECT_DIR}", root_project_dir)
+    
+    with open(script_path, "w") as f:
+        f.write(bridge_script)
+        
+    self.log_console.append(f"> SCRIPT GENERADO: {script_path}")
+    
+    import subprocess
+    import shutil
+    terminals = ['konsole', 'gnome-terminal', 'xfce4-terminal', 'xterm']
+    term_cmd = None
+    
+    for t in terminals:
+        if shutil.which(t):
+            if t == 'gnome-terminal':
+                term_cmd = [t, '--', 'bash', '-c', f"{sys.executable} {script_path}; echo '\nProceso finalizado. Presiona Enter para salir...'; read"]
+            else:
+                term_cmd = [t, '-e', f"bash -c \"{sys.executable} {script_path}; echo '\nProceso finalizado. Presiona Enter para salir...'; read\""]
+            break
+            
+    if term_cmd:
+        try:
+            subprocess.Popen(term_cmd)
+            self.log_console.append(f"> SCRIPT LANZADO EN TERMINAL ({term_cmd[0]})")
+        except Exception as e:
+            self.log_console.append(f"> [Error] Falló el lanzamiento en terminal: {str(e)}")
+            subprocess.Popen([sys.executable, script_path])
+    else:
+        self.log_console.append("> [Aviso] No se encontró terminal gráfica, lanzando en background...")
+        subprocess.Popen([sys.executable, script_path])
+
+  def run_pca_nativo(self):
+    from PySide6.QtWidgets import QInputDialog
+    nombre_set, ok = QInputDialog.getText(self, "Nombre del Set (PCA)", "Introduce un nombre para identificar este set de resultados:")
+    if not ok or not nombre_set.strip():
+        self.log_console.append("> [Aviso] Ejecución de PCA cancelada.")
+        return
+    nombre_set = nombre_set.strip().replace(" ", "_")
+
+    kwargs = self.tab_dl_ml.get_pca_kwargs()
+    template = """
+import json
+import sys
+import os
+
+project_root = r'{ROOT_PROJECT_DIR}'
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+script_dir = os.path.dirname(os.path.abspath(__file__))
+if script_dir not in sys.path:
+    sys.path.append(script_dir)
+
+with open(r'{TEMP_JSON}', 'r') as f:
+    kwargs = json.load(f)
+
+mediciones = {MEDICIONES}
+base_dir = r'{BASE_DIR}'
+
+import deep_learning.pca_umap_clustering.generador_pca_umap as generador
+
+# Define explicit out_dir based on user input
+pca_umap_dir = os.path.join(project_root, "deep_learning", "pca_umap_clustering", "resultados_pca_umap", \"""" + nombre_set + """\")
+os.makedirs(pca_umap_dir, exist_ok=True)
+
+# Save the kwargs into the folder
+with open(os.path.join(pca_umap_dir, "parametros.json"), 'w') as f:
+    json.dump(kwargs, f, indent=4)
+
+generador.ejecutar_procesamiento(mediciones=mediciones, base_dir=base_dir, out_dir=pca_umap_dir, **kwargs)
+"""
+    self._launch_bridge_script("run_pca", "PCA (COMPONENTES PRINCIPALES)", kwargs, template)
+
+  def run_umap_nativo(self):
+    from PySide6.QtWidgets import QInputDialog
+    nombre_set, ok = QInputDialog.getText(self, "Nombre del Set (UMAP)", "Introduce un nombre para identificar este set de resultados:")
+    if not ok or not nombre_set.strip():
+        self.log_console.append("> [Aviso] Ejecución de UMAP cancelada.")
+        return
+    nombre_set = nombre_set.strip().replace(" ", "_")
+
+    kwargs = self.tab_dl_ml.get_umap_kwargs()
+    template = """
+import json
+import sys
+import os
+
+project_root = r'{ROOT_PROJECT_DIR}'
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+script_dir = os.path.dirname(os.path.abspath(__file__))
+if script_dir not in sys.path:
+    sys.path.append(script_dir)
+
+with open(r'{TEMP_JSON}', 'r') as f:
+    kwargs = json.load(f)
+
+mediciones = {MEDICIONES}
+base_dir = r'{BASE_DIR}'
+
+import deep_learning.pca_umap_clustering.generador_pca_umap as generador
+
+pca_umap_dir = os.path.join(project_root, "deep_learning", "pca_umap_clustering", "resultados_pca_umap", \"""" + nombre_set + """\")
+os.makedirs(pca_umap_dir, exist_ok=True)
+
+with open(os.path.join(pca_umap_dir, "parametros.json"), 'w') as f:
+    json.dump(kwargs, f, indent=4)
+
+generador.ejecutar_procesamiento(mediciones=mediciones, base_dir=base_dir, out_dir=pca_umap_dir, **kwargs)
+"""
+    self._launch_bridge_script("run_umap", "UMAP (NO LINEAL)", kwargs, template)
+
+  def run_umap_supervisado_nativo(self):
+    base_dir, mediciones = self._generar_base_dir_y_mediciones()
+    if not base_dir: return
+
+    # Extraer nombres de sesiones únicas (formato: "fecha/sesion")
+    sesiones_unicas = list(set(mediciones))
+    sesiones_unicas.sort()
+
+    from views.ui_analysis import TrainTestSplitDialog
+    dialog = TrainTestSplitDialog(sesiones_unicas, self)
+    if dialog.exec() != TrainTestSplitDialog.Accepted:
+        self.log_console.append("> [Aviso] Ejecución de UMAP Supervisado cancelada.")
+        return
+        
+    nombre_set, train_sessions, test_sessions = dialog.get_results()
+    if not nombre_set:
+        nombre_set = "umap_supervisado_run"
+
+    kwargs = self.tab_dl_ml.get_umap_supervisado_kwargs()
+    # Inyectar train_sessions y test_sessions a kwargs para pasarlo al script
+    kwargs["train_sessions"] = train_sessions
+    kwargs["test_sessions"] = test_sessions
+
+    template = """
+import json
+import sys
+import os
+
+project_root = r'{ROOT_PROJECT_DIR}'
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+script_dir = os.path.dirname(os.path.abspath(__file__))
+if script_dir not in sys.path:
+    sys.path.append(script_dir)
+
+with open(r'{TEMP_JSON}', 'r') as f:
+    kwargs = json.load(f)
+
+mediciones = {MEDICIONES}
+base_dir = r'{BASE_DIR}'
+
+import deep_learning.generador_umap_supervisado as gen_sup
+
+out_dir = os.path.join(project_root, "deep_learning", "resultados_umap_supervisado", \"""" + nombre_set + """\")
+os.makedirs(out_dir, exist_ok=True)
+
+with open(os.path.join(out_dir, "parametros.json"), 'w') as f:
+    json.dump(kwargs, f, indent=4)
+
+gen_sup.ejecutar_procesamiento(
+    mediciones=mediciones,
+    base_dir=base_dir,
+    out_dir=out_dir,
+    **kwargs
+)
+"""
+    self._launch_bridge_script("run_umap_sup", "UMAP SUPERVISADO", kwargs, template)
 
   def _sync_electrode_viewer(self):
     """Sincroniza el visor de electrodos con las mediciones seleccionadas en el gestor."""
@@ -1381,7 +1801,10 @@ finally:
         """
         import subprocess
         # Run in new console!
-        p = subprocess.run([sys.executable, self.spath], creationflags=subprocess.CREATE_NEW_CONSOLE)
+        run_kwargs = {}
+        if sys.platform == "win32":
+          run_kwargs["creationflags"] = subprocess.CREATE_NEW_CONSOLE
+        p = subprocess.run([sys.executable, self.spath], **run_kwargs)
         self.finished_signal.emit(p.returncode)
         
     self.procesador_thread = ProcessRunner(script_path)
@@ -1529,20 +1952,49 @@ finally:
     import os
     import sys
     import subprocess
-    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    script_abs_path = os.path.join(root_dir, script_rel_path.replace("/", os.sep))
     
-    if not os.path.exists(script_abs_path):
-      self.log_console.append(f"> ERROR: Script no encontrado: {script_abs_path}\n")
-      return
+    if getattr(sys, 'frozen', False):
+      cmd = [sys.executable, script_rel_path] + rutas
+    else:
+      root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+      script_abs_path = os.path.join(root_dir, script_rel_path.replace("/", os.sep))
+      
+      if not os.path.exists(script_abs_path):
+        self.log_console.append(f"> ERROR: Script no encontrado: {script_abs_path}\n")
+        return
+      cmd = [sys.executable, script_abs_path] + rutas
       
     self.log_console.append(f"> INICIANDO SCRIPT: {script_rel_path}")
     for r in rutas:
       self.log_console.append(f"  - {r}")
-      
-    cmd = [sys.executable, script_abs_path] + rutas
+    
+    if os.name == 'nt':
+        terminal_cmd = ['cmd.exe', '/c', 'start', 'cmd.exe', '/k'] + cmd
+    else:
+        # En Linux buscamos la terminal instalada iterando sobre las más populares
+        import shlex
+        import shutil
+        cmd_str = " ".join(shlex.quote(c) for c in cmd)
+        bash_cmd = f"{cmd_str}; echo ''; read -p 'Presiona Enter para cerrar la terminal...'"
+        
+        terminales = ['konsole', 'gnome-terminal', 'xfce4-terminal', 'mate-terminal', 'lxterminal', 'x-terminal-emulator', 'xterm']
+        terminal_elegida = None
+        for term in terminales:
+            if shutil.which(term):
+                terminal_elegida = term
+                break
+                
+        if terminal_elegida:
+            if terminal_elegida == 'gnome-terminal':
+                terminal_cmd = [terminal_elegida, '--', 'bash', '-c', bash_cmd]
+            else:
+                terminal_cmd = [terminal_elegida, '-e', 'bash', '-c', bash_cmd]
+        else:
+            # Fallback extremo si no encuentra absolutamente nada
+            terminal_cmd = ['bash', '-c', bash_cmd]
+        
     try:
-      subprocess.Popen(cmd)
+      subprocess.Popen(terminal_cmd)
       self.log_console.append("> Script lanzado exitosamente en segundo plano.\n")
     except Exception as e:
       self.log_console.append(f"> ERROR al lanzar script: {e}\n")

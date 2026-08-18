@@ -5,17 +5,11 @@
 # Descripción: Definiciones de interfaz de usuario para módulos de análisis.
 # ==============================================================================
 
-# ==============================================================================
-# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
-# Autores: Lucas Braunstein y Santiago Prado
-# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
-# Descripción: Definiciones de interfaz de usuario para módulos de análisis.
-# ==============================================================================
-
 import os
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QTabWidget,
-    QLabel, QSpinBox, QDoubleSpinBox, QCheckBox, QPushButton, QLineEdit, QComboBox
+    QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox, QTabWidget,
+    QLabel, QSpinBox, QDoubleSpinBox, QCheckBox, QPushButton, QLineEdit, QComboBox,
+    QScrollArea, QRadioButton, QGridLayout, QDialog, QListWidget
 )
 from PySide6.QtCore import Qt
 
@@ -49,14 +43,14 @@ class ProcessingTab(QWidget):
         l_ind.addWidget(self.chk_cruda)
 
         self.chk_cyberpunk = QCheckBox("Tema Cyberpunk (Gráficos oscuros y neón)")
-        self.chk_cyberpunk.setChecked(True)
+        self.chk_cyberpunk.setChecked(False) # Por defecto apagado para usar estética normal
         l_ind.addWidget(self.chk_cyberpunk)
 
-        row_spec = QHBoxLayout()
-        self.chk_espectrograma = QCheckBox("Generar Espectrograma Crudo (Praat)")
+        self.chk_espectrograma = QCheckBox("Generar Espectrograma Señal Completa (Estilo Praat)")
         self.chk_espectrograma.setChecked(False)
+        row_spec = QHBoxLayout()
         row_spec.addWidget(self.chk_espectrograma)
-        
+
         row_spec.addWidget(QLabel("Freq. Máx (Hz):"))
         self.inp_spec_fmax = QLineEdit("5000")
         self.inp_spec_fmax.setFixedWidth(60)
@@ -65,13 +59,13 @@ class ProcessingTab(QWidget):
         l_ind.addLayout(row_spec)
 
         row_notch = QHBoxLayout()
-        self.chk_notch = QCheckBox("Aplicar filtro Notch 50 Hz")
+        self.chk_notch = QCheckBox("Aplicar filtro Notch 50 Hz (ruido de línea)")
         self.chk_notch.setChecked(True)
         row_notch.addWidget(self.chk_notch)
-        
+
         row_notch.addWidget(QLabel("Factor Q:"))
         self.inp_notch_q = QLineEdit("2.0")
-        self.inp_notch_q.setFixedWidth(60)
+        self.inp_notch_q.setFixedWidth(40)
         row_notch.addWidget(self.inp_notch_q)
         row_notch.addStretch()
         l_ind.addLayout(row_notch)
@@ -145,7 +139,7 @@ class ProcessingTab(QWidget):
             QPushButton:disabled { border: 2px solid #555; color: #555; }
         """)
         
-        self.btn_run_rapido = QPushButton(" REPROCESAR RÁPIDO")
+        self.btn_run_rapido = QPushButton("REPROCESAR RAPIDO")
         self.btn_run_rapido.setFixedHeight(50)
         self.btn_run_rapido.setCursor(Qt.PointingHandCursor)
         self.btn_run_rapido.setStyleSheet("""
@@ -160,6 +154,33 @@ class ProcessingTab(QWidget):
         btn_layout.addWidget(self.btn_run_procesar)
         btn_layout.addWidget(self.btn_run_rapido)
         self.layout.addLayout(btn_layout)
+
+    def get_processing_kwargs(self):
+        """Recolecta todos los parámetros de procesamiento de la pestaña individual."""
+        excl_raw = self.inp_excluded.text().strip()
+        excl_list = []
+        if excl_raw:
+            for part in excl_raw.split(','):
+                part = part.strip()
+                if part.isdigit():
+                    excl_list.append(int(part))
+        return {
+            'mostrar_recortes': self.chk_recortes.isChecked(),
+            'mostrar_senal_cruda': self.chk_cruda.isChecked(),
+            'tema_cyberpunk': self.chk_cyberpunk.isChecked(),
+            'mostrar_espectrograma': self.chk_espectrograma.isChecked(),
+            'frecuenciamaxima': self.inp_spec_fmax.text().strip() or "5000",
+            'apply_notch_filter': self.chk_notch.isChecked(),
+            'notch_q_factor': self.inp_notch_q.text().strip() or "2.0",
+            'mostrar_evolucion': self.chk_evolucion.isChecked(),
+            'evol_t_start': self.inp_evol_start.text().strip() or "10",
+            'evol_t_end': self.inp_evol_end.text().strip() or "1000",
+            'excluded_windows_list': excl_list,
+            'tipo_envolvente': self.cmb_tipo_env.currentText(),
+            'smooth_ms': self.inp_smooth.text().strip() or "50",
+            'highpass_cutoff_hz': self.inp_hp.text().strip() or "20",
+            'lowpass_cutoff_hz': self.inp_lp.text().strip() or "500"
+        }
 
 
 class ComparativeTab(QWidget):
@@ -240,7 +261,7 @@ class ComparativeTab(QWidget):
         """)
         btn_layout.addWidget(self.btn_run_comparativo)
 
-        self.btn_run_sesion = QPushButton(" LANZAR EVOLUCIÓN DE SESIÓN")
+        self.btn_run_sesion = QPushButton("LANZAR EVOLUCIÓN DE SESIÓN")
         self.btn_run_sesion.setFixedHeight(50)
         self.btn_run_sesion.setCursor(Qt.PointingHandCursor)
         self.btn_run_sesion.setStyleSheet("""
@@ -255,6 +276,571 @@ class ComparativeTab(QWidget):
         
         self.layout.addLayout(btn_layout)
 
+
+class DiscreteMotorTab(QWidget):
+    """Pestaña para Análisis de Coordenadas Discretas (Assaneo et al. 2013)"""
+    def __init__(self):
+        super().__init__()
+        self.layout = QVBoxLayout(self)
+        
+        # 1. Selector de Método (QTabWidget)
+        self.method_tabs = QTabWidget()
+        
+        # 1A. Pestaña Estadístico
+        tab_stat = QWidget()
+        l_stat = QFormLayout(tab_stat)
+        self.inp_std_multiplier = QDoubleSpinBox()
+        self.inp_std_multiplier.setRange(1.0, 10.0)
+        self.inp_std_multiplier.setSingleStep(0.5)
+        self.inp_std_multiplier.setValue(3.0)
+        l_stat.addRow("Sensibilidad (N Std):", self.inp_std_multiplier)
+        self.method_tabs.addTab(tab_stat, " Umbral Estadístico (Ruido)")
+        
+        # 1B. Pestaña Manual
+        tab_man = QWidget()
+        l_man = QVBoxLayout(tab_man)
+        l_man.addWidget(QLabel("Umbrales absolutos (0.01 a 1.0) sobre la máxima amplitud global del pulso."))
+        
+        from utils.config_manager import ConfigManager
+        cm = ConfigManager()
+        c_config = cm.get("canales") or {}
+        
+        self.manual_thresholds = {}
+        form_man = QFormLayout()
+        for i in range(8):  # Soportamos hasta 8 canales por defecto
+            c_key = f"canal_{i}"
+            nombre = c_config.get(f"Canal {i}", {}).get("musculo", c_key)
+            sp = QDoubleSpinBox()
+            sp.setRange(0.01, 1.0)
+            sp.setSingleStep(0.05)
+            sp.setValue(0.5)
+            form_man.addRow(f"Umbral {nombre}:", sp)
+            self.manual_thresholds[c_key] = sp
+            
+        l_man.addLayout(form_man)
+        self.method_tabs.addTab(tab_man, "Umbral Manual por Canal")
+        
+        self.layout.addWidget(self.method_tabs)
+        
+        # 2. Anotación de Vocales
+        g_voc = QGroupBox("Anotación de Secuencia de Vocales")
+        g_voc.setCheckable(True)
+        g_voc.setChecked(False)
+        self.g_voc = g_voc
+        l_voc = QFormLayout()
+        
+        self.cmb_vocal_orden = QComboBox()
+        self.cmb_vocal_orden.addItems(["Normal (a, e, i, o, u)", "Inverso (u, o, i, e, a)"])
+        l_voc.addRow("Orden:", self.cmb_vocal_orden)
+        
+        self.cmb_vocal_inicio = QComboBox()
+        self.cmb_vocal_inicio.addItems(["a", "e", "i", "o", "u"])
+        l_voc.addRow("Primera vocal del registro:", self.cmb_vocal_inicio)
+        
+        g_voc.setLayout(l_voc)
+        self.layout.addWidget(g_voc)
+        
+        self.layout.addStretch()
+        
+        btn_layout = QHBoxLayout()
+        self.btn_run_motor = QPushButton(" LANZAR COORDENADAS DISCRETAS")
+        self.btn_run_motor.setFixedHeight(50)
+        self.btn_run_motor.setCursor(Qt.PointingHandCursor)
+        self.btn_run_motor.setStyleSheet("""
+            QPushButton {
+                font-weight: bold; font-size: 14px;
+                background-color: transparent; color: #ff00ff; border: 2px solid #ff00ff; border-radius: 5px;
+            }
+            QPushButton:hover { background-color: #ff00ff; color: #000; }
+            QPushButton:disabled { border: 2px solid #555; color: #555; }
+        """)
+        btn_layout.addWidget(self.btn_run_motor)
+        
+        self.layout.addLayout(btn_layout)
+
+class TrainingMotorTab(QWidget):
+    """Pestaña para Entrenamiento de Umbrales Óptimos (Barrido de Colisiones)"""
+    def __init__(self):
+        super().__init__()
+        self.layout = QVBoxLayout(self)
+        
+        # 1. Opciones de Filtro y Pre-procesamiento
+        g_filtro = QGroupBox("1. Limpieza de Datos (Pre-procesamiento)")
+        l_filtro = QFormLayout()
+        
+        self.chk_snr = QCheckBox("Descartar si el SNR es menor a:")
+        self.chk_snr.setChecked(True)
+        
+        self.inp_snr_limit = QDoubleSpinBox()
+        self.inp_snr_limit.setRange(0.1, 50.0)
+        self.inp_snr_limit.setSingleStep(0.5)
+        self.inp_snr_limit.setValue(4.0)
+        
+        self.cmb_snr_tipo = QComboBox()
+        self.cmb_snr_tipo.addItems(["Por Ventana (Individual)", "Global (Toda la medición)", "Ambos (Global + Ventana)"])
+        
+        row_lyt = QHBoxLayout()
+        row_lyt.addWidget(self.chk_snr)
+        row_lyt.addWidget(self.inp_snr_limit)
+        row_lyt.addWidget(self.cmb_snr_tipo)
+        row_lyt.addStretch()
+        
+        l_filtro.addRow(row_lyt)
+        g_filtro.setLayout(l_filtro)
+        self.layout.addWidget(g_filtro)
+        
+        # 2. Metodología de Discretización
+        g_metodo = QGroupBox("2. Metodología de Discretización")
+        l_metodo = QFormLayout()
+        
+        self.cmb_tipo_barrido = QComboBox()
+        self.cmb_tipo_barrido.addItems([
+            "Umbral Común (Único para todos los canales)",
+            "Umbral por Canal (Búsqueda de Intervalos Óptimos)"
+        ])
+        
+        self.inp_paso_barrido = QDoubleSpinBox()
+        self.inp_paso_barrido.setRange(0.01, 0.20)
+        self.inp_paso_barrido.setSingleStep(0.01)
+        self.inp_paso_barrido.setValue(0.05)
+        self.inp_paso_barrido.setToolTip("Paso de iteración para buscar intervalos.")
+        
+        l_metodo.addRow(QLabel("Tipo de Búsqueda:"), self.cmb_tipo_barrido)
+        l_metodo.addRow(QLabel("Resolución del Barrido:"), self.inp_paso_barrido)
+        
+        g_metodo.setLayout(l_metodo)
+        self.layout.addWidget(g_metodo)
+        
+        # --- BOTON DE EJECUCION ---
+        btn_layout = QHBoxLayout()
+        self.btn_run_training = QPushButton("ENTRENAR UMBRALES (TRAIN)")
+        self.btn_run_training.setFixedHeight(50)
+        self.btn_run_training.setCursor(Qt.PointingHandCursor)
+        self.btn_run_training.setStyleSheet("""
+            QPushButton {
+                font-weight: bold; font-size: 14px;
+                background-color: transparent; color: #00ffcc; border: 2px solid #00ffcc; border-radius: 5px;
+            }
+            QPushButton:hover { background-color: #00ffcc; color: #000; }
+            QPushButton:disabled { border: 2px solid #555; color: #555; }
+        """)
+        btn_layout.addWidget(self.btn_run_training)
+        
+        self.layout.addLayout(btn_layout)
+
+class PcaTab(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.layout = QVBoxLayout(self)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        content = QWidget()
+        lay = QVBoxLayout(content)
+        
+        g_canales = QGroupBox("Canales EMG a incluir en PCA")
+        l_canales = QHBoxLayout()
+        self.chk_canal_0 = QCheckBox("Canal 0 (Milohioideo)")
+        self.chk_canal_0.setChecked(True)
+        self.chk_canal_1 = QCheckBox("Canal 1 (Depresor)")
+        self.chk_canal_1.setChecked(True)
+        self.chk_canal_2 = QCheckBox("Canal 2 (Orbicular)")
+        self.chk_canal_2.setChecked(True)
+        l_canales.addWidget(self.chk_canal_0)
+        l_canales.addWidget(self.chk_canal_1)
+        l_canales.addWidget(self.chk_canal_2)
+        g_canales.setLayout(l_canales)
+        lay.addWidget(g_canales)
+        
+        g_graficos = QGroupBox("Procesar Gráficos")
+        l_graficos = QHBoxLayout()
+        self.chk_pca_2d = QCheckBox("PCA 2D")
+        self.chk_pca_2d.setChecked(True)
+        self.chk_pca_3d = QCheckBox("PCA 3D")
+        self.chk_pca_3d.setChecked(True)
+        self.chk_ocultar_leyenda = QCheckBox("Ocultar Leyenda")
+        self.chk_ocultar_leyenda.setChecked(False)
+        l_graficos.addWidget(self.chk_pca_2d)
+        l_graficos.addWidget(self.chk_pca_3d)
+        l_graficos.addWidget(self.chk_ocultar_leyenda)
+        g_graficos.setLayout(l_graficos)
+        lay.addWidget(g_graficos)
+        
+        def create_dsp_row(title, default_smooth, default_alpha):
+            g = QGroupBox(title)
+            l = QGridLayout()
+            l.setContentsMargins(5, 5, 5, 5)
+            l.setSpacing(5)
+            l.addWidget(QLabel("Alpha:"), 0, 0)
+            inp_alpha = QDoubleSpinBox()
+            inp_alpha.setRange(0.01, 10.0)
+            inp_alpha.setSingleStep(0.1)
+            inp_alpha.setValue(default_alpha)
+            inp_alpha.setFixedWidth(60)
+            l.addWidget(inp_alpha, 0, 1)
+            l.addWidget(QLabel("Smooth:"), 0, 2)
+            inp_smooth = QSpinBox()
+            inp_smooth.setRange(0, 1000)
+            inp_smooth.setValue(default_smooth)
+            inp_smooth.setFixedWidth(60)
+            l.addWidget(inp_smooth, 0, 3)
+            l.addWidget(QLabel("Pts:"), 0, 4)
+            inp_pts = QSpinBox()
+            inp_pts.setRange(1, 1000)
+            inp_pts.setValue(20)
+            inp_pts.setFixedWidth(50)
+            l.addWidget(inp_pts, 0, 5)
+            l.addWidget(QLabel("SNR:"), 0, 6)
+            inp_snr = QDoubleSpinBox()
+            inp_snr.setRange(0.0, 100.0)
+            inp_snr.setValue(0.5)
+            inp_snr.setFixedWidth(60)
+            l.addWidget(inp_snr, 0, 7)
+            l.addWidget(QLabel("Outliers:"), 0, 8)
+            inp_outliers = QDoubleSpinBox()
+            inp_outliers.setRange(0.0, 0.99)
+            inp_outliers.setSingleStep(0.05)
+            inp_outliers.setValue(0.10)
+            inp_outliers.setFixedWidth(60)
+            l.addWidget(inp_outliers, 0, 9)
+            g.setLayout(l)
+            return g, inp_alpha, inp_smooth, inp_pts, inp_snr, inp_outliers
+
+        g_dsp_2d, self.inp_alpha_2d, self.inp_smooth_2d, self.inp_pts_2d, self.inp_snr_2d, self.inp_outliers_2d = create_dsp_row("Parámetros DSP y Limpieza (2D)", 90, 0.5)
+        lay.addWidget(g_dsp_2d)
+        
+        g_dsp_3d, self.inp_alpha_3d, self.inp_smooth_3d, self.inp_pts_3d, self.inp_snr_3d, self.inp_outliers_3d = create_dsp_row("Parámetros DSP y Limpieza (3D)", 125, 0.5)
+        lay.addWidget(g_dsp_3d)
+
+        g_cluster = QGroupBox("Algoritmo de Agrupamiento")
+        l_cluster = QHBoxLayout()
+        l_cluster.addWidget(QLabel("Evaluar PCA:"))
+        self.cmb_cluster = QComboBox()
+        self.cmb_cluster.addItems(["GMM", "K-Means"])
+        l_cluster.addWidget(self.cmb_cluster)
+        g_cluster.setLayout(l_cluster)
+        lay.addWidget(g_cluster)
+
+        g_adv = QGroupBox("DSP Avanzado y Normalización")
+        l_adv = QGridLayout()
+        self.chk_trevisan = QCheckBox("Aplicar Corrección Trevisan (Mediana Móvil + Detrending)")
+        self.chk_trevisan.setChecked(False)
+        l_adv.addWidget(self.chk_trevisan, 0, 0, 1, 2)
+        
+        self.chk_ignorar_cero = QCheckBox("Ignorar Ventana 0 (Artefactos)")
+        self.chk_ignorar_cero.setChecked(False)
+        l_adv.addWidget(self.chk_ignorar_cero, 0, 2, 1, 2)
+        
+        l_adv.addWidget(QLabel("Pre-Ventana (%):"), 1, 0)
+        self.inp_pre_pct = QDoubleSpinBox()
+        self.inp_pre_pct.setRange(0.0, 1.0)
+        self.inp_pre_pct.setSingleStep(0.1)
+        self.inp_pre_pct.setValue(0.4)
+        l_adv.addWidget(self.inp_pre_pct, 1, 1)
+        
+        l_adv.addWidget(QLabel("Post-Ventana (%):"), 1, 2)
+        self.inp_post_pct = QDoubleSpinBox()
+        self.inp_post_pct.setRange(0.0, 1.0)
+        self.inp_post_pct.setSingleStep(0.1)
+        self.inp_post_pct.setValue(0.6)
+        l_adv.addWidget(self.inp_post_pct, 1, 3)
+        g_adv.setLayout(l_adv)
+        lay.addWidget(g_adv)
+
+        g_align = QGroupBox("Alineación Temporal")
+        l_align = QHBoxLayout()
+        l_align.addWidget(QLabel("Centrar ventana en:"))
+        self.cmb_align = QComboBox()
+        self.cmb_align.addItems(["Pico Volumen Micrófono", "Pico Derivada Micrófono (Onset)"])
+        l_align.addWidget(self.cmb_align)
+        g_align.setLayout(l_align)
+        lay.addWidget(g_align)
+
+        g_visual = QGroupBox("Estilo Visual (Solo GMM)")
+        l_visual = QHBoxLayout()
+        self.rb_fronteras = QRadioButton("Fronteras")
+        self.rb_fronteras.setChecked(True)
+        self.rb_sombreado = QRadioButton("Sombreado")
+        self.rb_elipses = QRadioButton("Elipses")
+        l_visual.addWidget(self.rb_fronteras)
+        l_visual.addWidget(self.rb_sombreado)
+        l_visual.addWidget(self.rb_elipses)
+        g_visual.setLayout(l_visual)
+        lay.addWidget(g_visual)
+
+        lay.addStretch()
+        scroll.setWidget(content)
+        self.layout.addWidget(scroll)
+        
+        self.btn_run = QPushButton(" 1. LANZAR PCA (COMP. PRINCIPALES)")
+        self.btn_run.setStyleSheet("background-color: #00ffcc; color: black; font-weight: bold; padding: 10px;")
+        self.layout.addWidget(self.btn_run)
+
+class UmapTab(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.layout = QVBoxLayout(self)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        content = QWidget()
+        lay = QVBoxLayout(content)
+        
+        g_canales = QGroupBox("Canales EMG a incluir en UMAP")
+        l_canales = QHBoxLayout()
+        self.chk_canal_0 = QCheckBox("Canal 0 (Milohioideo)")
+        self.chk_canal_0.setChecked(True)
+        self.chk_canal_1 = QCheckBox("Canal 1 (Depresor)")
+        self.chk_canal_1.setChecked(True)
+        self.chk_canal_2 = QCheckBox("Canal 2 (Orbicular)")
+        self.chk_canal_2.setChecked(True)
+        l_canales.addWidget(self.chk_canal_0)
+        l_canales.addWidget(self.chk_canal_1)
+        l_canales.addWidget(self.chk_canal_2)
+        g_canales.setLayout(l_canales)
+        lay.addWidget(g_canales)
+
+        g_graficos = QGroupBox("Procesar Gráficos")
+        l_graficos = QHBoxLayout()
+        self.chk_umap_2d = QCheckBox("UMAP 2D")
+        self.chk_umap_2d.setChecked(True)
+        self.chk_umap_3d = QCheckBox("UMAP 3D")
+        self.chk_umap_3d.setChecked(True)
+        self.chk_ocultar_leyenda = QCheckBox("Ocultar Leyenda")
+        self.chk_ocultar_leyenda.setChecked(False)
+        l_graficos.addWidget(self.chk_umap_2d)
+        l_graficos.addWidget(self.chk_umap_3d)
+        l_graficos.addWidget(self.chk_ocultar_leyenda)
+        g_graficos.setLayout(l_graficos)
+        lay.addWidget(g_graficos)
+
+        g_umap = QGroupBox("Hiperparámetros Topológicos UMAP")
+        l_umap = QGridLayout()
+        l_umap.setContentsMargins(5, 5, 5, 5)
+        l_umap.setSpacing(5)
+
+        l_umap.addWidget(QLabel("Alpha:"), 0, 0)
+        self.inp_alpha_u = QDoubleSpinBox()
+        self.inp_alpha_u.setRange(0.01, 10.0)
+        self.inp_alpha_u.setSingleStep(0.1)
+        self.inp_alpha_u.setValue(1.0)
+        self.inp_alpha_u.setFixedWidth(60)
+        l_umap.addWidget(self.inp_alpha_u, 0, 1)
+
+        l_umap.addWidget(QLabel("n_neighbors:"), 0, 2)
+        self.inp_n_neighbors = QSpinBox()
+        self.inp_n_neighbors.setRange(2, 500)
+        self.inp_n_neighbors.setValue(10)
+        self.inp_n_neighbors.setFixedWidth(60)
+        l_umap.addWidget(self.inp_n_neighbors, 0, 3)
+
+        l_umap.addWidget(QLabel("min_dist:"), 0, 4)
+        self.inp_min_dist = QDoubleSpinBox()
+        self.inp_min_dist.setRange(0.0, 1.0)
+        self.inp_min_dist.setSingleStep(0.05)
+        self.inp_min_dist.setValue(0.05)
+        self.inp_min_dist.setFixedWidth(60)
+        l_umap.addWidget(self.inp_min_dist, 0, 5)
+
+        l_umap.addWidget(QLabel("Métrica:"), 0, 6)
+        self.cmb_metric = QComboBox()
+        self.cmb_metric.addItems(["euclidean", "manhattan", "chebyshev", "minkowski", "cosine"])
+        self.cmb_metric.setFixedWidth(90)
+        l_umap.addWidget(self.cmb_metric, 0, 7)
+
+        l_umap.addWidget(QLabel("Smooth:"), 1, 0)
+        self.inp_smooth_u = QSpinBox()
+        self.inp_smooth_u.setRange(0, 1000)
+        self.inp_smooth_u.setValue(125)
+        self.inp_smooth_u.setFixedWidth(60)
+        l_umap.addWidget(self.inp_smooth_u, 1, 1)
+
+        l_umap.addWidget(QLabel("Pts:"), 1, 2)
+        self.inp_pts_u = QSpinBox()
+        self.inp_pts_u.setRange(1, 1000)
+        self.inp_pts_u.setValue(20)
+        self.inp_pts_u.setFixedWidth(60)
+        l_umap.addWidget(self.inp_pts_u, 1, 3)
+
+        l_umap.addWidget(QLabel("SNR:"), 1, 4)
+        self.inp_snr_u = QDoubleSpinBox()
+        self.inp_snr_u.setRange(0.0, 100.0)
+        self.inp_snr_u.setValue(3.0)
+        self.inp_snr_u.setFixedWidth(60)
+        l_umap.addWidget(self.inp_snr_u, 1, 5)
+
+        l_umap.addWidget(QLabel("Outliers:"), 1, 6)
+        self.inp_outliers_u = QDoubleSpinBox()
+        self.inp_outliers_u.setRange(0.0, 0.99)
+        self.inp_outliers_u.setSingleStep(0.05)
+        self.inp_outliers_u.setValue(0.10)
+        self.inp_outliers_u.setFixedWidth(60)
+        l_umap.addWidget(self.inp_outliers_u, 1, 7)
+
+        g_umap.setLayout(l_umap)
+        lay.addWidget(g_umap)
+
+        g_cluster = QGroupBox("Algoritmo de Agrupamiento")
+        l_cluster = QHBoxLayout()
+        l_cluster.addWidget(QLabel("Evaluar UMAP:"))
+        self.cmb_cluster = QComboBox()
+        self.cmb_cluster.addItems(["K-Means", "GMM"])
+        l_cluster.addWidget(self.cmb_cluster)
+        g_cluster.setLayout(l_cluster)
+        lay.addWidget(g_cluster)
+
+        g_adv = QGroupBox("DSP Avanzado y Normalización")
+        l_adv = QGridLayout()
+        self.chk_trevisan = QCheckBox("Aplicar Corrección Trevisan")
+        self.chk_trevisan.setChecked(False)
+        l_adv.addWidget(self.chk_trevisan, 0, 0, 1, 2)
+        self.chk_ignorar_cero = QCheckBox("Ignorar Ventana 0")
+        self.chk_ignorar_cero.setChecked(False)
+        l_adv.addWidget(self.chk_ignorar_cero, 0, 2, 1, 2)
+        l_adv.addWidget(QLabel("Pre-Ventana (%):"), 1, 0)
+        self.inp_pre_pct = QDoubleSpinBox()
+        self.inp_pre_pct.setRange(0.0, 1.0)
+        self.inp_pre_pct.setSingleStep(0.1)
+        self.inp_pre_pct.setValue(0.4)
+        l_adv.addWidget(self.inp_pre_pct, 1, 1)
+        l_adv.addWidget(QLabel("Post-Ventana (%):"), 1, 2)
+        self.inp_post_pct = QDoubleSpinBox()
+        self.inp_post_pct.setRange(0.0, 1.0)
+        self.inp_post_pct.setSingleStep(0.1)
+        self.inp_post_pct.setValue(0.6)
+        l_adv.addWidget(self.inp_post_pct, 1, 3)
+        g_adv.setLayout(l_adv)
+        lay.addWidget(g_adv)
+
+        g_align = QGroupBox("Alineación Temporal")
+        l_align = QHBoxLayout()
+        l_align.addWidget(QLabel("Centrar ventana en:"))
+        self.cmb_align = QComboBox()
+        self.cmb_align.addItems(["Pico Volumen Micrófono", "Pico Derivada Micrófono (Onset)"])
+        l_align.addWidget(self.cmb_align)
+        g_align.setLayout(l_align)
+        lay.addWidget(g_align)
+
+        lay.addStretch()
+        scroll.setWidget(content)
+        self.layout.addWidget(scroll)
+        
+        self.btn_run = QPushButton(" 2. LANZAR UMAP (NO LINEAL)")
+        self.btn_run.setStyleSheet("background-color: #ff00ff; color: white; font-weight: bold; padding: 10px;")
+        self.layout.addWidget(self.btn_run)
+
+class UmapSupervisadoTab(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.layout = QVBoxLayout(self)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        content = QWidget()
+        lay = QVBoxLayout(content)
+        
+        g_dsp = QGroupBox("Filtros DSP (Extracción Base)")
+        l_dsp = QGridLayout()
+        
+        l_dsp.addWidget(QLabel("Alpha:"), 0, 0)
+        self.inp_alpha = QDoubleSpinBox()
+        self.inp_alpha.setRange(0.01, 10.0)
+        self.inp_alpha.setSingleStep(0.1)
+        self.inp_alpha.setValue(1.0)
+        l_dsp.addWidget(self.inp_alpha, 0, 1)
+        
+        l_dsp.addWidget(QLabel("Smooth (ms):"), 0, 2)
+        self.inp_smooth = QSpinBox()
+        self.inp_smooth.setRange(0, 1000)
+        self.inp_smooth.setValue(125)
+        l_dsp.addWidget(self.inp_smooth, 0, 3)
+        
+        l_dsp.addWidget(QLabel("Target Len:"), 0, 4)
+        self.inp_target_len = QSpinBox()
+        self.inp_target_len.setRange(1, 1000)
+        self.inp_target_len.setValue(40)
+        l_dsp.addWidget(self.inp_target_len, 0, 5)
+
+        l_dsp.addWidget(QLabel("SNR Thresh:"), 1, 0)
+        self.inp_snr = QDoubleSpinBox()
+        self.inp_snr.setRange(0.0, 100.0)
+        self.inp_snr.setValue(3.0)
+        l_dsp.addWidget(self.inp_snr, 1, 1)
+
+        l_dsp.addWidget(QLabel("Outliers:"), 1, 2)
+        self.inp_outliers = QDoubleSpinBox()
+        self.inp_outliers.setRange(0.0, 0.99)
+        self.inp_outliers.setSingleStep(0.05)
+        self.inp_outliers.setValue(0.10)
+        l_dsp.addWidget(self.inp_outliers, 1, 3)
+        
+        l_dsp.addWidget(QLabel("Notch Q:"), 1, 4)
+        self.inp_notch = QDoubleSpinBox()
+        self.inp_notch.setRange(0.1, 50.0)
+        self.inp_notch.setSingleStep(0.5)
+        self.inp_notch.setValue(2.0)
+        l_dsp.addWidget(self.inp_notch, 1, 5)
+
+        g_dsp.setLayout(l_dsp)
+        lay.addWidget(g_dsp)
+        
+        g_umap = QGroupBox("Hiperparámetros de Embedding UMAP")
+        l_umap = QGridLayout()
+        
+        l_umap.addWidget(QLabel("n_neighbors:"), 0, 0)
+        self.inp_umap_nn = QSpinBox()
+        self.inp_umap_nn.setRange(2, 500)
+        self.inp_umap_nn.setValue(5)
+        l_umap.addWidget(self.inp_umap_nn, 0, 1)
+        
+        l_umap.addWidget(QLabel("min_dist:"), 0, 2)
+        self.inp_umap_md = QDoubleSpinBox()
+        self.inp_umap_md.setRange(0.0, 1.0)
+        self.inp_umap_md.setSingleStep(0.05)
+        self.inp_umap_md.setValue(0.8)
+        l_umap.addWidget(self.inp_umap_md, 0, 3)
+        
+        l_umap.addWidget(QLabel("Métrica:"), 1, 0)
+        self.cmb_metric = QComboBox()
+        self.cmb_metric.addItems(["euclidean", "cosine", "manhattan", "correlation"])
+        l_umap.addWidget(self.cmb_metric, 1, 1)
+        
+        l_umap.addWidget(QLabel("target_weight:"), 1, 2)
+        self.inp_umap_tw = QDoubleSpinBox()
+        self.inp_umap_tw.setRange(0.0, 1.0)
+        self.inp_umap_tw.setSingleStep(0.1)
+        self.inp_umap_tw.setValue(0.8)
+        l_umap.addWidget(self.inp_umap_tw, 1, 3)
+        
+        self.chk_outliers_train = QCheckBox("Eliminar Outliers Espaciales del Train Set")
+        self.chk_outliers_train.setChecked(False)
+        l_umap.addWidget(self.chk_outliers_train, 2, 0, 1, 4)
+        
+        g_umap.setLayout(l_umap)
+        lay.addWidget(g_umap)
+        
+        lay.addStretch()
+        scroll.setWidget(content)
+        self.layout.addWidget(scroll)
+        
+        self.btn_run = QPushButton(" 3. GENERAR UMAP SUPERVISADO (TRAIN/TEST)")
+        self.btn_run.setStyleSheet("background-color: #45A29E; color: white; font-weight: bold; padding: 10px;")
+        self.layout.addWidget(self.btn_run)
+
+class MachineLearningTab(QWidget):
+    def __init__(self):
+        super().__init__()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0,0,0,0)
+        
+        self.tabs = QTabWidget()
+        
+        self.tab_pca = PcaTab()
+        self.tab_umap = UmapTab()
+        self.tab_umap_sup = UmapSupervisadoTab()
+        
+        self.tabs.addTab(self.tab_pca, "PCA")
+        self.tabs.addTab(self.tab_umap, "UMAP No-Lineal")
+        self.tabs.addTab(self.tab_umap_sup, "UMAP Supervisado")
+        
+        layout.addWidget(self.tabs)
 
 class AnalysisPanel(QWidget):
     """Contenedor Principal que alberga las Pestañas de Análisis y emite los kwargs"""
@@ -277,85 +863,340 @@ class AnalysisPanel(QWidget):
             }
             QTabWidget::pane { border: 2px solid #ff0033; border-radius: 4px; background: #050505; }
             QTabBar::tab {
-                background: #111; color: #00ffcc; padding: 8px 15px; border: 1px solid #ff0033;
-                border-bottom: none; border-top-left-radius: 4px; border-top-right-radius: 4px;
+                background: #111; color: #aaa; border: 2px solid #333; padding: 10px; font-weight: bold;
             }
-            QTabBar::tab:selected { background: #050505; color: #ff0033; font-weight: bold; border: 2px solid #ff0033; border-bottom: none; }
+            QTabBar::tab:selected { background: #ff0033; color: #fff; border-color: #ff0033; }
         """)
-
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(5, 5, 5, 5)
-
+        
+        self.layout = QVBoxLayout(self)
         self.tabs = QTabWidget()
         
         # Pestaña Individual
         self.tab_procesamiento = ProcessingTab()
-        self.tabs.addTab(self.tab_procesamiento, "️ Procesamiento Individual")
+        self.tabs.addTab(self.tab_procesamiento, " Procesamiento Individual")
         
         # Pestaña Comparativa
         self.tab_comparativo = ComparativeTab()
         self.tabs.addTab(self.tab_comparativo, " Análisis Comparativo")
-
-        main_layout.addWidget(self.tabs)
-
+        
+        self.layout.addWidget(self.tabs)
+        
     def get_processing_kwargs(self):
-        """Devuelve los kwargs basados exclusivamente en lo que ofrece la UI original de Tkinter"""
-        # Parsear exclusiones
-        excl_str = self.tab_procesamiento.inp_excluded.text().strip()
-        excluded = []
-        if excl_str:
-            try: excluded = [int(x.strip()) for x in excl_str.split(',') if x.strip()]
-            except ValueError: pass
+        """Obtiene los parámetros de procesamiento delegando a la pestaña de procesamiento."""
+        return self.tab_procesamiento.get_processing_kwargs()
 
-        # Parsear numéricos con fallbacks seguros
-        try: smooth = float(self.tab_procesamiento.inp_smooth.text())
-        except ValueError: smooth = 50.0
-
-        try: hp = float(self.tab_procesamiento.inp_hp.text())
-        except ValueError: hp = 20.0
-
-        try: lp = float(self.tab_procesamiento.inp_lp.text())
-        except ValueError: lp = 500.0
-
-        try: ev_start = float(self.tab_procesamiento.inp_evol_start.text())
-        except ValueError: ev_start = 10.0
-
-        try: ev_end = float(self.tab_procesamiento.inp_evol_end.text())
-        except ValueError: ev_end = 1000.0
-        
-        try: spec_fmax = float(self.tab_procesamiento.inp_spec_fmax.text())
-        except ValueError: spec_fmax = 5000.0
-        
-        try: notch_q = float(self.tab_procesamiento.inp_notch_q.text())
-        except ValueError: notch_q = 2.0
-        
-        tipo_env = self.tab_procesamiento.cmb_tipo_env.currentText()
-
+    def get_trevisan_kwargs(self):
+        t = self.tab_procesamiento
+        smooth_val = 50.0
+        try:
+            smooth_val = float(t.inp_smooth.text().strip() or 50.0)
+        except (ValueError, TypeError):
+            smooth_val = 50.0
         return {
-            'smooth_ms': smooth,
-            'tipo_envolvente': tipo_env,
-            'apply_notch_filter': self.tab_procesamiento.chk_notch.isChecked(),
-            'notch_q_factor': notch_q,
-            'highpass_cutoff_hz': hp,
-            'lowpass_cutoff_hz': lp,
-            'mostrar_recortes': self.tab_procesamiento.chk_recortes.isChecked(),
-            'mostrar_senal_cruda': self.tab_procesamiento.chk_cruda.isChecked(),
-            'mostrar_espectrograma': self.tab_procesamiento.chk_espectrograma.isChecked(),
-            'frecuenciamaxima': spec_fmax,
-            'mostrar_evolucion': self.tab_procesamiento.chk_evolucion.isChecked(),
-            'evol_t_start': ev_start,
-            'evol_t_end': ev_end,
-            'excluded_windows_list': excluded,
-            'tema_cyberpunk': self.tab_procesamiento.chk_cyberpunk.isChecked()
+            'alpha_ruido': 1.0,
+            'snr_threshold': 3.0,
+            'smooth_ms': smooth_val,
+            'n_pts_window': 100
         }
 
     def get_comparative_kwargs(self):
-        """Devuelve los booleanos para _comparative_plots"""
+        t = self.tab_comparativo
         return {
-            'show_overlay': self.tab_comparativo.chk_overlay.isChecked(),
-            'show_snr': self.tab_comparativo.chk_snr.isChecked(),
-            'show_amplitude': self.tab_comparativo.chk_amp.isChecked(),
-            'show_table': self.tab_comparativo.chk_table.isChecked(),
-            'show_snr_time': self.tab_comparativo.chk_snr_time.isChecked(),
-            'show_amp_time': self.tab_comparativo.chk_amp_time.isChecked()
+            'canal_comparar': t.cmb_canal_comun.currentText(),
+            'overlay': t.chk_overlay.isChecked(),
+            'snr': t.chk_snr.isChecked(),
+            'amp': t.chk_amp.isChecked(),
+            'snr_time': t.chk_snr_time.isChecked(),
+            'amp_time': t.chk_amp_time.isChecked(),
+            'table': t.chk_table.isChecked()
         }
+        
+
+    
+class MachineLearningPanel(QWidget):
+    """Contenedor para la sección de Deep Learning / Machine Learning"""
+    def __init__(self):
+        super().__init__()
+        self.setStyleSheet(
+            "QWidget { background-color: #050505; color: #00ffcc; font-family: 'Courier New', monospace; }"
+            "QTabWidget::pane { border: 2px solid #ff00ff; border-radius: 4px; background: #050505; }"
+            "QTabBar::tab { background: #111; color: #aaa; border: 2px solid #333; padding: 10px; font-weight: bold; }"
+            "QTabBar::tab:selected { background: #ff00ff; color: #fff; border-color: #ff00ff; }"
+            "QGroupBox { border: 1px solid #ff00ff; border-radius: 4px; margin-top: 10px; padding-top: 10px; font-weight: bold; color: #00ffcc; }"
+            "QLabel { color: #00ffcc; }"
+            "QCheckBox { color: #00ffcc; }"
+            "QCheckBox::indicator:checked { background: #ff00ff; }"
+            "QSpinBox, QDoubleSpinBox, QLineEdit, QComboBox { background-color: #111; color: #00ffcc; border: 1px solid #00ffcc; padding: 4px; }"
+        )
+        
+        self.layout = QVBoxLayout(self)
+        self.tabs = QTabWidget()
+        
+        # 1. Umbrales (Coordenadas + Entrenamiento)
+        self.tab_umbrales = QWidget()
+        lyt_umbrales = QVBoxLayout(self.tab_umbrales)
+        self.subtabs_umbrales = QTabWidget()
+        self.tab_motor = DiscreteMotorTab()
+        self.tab_training = TrainingMotorTab()
+        self.subtabs_umbrales.addTab(self.tab_motor, " Coordenadas Discretas")
+        self.subtabs_umbrales.addTab(self.tab_training, " Entrenamiento de Umbrales")
+        lyt_umbrales.addWidget(self.subtabs_umbrales)
+        self.tabs.addTab(self.tab_umbrales, "Umbrales")
+        
+        # 2, 3, 4. PCA, UMAP, UMAP Supervisado
+        self.tab_pca = PcaTab()
+        self.tabs.addTab(self.tab_pca, "PCA")
+        
+        self.tab_umap = UmapTab()
+        self.tabs.addTab(self.tab_umap, "UMAP No-Lineal")
+        
+        self.tab_umap_sup = UmapSupervisadoTab()
+        self.tabs.addTab(self.tab_umap_sup, "UMAP Supervisado")
+        
+        # 5. Autoencoders
+        self.tab_autoencoders = QWidget()
+        lyt_autoencoders = QVBoxLayout(self.tab_autoencoders)
+        self.btn_autoencoders = QPushButton("Pipeline Maestro: Autoencoder")
+        self.btn_autoencoders.setStyleSheet("padding: 15px; font-size: 14px; background-color: #00331a; color: #00ffaa; border: 1px solid #00ffaa;")
+        lyt_autoencoders.addWidget(self.btn_autoencoders)
+        lyt_autoencoders.addStretch()
+        self.tabs.addTab(self.tab_autoencoders, "Autoencoders")
+        
+        # 6. Otros Clasificadores y Herramientas
+        self.tab_otros = QWidget()
+        lyt_otros = QVBoxLayout(self.tab_otros)
+        self.btn_xgboost = QPushButton("Machine Learning: XGBoost")
+        self.btn_xgboost.setStyleSheet("padding: 15px; font-size: 14px; background-color: #331a00; color: #ffaa00; border: 1px solid #ffaa00;")
+        self.btn_trevisan = QPushButton("Análisis de Binarización (Trevisan)")
+        self.btn_trevisan.setStyleSheet("padding: 15px; font-size: 14px; background-color: #001a33; color: #00ffff; border: 1px solid #00ffff;")
+        self.btn_visor_features = QPushButton("Visualizador de Features (PCA/UMAP)")
+        self.btn_visor_features.setStyleSheet("padding: 15px; font-size: 14px; background-color: #330033; color: #ff00ff; border: 1px solid #ff00ff;")
+        
+        lyt_otros.addWidget(self.btn_xgboost)
+        lyt_otros.addWidget(self.btn_trevisan)
+        lyt_otros.addWidget(self.btn_visor_features)
+        lyt_otros.addStretch()
+        self.tabs.addTab(self.tab_otros, "Herramientas Extra (XGBoost, Visor)")
+        
+        self.layout.addWidget(self.tabs)
+
+    def get_discrete_kwargs(self):
+        return {
+            'n_std': self.tab_motor.inp_std_multiplier.value(),
+            'vocal_orden': self.tab_motor.cmb_vocal_orden.currentText(),
+            'vocal_inicio': self.tab_motor.cmb_vocal_inicio.currentText()
+        }
+
+    def get_training_kwargs(self):
+        return {
+            'chk_snr': self.tab_training.chk_snr.isChecked(),
+            'snr_limit': self.tab_training.inp_snr_limit.value(),
+            'snr_tipo': self.tab_training.cmb_snr_tipo.currentText(),
+            'tipo_barrido': self.tab_training.cmb_tipo_barrido.currentText(),
+            'paso_barrido': self.tab_training.inp_paso_barrido.value()
+        }
+
+    def get_pca_kwargs(self):
+        t = self.tab_pca
+        canales = []
+        if t.chk_canal_0.isChecked(): canales.append("canal_0")
+        if t.chk_canal_1.isChecked(): canales.append("canal_1")
+        if t.chk_canal_2.isChecked(): canales.append("canal_2")
+        
+        estilo_visual = "Fronteras"
+        if t.rb_elipses.isChecked(): estilo_visual = "Elipses"
+        elif t.rb_sombreado.isChecked(): estilo_visual = "Sombreado"
+        
+        return {
+            'proc_pca_2d': t.chk_pca_2d.isChecked(),
+            'proc_pca_3d': t.chk_pca_3d.isChecked(),
+            'proc_umap_2d': False,
+            'proc_umap_3d': False,
+            'ocultar_leyenda': t.chk_ocultar_leyenda.isChecked(),
+            'params_2d': {
+                'alpha_ruido': t.inp_alpha_2d.value(),
+                'smooth_ms': t.inp_smooth_2d.value(),
+                'target_length': t.inp_pts_2d.value(),
+                'snr_threshold': t.inp_snr_2d.value(),
+                'outlier_contamination': t.inp_outliers_2d.value(),
+                'notch_q': 2.0
+            },
+            'params_3d': {
+                'alpha_ruido': t.inp_alpha_3d.value(),
+                'smooth_ms': t.inp_smooth_3d.value(),
+                'target_length': t.inp_pts_3d.value(),
+                'snr_threshold': t.inp_snr_3d.value(),
+                'outlier_contamination': t.inp_outliers_3d.value(),
+                'notch_q': 2.0
+            },
+            'params_umap': {},
+            'umap_n_neighbors': 15,
+            'umap_min_dist': 0.1,
+            'umap_metric': 'euclidean',
+            'algoritmo_clustering_pca': t.cmb_cluster.currentText(),
+            'algoritmo_clustering_umap': 'K-Means',
+            'aplicar_trevisan': t.chk_trevisan.isChecked(),
+            'ignorar_ventana_cero': t.chk_ignorar_cero.isChecked(),
+            'pre_pct': t.inp_pre_pct.value(),
+            'post_pct': t.inp_post_pct.value(),
+            'modo_alineacion': t.cmb_align.currentText(),
+            'estilo_visual': estilo_visual,
+            'canales_features': canales
+        }
+
+    def get_umap_kwargs(self):
+        t = self.tab_umap
+        canales = []
+        if t.chk_canal_0.isChecked(): canales.append("canal_0")
+        if t.chk_canal_1.isChecked(): canales.append("canal_1")
+        if t.chk_canal_2.isChecked(): canales.append("canal_2")
+        
+        return {
+            'proc_pca_2d': False,
+            'proc_pca_3d': False,
+            'proc_umap_2d': t.chk_umap_2d.isChecked(),
+            'proc_umap_3d': t.chk_umap_3d.isChecked(),
+            'ocultar_leyenda': t.chk_ocultar_leyenda.isChecked(),
+            'params_2d': {},
+            'params_3d': {},
+            'params_umap': {
+                'alpha_ruido': t.inp_alpha_u.value(),
+                'smooth_ms': t.inp_smooth_u.value(),
+                'target_length': t.inp_pts_u.value(),
+                'snr_threshold': t.inp_snr_u.value(),
+                'outlier_contamination': t.inp_outliers_u.value(),
+                'notch_q': 2.0
+            },
+            'umap_n_neighbors': t.inp_n_neighbors.value(),
+            'umap_min_dist': t.inp_min_dist.value(),
+            'umap_metric': t.cmb_metric.currentText(),
+            'algoritmo_clustering_pca': 'K-Means',
+            'algoritmo_clustering_umap': t.cmb_cluster.currentText(),
+            'aplicar_trevisan': t.chk_trevisan.isChecked(),
+            'ignorar_ventana_cero': t.chk_ignorar_cero.isChecked(),
+            'pre_pct': t.inp_pre_pct.value(),
+            'post_pct': t.inp_post_pct.value(),
+            'modo_alineacion': t.cmb_align.currentText(),
+            'estilo_visual': 'Elipses',
+            'canales_features': canales
+        }
+
+    def get_umap_supervisado_kwargs(self):
+        t = self.tab_umap_sup
+        t_umap = self.tab_umap
+        canales = []
+        if t_umap.chk_canal_0.isChecked(): canales.append("canal_0")
+        if t_umap.chk_canal_1.isChecked(): canales.append("canal_1")
+        if t_umap.chk_canal_2.isChecked(): canales.append("canal_2")
+
+        return {
+            'alpha_ruido': t.inp_alpha.value(),
+            'smooth_ms': t.inp_smooth.value(),
+            'target_length': t.inp_target_len.value(),
+            'snr_threshold': t.inp_snr.value(),
+            'outlier_contamination': t.inp_outliers.value(),
+            'notch_q': 2.0,
+            'umap_n_neighbors': t.inp_umap_nn.value(),
+            'umap_min_dist': t.inp_umap_md.value(),
+            'umap_metric': t.cmb_metric.currentText(),
+            'target_weight': t.inp_umap_tw.value(),
+            'eliminar_outliers_train': t.chk_outliers_train.isChecked(),
+            'aplicar_trevisan': t_umap.chk_trevisan.isChecked(),
+            'ignorar_ventana_cero': t_umap.chk_ignorar_cero.isChecked(),
+            'pre_pct': t_umap.inp_pre_pct.value(),
+            'post_pct': t_umap.inp_post_pct.value(),
+            'modo_alineacion': t_umap.cmb_align.currentText(),
+            'canales_features': canales
+        }
+
+class TrainTestSplitDialog(QDialog):
+    def __init__(self, sesiones, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Configuración de UMAP Supervisado")
+        self.setMinimumSize(600, 450)
+        self.setStyleSheet("""
+            QDialog { background-color: #0c0c0c; color: #e0e0e0; font-family: 'Consolas', 'Courier New', monospace; }
+            QLabel { color: #ffffff; font-weight: bold; }
+            QLineEdit { background-color: #1e1e1e; color: #00ffcc; border: 1px solid #333; padding: 5px; }
+            QListWidget { background-color: #1e1e1e; color: #00ffcc; border: 1px solid #333; }
+            QPushButton { background-color: #333333; color: white; border-radius: 4px; padding: 8px; font-weight: bold; }
+            QPushButton:hover { background-color: #555555; }
+            QPushButton#btnConfirm { background-color: #0066cc; }
+            QPushButton#btnConfirm:hover { background-color: #0088ff; }
+        """)
+
+        layout = QVBoxLayout(self)
+
+        # Nombre del Set
+        h_name = QHBoxLayout()
+        h_name.addWidget(QLabel("Nombre del Set de Mediciones:"))
+        self.inp_nombre = QLineEdit()
+        self.inp_nombre.setPlaceholderText("Ej: sujeto_lucas_prueba_1")
+        h_name.addWidget(self.inp_nombre)
+        layout.addLayout(h_name)
+
+        # Listas de Train y Test
+        h_lists = QHBoxLayout()
+        
+        v_train = QVBoxLayout()
+        v_train.addWidget(QLabel("Entrenamiento (Train)"))
+        self.lst_train = QListWidget()
+        self.lst_train.setSelectionMode(QListWidget.ExtendedSelection)
+        # By default, add all sessions to Train
+        for s in sesiones:
+            self.lst_train.addItem(s)
+        v_train.addWidget(self.lst_train)
+        h_lists.addLayout(v_train)
+
+        # Botones de flechas
+        v_arrows = QVBoxLayout()
+        v_arrows.addStretch()
+        self.btn_to_test = QPushButton(">>")
+        self.btn_to_train = QPushButton("<<")
+        self.btn_to_test.clicked.connect(self._move_to_test)
+        self.btn_to_train.clicked.connect(self._move_to_train)
+        v_arrows.addWidget(self.btn_to_test)
+        v_arrows.addWidget(self.btn_to_train)
+        v_arrows.addStretch()
+        h_lists.addLayout(v_arrows)
+
+        v_test = QVBoxLayout()
+        v_test.addWidget(QLabel("Validación (Test)"))
+        self.lst_test = QListWidget()
+        self.lst_test.setSelectionMode(QListWidget.ExtendedSelection)
+        v_test.addWidget(self.lst_test)
+        h_lists.addLayout(v_test)
+
+        layout.addLayout(h_lists)
+
+        # Botones de Acción
+        h_action = QHBoxLayout()
+        h_action.addStretch()
+        self.btn_cancel = QPushButton("Cancelar")
+        self.btn_confirm = QPushButton("Confirmar")
+        self.btn_confirm.setObjectName("btnConfirm")
+        
+        self.btn_cancel.clicked.connect(self.reject)
+        self.btn_confirm.clicked.connect(self.accept)
+        
+        h_action.addWidget(self.btn_cancel)
+        h_action.addWidget(self.btn_confirm)
+        layout.addLayout(h_action)
+
+    def _move_to_test(self):
+        items = self.lst_train.selectedItems()
+        for item in items:
+            self.lst_train.takeItem(self.lst_train.row(item))
+            self.lst_test.addItem(item)
+
+    def _move_to_train(self):
+        items = self.lst_test.selectedItems()
+        for item in items:
+            self.lst_test.takeItem(self.lst_test.row(item))
+            self.lst_train.addItem(item)
+            
+    def get_results(self):
+        nombre = self.inp_nombre.text().strip().replace(" ", "_")
+        train_sessions = [self.lst_train.item(i).text() for i in range(self.lst_train.count())]
+        test_sessions = [self.lst_test.item(i).text() for i in range(self.lst_test.count())]
+        return nombre, train_sessions, test_sessions

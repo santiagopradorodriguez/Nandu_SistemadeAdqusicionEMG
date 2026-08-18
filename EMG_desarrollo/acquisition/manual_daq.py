@@ -376,9 +376,9 @@ def guardar_grabacion_wav(datos_completos, sample_rate, output_dir, num_canales,
         
         try:
             write_wav(nombre_archivo_canal, sample_rate, datos_int16)
-            print(f"   ✅ Canal {i} guardado como: {nombre_archivo_canal}")
+            print(f"   [OK] Canal {i} guardado como: {nombre_archivo_canal}")
         except Exception as e:
-            print(f"   ❌ Error al guardar el .wav del canal {i}: {e}")
+            print(f"   [ERROR] Error al guardar el .wav del canal {i}: {e}")
             exito_total = False
     return exito_total
 
@@ -428,10 +428,10 @@ def guardar_grabacion_csv(datos_completos, sample_rate, output_dir, num_canales,
         columnas = ["Tiempo (s)"] + [f"Canal {i}" for i in range(num_canales)]
         df = pd.DataFrame(datos_para_csv, columns=columnas)
         df.to_csv(nombre_archivo_csv, index=False, float_format='%.5f')
-        print(f"   ✅ CSV guardado exitosamente.")
+        print(f"   [OK] CSV guardado exitosamente.")
         return True
     except Exception as e:
-        print(f"   ❌ Error al guardar el CSV: {e}")
+        print(f"   [ERROR] Error al guardar el CSV: {e}")
         return False
 
 # =============================================================================
@@ -505,10 +505,10 @@ def generar_grafico_grabacion(datos_completos, sample_rate, output_dir, num_cana
     try:
         fig.tight_layout(rect=[0, 0.03, 1, 0.96]) # Ajuste para el supertítulo
         fig.savefig(nombre_archivo_grafico, dpi=200) # dpi=200 es un buen balance
-        print(f"   ✅ Gráfico guardado como: {nombre_archivo_grafico}")
+        print(f"   [OK] Gráfico guardado como: {nombre_archivo_grafico}")
         return True
     except Exception as e:
-        print(f"   ❌ Error al guardar el gráfico: {e}")
+        print(f"   [ERROR] Error al guardar el gráfico: {e}")
         return False
     finally:
         fig.clear() # Liberar memoria
@@ -587,7 +587,7 @@ def generar_grafico_estadisticas(stats_time, stats_snr, stats_noise_mean, stats_
     plt.tight_layout(rect=[0, 0.03, 1, 0.96])
     plt.savefig(nombre_archivo, dpi=200)
     plt.close(fig)
-    print(f"   ✅ Gráfico de estadísticas guardado como: {nombre_archivo}")
+    print(f"   [OK] Gráfico de estadísticas guardado como: {nombre_archivo}")
     return True
 
 # =============================================================================
@@ -920,7 +920,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.config_layout.addLayout(self.channel_layout, 2, 1, 1, 4) # row, col, rowspan, colspan
         
         # --- NUEVO: Control de Modo Terminal ---
-        self.label_terminal_config = QtWidgets.QLabel("⚡ CONEXIÓN DAQ (Voltaje):")
+        self.label_terminal_config = QtWidgets.QLabel("CONEXIÓN DAQ (Voltaje):")
         self.label_terminal_config.setStyleSheet("color: #FFFF00; font-weight: bold; font-size: 13px;")
         self.cmb_terminal_config = QtWidgets.QComboBox()
         self.cmb_terminal_config.setStyleSheet("background-color: #000000; color: #FFFF00; border: 2px solid #FFFF00; font-size: 14px; font-weight: bold; padding: 4px;")
@@ -992,7 +992,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         
         self.label_trig_edge = QtWidgets.QLabel("Flanco:")
         self.cmb_trig_edge = QtWidgets.QComboBox()
-        self.cmb_trig_edge.addItems(["Subida ↗", "Bajada ↘"])
+        self.cmb_trig_edge.addItems(["Subida (Flanco Positivo)", "Bajada (Flanco Negativo)"])
         
         # --- NUEVO: Umbral para SNR ---
         self.label_peak_th = QtWidgets.QLabel("Umbral Picos SNR (µV):")
@@ -1870,14 +1870,14 @@ class RealTimePlotter(QtWidgets.QWidget):
         try:
             os.makedirs(output_dir, exist_ok=True)
         except Exception as e:
-            print(f"--- ❌ ERROR FATAL AL CREAR DIRECTORIO ---\n{e}")
+            print(f"--- [ERROR] ERROR FATAL AL CREAR DIRECTORIO ---\n{e}")
             return
 
         # --- NUEVO: Crear las carpetas de los canales desde el principio ---
         for i in range(self.NUM_CANALES):
             channel_output_dir = os.path.join(output_dir, f"canal_{i}")
             os.makedirs(channel_output_dir, exist_ok=True)
-        print(f"   ✅ Creadas {self.NUM_CANALES} carpetas de canal en '{output_dir}'")
+        print(f"   [OK] Creadas {self.NUM_CANALES} carpetas de canal en '{output_dir}'")
 
         print(f"\n--- INICIANDO EXPORTACIÓN a la carpeta '{output_dir}' ---")
         
@@ -1895,9 +1895,9 @@ class RealTimePlotter(QtWidgets.QWidget):
                     pulse_count_from_metronome = data.get('last_beat_count')
                     if pulse_count_from_metronome is not None:
                         # --- MENSAJE DE CONFIRMACIÓN ---
-                        print(f"✅ Guardados {pulse_count_from_metronome} pulsos en el metadata.")
+                        print(f"[OK] Guardados {pulse_count_from_metronome} pulsos en el metadata.")
                     else:
-                        print("⚠️ No se encontró 'last_beat_count' en metronome_config.json.")
+                        print("[WARN] No se encontró 'last_beat_count' en metronome_config.json.")
             except Exception as e:
                 print(f"Advertencia: No se pudo leer el conteo de pulsos desde metronome_config.json. Error: {e}")
 
@@ -1923,34 +1923,34 @@ class RealTimePlotter(QtWidgets.QWidget):
             try:
                 with open(metadata_path, 'w', encoding='utf-8') as f:
                     json.dump(metadata, f, indent=4)
-                print(f"   ✅ Metadata guardado en: {metadata_path}")
+                print(f"   [OK] Metadata guardado en: {metadata_path}")
             except Exception as e:
-                print(f"--- ❌ ERROR AL GUARDAR METADATA.JSON en '{current_dir}' ---\n{e}")
+                print(f"--- [ERROR] ERROR AL GUARDAR METADATA.JSON en '{current_dir}' ---\n{e}")
 
         # 1. Guarda el .wav
         try:
             guardar_grabacion_wav(self.current_recording, self.SAMPLE_RATE, output_dir, self.NUM_CANALES)
         except Exception as e:
-            print(f"--- ❌ ERROR FATAL AL GUARDAR ARCHIVOS .WAV ---\n{e}")
+            print(f"--- [ERROR] ERROR FATAL AL GUARDAR ARCHIVOS .WAV ---\n{e}")
 
         # 2. Guarda el .csv
         try:
             guardar_grabacion_csv(self.current_recording, self.SAMPLE_RATE, output_dir, self.NUM_CANALES)
         except Exception as e:
-            print(f"--- ❌ ERROR FATAL AL GUARDAR .CSV ---\n{e}")
+            print(f"--- [ERROR] ERROR FATAL AL GUARDAR .CSV ---\n{e}")
 
         # 3. Genera el gráfico .png
         try:
             generar_grafico_grabacion(self.current_recording, self.SAMPLE_RATE, output_dir, self.NUM_CANALES, self.CANALES_DAQ)
         except Exception as e:
-            print(f"--- ❌ ERROR FATAL AL GUARDAR .PNG ---\n{e}")
+            print(f"--- [ERROR] ERROR FATAL AL GUARDAR .PNG ---\n{e}")
             print("   (¿Estás seguro de que 'matplotlib' está instalado? -> pip install matplotlib)")
 
         # 4. Genera el gráfico de estadísticas (Evolución de SNR y Ruido)
         try:
             generar_grafico_estadisticas(self.stats_time, self.stats_snr, self.stats_noise_mean, self.stats_noise_std, output_dir, self.NUM_CANALES, self.CANALES_DAQ)
         except Exception as e:
-            print(f"--- ❌ ERROR FATAL AL GUARDAR GRÁFICO ESTADÍSTICO ---\n{e}")
+            print(f"--- [ERROR] ERROR FATAL AL GUARDAR GRÁFICO ESTADÍSTICO ---\n{e}")
 
         print("--- EXPORTACIÓN FINALIZADA ---")
 

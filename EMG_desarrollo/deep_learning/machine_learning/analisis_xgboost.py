@@ -24,7 +24,7 @@ def main():
     csv_path = os.path.join(out_dir, "caracteristicas_exportadas.csv")
         
     if not os.path.exists(csv_path):
-        print(f"❌ Error: No se encontró {csv_path}. ¡Extrae las features primero!")
+        print(f"[ERROR] No se encontró {csv_path}. ¡Extrae las features primero!")
         return
         
     print(f"Cargando dataset: {csv_path}")

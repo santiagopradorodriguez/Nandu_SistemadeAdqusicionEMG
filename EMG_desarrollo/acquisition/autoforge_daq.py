@@ -2243,7 +2243,7 @@ class RealTimePlotter(QtWidgets.QWidget):
             # --- MENSAJE DE CONFIRMACIÓN ---
             print(f" Guardados {pulse_count_from_metronome} pulsos en el metadata.")
           else:
-            print("⚠ No se encontró 'last_beat_count' en metronome_config.json.")
+            print("[WARN] No se encontró 'last_beat_count' en metronome_config.json.")
       except Exception as e:
         print(f"Advertencia: No se pudo leer el conteo de pulsos desde metronome_config.json. Error: {e}")
 
@@ -2506,7 +2506,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         if getattr(self, 'is_autoforge_running', False):
           # En AutoForge, ponemos textos personalizados
           tr_str = getattr(self, 'tiempo_restante_str', '00:00')
-          cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;⏱ Resta: {tr_str}&nbsp;</span>"
+          cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;Resta: {tr_str}&nbsp;</span>"
           if not getattr(self, 'noise_calculated', False):
             self.label_rec_time.setText(f"GRABANDO RUIDO... {elapsed_time:.1f} s{cuadro_azul}")
             self.label_rec_time.setStyleSheet("font-weight: bold; color: #FFFF00;") # Amarillo neón
@@ -2553,7 +2553,7 @@ class RealTimePlotter(QtWidgets.QWidget):
               if countdown < 1: countdown = 1
               
               tr_str = f"{time_remaining:.1f}s"
-              cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white; font-size: 20px;'>&nbsp;⏱ Resta: {tr_str}&nbsp;</span>"
+              cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white; font-size: 20px;'>&nbsp;Resta: {tr_str}&nbsp;</span>"
               
               time_str = f"PREPÁRATE... {countdown}{cuadro_azul}"
               self.label_rec_time.setStyleSheet("font-weight: bold; color: #FF8800; font-size: 30px;") # Naranja gigante
@@ -2573,7 +2573,7 @@ class RealTimePlotter(QtWidgets.QWidget):
             if not getattr(self, 'noise_calculated', False) and elapsed_time < noise_dur:
               time_remaining = noise_dur - elapsed_time
               tr_str = f"{time_remaining:.1f}s"
-              cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white; font-size: 20px;'>&nbsp;⏱ Resta: {tr_str}&nbsp;</span>"
+              cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white; font-size: 20px;'>&nbsp;Resta: {tr_str}&nbsp;</span>"
               
               if time_remaining <= 3.0:
                 import math
@@ -2995,7 +2995,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.autoforge_estado_actual_str = f"Secuencia: {total_pulsos} pulsos"
     
     tr_str = getattr(self, 'tiempo_restante_str', '00:00')
-    cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;⏱ Resta: {tr_str}&nbsp;</span>"
+    cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;Resta: {tr_str}&nbsp;</span>"
     self.label_rec_time.setText(f"{self.autoforge_estado_actual_str}{cuadro_azul}")
     
     self.autoforge_overlay.setText("<div align='center'>HAZ SILENCIO<br>PREPARANDO ENTORNO...</div>")
@@ -3049,7 +3049,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.autoforge_estado_actual_str = "ESCUCHA EL METRÓNOMO..."
     
     tr_str = getattr(self, 'tiempo_restante_str', '00:00')
-    cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;⏱ Resta: {tr_str}&nbsp;</span>"
+    cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;Resta: {tr_str}&nbsp;</span>"
     self.label_rec_time.setText(f"{self.autoforge_estado_actual_str}{cuadro_azul}")
     self.label_rec_time.setStyleSheet("font-weight: bold; color: #FF8800;")
     
@@ -3261,7 +3261,7 @@ class RealTimePlotter(QtWidgets.QWidget):
       # Actualizamos el label si no está grabando ruido/palabra, o si está en un descanso
       if not getattr(self, 'is_recording', False) and getattr(self, 'is_autoforge_running', False):
         if hasattr(self, 'autoforge_estado_actual_str'):
-          cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;⏱ Resta: {self.tiempo_restante_str}&nbsp;</span>"
+          cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;Resta: {self.tiempo_restante_str}&nbsp;</span>"
           self.label_rec_time.setText(f"{self.autoforge_estado_actual_str}{cuadro_azul}")
     else:
       self.tiempo_restante_str = "00:00"
@@ -3305,7 +3305,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.autoforge_estado_actual_str = f"Set: {palabra_num}/{total_palabras}"
     
     tr_str = getattr(self, 'tiempo_restante_str', '00:00')
-    cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;⏱ Resta: {tr_str}&nbsp;</span>"
+    cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;Resta: {tr_str}&nbsp;</span>"
     self.label_rec_time.setText(f"{self.autoforge_estado_actual_str}{cuadro_azul}")
     
     self.autoforge_overlay.setText("<div align='center'>HAZ SILENCIO<br>PREPARANDO ENTORNO...</div>")
@@ -3372,7 +3372,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.autoforge_estado_actual_str = "ESCUCHA EL METRÓNOMO..."
     
     tr_str = getattr(self, 'tiempo_restante_str', '00:00')
-    cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;⏱ Resta: {tr_str}&nbsp;</span>"
+    cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;Resta: {tr_str}&nbsp;</span>"
     self.label_rec_time.setText(f"{self.autoforge_estado_actual_str}{cuadro_azul}")
     self.label_rec_time.setStyleSheet("font-weight: bold; color: #FF8800;") # Naranja
     

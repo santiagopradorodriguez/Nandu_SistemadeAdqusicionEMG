@@ -45,10 +45,10 @@ def main():
     letras_dir = os.path.join(script_dir, 'base_de_datos_letras')
     path_csv = os.path.join(letras_dir, 'amplitudes_maximas.csv')
 
-    print(f"🔎 Buscando y cargando datos de amplitud desde '{path_csv}'...")
+    print(f"Buscando y cargando datos de amplitud desde '{path_csv}'...")
 
     if not os.path.exists(path_csv):
-        print("❌ No se encontraron datos de amplitud para analizar.")
+        print("[ERROR] No se encontraron datos de amplitud para analizar.")
         print("   Asegúrate de haber ejecutado 'extractor_de_datos_procesados.py' primero.")
         return
 
@@ -59,7 +59,7 @@ def main():
         # Extraer la letra del nombre del pulso (ej. 'A' de 'A_ampli1_a_10ohm...')
         df['Letra'] = df['nombre_pulso'].str[0]
 
-        print("\n📊 Análisis de Amplitud Real por Letra:")
+        print("\n[INFO] Análisis de Amplitud Real por Letra:")
         
         # Agrupar por la nueva columna 'Letra' y calcular estadísticas para 'Amplitud_Real'
         stats = df.groupby('Letra')['Amplitud_Real'].describe()
@@ -67,7 +67,7 @@ def main():
         print(stats.to_string()) # Imprimir estadísticas en consola
 
         # --- NUEVO: Generar y guardar el histograma de amplitudes ---
-        print("\n📊 Generando histograma de amplitudes reales...")
+        print("\n[INFO] Generando histograma de amplitudes reales...")
         path_histograma = os.path.join(letras_dir, 'histograma_amplitudes_reales.png')
 
         plt.figure(figsize=(12, 7))
@@ -86,11 +86,11 @@ def main():
         plt.tight_layout()
         plt.savefig(path_histograma)
         
-        print(f"   -> ✅ Histograma guardado en '{path_histograma}'")
-        print("\n--- ✨ Análisis Finalizado ---")
+        print(f"   -> [OK] Histograma guardado en '{path_histograma}'")
+        print("\n--- Análisis Finalizado ---")
 
     except Exception as e:
-        print(f"❌ Ocurrió un error durante el análisis: {e}")
+        print(f"[ERROR] Ocurrió un error durante el análisis: {e}")
 
 if __name__ == "__main__":
     main()

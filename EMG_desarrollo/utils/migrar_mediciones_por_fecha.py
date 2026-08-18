@@ -38,7 +38,7 @@ def migrar_analisis_comparativos():
     date_folder_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}$")
     
     if not os.path.exists(comp_dir):
-        print(f"⚠️ El directorio '{comp_dir}' no existe. Saltando...")
+        print(f"[WARN] El directorio '{comp_dir}' no existe. Saltando...")
         return
 
     # Patrón para capturar YYYYMMDD (8 dígitos seguidos)
@@ -70,21 +70,21 @@ def migrar_analisis_comparativos():
             os.makedirs(ruta_destino_folder, exist_ok=True)
             
             try:
-                print(f"📊 Moviendo: '{item}' -> '{fecha_folder}/'")
+                print(f"[INFO] Moviendo: '{item}' -> '{fecha_folder}/'")
                 # shutil.move funciona tanto para archivos como para directorios
                 shutil.move(ruta_origen, os.path.join(ruta_destino_folder, item))
                 movidos += 1
             except Exception as e:
-                print(f"❌ Error moviendo '{item}': {e}")
+                print(f"[ERROR] Error moviendo '{item}': {e}")
 
-    print(f"✅ Archivos de análisis migrados: {movidos}")
+    print(f"[OK] Archivos de análisis migrados: {movidos}")
 
 def migrar_base_datos():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     base_dir = os.path.join(os.path.dirname(script_dir), "base_de_datos_electrodos")
     
     if not os.path.exists(base_dir):
-        print(f"❌ El directorio '{base_dir}' no existe. Ejecuta el script desde la raíz del proyecto.")
+        print(f"[ERROR] El directorio '{base_dir}' no existe. Ejecuta el script desde la raíz del proyecto.")
         return
 
     # Regex para identificar si una carpeta ya es una carpeta de fecha (YYYY-MM-DD)
@@ -118,9 +118,9 @@ def migrar_base_datos():
                         # Extraer solo la parte YYYY-MM-DD (ej: "2023-10-27T10:00:00" -> "2023-10-27")
                         fecha_medicion = fecha_iso.split("T")[0]
             except Exception as e:
-                print(f"⚠️ Error leyendo {ruta_metadata}: {e}")
+                print(f"[WARN] Error leyendo {ruta_metadata}: {e}")
         else:
-            print(f"⚠️ No se encontró metadata en '{carpeta}'. Se moverá a 'Sin_Fecha'.")
+            print(f"[WARN] No se encontró metadata en '{carpeta}'. Se moverá a 'Sin_Fecha'.")
             
         # Crear la carpeta de la fecha si no existe
         ruta_destino_fecha = os.path.join(base_dir, fecha_medicion)
@@ -130,16 +130,16 @@ def migrar_base_datos():
         ruta_destino_final = os.path.join(ruta_destino_fecha, carpeta)
         
         try:
-            print(f"📁 Moviendo: '{carpeta}' -> '{fecha_medicion}/{carpeta}'")
+            print(f"[INFO] Moviendo: '{carpeta}' -> '{fecha_medicion}/{carpeta}'")
             shutil.move(ruta_medicion, ruta_destino_final)
             movidas += 1
         except Exception as e:
-            print(f"❌ Error al mover '{carpeta}': {e}")
+            print(f"[ERROR] Error al mover '{carpeta}': {e}")
             errores += 1
 
     print("\n--- RESUMEN DE MIGRACIÓN ---")
-    print(f"✅ Carpetas migradas exitosamente: {movidas}")
-    print(f"❌ Errores: {errores}")
+    print(f"[OK] Carpetas migradas exitosamente: {movidas}")
+    print(f"[ERROR] Errores: {errores}")
 
 if __name__ == "__main__":
     migrar_base_datos()

@@ -42,7 +42,7 @@ def main():
     print(f"--- Iniciando Actualizador de Metadata v1.0 en '{base_dir}' ---")
 
     if not os.path.isdir(base_dir):
-        print(f"❌ ERROR: El directorio base '{base_dir}' no existe. No hay nada que procesar.")
+        print(f"[ERROR] El directorio base '{base_dir}' no existe. No hay nada que procesar.")
         return
 
     # Regex para encontrar la resistencia en el nombre de la carpeta.
@@ -63,7 +63,7 @@ def main():
                 resistencia_str = match.group(1).replace('_', '.')
                 resistencia_val = float(resistencia_str)
 
-            print(f"\n✅ Medición '{nombre_medicion}': Resistencia a usar = {resistencia_val} Ω")
+            print(f"\n[OK] Medición '{nombre_medicion}': Resistencia a usar = {resistencia_val} Ω")
             # Recorrer las carpetas de canal dentro de la medición
             for item in sorted(os.listdir(path_medicion)):
                 path_canal = os.path.join(path_medicion, item)
@@ -84,7 +84,7 @@ def main():
                         json.dump(metadata, f, indent=4)
                     print(f"  -> Metadata actualizado en '{os.path.join(item, 'metadata.json')}'")
 
-    print("\n--- ✨ Proceso Finalizado ---")
+    print("\n--- Proceso Finalizado ---")
 
 if __name__ == "__main__":
     main()

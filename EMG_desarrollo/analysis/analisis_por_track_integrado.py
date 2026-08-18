@@ -652,27 +652,32 @@ def export_results_for_file(out_dir, filename, resultados_entry):
       - (los PNG ya deben estar guardados en out_dir por las funciones de plotting)
     """
     os.makedirs(out_dir, exist_ok=True)
-    # Guardar JSON con valores principales
-    export = {}
-    keys = ['mean_pulse', 'pulse_time', 'snr_mean', 'snr_per_pulse', 'snr_manual', 'amp_uncertainty',
-            'snr_uncertainty', 'noise_sigma', 'noise_rms',
-            'noise_rms_from_noise_window', 'umbral', 'segmentos_rs', 'snr_per_pulse']
-    for k in keys:
-        export[k] = resultados_entry.get(k, None)
-    export['file'] = filename
-    json_path = os.path.join(out_dir, 'results.json')
-    with open(json_path, 'w') as fh:
-        json.dump(export, fh, indent=2, default=lambda x: 'Array omitido' if (isinstance(x, np.ndarray)) else x)
+    smooth_ms_val = resultados_entry.get('smooth_ms', 0)
+    smooth_ms_str = str(smooth_ms_val).replace('.', '_')
+    json_path = os.path.join(out_dir, f'results_env{smooth_ms_str}ms.json')
+    with open(json_path, 'w') as f:
+        json.dump(resultados_entry, f, indent=4, default=lambda o: o.tolist() if isinstance(o, np.ndarray) else o)
+
+    full_results_path = os.path.join(out_dir, f'analisis_results_env{smooth_ms_str}ms.json')
+    full_results_path_latest = os.path.join(out_dir, 'analisis_results.json')
     
-    # --- NUEVO: Guardar todos los resultados en un único archivo JSON ---
-    # Esto simplifica la carga posterior para comparaciones.
-    full_results_path = os.path.join(out_dir, 'analisis_results.json')
-    try:
-        with open(full_results_path, 'w') as f:
-            # Usamos un default para convertir arrays de numpy a listas para que sea serializable
-            json.dump(resultados_entry, f, indent=4, default=lambda o: o.tolist() if isinstance(o, np.ndarray) else o)
-    except Exception as e:
-        print(f"Error guardando arrays para {filename}: {e}")
+    if os.path.exists(full_results_path):
+        with open(full_results_path, 'r') as f:
+            try:
+                all_results = json.load(f)
+            except json.JSONDecodeError:
+                all_results = []
+    else:
+        all_results = []
+        
+    all_results.append(resultados_entry)
+    
+    with open(full_results_path, 'w') as f:
+        json.dump(all_results, f, indent=4, default=lambda o: o.tolist() if isinstance(o, np.ndarray) else o)
+        
+    with open(full_results_path_latest, 'w') as f:
+        json.dump(resultados_entry, f, indent=4, default=lambda o: o.tolist() if isinstance(o, np.ndarray) else o)
+
     print(f"Exportados resultados en {out_dir}")
 
 
@@ -1767,11 +1772,17 @@ def procesar_wavs_promedio(
         # Usar el output_root directamente como directorio de salida para los archivos de este canal.
         out_dir = output_root
 
-        # nombres de archivo simplificados para que tu otro programa los lea fácilmente
-        out_prom = os.path.join(out_dir, "avg.png")       # pulso promedio
-        out_spec = os.path.join(out_dir, "spec.png")      # espectro/espectrograma
-        out_rec = os.path.join(out_dir, "pulses.png")       # recortes / señal original
-        out_evol = os.path.join(out_dir, "evolucion.png")   # evolucion temporal
+        smooth_ms_str = str(smooth_ms).replace('.', '_')
+        is_dark = plt.rcParams.get('axes.facecolor', '') == 'black'
+        estetica_str = "cyberpunk" if is_dark else "normal"
+        env_str = tipo_envolvente.replace('_', '')
+        
+        sufijo = f"{env_str}_env{smooth_ms_str}ms_{estetica_str}.png"
+        
+        out_prom = os.path.join(out_dir, f"avg_{sufijo}")
+        out_spec = os.path.join(out_dir, f"spec_{sufijo}")
+        out_rec = os.path.join(out_dir, f"pulses_{sufijo}")
+        out_evol = os.path.join(out_dir, f"evolucion_{sufijo}")
 
         # --- GRAFICO: pulsos individuales y promedio (restaurado completo) ---
         _plot_pulse_full(
@@ -1830,6 +1841,7 @@ def procesar_wavs_promedio(
         nombres_globales.append(filename)
 
         resultados[filename] = {
+            'smooth_ms': smooth_ms,
             'maxima_per_cut': maxima_per_cut,
             'segmentos_rs': segmentos_rs,
             'segmentos_norm': segmentos_norm,

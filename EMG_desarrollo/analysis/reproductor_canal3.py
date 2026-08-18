@@ -92,7 +92,7 @@ class AudioPlayer(QMainWindow):
         
         # --- Controles Superiores: Selección de Carpeta ---
         top_layout = QHBoxLayout()
-        self.btn_open = QPushButton("📁 Abrir Base de Datos")
+        self.btn_open = QPushButton("Abrir Base de Datos")
         self.btn_open.clicked.connect(self.open_folder)
         top_layout.addWidget(self.btn_open)
         
@@ -104,7 +104,7 @@ class AudioPlayer(QMainWindow):
         # --- Lista de Archivos de Audio ---
         self.file_list = QListWidget()
         self.file_list.itemDoubleClicked.connect(self.play_selected)
-        layout.addWidget(QLabel("🎙️ Archivos de audio disponibles:"))
+        layout.addWidget(QLabel("Archivos de audio disponibles:"))
         layout.addWidget(self.file_list, stretch=1)
         
         # --- Línea de Tiempo (Timeline) ---
@@ -122,11 +122,11 @@ class AudioPlayer(QMainWindow):
         
         # --- Controles de Reproducción ---
         ctrl_layout = QHBoxLayout()
-        self.btn_play = QPushButton("▶ Play")
+        self.btn_play = QPushButton("Play")
         self.btn_play.setMinimumWidth(100)
         self.btn_play.clicked.connect(self.play_audio)
         
-        self.btn_pause = QPushButton("⏸ Pause")
+        self.btn_pause = QPushButton("Pause")
         self.btn_pause.setMinimumWidth(100)
         self.btn_pause.clicked.connect(self.pause_audio)
         

@@ -1,244 +1,334 @@
-# Sistema de Adquisición y Análisis de EMG
+# Sistema de Adquisición y Análisis de EMG (Ñandú LSD v6.0)
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python)
-![Estado](https://img.shields.io/badge/Estado-En_Desarrollo-yellow?style=for-the-badge)
+![Estado](https://img.shields.io/badge/Estado-v6.0_Deep_Learning_Release-yellow?style=for-the-badge)
 ![Licencia](https://img.shields.io/badge/Licencia-Open_Source-green?style=for-the-badge)
 [![Descargas](https://img.shields.io/badge/Descargas_Windows-Click_Aquí-0078D6?style=for-the-badge)](./DESCARGAS.md)
 
 > **"HECHO PARA Y POR LA COMUNIDAD"**
 
-Este repositorio aloja el software para la **adquisición automatizada, almacenamiento y análisis** de señales de Electromiografía (EMG). El sistema gestiona todo el flujo, desde la captura de hardware (National Instruments o Micrófono) hasta la extracción y evaluación de la relación Señal-Ruido. Desarrollado con una arquitectura orientada a la creación masiva de datasets de Machine Learning, permite automatizar los protocolos de grabación de diccionarios de gestos/palabras para los experimentos de laboratorio.
+Este repositorio aloja la plataforma científica integral para la **adquisición automatizada, curación, procesamiento digital de señales (DSP), modelado por Machine Learning y Deep Learning** de señales de Electromiografía de Superficie (sEMG).
 
-Desarrollado por la comunidad para el **Laboratorio de Sistemas Dinámicos**.
+El sistema cubre la totalidad del flujo experimental: desde la captura física mediante hardware National Instruments (NI-DAQmx) o simulación acústica por micrófono, hasta la extracción de envolventes RMS, alineación temporal Master-Slave, reducción de dimensionalidad (PCA, UMAP), clasificación de fonemas (XGBoost), binarización de patrones musculares (Método Trevisan) y compresión en espacios latentes con Autoencoders Convolucionales 1D implementados en PyTorch.
 
+Desarrollado para el **Laboratorio de Sistemas Dinámicos (LSD)** de la **Facultad de Ciencias Exactas y Naturales (FCEyN) - Universidad de Buenos Aires (UBA)**.
+
+---
 
 ## Tabla de Contenidos
-- [Características del Sistema](#-características-del-sistema)
-- [Arquitectura y Protocolo de Datos](#-arquitectura-y-protocolo-de-datos)
-- [Instalación y Requisitos](#-instalación-y-requisitos)
-- [Guía de Uso Rápida](#-guía-de-uso-rápida)
-- [Roadmap y Tareas Pendientes](#-roadmap-y-tareas-pendientes)
+- [Características del Sistema (v6.0)](#características-del-sistema-v60)
+- [Estructura Oficial de la Base de Datos](#estructura-oficial-de-la-base-de-datos)
+- [Flujo de Trabajo Científico](#flujo-de-trabajo-científico)
+- [Arquitectura Modular del Código](#arquitectura-modular-del-código)
+- [Pipeline de Deep Learning y Machine Learning](#pipeline-de-deep-learning-y-machine-learning)
+- [Instalación y Requisitos](#instalación-y-requisitos)
+- [Guía de Uso Rápida](#guía-de-uso-rápida)
+- [Compilación de Ejecutables](#compilación-de-ejecutables)
+- [Roadmap y Estado del Proyecto](#roadmap-y-estado-del-proyecto)
+- [Créditos y Licencia](#créditos-y-licencia)
 
 ---
 
-## Características del Sistema (Beta 6.0 - Deep Learning Integration)
+## Características del Sistema (v6.0)
 
-El proyecto se gestiona desde el **Lanzador Principal** (`gui_app/main_app.py`) que integra estética Cyberpunk, aceleración de hardware y múltiples módulos independientes:
+La plataforma se gestiona desde el **Lanzador Principal** (`EMG_desarrollo/gui_app/main_app.py`), diseñado con interfaz nativa en PySide6, aceleración gráfica mediante PyQtGraph y arquitectura modular distribuida en 5 pestañas maestras y paneles especializados:
 
-1.  **Adquisición Normal (Libre)**: 
-    - Captura manual de señales, visualización en tiempo real con filtros dinámicos (Notch y Pasabanda) y autoescala.
-    - Metrónomo simple integrado y "Tester de Relajación" para evaluar el ruido inter-pulso.
-2.  **Adquisición Automatizada (AutoForge DAQ)**: 
-    - Captura señales vía hardware NI-DAQmx, o mediante el **micrófono de la PC** para pruebas y simulaciones de desarrollo sin hardware de laboratorio.
-    - **Protocolo AutoForge**: Máquina de estados automatizada que guía al paciente leyendo un archivo de diccionario (`palabras.txt`). Automatiza la grabación del ruido base, cuenta regresiva, captura y descansos, reduciendo el error humano al mínimo.
-    - **Metrónomo Visual y Auditivo**: Subproceso dinámico sincronizado en tiempo real para guiar los tiempos de contracción muscular mediante conteo visual gigante y pitidos sonoros.
-3.  **Visualización y Calidad en Tiempo Real**: 
-    - Auto-escala dinámica con sistema **"Peak-Hold"** para estabilizar la gráfica durante la captura de contracciones intensas, evitando los mareos visuales del autoscroll.
-    - Medición en vivo de la Relación Señal-Ruido (**SNR**), comparando la energía de la contracción actual con el ruido de fondo (inter-pulso) evaluado automáticamente en cada ciclo.
-    - **Modo de Envolvente RMS en Tiempo Real**: Cálculo dinámico y vectorizado para visualizar la activación muscular durante la adquisición.
-4.  **Procesamiento de Señal (DSP)**: 
-    - Filtros matemáticos en vivo (Notch 50Hz y Pasa-banda) procesados de forma continua (estado `zi`) para transiciones perfectas sin saltos.
-    - Espectrograma (STFT) integrado reactivo e independiente para cada canal.
-5.  **Análisis Comparativo y Extracción**:
-    - Generación estandarizada de archivos de grabación para alimentar la base de datos de letras y gestos listos para el pipeline de Machine Learning.
-6.  **Reproductor de Audios (Mini-DAW)**:
-    - Integrado para reproducir estímulos auditivos a través del Canal 3.
-7.  **Pantallas de Carga (Splash Screens)**:
-    - Indicadores visuales durante el inicio y carga de los módulos principales.
+1. **Pestaña 1: Inicio y Adquisición**
+   - **Modo Manual (Libre):** Captura continua multitrayecto con filtrado interactivo en tiempo real (Notch 50 Hz y Pasabanda 20-500 Hz), autoescala Peak-Hold y exportación estandarizada en formato WAV y CSV.
+   - **Modo AutoForge DAQ:** Máquina de estados automatizada que guía al paciente mediante archivos de diccionario (`palabras.txt`). Implementa calibración dinámica de ruido basal, cuenta regresiva estandarizada, metrónomo visual/auditivo esclavo, control de pausas de relajación y cálculo adaptativo de Relación Señal-Ruido (SNR) inter-pulso para descarte preventivo de ensayos defectuosos.
+   - **Modo Secuencia Continua:** Permite la grabación cíclica en bloque de diccionarios completos, generando automáticamente el vector de metadatos `valid_words` para mapeo determinístico de fonemas.
 
----
+2. **Pestaña 2: Visualización**
+   - **Explorador de Señales (CSV):** Visualizador de alto rendimiento basado en PyQtGraph con soporte para zoom bidireccional fluido, downsampling adaptativo y filtrado matemático en caliente sobre registros continuos extensos.
+   - **Historial de Gráficos Musculares:** Carga y despliegue rápido de perfiles mioeléctricos precalculados.
+   - **Visor de Electrodos (Grilla):** Renderizado simultáneo y comparativo de los 4 canales físicos para inspección topográfica de la colocación de electrodos.
+   - **Historial de Patrón Muscular:** Comparativa visual de activaciones musculares entre repeticiones.
 
-## Módulo de Autograbación Inteligente (AutoForge)
-AutoForge es la nueva máquina de estados central del proyecto, diseñada para capturar datasets de forma masiva y estructurada sin intervención manual constante. Su flujo de trabajo automatizado incluye:
+3. **Pestaña 3: Análisis y Extracción**
+   - **Procesamiento de Pulsos (Interactivo y Rápido):** Segmentación automática de ventanas de activación, aplicación de filtros de fase cero, cálculo de envolventes RMS y aislamiento de biopotenciales.
+   - **Alineación Master-Slave:** Sincronización temporal entre canales musculares mediante correlación cruzada (*Cross-Correlation*), utilizando el canal de referencia (Canal 0) para fijar el instante de activación y preservar de forma intacta los desfases fisiológicos y la sinergia muscular inter-canal.
+   - **Análisis de Sesión y Estadísticas:** Extracción de amplitudes máximas calibradas (conversión Ohms a Volts), histogramas de distribución y exportación estructurada de resultados (`analisis_results.json`).
 
-- **Lectura Automática de Diccionarios:** Lee un archivo `palabras.txt` para guiar al sujeto secuencialmente por todos los gestos.
-- **Modo Secuencia Continua:** Permite grabar el diccionario entero de forma cíclica (Ej: A, E, I, O, U, A, E...). Al procesar, el sistema automáticamente genera un vector de metadatos `valid_words` que mapea cada pulso/ventana detectada a su palabra real, facilitando el etiquetado para Machine Learning.
-- **Calibración Dinámica de Ruido Base:** Antes de cada palabra o secuencia, graba silenciosamente para muestrear el ruido electromagnético de fondo y aplica un umbral estadístico adaptativo.
-- **Sincronización:** Dispara el metrónomo visual y sonoro ("3, 2, 1, GO") para estandarizar los tiempos de preparación y contracción.
-- **Validación SNR y Ruido Adaptativo:** Registra el esfuerzo muscular y calcula automáticamente el SNR (Relación Señal-Ruido) para descartar mediciones contaminadas. Además incluye un **Cálculo de Ruido Inter-pulso Adaptativo** basado en el punto medio del metrónomo.
-- **Auto-Guardado:** Guarda las grabaciones crudas, procesadas y metadatos con la nomenclatura perfecta para su posterior entrenamiento en Machine Learning.
+4. **Pestaña 4: Machine Learning y Deep Learning**
+   - **Reducción Dimensional Lineal y No Lineal:** Módulos integrados para Análisis de Componentes Principales (PCA) y Uniform Manifold Approximation and Projection (UMAP no supervisado y UMAP supervisado) para visualización de clusters fonatorios.
+   - **Autoencoders Convolucionales 1D (PyTorch):** Redes neuronales convolucionales profundas para compresión de series temporales EMG, reducción no lineal a espacios latentes 2D/3D y reconstrucción de trayectorias articulatorias.
+   - **Clasificador XGBoost:** Clasificación supervisada de fonemas y gestos articulatorios a partir de matrices de características estadísticas y tensoriales.
+   - **Binarización y Decodificación (Método Trevisan):** Análisis de activación discreta de unidades motoras y decodificación continua de trayectorias.
+   - **Galería de Resultados Integrada:** Subpanel con visor interactivo de gráficos con zoom y visualizador de tablas de métricas estructuradas (CSV, JSON, LaTeX, TXT).
 
----
-### Herramientas y Módulos (Nueva Arquitectura Beta 6.0 PySide6)
-El proyecto ha sido completamente refactorizado en una arquitectura modular usando **PySide6** para interfaces gráficas modernas y fluidas:
+5. **Pestaña 5: Historial de Resultados**
+   - **Historial de Comparativas:** Explorador centralizado de reportes multi-sesión almacenados en `analisis_comparativos/`.
+   - **Historial de Sesión:** Navegación jerárquica de resultados consolidados en `analisis_de_sesiones/`.
 
-#### 1. Módulo `acquisition/` (Adquisición de Hardware)
-*   **`manual_daq.py`**: Interfaz de captura libre con configuración manual de ganancia y hardware.
-*   **`autoforge_daq.py`**: Núcleo de autograbación por diccionario y evaluación SNR.
-*   **`metronomo_visual.py`**: Subproceso esclavo para la sincronización temporal.
-
-#### 2. Módulo `analysis/` (DSP y Procesamiento)
-*   **`feature_extractor.py`**: Recopila pulsos de las mediciones y realiza calibración cruzada de amplitudes (Ohms a Volts).
-*   **`analisis_estadistico_pulsos.py`**: Generación de histogramas y datos de "Amplitud Real".
-*   **`plotter_calibrado.py`**: Visor de datos crudos aplicando una calibración de ganancia fija y filtros matemáticos.
-*   **`correlaciondeseñales.py`**: Alineación temporal "Master-Slave" usando cross-correlation para compensar la coarticulación.
-
-#### 3. Módulo `utils/` (Manejo de Base de Datos)
-*   **`editor_mediciones.py`**: GUI para renombrar y curar mediciones post-captura.
-*   **`actualizar_metadata.py`**: Script de migración en lote para archivos JSON de sesiones antiguas.
+6. **Herramientas Auxiliares y Menú Superior**
+   - **Reproductor de Audios (Mini-DAW):** Emisión de estímulos auditivos sincronizados a través del Canal 3 del DAQ.
+   - **Configuración General:** Diálogo centralizado para configurar parámetros de adquisición (frecuencia de muestreo, filtros, canales activos), asignación anatómica de músculos (*Orbicularis Oris*, *Depressor Anguli Oris*, *Mylohyoid*) y preferencias de UI con persistencia JSON.
+   - **Extractor de Datos para Deep Learning (`dl_data_pipeline.py`):** Procesador por lotes que estandariza las señales a tensores `(C, 500)` normalizados en $[0, 1]$ para PyTorch.
+   - **Editor y Migrador de Mediciones:** Herramientas para renombrar, curar metadatos y reestructurar carpetas de sesiones.
 
 ---
 
-## Pipeline de Deep Learning (PyTorch)
-El proyecto incluye un pipeline estructurado enfocado en transformar señales crudas a tensores normalizados para el entrenamiento de arquitecturas de Deep Learning (como Autoencoders).
+## Estructura Oficial de la Base de Datos
 
-*   **`dl_data_pipeline.py`**: Script encargado de procesar en "Batch" las bases de datos de electrodos. 
-    1. **Filtros Base**: Aplica Pasa-banda y Notch.
-    2. **RMS**: Extrae la envolvente de la señal.
-    3. **Alineación**: Centra los fonemas mediante la técnica "Master-Slave".
-    4. **Tensorización**: Aplica _Resampling_ a 500 dimensiones constantes y normalización _Min-Max_ (0.0 a 1.0).
-    5. **Dataloader**: Genera archivos `.npy` y crea la clase `EMGDataset` compatible con `torch.utils.data.Dataset`.
+Para garantizar la reproducibilidad científica y evitar fallos en los pipelines de procesamiento y entrenamiento, la base de datos sigue estrictamente la jerarquía oficial establecida en las reglas del proyecto (`AGENTS.md`):
+
+```
+base_de_datos_electrodos/
+└── <Fecha> (ej. 2026-06-10) /
+    └── <Sesión> (ej. SecuenciaContinua_Prueba5_Sujeto1, A_T1_Lucas, etc.) /
+        ├── canal_0/
+        │   ├── grabacion.wav
+        │   └── metadata.json
+        ├── canal_1/
+        │   ├── grabacion.wav
+        │   └── metadata.json (Opcional)
+        ├── canal_2/
+        │   ├── grabacion.wav
+        │   └── metadata.json (Opcional)
+        └── canal_3/
+            ├── grabacion.wav
+            └── metadata.json (Opcional)
+```
+
+### Regla de Oro para el Procesamiento de Datos:
+1. **Acceso Multi-Canal Obligatorio:** Ningún módulo DSP, script de extracción o pipeline de Machine Learning debe buscar archivos `.wav` ni `metadata.json` directamente en la raíz de la sesión (`<Sesión>/`). Debe iterar y acceder de forma explícita a través de las subcarpetas `canal_0`, `canal_1`, `canal_2` y `canal_3`.
+2. **Ubicación del Archivo Maestro de Metadatos:** El archivo `metadata.json` principal —que contiene parámetros experimentales críticos como `sampling_rate`, `bpm`, `measurement_date`, `subject`, `dictionary`, `channels_mapping` y `resistencia_ohms`— reside obligatoriamente dentro del directorio `canal_0`.
 
 ---
-## Arquitectura y Protocolo de Datos
 
-### Diagrama de Flujo de Datos
+## Flujo de Trabajo Científico
+
+El siguiente diagrama ilustra el flujo de datos completo a través de las fases de la plataforma:
+
 ```mermaid
 graph TD
-    subgraph Fase1 ["Fase 1: Adquisición (AutoForge)"]
-        A["Nandu_AutoForge_DAQ.py"] -->|Automatiza| B["Carpeta de Medición"]
-        B --> B1["grabacion.csv"]
-        B --> B2["grabacion.wav"]
-        B --> B3["metadata.json"]
+    subgraph Fase1 ["Fase 1: Adquisición de Señales"]
+        A["Hardware NI-DAQmx / Micrófono"] --> B["AutoForge DAQ (autoforge_daq.py)"]
+        A --> C["Manual DAQ (manual_daq.py)"]
+        B --> D["base_de_datos_electrodos/<Fecha>/<Sesión>/"]
+        C --> D
+        D --> D0["canal_0/ (grabacion.wav, metadata.json)"]
+        D --> D1["canal_1/ (grabacion.wav)"]
+        D --> D2["canal_2/ (grabacion.wav)"]
+        D --> D3["canal_3/ (grabacion.wav)"]
     end
 
-    subgraph Fase2 ["Fase 2: Análisis y Sincronización"]
-        C["correlaciondeseñales.py"] -->|Lee| B
-        C -->|Alinea pulsos Master-Slave| D["analisis_results.json"]
+    subgraph Fase2 ["Fase 2: Procesamiento Digital de Señal (DSP)"]
+        D --> E["Filtrado Continuo (Notch 50 Hz + Pasabanda 20-500 Hz)"]
+        E --> F["Cálculo de Envolvente RMS"]
+        F --> G["Alineación Master-Slave (Cross-Correlation)"]
+        G --> H["Segmentación y Extracción de Pulsos"]
+        H --> I["analisis_results.json + Gráficos de Pulso"]
     end
 
-    subgraph Fase3 ["Fase 3: Extracción y Calibración Final"]
-        E["extractor_de_datos_procesados.py"] -->|Lee| D
-        E -->|Lee resistencia de| B3
-        E -->|Calcula Amplitud Real| F["base_de_datos_letras/"]
-        F --> F1["Pulsos individuales .csv"]
-        F --> F2["amplitudes_maximas.csv"]
+    subgraph Fase3 ["Fase 3: Estandarización Tensorial (PyTorch Pipeline)"]
+        I --> J["dl_data_pipeline.py"]
+        J --> K["Resampling a 500 muestras constantes"]
+        K --> L["Normalización Min-Max [0, 1] por canal"]
+        L --> M["Tensores Binarios .npy (datasets_ml/)"]
+        M --> N["Dataloader PyTorch (EMGDataset)"]
     end
 
-    subgraph Fase4 ["Fase 4: Análisis Estadístico"]
-        G["analisis_estadistico_pulsos.py"] -->|Lee| F2
-        G -->|Genera| H["Estadísticas e Histogramas"]
+    subgraph Fase4 ["Fase 4: Machine Learning y Deep Learning"]
+        N --> O["Autoencoders Convolucionales 1D (train_autoencoder.py)"]
+        N --> P["Reducción Dimensional Topológica (PCA / UMAP)"]
+        N --> Q["Clasificador XGBoost (analisis_xgboost.py)"]
+        N --> R["Binarización de Unidades Motoras (analisis_trevisan.py)"]
     end
 
-    subgraph Aux ["Herramientas Auxiliares"]
-        I["editor_mediciones.py"] -->|Modifica| B
-        J["actualizar_metadata.py"] -->|Modifica| B3
-        K["plotter_calibrado.py"] -->|Lee y Visualiza| B1
+    subgraph Fase5 ["Fase 5: Exploración e Interpretación"]
+        O --> S["Galería de Resultados (main_app.py Tab 4)"]
+        P --> S
+        Q --> S
+        R --> S
+        S --> T["Visor de Gráficos con Zoom"]
+        S --> U["Tablas de Métricas (CSV / JSON / LaTeX)"]
+        S --> V["Historial de Comparativas y Sesiones (Tab 5)"]
     end
 ```
 
-### Estructura de Directorios
+---
 
-1.  **`base_de_datos_electrodos/`**: Almacena los datos crudos y resultados de análisis por medición.
-    ```
-    [Letra_Prueba_Sujeto]/
-    ├── grabacion.csv
-    ├── grabacion.png
-    ├── canal_0/
-    │   ├── grabacion.wav
-    │   ├── metadata.json
-    │   └── analisis_results.json  # Generado por correlaciondeseñales.py
-    └── ...
-    ```
+## Arquitectura Modular del Código
 
-2.  **`base_de_datos_letras/`**: Almacena los pulsos individuales extraídos y calibrados, listos para el análisis estadístico.
-    ```
-    [Letra]/
-    ├── canal_0/
-    │   ├── [Letra_Prueba_Sujeto]_pulso_001.csv
-    │   └── ...
-    └── ...
-    amplitudes_maximas.csv
-    histograma_amplitudes_reales.png
-    ```
+El repositorio está organizado en módulos desacoplados y testeables:
+
+```
+Nandu_SistemadeAdqusicionEMG/
+├── README.md                           # Documentación principal del proyecto
+├── CONTRIBUTING.md                     # Guía de contribución para desarrolladores
+├── DESCARGAS.md                        # Enlaces a binarios precompilados
+├── requirements.txt                    # Dependencias estándar de Python
+├── requirements_linux.txt              # Dependencias optimizadas para Linux
+├── base_de_datos_electrodos/           # Directorio raíz de mediciones (Fecha/Sesión/Canales)
+├── analisis_comparativos/              # Reportes de análisis comparativos multi-sesión
+├── analisis_de_sesiones/               # Reportes consolidados de sesiones
+├── datasets_ml/                        # Tensores procesados .npy e índice JSON
+└── EMG_desarrollo/
+    ├── gui_app/                        # Aplicación principal PySide6
+    │   ├── main_app.py                 # Ventana principal y despachador de pestañas
+    │   ├── core/                       # Hilos de adquisición, señales y workers Qt
+    │   ├── panels/                     # Paneles de control (ML, análisis, visualización)
+    │   └── views/                      # Widgets de renderizado (CSV, electrodos, comparativas)
+    ├── acquisition/                    # Controladores de hardware y adquisición
+    │   ├── autoforge_daq.py            # Máquina de estados AutoForge por diccionario
+    │   ├── manual_daq.py               # Adquisición continua manual
+    │   ├── metronomo_visual.py         # Subproceso esclavo del metrónomo
+    │   └── ventana_palabras.py         # Interfaz de pauta y despliegue de palabras
+    ├── analysis/                       # Algoritmos DSP y alineación
+    │   ├── correlaciondeseñales.py     # Alineación temporal Master-Slave por cross-correlation
+    │   ├── analisis_estadistico_pulsos.py # Histograma y distribución de amplitudes reales
+    │   ├── plotter_calibrado.py        # Visualizador de calibración y filtros en cascada
+    │   ├── reproductor_canal3.py       # Reproductor de estímulos acústicos (Mini-DAW)
+    │   └── segmentador_secuencias.py   # Segmentador automático para secuencias continuas
+    ├── deep_learning/                  # Arquitecturas neuronales y clasificadores
+    │   ├── modelos.py                  # Autoencoders Convolucionales 1D en PyTorch
+    │   ├── dataset_emg.py              # Clase EMGDataset y generador de lotes
+    │   ├── train_autoencoder.py        # Rutina de entrenamiento de autoencoders
+    │   ├── pipeline_autoencoder_gui.py # Interfaz gráfica del pipeline de autoencoders
+    │   ├── decodificador_continuo.py   # Inferencia continua sobre series temporales
+    │   ├── binarizacion/               # Método Trevisan de binarización de potenciales
+    │   ├── machine_learning/           # Clasificación con XGBoost y métricas
+    │   ├── pca_umap_clustering/        # Reducción dimensional (PCA, UMAP no supervisado y supervisado)
+    │   └── dataset_tools/              # Visualizadores de features y tensores
+    ├── utils/                          # Utilidades generales y persistencia
+    │   ├── config_manager.py           # Gestor de configuración persistente JSON
+    │   ├── logger.py                   # Sistema unificado de logging
+    │   ├── editor_mediciones.py        # Interfaz de curación y renombrado de carpetas
+    │   └── migrar_mediciones_por_fecha.py # Migrador de estructura de base de datos
+    ├── instrucciones_uso.py            # Manual de usuario interactivo in-app
+    ├── build.bat                       # Script de compilación para Windows (PyInstaller)
+    └── build_linux.sh                  # Script de compilación para Linux (PyInstaller)
+```
+
+---
+
+## Pipeline de Deep Learning y Machine Learning
+
+### 1. Ingesta DSP y Extracción de Envolventes
+- **Filtro Pasabanda:** Butterworth de 4to orden (20 Hz - 500 Hz), fase cero (`filtfilt`).
+- **Filtro Notch:** IIR centrado en 50 Hz ($Q = 30$) para supresión de armónicos de red eléctrica.
+- **Envolvente RMS:** Convolución cuadrática con ventana móvil de 50 ms.
+
+### 2. Alineación Master-Slave y Tensorización
+- El Canal 0 actúa como eje maestro de tiempo para detectar la cúspide articulatoria.
+- Los canales restantes se recortan sobre la misma ventana temporal, preservando íntegramente la relación de fase y sinergia muscular.
+- **Resampling:** Remuestreo por transformada de Fourier (`scipy.signal.resample`) a exactamente 500 puntos temporales.
+- **Normalización Min-Max:** Cada canal se escala independientemente al rango $[0.0, 1.0]$.
+- **Matriz de Salida:** Tensor bidimensional de dimensiones $(C, 500)$ almacenado en formato `.npy`.
+
+### 3. Modelos Disponibles
+- **Autoencoder Convolucional 1D:** Arquitectura encoder-decoder profunda con capas `Conv1d`, `BatchNorm1d`, `LeakyReLU` y `MaxPool1d` que comprime la señal a un cuello de botella latente (2D o 3D) para evaluar trayectorias fonatorias y reconstrucción de biopotenciales.
+- **PCA y UMAP:** Reducción lineal y no lineal para análisis de agrupamiento y separación de clases vocálicas y consonánticas.
+- **Clasificador XGBoost:** Algoritmo de ensamble sobre árboles de decisión con validación cruzada estratificada y métricas de matriz de confusión.
+- **Binarización de Trevisan:** Algoritmo biofísico de cuantización de patrones de disparo mioeléctrico.
 
 ---
 
 ## Instalación y Requisitos
 
-### 1. Prerrequisitos de Hardware
-- Tarjeta de adquisición compatible con **NI-DAQmx** (National Instruments).
-- *Nota: Si no tienes hardware de laboratorio, puedes activar la casilla "Usar Micrófono" en la aplicación para realizar simulaciones reales utilizando cualquier placa de sonido estándar.*
+### 1. Prerrequisitos de Hardware y Software
+- **Python:** 3.10 o superior (compatible con Python 3.10, 3.11, 3.12).
+- **Placa de Adquisición:** Compatible con NI-DAQmx (National Instruments, ej. NI USB-6212).
+- **Modo Simulador:** Si no se dispone de tarjeta física NI, el software permite activar la opción **"Usar Micrófono"** para operar el pipeline analítico completo utilizando cualquier placa de sonido convencional.
 
-### 2. Configuración del Entorno
-Se recomienda usar un entorno virtual para aislar las dependencias. En Windows, si hay problemas de permisos, habilita la ejecución de scripts abriendo PowerShell como administrador y corriendo: `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`.
+### 2. Configuración del Entorno Virtual
 
 ```bash
 # 1. Clonar el repositorio
 git clone https://github.com/santiagopradorodriguez/Nandu_SistemadeAdqusicionEMG.git
 cd Nandu_SistemadeAdqusicionEMG
 
-# 2. Crear entorno virtual
+# 2. Crear el entorno virtual
 python -m venv venv
 
-# 3. Activar entorno
+# 3. Activar el entorno virtual
 # En Windows:
 .\venv\Scripts\activate
-# En Linux/Mac:
+# En Linux/macOS:
 source venv/bin/activate
 
 # 4. Instalar dependencias
-# En Windows (Para Python 3.8 máximo):
+# En Windows:
 pip install -r requirements.txt
 
-# En Linux/Mac (Para Python 3.12+):
+# En Linux:
 pip install -r requirements_linux.txt
 ```
 
-### 3. Drivers (Crítico)
-Para comunicar con la tarjeta de adquisición, **debes** instalar el driver **NI-DAQmx** desde el sitio oficial de National Instruments. Sin esto, la librería `nidaqmx` en Python fallará al intentar importar.
-- Probado con la placa NI USB 6212: [Descargar NI-DAQmx (Versión Recomendada)](https://download.ni.com/support/nipkg/products/ni-d/ni-daqmx/25.8/online/ni-daqmx_25.8_online.exe)
+### 3. Driver NI-DAQmx (Requerido para Hardware Físico)
+Para operar con placas National Instruments, se debe instalar el controlador oficial **NI-DAQmx**:
+- [Descarga oficial de NI-DAQmx para Windows](https://download.ni.com/support/nipkg/products/ni-d/ni-daqmx/25.8/online/ni-daqmx_25.8_online.exe)
 
 ---
 
 ## Guía de Uso Rápida
 
-Ejecuta el lanzador principal desde la raíz del repositorio (si usas VSCode, simplemente abre la terminal en la carpeta principal):
+Para iniciar la plataforma completa, ejecuta el lanzador maestro desde la raíz del repositorio:
 
 ```bash
 python EMG_desarrollo/gui_app/main_app.py
 ```
 
-1.  **Modo AutoForge (Dataset Automatizado):**
-    * Abre "AutoForge DAQ".
-    * Configura tu dispositivo (ej. `Dev1/ai0`) o usa la opción "Usar Micrófono" si no tienes placa NI.
-    * Selecciona el archivo de palabras (`palabras.txt`).
-    * Ajusta el tiempo de relajación (ruido base) y las repeticiones.
-    * Dale a "Comenzar Grabación" y sigue las instrucciones en la pantalla interactiva o confía en el metrónomo. El sistema guardará todo de forma estructurada automáticamente.
-
-2.  **Modo Manual:**
-    * Abre "Adquisición EMG" (Normal).
-    * Habilita tus canales y presiona "Empezar a Grabar" para capturas libres.
-
-3.  **Análisis y Procesamiento:**
-    * Utiliza las herramientas complementarias descritas en la sección de Utilidades para procesar, segmentar y analizar estadísticamente las carpetas generadas.
-
-4.  **Compilación de Ejecutables (Build):**
-    * En Windows: Ejecuta el script `EMG_desarrollo/build.bat` para compilar el ejecutable mediante PyInstaller.
-    * En Linux: Ejecuta el script `./EMG_desarrollo/build_linux.sh` (asegúrate de darle permisos de ejecución previamente con `chmod +x EMG_desarrollo/build_linux.sh`). El binario resultante se encontrará en `EMG_Ejecutable_Build/dist/NanduLsd/run_nandu.sh`.
+### Flujo Operativo Típico:
+1. **Adquisición con AutoForge:**
+   - En la Pestaña 1, selecciona "AutoForge DAQ".
+   - Elige el dispositivo de entrada (placa NI o micrófono) y carga el diccionario de fonemas (`palabras.txt`).
+   - Define el tempo del metrónomo (ej. 30 BPM) y las repeticiones.
+   - Presiona "Comenzar Grabación" y sigue las pautas visuales y sonoras. El sistema archivará los datos en `base_de_datos_electrodos/<Fecha>/<Sesión>/canal_0..3/`.
+2. **Inspección de Datos:**
+   - En la Pestaña 2 ("Visualización"), utiliza el Explorador CSV interactivo para revisar la calidad del registro y la respuesta de los electrodos.
+3. **Análisis y Curación:**
+   - En la Pestaña 3 ("Análisis y Extracción"), ejecuta el procesamiento interactivo de pulsos para validar envolventes RMS y sincronización Master-Slave.
+4. **Machine Learning / Deep Learning:**
+   - En la Pestaña 4, entrena modelos de reducción dimensional (PCA/UMAP), ejecuta el pipeline de Autoencoders Convolucionales 1D o entrena clasificadores XGBoost.
+   - Explora las gráficas de espacio latente y las tablas de métricas en la Galería de Resultados integrada.
+5. **Historial de Resultados:**
+   - En la Pestaña 5, revisa los históricos de sesiones previas y comparativas consolidadas.
 
 ---
 
-## Roadmap y Tareas Pendientes (Beta 6.0+)
+## Compilación de Ejecutables
 
-El proyecto está en desarrollo activo. Consulta `ROADMAP.md` para más detalles o `CONTRIBUTING.md` si quieres ayudar con:
+La plataforma puede compilarse como aplicación independiente sin requerir instalación manual de Python en la máquina de destino:
 
-- [ ] **Visualización Anatómica:** Permitir mostrar fotos (ej. `configuracion.jpg`) automáticamente en la interfaz para documentar la disposición física de los electrodos en el sujeto.
+### Compilación en Windows:
+Ejecuta el script por lotes desde una consola de comandos:
+```cmd
+EMG_desarrollo\build.bat
+```
+El ejecutable resultante se generará en `EMG_desarrollo\dist\NanduLsd\NanduLsd.exe`.
 
+### Compilación en Linux:
+Asigna permisos de ejecución y corre el script de compilación:
+```bash
+chmod +x EMG_desarrollo/build_linux.sh
+./EMG_desarrollo/build_linux.sh
+```
+El binario ejecutable y su script lanzador residirán en `EMG_Ejecutable_Build/dist/NanduLsd/run_nandu.sh`.
 
-### Trabajo a futuro
-
-- **Botón de Pausa:** Implementar un botón en la interfaz principal para permitir la interrupción temporal y reanudación de las adquisiciones de forma segura.
-- **Decodificador de Voz:** Implementar un módulo decodificador de voz basado en la adquisición principal (DAQ), utilizando los datos procesados por el Autoencoder o PCA.
 ---
 
-## Errores Conocidos y Soluciones Históricas
+## Roadmap y Estado del Proyecto
 
-Durante el desarrollo de la versión Beta 5.0, nos enfrentamos a problemas de "scoping" en Python al migrar componentes de la UI. 
-- **El Problema:** Al instanciar colores (`bg_panel`) en métodos `__init__`, otras funciones internas de la clase perdían la referencia en tiempo de ejecución, provocando caídas completas del programa (`NameError`).
-- **La Solución:** Todo objeto visual que deba perdurar o ser accedido por funciones secundarias **debe ser instanciado usando `self.`** (ej. `self.bg_panel`). 
-- **Resiliencia de la Terminal:** Como medida adicional, todos los procesos que abran sub-ventanas analíticas (como Análisis Comparativo o Análisis Integrado) ahora se ejecutan en terminales persistentes mediante `subprocess.Popen` con un `try/except` general que pausa la terminal (`input()`) al detectar un traceback, impidiendo que el error sea invisible.
+- [x] Arquitectura modular v6.0 en PySide6 con 5 pestañas principales y galería integrada.
+- [x] Cumplimiento estricto del esquema de base de datos `base_de_datos_electrodos/<Fecha>/<Sesión>/canal_0..3/`.
+- [x] Pipeline de tensores normalizados para PyTorch y soporte de Autoencoders Convolucionales 1D.
+- [x] Integración de clasificadores XGBoost y proyecciones UMAP supervisadas/no supervisadas.
+- [x] Soporte multiplataforma garantizado para Windows y Linux mediante PyInstaller.
+- [x] Política estricta de Cero Emojis en toda la documentación y código fuente.
+- [ ] Módulo de visualización anatómica de colocación de electrodos (`configuracion.jpg`).
+- [ ] Decodificador de habla silenciosa en tiempo real conectado directamente al flujo de adquisición.
+- [ ] Botón de pausa segura y reanudación de sesiones de captura durante protocolos extensos.
 
 ---
 
-*"Desarrollado para la ciencia por Lucas Braunstein y Santiago Prado. Agradecimientos al Laboratorio de Sistemas Dinámicos y a la Facultad de Ciencias Exactas de la UBA por darnos esta oportunidad. Basado en códigos preliminares de Tomás Mininni y Roman Rolla."*
+## Créditos y Licencia
+
+Desarrollado para la investigación científica por:
+- **Santiago Prado** (Investigador / Desarrollador)
+- **Lucas Braunstein** (Investigador / Desarrollador)
+
+Agradecimientos especiales al **Laboratorio de Sistemas Dinámicos (LSD)** y a la **Facultad de Ciencias Exactas y Naturales (FCEyN) de la Universidad de Buenos Aires (UBA)**. Códigos preliminares e históricos por Tomás Mininni y Román Rolla.
+
+Proyecto publicado bajo Licencia de Código Abierto (Open Source) para fines académicos y científicos.

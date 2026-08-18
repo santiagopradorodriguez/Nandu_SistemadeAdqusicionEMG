@@ -5,19 +5,12 @@
 # Descripción: Módulo de interfaz gráfica que muestra las instrucciones de uso del sistema.
 # ==============================================================================
 
-# ==============================================================================
-# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
-# Autores: Lucas Braunstein y Santiago Prado
-# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
-# Descripción: Módulo de interfaz gráfica que muestra las instrucciones de uso del sistema.
-# ==============================================================================
-
 # -*- coding: utf-8 -*-
 """
-instrucciones_uso.py - v4.0
+instrucciones_uso.py - v6.0
 
-Ventana de instrucciones nativa en PySide6 con estética profesional (Cyberpunk UI).
-Detalla todo el funcionamiento de la nueva arquitectura de EMG Studio.
+Ventana de instrucciones nativa en PySide6 con estetica profesional (Cyberpunk UI).
+Detalla el funcionamiento integral de la plataforma Nandu EMG v6.0.
 """
 
 import sys
@@ -40,12 +33,13 @@ INSTRUCTIONS_HTML = """
         line-height: 1.6;
     }
     h1 { color: #ff003c; border-bottom: 2px solid #ff003c; padding-bottom: 10px; }
-    h2 { color: #00ffcc; margin-top: 30px; }
-    h3 { color: #ffaa00; }
+    h2 { color: #00ffcc; margin-top: 30px; border-bottom: 1px solid #222; padding-bottom: 5px; }
+    h3 { color: #ffaa00; margin-top: 15px; }
     p { font-size: 14px; }
     ul { font-size: 14px; }
-    li { margin-bottom: 10px; }
+    li { margin-bottom: 8px; }
     b { color: #ffffff; }
+    code { color: #00ffcc; background-color: #111111; padding: 2px 5px; border-radius: 3px; font-family: 'Courier New', monospace; }
     .footer {
         margin-top: 50px;
         padding: 20px;
@@ -56,57 +50,81 @@ INSTRUCTIONS_HTML = """
         color: #777777;
     }
     .highlight { color: #00ffcc; font-weight: bold; }
+    .box { background-color: #0d0d0d; border-left: 4px solid #ff003c; padding: 10px; margin: 15px 0; }
 </style>
 </head>
 <body>
 
-    <h1><center>EMG Studio v4.x - Guía de Operación</center></h1>
-    <p>Bienvenido al Sistema Avanzado de Adquisición y Análisis de Señales Electromiográficas (sEMG).</p>
+    <h1><center>Nandu EMG v6.0 - Manual de Instrucciones y Guia de Operacion</center></h1>
+    <p>Bienvenido a la plataforma cientifica integral de Adquisicion, Procesamiento Digital de Senales (DSP), Machine Learning y Deep Learning para Electromiografia de Superficie (sEMG).</p>
 
-    <h2>PASO 1: Adquisición de Señales (Tab 1)</h2>
-    <p>El hub principal permite lanzar dos modalidades de adquisición:</p>
+    <div class="box">
+        <b>Regla de Oro de la Base de Datos:</b> Toda sesion se estructura deterministicamente bajo el patron <code>base_de_datos_electrodos/&lt;Fecha&gt;/&lt;Sesion&gt;/canal_0..3/</code>. El archivo <code>metadata.json</code> principal se localiza siempre en <code>canal_0/</code>.
+    </div>
+
+    <h2>PESTANA 1: Inicio y Adquisicion</h2>
+    <p>El modulo de captura permite dos modalidades de operacion:</p>
     <ul>
-        <li><b>Adquisición Manual:</b> Ideal para pruebas libres. Inicia una grabación continua con semáforo y metrónomo visual. Genera archivos <code>.wav</code> y <code>.csv</code>.</li>
-        <li><b>Auto-Forge (Auto-Grabado):</b> Rutina estricta y automatizada. Graba secuencias exactas de reposo y contracción. Diseñado para estandarizar bases de datos de Deep Learning.
-            <br><i>*Nota: Para activar el Modo de Envolvente RMS en Tiempo Real, marca la casilla correspondiente en la interfaz de AutoForge antes de comenzar a grabar.</i>
+        <li><b>Adquisicion Manual (Libre):</b> Grabacion continua multicanal con filtrado dinámico en tiempo real (Notch 50 Hz y Pasabanda 20-500 Hz), autoescala Peak-Hold y exportacion simultanea en formato WAV y CSV.</li>
+        <li><b>AutoForge DAQ (Automatizado):</b> Protocolo riguroso de guiado experimental basado en maquinas de estados. Lee un diccionario de fonemas (<code>palabras.txt</code>) y ejecuta automaticamente:
+            <ul>
+                <li><i>Calibracion Dinamica de Ruido Basal:</i> Muestreo silencioso previo para determinar umbrales estadisticos adaptativos.</li>
+                <li><i>Metronomo Audiovisual Esclavo:</i> Pauta temporal visual gigante y senales sonoras para fijar ventanas de preparacion, contraccion y reposo.</li>
+                <li><i>Evaluacion de Calidad SNR:</i> Estimacion en tiempo real de la relacion senal-ruido inter-pulso para descarte preventivo de ensayos contaminados.</li>
+                <li><i>Modo Secuencia Continua:</i> Grabacion ciclica del diccionario completo con autogeneracion del vector de metadatos <code>valid_words</code>.</li>
+                <li><i>Modo Envolvente RMS en Vivo:</i> Visualizacion dinamica del esfuerzo muscular vectorizado.</li>
+            </ul>
         </li>
     </ul>
 
-    <h2>PASO 2: Análisis Individual y Curación (Tab 2)</h2>
-    <p>Desde el panel izquierdo (Gestor de Sesiones), selecciona una o múltiples mediciones.</p>
+    <h2>PESTANA 2: Visualizacion</h2>
+    <p>Herramientas de exploracion grafica de alto rendimiento sin salir del entorno:</p>
     <ul>
-        <li><b>Procesamiento de Pulsos:</b> Aplica filtros Notch (50Hz) y Pasa-Banda (20-500Hz), calcula la envolvente RMS y aísla los pulsos usando las ventanas del metrónomo.</li>
-        <li><b>Curación:</b> En modo interactivo, puedes descartar pulsos ruidosos o anómalos. Los resultados se guardan en <code>analisis_results.json</code> y se exportan gráficos de alta calidad (<code>pulses.png</code>).</li>
+        <li><b>Explorador de Senales (CSV):</b> Graficador de alto desempeno basado en PyQtGraph con soporte para zoom bidireccional, downsampling inteligente y aplicacion de filtros en caliente sobre senales continuas masivas.</li>
+        <li><b>Historial Graficos Musculares:</b> Visualizacion de biopotenciales calibrados y filtrados.</li>
+        <li><b>Visor de Electrodos (Grilla):</b> Muestra una matriz comparativa simultanea de los 4 canales fisicos para evaluar la respuesta global de los grupos musculares.</li>
+        <li><b>Historial Patron Muscular:</b> Analisis topologico y perfiles de activacion por sesion.</li>
     </ul>
 
-    <h2>PASO 3: Visualización Integrada (Tab 3)</h2>
-    <p>Explora tus datos crudos y procesados sin salir del programa.</p>
+    <h2>PESTANA 3: Analisis y Extraccion</h2>
+    <p>Procesamiento avanzado de senales y preservacion biomecanica:</p>
     <ul>
-        <li><b>Visor CSV (Natívo PyQtGraph):</b> Permite hacer zoom interactivo, downsampling automático y filtrado en tiempo real de cualquier señal en bruto.</li>
-        <li><b>Visor de Electrodos:</b> Muestra una grilla con las miniaturas de todos los canales procesados para una revisión rápida.</li>
+        <li><b>Procesamiento de Pulsos (Interactivo y Rapido):</b> Segmentacion de ventanas temporales, filtrado de fase cero (filtfilt) y aislamiento de activaciones mioelectricas.</li>
+        <li><b>Alineacion Master-Slave:</b> Emplea el Canal 0 como referencia temporal para alinear los canales adyacentes mediante correlacion cruzada (<i>Cross-Correlation</i>), manteniendo estrictamente intactos los desfases fisiologicos y las sinergias inter-musculares.</li>
+        <li><b>Analisis de Sesion y Estadisticas:</b> Extraccion de amplitudes maximas calibradas (Volts / Ohms), generacion de histogramas y exportacion del archivo estructurado <code>analisis_results.json</code>.</li>
     </ul>
 
-    <h2>PASO 4: Análisis Comparativo (Tab 4)</h2>
-    <p>Selecciona varias mediciones en el gestor y presiona "Lanzar Análisis Comparativo".</p>
+    <h2>PESTANA 4: Machine Learning y Deep Learning</h2>
+    <p>Pipeline completo de modelado inteligente y clasificacion:</p>
     <ul>
-        <li><b>Master-Slave Alignment:</b> Utiliza el canal 0 como referencia temporal para alinear los pulsos de los canales adyacentes mediante <i>Cross-Correlation</i>, manteniendo intacta la sinergia muscular.</li>
+        <li><b>Reduccion Dimensional (PCA y UMAP):</b> Analisis de Componentes Principales lineal y proyecciones no lineales UMAP (tanto no supervisado como supervisado) para visualizacion de clusters fonatorios.</li>
+        <li><b>Autoencoders Convolucionales 1D (PyTorch):</b> Redes profundas para compresion no lineal de senales, analisis de espacios latentes 2D/3D y reconstruccion temporal de gestos fonatorios.</li>
+        <li><b>Clasificador XGBoost:</b> Entrenamiento y evaluacion supervisada de modelos de ensamble sobre matrices de caracteristicas mioelectricas.</li>
+        <li><b>Binarizacion y Decodificacion (Metodo Trevisan):</b> Analisis biofisico de patrones discretos de disparo de unidades motoras y decodificacion continua.</li>
+        <li><b>Galeria de Resultados Integrada:</b> Visor unificado con zoom interactivo para figuras complejas y visor tabular para matrices y tablas de metricas (CSV, JSON, LaTeX, TXT).</li>
     </ul>
 
-    <h2>Herramientas Secundarias (Barra Superior)</h2>
+    <h2>PESTANA 5: Historial de Resultados</h2>
+    <p>Navegacion estructurada del archivo cientifico:</p>
     <ul>
-        <li><span class="highlight">Reproductor de Audios (Mini-DAW):</span> Selecciona el Reproductor desde la barra de herramientas para emitir estímulos auditivos directamente a través del Canal 3 del DAQ.</li>
-        <li><span class="highlight">Configuración General (NUEVO):</span> Menú centralizado para personalizar todos los aspectos del programa. Permite ajustar el mapeo de músculos por canal, elegir colores hexadecilmales, setear parámetros por defecto para la DAQ (Sample Rate, Filtro, Canales activos) y guardar estas preferencias para futuros usos.</li>
-        <li><span class="highlight">Extractor de Datos (Deep Learning):</span> Recolecta todos los pulsos procesados, aplica un resampling a 500 puntos (Nyquist estandarizado), normaliza vía Min-Max, y exporta tensores listos en formato <code>.npy</code> para PyTorch.</li>
-        <li><span class="highlight">Editor de Mediciones:</span> Utilidad para renombrar formalmente las carpetas de adquisición y re-rutear sus metadatos internos de manera segura.</li>
+        <li><b>Historial de Comparativas:</b> Acceso directo a los reportes consolidados generados en <code>analisis_comparativos/</code>.</li>
+        <li><b>Historial de Sesion:</b> Exploracion cronologica y lectura de metadatos de las sesiones procesadas en <code>analisis_de_sesiones/</code>.</li>
+    </ul>
+
+    <h2>Herramientas Auxiliares y Menu Superior</h2>
+    <ul>
+        <li><span class="highlight">Reproductor de Audios (Mini-DAW):</span> Modulo para emitir estimulos auditivos sincronizados a traves del Canal 3 del DAQ durante protocolos experimentales.</li>
+        <li><span class="highlight">Configuracion General:</span> Panel centralizado para definir parametros del DAQ (frecuencia de muestreo, canales activos, filtros), mapeo anatomico de grupos musculares (Orbicularis Oris, Depressor Anguli Oris, Mylohyoid) y preferencias visuales con persistencia JSON.</li>
+        <li><span class="highlight">Extractor de Datos Tensoriales (<code>dl_data_pipeline.py</code>):</span> Procesa lotes de grabaciones, aplica remuestreo a 500 muestras, normalizacion Min-Max [0, 1] y genera tensores binarios <code>.npy</code> compatibles con <code>torch.utils.data.Dataset</code>.</li>
+        <li><span class="highlight">Editor y Migrador de Mediciones:</span> Herramientas para renombrar, curar metadatos y asegurar la organizacion jerarquica por fechas de la base de datos.</li>
     </ul>
 
     <div class="footer">
-        <b>ACERCA DE Y CRÉDITOS</b><br><br>
-        Desarrollado integralmente para el Laboratorio de Sistemas Dinámicos (LSD).<br>
+        <b>LABORATORIO DE SISTEMAS DINAMICOS (LSD)</b><br>
         Facultad de Ciencias Exactas y Naturales (FCEyN), Universidad de Buenos Aires (UBA).<br><br>
-        <b>Autores e Investigadores Principales:</b><br>
-        Santiago Prado & Lucas Braunstein<br><br>
-        &copy; 2026. Todos los derechos reservados. Proyecto Ñandú LSD.
+        <b>Investigadores y Autores Principales:</b> Santiago Prado & Lucas Braunstein<br>
+        Codigos preliminares: Tomas Mininni y Roman Rolla.<br><br>
+        Version 6.0 — Todos los derechos reservados. Proyecto Nandu LSD.
     </div>
 
 </body>
@@ -116,8 +134,8 @@ INSTRUCTIONS_HTML = """
 class InstructionsWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Ñandú LSD - Manual de Instrucciones - EMG Studio")
-        self.setGeometry(200, 100, 900, 750)
+        self.setWindowTitle("Nandu LSD - Manual de Instrucciones - EMG Studio v6.0")
+        self.setGeometry(200, 100, 950, 800)
         self.setStyleSheet("background-color: #000000;")
         
         # Intentar cargar icono
@@ -129,12 +147,12 @@ class InstructionsWindow(QMainWindow):
         layout = QVBoxLayout(central_widget)
         layout.setContentsMargins(10, 10, 10, 10)
         
-        # Título superior
-        lbl_header = QLabel("MANUAL DEL USUARIO")
+        # Titulo superior
+        lbl_header = QLabel("MANUAL DEL USUARIO - VERSION 6.0")
         lbl_header.setAlignment(Qt.AlignCenter)
         lbl_header.setStyleSheet("""
             font-family: 'Courier New', monospace;
-            font-size: 24px;
+            font-size: 22px;
             font-weight: bold;
             color: #000000;
             background-color: #ff003c;
@@ -172,7 +190,7 @@ class InstructionsWindow(QMainWindow):
         """)
         layout.addWidget(self.browser)
         
-        # Botón de cierre
+        # Boton de cierre
         btn_close = QPushButton("ENTENDIDO")
         btn_close.setCursor(Qt.PointingHandCursor)
         btn_close.setStyleSheet("""

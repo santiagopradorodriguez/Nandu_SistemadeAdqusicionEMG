@@ -332,9 +332,9 @@ class ElectrodeViewerWidget(QWidget):
             # Nombres bonitos para subpestañas
             img_tabs = {
                 "avg.png": " Promedio",
-                "pulses.png": "️ Recortes",
+                "pulses.png": " Recortes",
                 "spec.png": " Espectrograma",
-                "evolucion.png": " Evolución"
+                "evolucion.png": " Evolucion"
             }
             
             # Load images into sub-tabs

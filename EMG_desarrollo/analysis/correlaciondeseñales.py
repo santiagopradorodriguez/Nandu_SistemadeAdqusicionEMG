@@ -244,7 +244,7 @@ def main(mediciones_dirs=None, medicion_dir=None, master_dir=None, slave_dirs=No
             _plot_muscle_overlay(meas_name, resultados_canales, parent_meas_dir, master_basename, normalize_all=normalizar)
 
     if console_win:
-        print("\n\n✅ --- PROCESAMIENTO FINALIZADO --- ✅")
+        print("\n\n[OK] --- PROCESAMIENTO FINALIZADO --- [OK]")
         print("Puede cerrar esta ventana para volver al menú principal.")
         console_win.exec()
 

@@ -5,13 +5,6 @@
 # Descripción: Inyecta parches en scripts durante la compilación a ejecutable.
 # ==============================================================================
 
-# ==============================================================================
-# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
-# Autores: Lucas Braunstein y Santiago Prado
-# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
-# Descripción: Inyecta parches en scripts durante la compilación a ejecutable.
-# ==============================================================================
-
 import os
 import re
 
@@ -21,19 +14,19 @@ def aplicar_parches():
     build_dir = os.path.join(base_dir, "EMG_Ejecutable_Build")
 
     if not os.path.exists(build_dir):
-        print("❌ Carpeta 'EMG_Ejecutable_Build' no encontrada. Ejecuta primero 'crear_entorno_ejecutable.py'.")
+        print("[ERROR] Carpeta 'EMG_Ejecutable_Build' no encontrada. Ejecuta primero 'crear_entorno_ejecutable.py'.")
         return
 
     # Este es el bloque de código que inyectaremos en la cabecera de los archivos
     inyeccion_base = '''
 # ==============================================================================
-# 🛑 ⚠️ ¡ATENCIÓN! ESTE ES UN ARCHIVO TEMPORAL DE BUILD ⚠️ 🛑
+# [ATENCION] ESTE ES UN ARCHIVO TEMPORAL DE BUILD
 # 
-# 🚫 NO EDITES ESTE ARCHIVO 🚫
-# Cualquier cambio que hagas aquí se PERDERÁ al volver a compilar.
+# NO EDITES ESTE ARCHIVO
+# Cualquier cambio que hagas aqui se PERDERA al volver a compilar.
 # Por favor, realiza tus cambios en los archivos de la carpeta principal.
 # ==============================================================================
-# --- INYECCIÓN AUTOMÁTICA PARA PYINSTALLER ---
+# --- INYECCION AUTOMATICA PARA PYINSTALLER ---
 import sys
 import os
 import subprocess
@@ -109,7 +102,7 @@ def lanzar_script(script_name, args=[]):
                 ruta = os.path.join(root, file)
                 parchear_archivo(ruta, [])
 
-    # --- 2. REEMPLAZOS ESPECÍFICOS PARA ADQUISICIÓN ---
+    # --- 2. REEMPLAZOS ESPECIFICOS PARA ADQUISICION ---
     reemplazos_daq = [
         ("os.path.exists('metronome_config.json')", "os.path.exists(user_data_path('metronome_config.json'))"),
         ("open('metronome_config.json'", "open(user_data_path('metronome_config.json')"),
@@ -163,7 +156,7 @@ def lanzar_script(script_name, args=[]):
     reemplazos_main = [
         ("assets_dir = gui_dir / \"assets\"", "assets_dir = Path(resource_path(os.path.join('gui_app', 'assets')))"),
         ("search_dirs = [assets_dir, gui_dir, root_dir, pictures_dir]", "search_dirs = [assets_dir, pictures_dir]"),
-        ("md_path = os.path.abspath(os.path.join(os.path.dirname(__file__), \"..\", \"justificacion_matematica.md\"))", "md_path = resource_path('justificacion_matematica.md')"),
+        ("md_path = os.path.abspath(os.path.join(os.path.dirname(__file__), \"..\", \"justificacion_matematica.md\"))", "md_path = resource_path(os.path.join('archivos_md', 'justificacion_matematica.md'))"),
         ('comparative_path = os.path.join(root_dir, "analisis_comparativos")', 'comparative_path = user_data_path("analisis_comparativos")'),
         ('db_path = os.path.join(root_dir, "base_de_datos_electrodos")', 'db_path = user_data_path("base_de_datos_electrodos")'),
         (viejo_launch, nuevo_launch)
@@ -187,9 +180,9 @@ def lanzar_script(script_name, args=[]):
         (r"self\.destino_dir\s*=\s*[\"']base_de_datos_letras[\"']", r"self.destino_dir = user_data_path('base_de_datos_letras')")
     ]
     archivos_auxiliares = [
-        "analysis/plotter_calibrado.py", "analysis/feature_extractor.py", 
+        "analysis/plotter_calibrado.py", 
         "analysis/electrode_viewer_4.py", "utils/editor_mediciones.py", "analysis/analisis_por_track_integrado.py", 
-        "analysis/analisis_por_track_integrado_experimental.py", "analysis/correlaciondeseñales.py", "analysis/segmentador_secuencias.py", 
+        "analysis/correlaciondeseñales.py", "analysis/segmentador_secuencias.py", 
         "utils/actualizar_metadata.py", "utils/migrar_mediciones_por_fecha.py"
     ]
     for archivo in archivos_auxiliares:
@@ -197,29 +190,7 @@ def lanzar_script(script_name, args=[]):
         if os.path.exists(ruta):
             parchear_archivo(ruta, reemplazos_bases, reemplazos_regex_bases)
 
-    # Parche especial avanzado para Sistema_de_Adquisicion_Emg.py (El Lanzador)
-    reemplazo_launcher = """def launch_script(script_path_rel):
-    comando = lanzar_script(script_path_rel)
-    try:
-        if sys.platform == 'win32':
-            subprocess.Popen(comando, creationflags=0x08000000)
-        else:
-            subprocess.Popen(comando)
-    except Exception as e:
-        messagebox.showerror('Error de Lanzamiento', str(e))
-    return
-def launch_script_original(script_path_rel):"""
-    
-    ruta_sistema = os.path.join(build_dir, "Sistema_de_Adquisicion_Emg.py")
-    if os.path.exists(ruta_sistema):
-        parchear_archivo(ruta_sistema, [
-            ("BASE_DIR = Path(__file__).resolve().parent", "BASE_DIR = Path(user_data_path(''))"),
-            ("ICON_DIR = BASE_DIR / \"icons\"", "ICON_DIR = Path(resource_path('icons'))"),
-            ('pictures_dir = BASE_DIR / "DataConfig" / "Pictures"', 'pictures_dir = Path(resource_path("DataConfig/Pictures"))'),
-            ("def launch_script(script_path_rel):", reemplazo_launcher)
-        ])
-
-    print("\n[OK] Parches aplicados a TODA la suite de codigos! Entorno listo para la compilacion (Fases 1.1 y 1.2 superadas).")
+    print("\n[OK] Parches aplicados a toda la suite de codigos. Entorno listo para compilacion.")
 
 if __name__ == "__main__":
     aplicar_parches()

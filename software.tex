@@ -1,0 +1,90 @@
+% ==============================================================================
+% Seccion: Plataforma de Adquisicion y Estandarizacion Experimental (Nandu LSD)
+% Archivo: software.tex
+% Enfoque: Experimental, Fisiologico y Biomedico (No Tecnico en Software)
+% Estilo: Espanol Academico FCEyN / UBA (Laboratorio de Sistemas Dinamicos)
+% ==============================================================================
+
+\section{Plataforma de Adquisición y Estandarización Experimental}
+\label{sec:plataforma_software}
+
+El registro de electromiografía de superficie facial (sEMG) presenta desafíos metrológicos y fisiológicos severos. Los biopotenciales superficiales generados por la musculatura fonatoria exhiben amplitudes reducidas (típicamente entre $10\,\mu\text{V}$ y $1\,\text{mV}$), alta sensibilidad a artefactos por desplazamiento de contacto piel-electrodo, interferencia electromagnética de red ($50\,\text{Hz}$) y una notable variabilidad intrínseca en la coordinación motora inter e intra-sujeto. Para superar estas fuentes de dispersión y garantizar la reproducibilidad y validez estadística de los ensayos, se desarrolló la plataforma científica \textit{Ñandú LSD}, concebida específicamente para sistematizar los protocolos de captura, curación y organización de registros mioeléctricos en el marco de interfaces de habla silenciosa (\textit{Silent Speech Interfaces}, SSI).
+
+\subsection{Protocolo Automatizado de Guiado y Captura (AutoForge)}
+\label{subsec:protocolo_autoforge}
+
+Uno de los factores determinantes en la dispersión de las mediciones sEMG es la falta de sincronismo temporal y la fatiga neuromuscular inducida por repeticiones no pautadas. El sistema incorpora un protocolo de adquisición automatizado (\textit{AutoForge}) que actúa como un director experimental estructurado:
+
+\begin{enumerate}
+    \item \textbf{Calibración Dinámica de Ruido Basal:} Antes de cada ciclo de fonación o gesto motor, el sistema muestrea de forma autónoma una ventana temporal de reposo eléctrico previo al estímulo. Esto permite caracterizar la línea base del sujeto en tiempo real y calcular umbrales estadísticos de activación muscular ($\mu_{\text{ruido}} + k \cdot \sigma_{\text{ruido}}$) adaptados a la impedancia de contacto electrodo-tejido en ese instante específico.
+    \item \textbf{Pauta Temporal por Metrónomo Audiovisual:} La contracción y la relajación del sujeto son guiadas mediante estímulos visuales de alto contraste y marcas acústicas periódicas a una frecuencia programable (típicamente entre $20$ y $40\,\text{BPM}$). Este diseño fija una ventana de expectativa temporal constante, reduce drásticamente el \textit{jitter} de tiempo de reacción y estandariza la duración y cinemática del gesto articulatorio a lo largo de decenas de repeticiones.
+    \item \textbf{Grabación de Secuencias Continuas y Ciclado de Fonemas:} El protocolo permite iterar de manera automatizada sobre diccionarios predefinidos de vocales y palabras (e.g., /a/, /e/, /i/, /o/, /u/), asociando a cada ventana de activación su correspondiente etiqueta fonética y metadatos contextuales. Esto elimina por completo la necesidad de intervención manual del operador durante el ensayo, evitando sesgos de manipulación y distracciones en el participante.
+\end{enumerate}
+
+\subsection{Preservación de la Sinergia Biomecánica y Alineación Master-Slave}
+\label{subsec:sinergia_master_slave}
+
+La producción de habla, tanto sonora como silenciosa, no se origina en la acción aislada de un único efector muscular, sino en la co-activación coordinada y espaciotemporal de complejos musculares faciales y suprahioideos (\textit{Orbicularis Oris}, \textit{Depressor Anguli Oris}, \textit{Mylohyoid}). En este marco biomecánico, la diferencia temporal relativa (\textit{phase lag}) entre el encendido de los distintos grupos musculares constituye la firma fisiológica determinante para discriminar fonemas que presentan niveles de energía muscular globalmente similares.
+
+Para evitar la pérdida de esta correlación de fase temporal durante el recorte y preprocesamiento, la plataforma implementa una estrategia de sincronización \textit{Master-Slave}:
+\begin{itemize}
+    \item Se establece un canal maestro de referencia temporal (pudiendo corresponder a la envolvente de la señal acústica de control o al canal muscular primario con mayor relación señal-ruido) que determina de forma no supervisada el instante de ignición o de máxima activación del gesto fonatorio ($t_0$).
+    \item Todos los canales musculares esclavos se recortan y sincronizan tomando rígidamente la misma ventana temporal $[t_0 - \Delta t_{\text{pre}}, t_0 + \Delta t_{\text{post}}]$ dictada por el canal maestro.
+\end{itemize}
+De esta forma, se conservan íntegramente los desfases fisiológicos relativos inter-musculares, impidiendo la introducción de deformaciones artificiales en las matrices de correlación cruzada, en las proyecciones en componentes principales (PCA) y en las variedades topológicas no lineales (UMAP).
+
+\subsection{Control de Calidad en Línea y Monitoreo de Fatiga Muscular In-Situ}
+\label{subsec:control_calidad}
+
+La adquisición prolongada de bioseñales mioeléctricas se encuentra expuesta a la degradación progresiva de la calidad de registro por factores como sudoración, micromovimientos del parche de electrodos o agotamiento neuromuscular del sujeto. La plataforma integra herramientas de diagnóstico en tiempo real para el control de calidad:
+\begin{itemize}
+    \item \textbf{Evaluación Instantánea de la Relación Señal-Ruido (SNR):} Para cada pulso mioeléctrico detectado, se calcula el cociente energético entre la ventana de contracción activa y la ventana basal de reposo previa:
+    \begin{equation}
+        \text{SNR}_{\text{pulso}} = 10 \log_{10} \left( \frac{E_{\text{contracción}}}{E_{\text{reposo}}} \right) = 10 \log_{10} \left( \frac{\sum_{n \in \mathcal{W}_{\text{act}}} s^2[n]}{\frac{|\mathcal{W}_{\text{act}}|}{|\mathcal{W}_{\text{rep}}|} \sum_{m \in \mathcal{W}_{\text{rep}}} s^2[m]} \right)
+        \label{eq:snr_pulso}
+    \end{equation}
+    Si este valor desciende por debajo del umbral de calidad requerido, el ensayo se etiqueta para revisión o descarte automático.
+    \item \textbf{Monitoreo del Ruido Inter-pulso (Evaluador de Relajación):} El sistema cuantifica la densidad de energía remanente en el punto medio del intervalo de descanso entre contracciones consecutivas. Un incremento sostenido del valor eficaz ($\text{RMS}$) en el reposo inter-pulso actúa como biomarcador de fatiga neuromuscular o de incapacidad de retorno a la línea base, permitiendo al operador pausar la sesión antes de incorporar datos contaminados por espasmos o tono basal elevado.
+\end{itemize}
+
+\subsection{Organización Jerárquica de Datos y Reproducibilidad Experimental}
+\label{subsec:organizacion_datos}
+
+Para garantizar la rigurosa reproducibilidad del protocolo experimental y alimentar de forma determinística los modelos de aprendizaje automático y decodificación neuronal, los registros se estructuran jerárquicamente en el almacenamiento:
+\begin{itemize}
+    \item Cada sesión de laboratorio se encapsula en una estructura unívoca indexada por fecha de adquisición y denominación del protocolo experimental (\nolinkurl{base_de_datos_electrodos/<Fecha>/<Sesion>/}).
+    \item Cada canal físico ($0, 1, 2, 3$) posee un subdirectorio aislado (\texttt{canal\_0}, \texttt{canal\_1}, \texttt{canal\_2}, \texttt{canal\_3}) que preserva la señal mioeléctrica continua sin pérdidas y un archivo descriptivo de metadatos en formato JSON.
+    \item Los metadatos encapsulan las condiciones experimentales completas: frecuencia de digitalización ($f_s$), ganancia analógica de instrumentación ($\sim 500\times$), resistencia estimada de electrodos ($R_{\text{ohm}}$), cadencia del metrónomo (BPM), diccionario de fonemas articulados y asignación anatómica de músculos.
+\end{itemize}
+Esta disposición asegura que las etapas posteriores de análisis (filtrado digital de fase cero, extracción de envolventes RMS, segmentación y conformación de tensores para redes neuronales) sean reproducibles y trazables a lo largo del tiempo.
+
+En el Cuadro~\ref{tab:dimensiones_plataforma} se sintetizan los pilares metodológicos de la plataforma y su impacto directo en el procesamiento y modelado biomédico.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Dimensiones metodológicas de la plataforma \textit{Ñandú LSD} y su impacto en la adquisición de sEMG para interfaces de habla silenciosa (SSI).}
+\label{tab:dimensiones_plataforma}
+\vspace{0.2cm}
+\begin{tabular}{p{2.8cm} p{5.2cm} p{6.0cm}}
+\toprule
+\textbf{Eje Metodológico} & \textbf{Estrategia Experimental} & \textbf{Impacto en el Modelado de SSI} \\
+\midrule
+Sincronismo temporal de activación & Metrónomo audiovisual pautado ($20\text{ a }40\,\text{BPM}$) en protocolo AutoForge & Reducción drástica del \textit{jitter} de reacción y homogeneidad cinemática del gesto articulado. \\
+\addlinespace
+Calibración dinámica de línea base & Muestreo previo de reposo eléctrico y umbral adaptativo ($\mu + k\sigma$) & Estimación de $\text{SNR}$ instantánea y robustez frente a derivas de impedancia de contacto. \\
+\addlinespace
+Preservación de sinergia muscular & Segmentación \textit{Master-Slave} anclada al canal rector ($t_0$) & Conservación de retardos relativos de fase fisiológicos (\textit{lags}) para PCA, UMAP y clasificadores. \\
+\addlinespace
+Monitoreo de fatiga \textit{in-situ} & Evaluación del valor eficaz ($\text{RMS}$) en el reposo inter-pulso & Detección preventiva de agotamiento motor y descarte objetivo de registros contaminados. \\
+\addlinespace
+Trazabilidad y reproducibilidad & Jerarquía de carpetas multicanal estandarizada y metadatos JSON unificados & Ingesta determinística y estructuración de tensores para autoencoders 1D y modelos neuronales. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Relevancia Biomédica e Impacto Clínico en Habla Silenciosa}
+\label{subsec:relevancia_biomedica}
+
+El diseño de la plataforma responde a un objetivo de investigación biomédica de alto impacto: proveer un marco experimental robusto para el desarrollo de sistemas de comunicación aumentativa y alternativa destinados a personas con afonía severa, parálisis de cuerdas vocales, pacientes laringectomizados o con enfermedades de la motoneurona (como la Esclerosis Lateral Amiotrófica, ELA). Al capturar fielmente las dinámicas electromiográficas en ausencia de emisión sonora audible (\textit{silent speech}), el sistema proporciona las bases de datos de alta fidelidad necesarias para mapear la intención articulatoria periférica hacia modelos generativos de habla sintética.
+
