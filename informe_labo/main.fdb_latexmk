@@ -1,12 +1,12 @@
 # Fdb version 4
-["biber main"] 1787006762.71813 "main.bcf" "main.bbl" "main" 1787006793.17785 0
-  "main.bcf" 1787006792.90869 107687 36beb17b1e64a36b7052a68d54f7df16 "pdflatex"
+["biber main"] 1787006762.71813 "main.bcf" "main.bbl" "main" 1787082172.00778 0
+  "main.bcf" 1787082171.74941 107687 36beb17b1e64a36b7052a68d54f7df16 "pdflatex"
   (generated)
   "main.bbl"
   "main.blg"
   (rewritten before read)
-["pdflatex"] 1787006778.78745 "/home/lbraun/Repos/Nandu_SistemadeAdqusicionEMG/informe_labo/main.tex" "main.pdf" "main" 1787006793.17812 1
-  "/home/lbraun/Repos/Nandu_SistemadeAdqusicionEMG/informe_labo/main.tex" 1787006734.32792 5140 99bc079d6770c0dce2e4f035a9d78446 ""
+["pdflatex"] 1787082158.86459 "/home/lbraun/Repos/Nandu_SistemadeAdqusicionEMG/informe_labo/main.tex" "main.pdf" "main" 1787082172.00804 0
+  "/home/lbraun/Repos/Nandu_SistemadeAdqusicionEMG/informe_labo/main.tex" 1787062826.95383 5156 dc43d291c24ebfbd3e996210e99e7a4e ""
   "/usr/share/texlive/texmf-dist/fonts/enc/dvips/base/8r.enc" 1775001600 4850 80dc9bab7f31fb78a000ccfed0e27cab ""
   "/usr/share/texlive/texmf-dist/fonts/map/fontname/texfonts.map" 1577235249 3524 cb3e574dea2d1052e39280babc910dc8 ""
   "/usr/share/texlive/texmf-dist/fonts/tfm/adobe/courier/pcrr7t.tfm" 1136768653 960 379cc0019370a9e0208a0a3f949f847a ""
@@ -452,15 +452,15 @@
   "insumos_ia/cuaderno_de_labo/images/logo.png" 1779453550.17875 5009715 91c49daf4cadb5c49808ad7fc8ba7ee2 ""
   "insumos_ia/cuaderno_de_labo/images/plot_calibrado_ARTE_Prueba1_Santi.png" 1786687420 338883 b000fa172e20d95e9d47b6dba2097d63 ""
   "insumos_ia/cuaderno_de_labo/images/plot_calibrado_NANDU_Prueba2_Santi.png" 1786687420 373020 947b538eacdb4c8fcbecd616d5a1081b ""
-  "main.aux" 1787006792.90069 48092 05f5affc663d949d975481f3da5a4159 "pdflatex"
+  "main.aux" 1787082171.74141 48093 02bf4c9142c18cb4f52b32f03c6ecbe7 "pdflatex"
   "main.bbl" 1787006763.2511 466 76d65a242ec496c9b4361af646ff12cb "biber main"
-  "main.out" 1787006792.90569 8808 37b435ebb3caafe1d40f842bdba8c8cd "pdflatex"
-  "main.run.xml" 1787006792.911 2306 21b6f2342482d65f7bca9ce329356541 "pdflatex"
-  "main.tex" 1787006734.32792 5140 99bc079d6770c0dce2e4f035a9d78446 ""
-  "main.toc" 1787006792.911 4564 00549fb8da46a2f4c22312dd4bd5290c "pdflatex"
-  "sections/01_hardware.tex" 1786908633.27403 58713 297cd2ab4dadd05674d828b6996531cc ""
+  "main.out" 1787082171.74541 8768 23dbf334820909961c35fa1407d157bc "pdflatex"
+  "main.run.xml" 1787082171.75101 2306 21b6f2342482d65f7bca9ce329356541 "pdflatex"
+  "main.tex" 1787062826.95383 5156 dc43d291c24ebfbd3e996210e99e7a4e ""
+  "main.toc" 1787082171.75101 4559 7337ec20f9d79d2f7f781474a6cb804d "pdflatex"
+  "sections/01_hardware.tex" 1787082158.5805 58617 a0322573c48cdbd6273011c7153db6eb ""
   "sections/02_software.tex" 1786909583.69977 0 d41d8cd98f00b204e9800998ecf8427e ""
-  "sections/03_experimentos.tex" 1786999845.22405 56628 f38b363555b5dddf269a8169459887d3 ""
+  "sections/03_experimentos.tex" 1787062826.94183 56644 dbda57a0eba7bf999259fbb4c972c4f8 ""
   (generated)
   "main.aux"
   "main.bcf"

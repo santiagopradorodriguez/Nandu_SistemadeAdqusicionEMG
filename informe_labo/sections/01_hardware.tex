@@ -5,11 +5,13 @@
 \end{center}
 \vspace{2cm}
 \stepcounter{section}
+\phantomsection
 \addcontentsline{toc}{section}{\protect\numberline{\thesection}Hardware}
 
 \subsection{Diseño de circuito y consideraciones en Proteus}
 
-El diseño del circuito se originó a partir de una adaptación de un modelo previo del grupo de Laboratorio 7\footnote{Basado en el circuito preamplificador de electromiografía del grupo anterior, referenciado en el plan de trabajo y cuadernos de laboratorio originales.}. Mientras que ellos contaban con un circuito de protección ante cambio de polarización por un lado y los canales de amplificación por otro, el objetivo para este manual fue consolidar todo en una única placa: el sistema de protección junto a los tres canales de amplificación diferencial.
+El diseño del circuito se originó a partir de una adaptación de un modelo previo del grupo de Laboratorio 7\footnote{Basado en el circuito preamplificador del grupo 
+anterior, referenciado en la carpeta de datos.}. Mientras que ellos contaban con un circuito de protección ante cambio de polarización por un lado y los canales de amplificación por otro, el objetivo para este manual fue consolidar todo en una única placa: el sistema de protección junto a los tres canales de amplificación diferencial.
 
 \begin{figure}[htbp]
 \centering
@@ -77,7 +79,7 @@ El diseño del circuito impreso (PCB) se realizó en Proteus 8.1 SP. Durante est
 \label{fig:vistas_proteus}
 \end{figure}
 
-Para la impresión final, se extrajo el diseño desde \textit{Output $>$ Print Layout}. Se seleccionaron exclusivamente la capa de cobre y el marco de referencia. La impresión debe hacerse en modo \enquote{Normal} (sin espejar la placa entera), espejando únicamente el logo gráfico para que se lea correctamente en el reverso\footnote{Acá el archivo para Proteus y todo el logo.}.
+Para la impresión final, se extrajo el diseño desde \textit{Output $>$ Print Layout}. Se seleccionaron exclusivamente la capa de cobre y el marco de referencia. La impresión debe hacerse en modo \enquote{Normal} (sin espejar la placa entera), espejando únicamente el logo gráfico para que se lea correctamente en el reverso.
 
 \begin{figure}[htbp]
 \centering

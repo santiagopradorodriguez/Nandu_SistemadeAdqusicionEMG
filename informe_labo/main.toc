@@ -1,13 +1,13 @@
 \babel@toc {spanish}{}\relax 
-\contentsline {section}{Introducción}{2}{Doc-Start}%
-\contentsline {section}{\numberline {1}Hardware}{4}{Doc-Start}%
+\contentsline {section}{Introducción}{2}{section*.1}%
+\contentsline {section}{\numberline {1}Hardware}{4}{section*.2}%
 \contentsline {subsection}{\numberline {1.1}Diseño de circuito y consideraciones en Proteus}{4}{subsection.1.1}%
 \contentsline {subsection}{\numberline {1.2}Fabricación de la placa}{7}{subsection.1.2}%
 \contentsline {subsubsection}{\numberline {1.2.1}Impresión y planchado}{7}{subsubsection.1.2.1}%
 \contentsline {subsubsection}{\numberline {1.2.2}Ataque con ácido férrico}{8}{subsubsection.1.2.2}%
-\contentsline {subsubsection}{\numberline {1.2.3}Mecanizado y Soldadura}{9}{subsubsection.1.2.3}%
-\contentsline {subsubsection}{\numberline {1.2.4}Tabla de componentes y materiales}{10}{subsubsection.1.2.4}%
-\contentsline {subsection}{\numberline {1.3}Caracterización empírica de las resistencias ($R_g$)}{11}{subsection.1.3}%
+\contentsline {subsubsection}{\numberline {1.2.3}Mecanizado y Soldadura}{8}{subsubsection.1.2.3}%
+\contentsline {subsubsection}{\numberline {1.2.4}Tabla de componentes y materiales}{9}{subsubsection.1.2.4}%
+\contentsline {subsection}{\numberline {1.3}Caracterización empírica de las resistencias ($R_g$)}{9}{subsection.1.3}%
 \contentsline {subsubsection}{\numberline {1.3.1}Pruebas con electrodos faciales}{12}{subsubsection.1.3.1}%
 \contentsline {subsubsection}{\numberline {1.3.2}Análisis de respuesta en frecuencia}{15}{subsubsection.1.3.2}%
 \contentsline {subsection}{\numberline {1.4}Armado del gabinete}{18}{subsection.1.4}%
@@ -19,7 +19,7 @@
 \contentsline {subsubsection}{\numberline {1.5.4}Comparación de ruidos iniciales en los últimos experimentos}{32}{subsubsection.1.5.4}%
 \contentsline {subsubsection}{\numberline {1.5.5}Ensamblado de los cables definitivos}{37}{subsubsection.1.5.5}%
 \contentsline {subsection}{\numberline {1.6}Imágenes del resultado final del Hardware Ñandú LSD}{40}{subsection.1.6}%
-\contentsline {section}{\numberline {2}Experimentos}{41}{figure.caption.69}%
+\contentsline {section}{\numberline {2}Experimentos}{41}{section*.72}%
 \contentsline {subsection}{\numberline {2.1}Experimento de Labo 6}{41}{subsection.2.1}%
 \contentsline {subsubsection}{\numberline {2.1.1}Set experimental}{41}{subsubsection.2.1.1}%
 \contentsline {subsubsection}{\numberline {2.1.2}Protocolo de preparación de la piel}{41}{subsubsection.2.1.2}%
@@ -27,14 +27,14 @@
 \contentsline {subsubsection}{\numberline {2.1.4}Resultados exploratorios en tiempo real}{47}{subsubsection.2.1.4}%
 \contentsline {subsection}{\numberline {2.2}Experimento de Labo 7}{52}{subsection.2.2}%
 \contentsline {subsubsection}{\numberline {2.2.1}Evolución y Consolidación del Set Experimental}{52}{subsubsection.2.2.1}%
-\contentsline {paragraph}{Cambio de locación y problemas con \textit {phantom power}:}{52}{paragraph*.85}%
-\contentsline {paragraph}{Reemplazo de NIDAQ y Consolidación del Set Final:}{52}{paragraph*.86}%
+\contentsline {paragraph}{Cambio de locación y problemas con \textit {phantom power}:}{52}{paragraph*.88}%
+\contentsline {paragraph}{Reemplazo de NIDAQ y Consolidación del Set Final:}{52}{paragraph*.89}%
 \contentsline {subsubsection}{\numberline {2.2.2}Protocolo de Adquisición}{53}{subsubsection.2.2.2}%
 \contentsline {subsubsection}{\numberline {2.2.3}Mediciones}{54}{subsubsection.2.2.3}%
-\contentsline {paragraph}{Lunes 01/06/2026 (Clase 20) - Medición exploratoria inicial:}{54}{paragraph*.91}%
-\contentsline {paragraph}{Miércoles 03/06/2026 (Clase 21) - Incorporación del protocolo de adquisición:}{55}{paragraph*.93}%
-\contentsline {paragraph}{Miércoles 10/06/2026 (Clase 23) - Consolidación y mejores mediciones:}{57}{paragraph*.98}%
-\contentsline {paragraph}{Lunes 22/06/2026 (Clase 25) - Medición con sujeto alternativo:}{58}{paragraph*.101}%
+\contentsline {paragraph}{Lunes 01/06/2026 (Clase 20) - Medición exploratoria inicial:}{54}{paragraph*.94}%
+\contentsline {paragraph}{Miércoles 03/06/2026 (Clase 21) - Incorporación del protocolo de adquisición:}{55}{paragraph*.96}%
+\contentsline {paragraph}{Miércoles 10/06/2026 (Clase 23) - Consolidación y mejores mediciones:}{57}{paragraph*.101}%
+\contentsline {paragraph}{Lunes 22/06/2026 (Clase 25) - Medición con sujeto alternativo:}{58}{paragraph*.104}%
 \contentsline {subsection}{\numberline {2.3}Resultados y Análisis (Experimento Labo 7)}{59}{subsection.2.3}%
 \contentsline {subsubsection}{\numberline {2.3.1}Discretización de Vocales en Espacio 3D (Método de Umbrales)}{59}{subsubsection.2.3.1}%
 \contentsline {subsection}{\numberline {2.4}Análisis de Componentes Principales (PCA)}{64}{subsection.2.4}%
