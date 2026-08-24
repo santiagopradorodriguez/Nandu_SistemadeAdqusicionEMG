@@ -11,16 +11,16 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 if script_dir not in sys.path:
     sys.path.append(script_dir)
 
-with open(r'/tmp/tmpkovgiir7.json', 'r') as f:
+with open(r'/tmp/tmp097wh4lg.json', 'r') as f:
     kwargs = json.load(f)
 
-mediciones = ['2026-07-10/A_T1_Lucas', '2026-07-10/A_T2_Lucas', '2026-07-10/A_T3_Lucas', '2026-07-10/A_T4_Lucas', '2026-07-10/A_T5_Lucas', '2026-07-10/A_T6_Lucas', '2026-07-10/A_T7_Lucas', '2026-07-10/E_T1_Lucas', '2026-07-10/E_T2_Lucas', '2026-07-10/E_T3_Lucas', '2026-07-10/E_T4_Lucas', '2026-07-10/E_T5_Lucas', '2026-07-10/E_T6_Lucas', '2026-07-10/E_T7_Lucas', '2026-07-10/I_T1_Lucas', '2026-07-10/I_T2_Lucas', '2026-07-10/I_T3_Lucas', '2026-07-10/I_T4_Lucas', '2026-07-10/I_T5_Lucas', '2026-07-10/I_T6_Lucas', '2026-07-10/I_T7_Lucas', '2026-07-10/O_T1_Lucas', '2026-07-10/O_T2_Lucas', '2026-07-10/O_T3_Lucas', '2026-07-10/O_T4_Lucas', '2026-07-10/O_T5_Lucas', '2026-07-10/O_T6_Lucas', '2026-07-10/O_T7_Lucas', '2026-07-10/U_T1_Lucas', '2026-07-10/U_T2_Lucas', '2026-07-10/U_T3_Lucas', '2026-07-10/U_T4_Lucas', '2026-07-10/U_T5_Lucas', '2026-07-10/U_T6_Lucas', '2026-07-10/U_T7_Lucas']
+mediciones = ['2026-08-21/A_Prueba1silicona_petra', '2026-08-21/A_silicona_aeiou_petra', '2026-08-21/E_Prueba1silicona_petra', '2026-08-21/E_silicona_aeiou_petra', '2026-08-21/I_Prueba1silicona_petra', '2026-08-21/I_silicona_aeiou_petra', '2026-08-21/O_Prueba1silicona_petra', '2026-08-21/O_silicona_aeiou_petra', '2026-08-21/U_Prueba1silicona_petra', '2026-08-21/U_silicona_aeiou_petra']
 base_dir = r'/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos'
 
 import deep_learning.pca_umap_clustering.generador_pca_umap as generador
 
 # Define explicit out_dir based on user input
-pca_umap_dir = os.path.join(project_root, "deep_learning", "pca_umap_clustering", "resultados_pca_umap", "lucas")
+pca_umap_dir = os.path.join(project_root, "deep_learning", "pca_umap_clustering", "resultados_pca_umap", "pca3d?")
 os.makedirs(pca_umap_dir, exist_ok=True)
 
 # Save the kwargs into the folder
