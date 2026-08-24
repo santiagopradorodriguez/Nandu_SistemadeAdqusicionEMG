@@ -571,6 +571,17 @@ class PcaTab(QWidget):
         scroll.setWidget(content)
         self.layout.addWidget(scroll)
         
+        l_grid_btns = QHBoxLayout()
+        self.btn_grid_search_2d = QPushButton(" 🔍 GRID SEARCH (2D)")
+        self.btn_grid_search_2d.setStyleSheet("background-color: #66FCF1; color: black; font-weight: bold; padding: 10px; margin-bottom: 5px;")
+        
+        self.btn_grid_search_3d = QPushButton(" 🔍 GRID SEARCH (3D)")
+        self.btn_grid_search_3d.setStyleSheet("background-color: #45A29E; color: black; font-weight: bold; padding: 10px; margin-bottom: 5px;")
+        
+        l_grid_btns.addWidget(self.btn_grid_search_2d)
+        l_grid_btns.addWidget(self.btn_grid_search_3d)
+        self.layout.addLayout(l_grid_btns)
+
         self.btn_run = QPushButton(" 1. LANZAR PCA (COMP. PRINCIPALES)")
         self.btn_run.setStyleSheet("background-color: #00ffcc; color: black; font-weight: bold; padding: 10px;")
         self.layout.addWidget(self.btn_run)
@@ -902,13 +913,12 @@ class AnalysisPanel(QWidget):
     def get_comparative_kwargs(self):
         t = self.tab_comparativo
         return {
-            'canal_comparar': t.cmb_canal_comun.currentText(),
-            'overlay': t.chk_overlay.isChecked(),
-            'snr': t.chk_snr.isChecked(),
-            'amp': t.chk_amp.isChecked(),
-            'snr_time': t.chk_snr_time.isChecked(),
-            'amp_time': t.chk_amp_time.isChecked(),
-            'table': t.chk_table.isChecked()
+            'show_overlay': t.chk_overlay.isChecked(),
+            'show_snr': t.chk_snr.isChecked(),
+            'show_amplitude': t.chk_amp.isChecked(),
+            'show_snr_time': t.chk_snr_time.isChecked(),
+            'show_amp_time': t.chk_amp_time.isChecked(),
+            'show_table': t.chk_table.isChecked()
         }
         
 
@@ -976,7 +986,7 @@ class MachineLearningPanel(QWidget):
         lyt_otros.addWidget(self.btn_trevisan)
         lyt_otros.addWidget(self.btn_visor_features)
         lyt_otros.addStretch()
-        self.tabs.addTab(self.tab_otros, "Herramientas Extra (XGBoost, Visor)")
+        # self.tabs.addTab(self.tab_otros, "Herramientas Extra (XGBoost, Visor)")
         
         self.layout.addWidget(self.tabs)
 

@@ -23,3 +23,7 @@ base_de_datos_electrodos/
 
 **Regla de Oro para el procesamiento de audio:**
 Cualquier módulo DSP o de Machine Learning que necesite acceder a los datos, NO debe buscar los archivos `.wav` ni `metadata.json` en la raíz de la sesión (`<Sesión>/`), sino que **obligatoriamente debe iterar o acceder a las subcarpetas `canal_0`, `canal_1`, `canal_2` y `canal_3`**. El `metadata.json` principal (que contiene BPM, date, etc.) se encuentra siempre dentro de `canal_0`.
+
+## Conservación Estricta de Contenido (Edición No Destructiva)
+Cuando el usuario solicite "agregar", "insertar" o "poner" una nueva imagen, sección o bloque de texto, está **terminantemente prohibido** borrar, reemplazar o alterar de forma colateral cualquier otro texto, código o sección adyacente.
+La edición debe ser puramente aditiva y conservadora, a menos que el usuario instruya explícitamente borrar o reemplazar contenido.

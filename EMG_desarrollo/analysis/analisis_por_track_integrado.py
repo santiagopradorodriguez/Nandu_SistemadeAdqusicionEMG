@@ -710,18 +710,20 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
                        show_amplitude=True,
                        show_table=True,
                        show_snr_time=True,
-                       show_amp_time=True
+                       show_amp_time=True,
+                       **kwargs
                        ):
     """
     Comparative plots and table (autocontenida).
-    - Añadido: barras de error en el plot de amplitud usando 'amp_uncertainty' de resultados.
-    - Recalculado SNR energy usando ruido entre pulsos promediado para todas las ventanas:
-        snr_energy_per_pulse = (pulse_rms**2) / (noise_rms_per_pulse**2)
-        snr_energy = mean(snr_energy_per_pulse)
-        snr_energy_unc = SE(snr_energy_per_pulse)
-      Para esto se reconstruyen pulse_rms a partir de 'segmentos_rs' (si está disponible),
-      y noise_rms_per_pulse se infiere como pulse_rms / snr_per_pulse cuando es posible.
     """
+    if 'overlay' in kwargs: show_overlay = kwargs['overlay']
+    if 'snr' in kwargs: show_snr = kwargs['snr']
+    if 'amp' in kwargs: show_amplitude = kwargs['amp']
+    if 'amplitude' in kwargs: show_amplitude = kwargs['amplitude']
+    if 'snr_time' in kwargs: show_snr_time = kwargs['snr_time']
+    if 'amp_time' in kwargs: show_amp_time = kwargs['amp_time']
+    if 'table' in kwargs: show_table = kwargs['table']
+
     import os
     import re
     import csv
@@ -790,10 +792,15 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
 
     # --- Preparar matriz base para superposición (sin normalizar) ---
     pulse_matrix = np.vstack(promedios_globales)
-    if isinstance(tiempos_globales, (list, tuple)) and len(tiempos_globales) > 0:
-        t_plot = tiempos_globales[0]
+    target_len = pulse_matrix.shape[1]
+    if isinstance(tiempos_globales, (list, tuple)) and len(tiempos_globales) > 0 and len(tiempos_globales[0]) > 0:
+        t0 = np.array(tiempos_globales[0])
+        if len(t0) == target_len:
+            t_plot = t0
+        else:
+            t_plot = np.linspace(t0[0], t0[-1], target_len)
     else:
-        t_plot = np.linspace(0, 1, pulse_matrix.shape[1])
+        t_plot = np.linspace(0, 1, target_len)
 
     # --- NUEVO: Barra de progreso para los gráficos comparativos ---
     num_plots = sum([show_overlay, show_snr, show_amplitude, show_table, show_snr_time, show_amp_time])
@@ -1779,10 +1786,11 @@ def procesar_wavs_promedio(
         
         sufijo = f"{env_str}_env{smooth_ms_str}ms_{estetica_str}.png"
         
-        out_prom = os.path.join(out_dir, f"avg_{sufijo}")
-        out_spec = os.path.join(out_dir, f"spec_{sufijo}")
-        out_rec = os.path.join(out_dir, f"pulses_{sufijo}")
-        out_evol = os.path.join(out_dir, f"evolucion_{sufijo}")
+        # Guardar con los nombres exactos que espera el Visor de Electrodos
+        out_prom = os.path.join(out_dir, "avg.png")
+        out_spec = os.path.join(out_dir, "spec.png")
+        out_rec = os.path.join(out_dir, "pulses.png")
+        out_evol = os.path.join(out_dir, "evolucion.png")
 
         # --- GRAFICO: pulsos individuales y promedio (restaurado completo) ---
         _plot_pulse_full(
@@ -2723,7 +2731,10 @@ def _comparative_session_plots(mediciones_data, nombre_salida_base):
                 labels_snr.append(f"{letra}\n(N={len(vals)})")
                 
         if len(data_snr) > 0:
-            bp_snr = ax_hsnr.boxplot(data_snr, labels=labels_snr, patch_artist=True)
+            try:
+                bp_snr = ax_hsnr.boxplot(data_snr, tick_labels=labels_snr, patch_artist=True)
+            except TypeError:
+                bp_snr = ax_hsnr.boxplot(data_snr, labels=labels_snr, patch_artist=True)
             for i, patch in enumerate(bp_snr['boxes']):
                 letra_pura = labels_snr[i].split('\n')[0].strip().upper()
                 patch.set_facecolor(letter_colors.get(letra_pura, 'gray'))
@@ -2765,7 +2776,10 @@ def _comparative_session_plots(mediciones_data, nombre_salida_base):
                 labels_plot.append(f"{letra}\n(N={len(vals)})")
                 
         if len(data_to_plot) > 0:
-            bp = ax_hamp.boxplot(data_to_plot, labels=labels_plot, patch_artist=True)
+            try:
+                bp = ax_hamp.boxplot(data_to_plot, tick_labels=labels_plot, patch_artist=True)
+            except TypeError:
+                bp = ax_hamp.boxplot(data_to_plot, labels=labels_plot, patch_artist=True)
             for i, patch in enumerate(bp['boxes']):
                 letra_pura = labels_plot[i].split('\n')[0].strip().upper()
                 patch.set_facecolor(letter_colors.get(letra_pura, 'gray'))

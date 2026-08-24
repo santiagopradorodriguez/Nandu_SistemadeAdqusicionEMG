@@ -867,7 +867,7 @@ def export_results_for_file(out_dir, filename, resultados_entry):
 
 # ---------------------- Comparative plotting --------------------
 def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, resultados, nombre_salida,
-                       show_overlay=True, show_amplitude=True, normalize_overlay=False):
+                       show_overlay=True, show_amplitude=True, normalize_overlay=False, **kwargs):
     
     import matplotlib.cm as cm
     n_files = len(promedios_globales)
@@ -880,7 +880,15 @@ def _comparative_plots(promedios_globales, tiempos_globales, nombres_globales, r
 
     plot_colors = cm.viridis(np.linspace(0, 1, n_files))
     pulse_matrix = np.vstack(promedios_globales)
-    t_plot = tiempos_globales[0] if tiempos_globales else np.linspace(0, 1, pulse_matrix.shape[1])
+    target_len = pulse_matrix.shape[1]
+    if isinstance(tiempos_globales, (list, tuple)) and len(tiempos_globales) > 0 and len(tiempos_globales[0]) > 0:
+        t0 = np.array(tiempos_globales[0])
+        if len(t0) == target_len:
+            t_plot = t0
+        else:
+            t_plot = np.linspace(t0[0], t0[-1], target_len)
+    else:
+        t_plot = np.linspace(0, 1, target_len)
 
     if show_overlay:
         fig_ov, ax_ov = plt.subplots(figsize=(12, 5))

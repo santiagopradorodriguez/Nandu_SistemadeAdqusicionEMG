@@ -121,7 +121,7 @@ def get_interpulse_noise(processed_segment, initial_noise):
         
     return curr_mean
 
-def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_ms=250, notch_q=30.0, target_len=100, return_raw_cache=False, aplicar_trevisan=False, modo_alineacion="Pico Volumen Micrófono", pre_pct=0.4, post_pct=0.6, canales_features=["canal_0", "canal_1", "canal_2"], ignorar_ventana_cero=False):
+def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_ms=250, notch_q=2.0, target_len=100, return_raw_cache=False, aplicar_trevisan=False, modo_alineacion="Pico Volumen Micrófono", pre_pct=0.4, post_pct=0.6, canales_features=["canal_0", "canal_1", "canal_2"], ignorar_ventana_cero=False, cache_canales_data=None):
     """
     Extrae y alinea las ventanas de los canales solicitados.
     Devuelve X (matriz de features), Y (labels/vocales) y Tomas (nombres de las mediciones).
@@ -146,9 +146,6 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_
         if vocal not in ['A', 'E', 'I', 'O', 'U']:
             continue
             
-        progreso = (idx / total_mediciones) * 100
-        print(f"\n[{progreso:.1f}%] Procesando: {med_name} (Vocal: {vocal})")
-        
         # Leemos archivo manual de exclusiones si existe
         excluded_windows = []
         exclude_path = os.path.join(med_path, 'excluded_windows.json')
@@ -157,48 +154,52 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_
                 data_excl = json.load(f)
                 excluded_windows = data_excl.get("excluded_windows", [])
                 
-        canales_data = {}
-        
-        for ch in canales_procesar:
-            carpeta = os.path.join(med_path, ch)
-            if not os.path.exists(carpeta):
-                print(f"  Advertencia: {ch} no encontrado en {med_name}")
-                continue
+        cache_key = f"{med_name}_{smooth_ms}"
+        if cache_canales_data is not None and cache_key in cache_canales_data:
+            canales_data = cache_canales_data[cache_key]
+        else:
+            canales_data = {}
+            for ch in canales_procesar:
+                carpeta = os.path.join(med_path, ch)
+                if not os.path.exists(carpeta):
+                    continue
+                    
+                bpm_u, noise_u, pulsos_u = 50, 2.0, None
+                meta_path = os.path.join(carpeta, 'metadata.json')
+                try:
+                    if os.path.exists(meta_path):
+                        with open(meta_path, 'r') as f:
+                            meta = json.load(f)
+                            bpm_u = meta.get('bpm', bpm_u)
+                            noise_u = meta.get('noise_seconds', noise_u)
+                            pulsos_u = meta.get('pulse_count', pulsos_u)
+                except: pass
                 
-            bpm_u, noise_u, pulsos_u = 50, 2.0, None
-            meta_path = os.path.join(carpeta, 'metadata.json')
-            try:
-                if os.path.exists(meta_path):
-                    with open(meta_path, 'r') as f:
-                        meta = json.load(f)
-                        bpm_u = meta.get('bpm', bpm_u)
-                        noise_u = meta.get('noise_seconds', noise_u)
-                        pulsos_u = meta.get('pulse_count', pulsos_u)
-            except: pass
-            
-            # Usar la función original para procesar, silenciando sus prints excesivos
-            old_stdout = sys.stdout
-            sys.stdout = io.StringIO()
-            try:
-                res_final = at.procesar_wavs_promedio(
-                    carpeta=carpeta, output_root=carpeta,
-                    bpm=bpm_u, mostrar_recortes=False,
-                    noise_seconds=noise_u, n_pulsos_manual=pulsos_u,
-                    excluded_windows=excluded_windows,
-                    show_interactive_plot=False,
-                    notch_q_factor=notch_q,
-                    tipo_envolvente="rms", smooth_ms=smooth_ms,
-                    pre_pct=pre_pct, post_pct=post_pct
-                )
-            finally:
-                sys.stdout = old_stdout
-            
-            if res_final:
-                fname = list(res_final.keys())[0]
-                canales_data[ch] = res_final[fname]
+                # Usar la función original para procesar, silenciando sus prints excesivos
+                old_stdout = sys.stdout
+                sys.stdout = io.StringIO()
+                try:
+                    res_final = at.procesar_wavs_promedio(
+                        carpeta=carpeta, output_root=carpeta,
+                        bpm=bpm_u, mostrar_recortes=False,
+                        noise_seconds=noise_u, n_pulsos_manual=pulsos_u,
+                        excluded_windows=excluded_windows,
+                        show_interactive_plot=False,
+                        notch_q_factor=notch_q,
+                        tipo_envolvente="rms", smooth_ms=smooth_ms,
+                        pre_pct=pre_pct, post_pct=post_pct
+                    )
+                finally:
+                    sys.stdout = old_stdout
+                
+                if res_final:
+                    fname = list(res_final.keys())[0]
+                    canales_data[ch] = res_final[fname]
+                    
+            if cache_canales_data is not None and len(canales_data) == len(canales_procesar):
+                cache_canales_data[cache_key] = canales_data
                 
         if len(canales_data) < len(canales_procesar):
-            print(f"  -> Se omite porque no se pudieron cargar los {len(canales_procesar)} canales solicitados.")
             continue
             
         # Alinear ventanas usando canal 3 como maestro (find_peaks global)
@@ -394,13 +395,13 @@ def evaluate_classifier(X_proj, Y, name):
         scores.append(accuracy_score(Y[test_idx], clf.predict(X_proj[test_idx])))
     print(f"Accuracy {name} (5-fold): {np.mean(scores):.4f} (+/- {np.std(scores):.4f})")
 
-def evaluar_clustering_no_supervisado(X, Y, nombre, algoritmo="K-Means"):
+def evaluar_clustering_no_supervisado(X, Y, nombre, algoritmo="K-Means", verbose=True):
     # Obtener etiquetas reales y cantidad de clases
     vocales_unicas = sorted(list(set(Y)))
     n_clases = len(vocales_unicas)
     
     if n_clases < 2:
-        print("Aviso: Solo hay una clase seleccionada. El clustering no tiene sentido.")
+        if verbose: print("Aviso: Solo hay una clase seleccionada. El clustering no tiene sentido.")
         n_clases = 2 # Evitar crash del modelo
 
     # Encontrar clústeres ciegos
@@ -434,12 +435,13 @@ def evaluar_clustering_no_supervisado(X, Y, nombre, algoritmo="K-Means"):
         vocal = vocales_unicas[real_idx]
         mapeo_str.append(f"Clúster {kmeans_idx} -> Vocal {vocal}")
         
-    print(f"\n=== INFO OCULTA K-MEANS ({nombre}) ===")
-    print("Matriz bruta (Sin etiquetas):")
-    print(df_cm_bruta.to_string())
-    print("\nMapeo óptimo descubierto por el Algoritmo Húngaro:")
-    print(" | ".join(mapeo_str))
-    print("=======================================")
+    if verbose:
+        print(f"\n=== INFO OCULTA K-MEANS ({nombre}) ===")
+        print("Matriz bruta (Sin etiquetas):")
+        print(df_cm_bruta.to_string())
+        print("\nMapeo óptimo descubierto por el Algoritmo Húngaro:")
+        print(" | ".join(mapeo_str))
+        print("=======================================")
     
     # --- INFO DETALLADA POR VOCAL ---
     # Reordenar las columnas de la matriz de confusión usando el mapeo del Húngaro
@@ -451,7 +453,8 @@ def evaluar_clustering_no_supervisado(X, Y, nombre, algoritmo="K-Means"):
     cm_optima_pct = (cm_optima / cm_optima.sum(axis=1)[:, np.newaxis]) * 100
     df_cm_optima = pd.DataFrame(cm_optima_pct, index=vocales_unicas, columns=vocales_unicas)
     
-    print(f"\n>> Desglose Accuracy Final para {nombre}:")
+    if verbose:
+        print(f"\n>> Desglose Accuracy Final para {nombre}:")
     for i, vocal in enumerate(vocales_unicas):
         print(f"   Vocal {vocal}: {acc_por_vocal[i]:.1f}%")
         
@@ -667,7 +670,7 @@ def plot_scatter_3d_multi_angle(X_proj, Y, title, output_path, variance_ratios=N
     
     axes = []
     for i in range(3):
-        ax = fig.add_subplot(3, 1, i+1, projection='3d')
+        ax = fig.add_subplot(1, 3, i+1, projection='3d')
         ax.set_facecolor('white')
         ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
         ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
@@ -1329,10 +1332,7 @@ def plot_confusion_matrix_heatmap(df_cm, title, filepath):
     plt.savefig(filepath, dpi=300, bbox_inches='tight', facecolor='white')
     plt.close()
 
-def extraer_y_filtrar(mediciones, base_dir, params, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=False):
-    print(f"\n--- Extrayendo Características ---")
-    print(f"    Parámetros: Alpha={params['alpha_ruido']}, Smooth={params['smooth_ms']}ms, Puntos={params['target_length']}, SNR>={params['snr_threshold']}, Outliers={params['outlier_contamination']}")
-    
+def extraer_y_filtrar(mediciones, base_dir, params, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=False, cache_canales_data=None, verbose=True):
     X, Y, Tomas, SNRs = extraer_features_concatenadas(
         base_dir, mediciones, 
         alpha_ruido=params['alpha_ruido'], 
@@ -1344,7 +1344,8 @@ def extraer_y_filtrar(mediciones, base_dir, params, aplicar_trevisan, modo_aline
         pre_pct=pre_pct, 
         post_pct=post_pct, 
         canales_features=canales_features,
-        ignorar_ventana_cero=ignorar_ventana_cero
+        ignorar_ventana_cero=ignorar_ventana_cero,
+        cache_canales_data=cache_canales_data
     )
     
     if len(X) == 0:
@@ -1393,8 +1394,9 @@ def extraer_y_filtrar(mediciones, base_dir, params, aplicar_trevisan, modo_aline
                 Y_clean.append(vocal)
                 Tomas_clean.append(Tomas_vocal_snr[i])
                 
-    print(f"    Total outliers/SNR removidos: {outliers_detectados}")
-    print(f"    Repeticiones finales válidas: {len(X_clean)}")
+    if verbose:
+        print(f"    Total outliers/SNR removidos: {outliers_detectados}")
+        print(f"    Repeticiones finales válidas: {len(X_clean)}")
     
     return np.array(X_clean), np.array(Y_clean), np.array(Tomas_clean), descartados
 
@@ -1458,15 +1460,24 @@ def ejecutar_procesamiento(
             cent_pca_2d, dist_mat_pca_2d, vocales_pca_2d = calcular_centroides_y_distancias(X_pca_2d, Y_2d)
             df_dist_pca_2d = pd.DataFrame(dist_mat_pca_2d, index=vocales_pca_2d, columns=vocales_pca_2d)
             # Add distance matrix latex export
-            latex_dist_2d = df_dist_pca_2d.to_latex(index=True, column_format='l' + 'c'*len(vocales_pca_2d), float_format="%.2f")
-            latex_dist_2d = latex_dist_2d.replace('\\toprule', '\\toprule\n\\rowcolor{col01}')
-            with open(os.path.join(out_dir, "matriz_distancias_pca_2d.tex"), 'w', encoding='utf-8') as f:
-                f.write(latex_dist_2d)
+            try:
+                latex_dist_2d = df_dist_pca_2d.to_latex(index=True, column_format='l' + 'c'*len(vocales_pca_2d), float_format="%.2f")
+                latex_dist_2d = latex_dist_2d.replace('\\toprule', '\\toprule\n\\rowcolor{col01}')
+                with open(os.path.join(out_dir, "matriz_distancias_pca_2d.tex"), 'w', encoding='utf-8') as f:
+                    f.write(latex_dist_2d)
+            except Exception as e:
+                print(f"Advertencia exportando matriz_distancias_pca_2d.tex: {e}")
                 
             calcular_y_guardar_silhouette_por_vocal(X_pca_2d, Y_2d, "Silhouette Score - PCA 2D", os.path.join(out_dir, "silhouette_pca_2d.tex"))
 
             if desc_2d:
                 pd.DataFrame(desc_2d).to_csv(os.path.join(out_dir, "reporte_mediciones_descartadas_PCA_2D.csv"), index=False)
+                
+            # Exportar datos proyectados
+            df_proy_2d = pd.DataFrame(X_pca_2d, columns=['PC1', 'PC2'])
+            df_proy_2d.insert(0, 'Vocal', Y_2d)
+            df_proy_2d.insert(1, 'Toma', Tomas_2d)
+            df_proy_2d.to_csv(os.path.join(out_dir, "proyecciones_pca_2d.csv"), index=False)
 
     if proc_umap_2d:
         print("\n=== PROCESANDO UMAP 2D ===")
@@ -1504,15 +1515,24 @@ def ejecutar_procesamiento(
             guardar_tabla_imagen(df_dist_pca_3d, "Matriz de Distancias - PCA 3D", os.path.join(out_dir, "tabla_distancias_pca_3d.png"))
             
             # Add distance matrix latex export
-            latex_dist_3d = df_dist_pca_3d.to_latex(index=True, column_format='l' + 'c'*len(vocales_pca_3d), float_format="%.2f")
-            latex_dist_3d = latex_dist_3d.replace('\\toprule', '\\toprule\n\\rowcolor{col01}')
-            with open(os.path.join(out_dir, "matriz_distancias_pca_3d.tex"), 'w', encoding='utf-8') as f:
-                f.write(latex_dist_3d)
+            try:
+                latex_dist_3d = df_dist_pca_3d.to_latex(index=True, column_format='l' + 'c'*len(vocales_pca_3d), float_format="%.2f")
+                latex_dist_3d = latex_dist_3d.replace('\\toprule', '\\toprule\n\\rowcolor{col01}')
+                with open(os.path.join(out_dir, "matriz_distancias_pca_3d.tex"), 'w', encoding='utf-8') as f:
+                    f.write(latex_dist_3d)
+            except Exception as e:
+                print(f"Advertencia exportando matriz_distancias_pca_3d.tex: {e}")
                 
             calcular_y_guardar_silhouette_por_vocal(X_pca_3d, Y_3d, "Silhouette Score - PCA 3D", os.path.join(out_dir, "silhouette_pca_3d.tex"))
 
             if desc_3d:
                 pd.DataFrame(desc_3d).to_csv(os.path.join(out_dir, "reporte_mediciones_descartadas_PCA_3D.csv"), index=False)
+
+            # Exportar datos proyectados
+            df_proy_3d = pd.DataFrame(X_pca_3d, columns=['PC1', 'PC2', 'PC3'])
+            df_proy_3d.insert(0, 'Vocal', Y_3d)
+            df_proy_3d.insert(1, 'Toma', Tomas_3d)
+            df_proy_3d.to_csv(os.path.join(out_dir, "proyecciones_pca_3d.csv"), index=False)
 
     if proc_umap_3d:
         print("\n=== PROCESANDO UMAP 3D ===")
@@ -1533,9 +1553,154 @@ def ejecutar_procesamiento(
             if desc_3d_u:
                 pd.DataFrame(desc_3d_u).to_csv(os.path.join(out_dir, "reporte_mediciones_descartadas_UMAP_3D.csv"), index=False)
 
+    import subprocess
+    plots_to_open = [
+        os.path.join(out_dir, "PCA_2D.png"),
+        os.path.join(out_dir, "PCA_3D.png"),
+        os.path.join(out_dir, "PCA_2D_Analisis_Errores.png"),
+        os.path.join(out_dir, "PCA_3D_Analisis_Errores.png"),
+        os.path.join(out_dir, "UMAP_2D.png"),
+        os.path.join(out_dir, "UMAP_3D.png")
+    ]
+    for p in plots_to_open:
+        if os.path.exists(p):
+            try:
+                subprocess.Popen(["xdg-open", p], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                pass
+
     return resultados_ejecucion
 
-    print("\nProcesamiento Finalizado Correctamente.")
+def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=False, algoritmo_clustering="GMM", smooth_grid=None, target_len_grid=None, alpha_grid=None, logger=print, n_jobs=-1, n_components=2):
+    if smooth_grid is None:
+        smooth_grid = [50, 80, 125, 150, 180, 220, 250]
+    if target_len_grid is None:
+        target_len_grid = [10, 20, 40, 60, 80, 100]
+    if alpha_grid is None:
+        alpha_grid = [0.1, 0.3, 0.5, 0.7, 0.9, 1.0]
+
+    num_workers = os.cpu_count() or 4 if n_jobs in [-1, None] else n_jobs
+    combis = [(s, t, a) for s in smooth_grid for t in target_len_grid for a in alpha_grid]
+    total_comb = len(combis)
+
+    logger(f"\n[GRID SEARCH PCA] Iniciando proceso (Barrido Fino de {total_comb} combinaciones con {num_workers} hilos de CPU)...")
+    logger("  - [Paso 1/2] Cargando audios y aplicando pre-filtros en memoria RAM...")
+
+    cache_canales = {}
+    old_stdout_init = sys.stdout
+    sys.stdout = io.StringIO()
+    try:
+        total_s = len(smooth_grid)
+        for i, s_ms in enumerate(smooth_grid):
+            p_temp = params_base.copy()
+            p_temp['smooth_ms'] = s_ms
+            extraer_y_filtrar(
+                mediciones, base_dir, p_temp, aplicar_trevisan, modo_alineacion,
+                pre_pct, post_pct, canales_features, ignorar_ventana_cero=ignorar_ventana_cero,
+                cache_canales_data=cache_canales, verbose=False
+            )
+            pct = ((i + 1) / total_s) * 100
+            sys.stdout = old_stdout_init
+            print(f"    -> Progreso Paso 1: {pct:.1f}% ({i+1}/{total_s} envolventes)", end='\r', flush=True)
+            sys.stdout = io.StringIO()
+        sys.stdout = old_stdout_init
+        print()
+    finally:
+        sys.stdout = old_stdout_init
+
+    logger(f"  - [Paso 2/2] Carga en RAM finalizada ({len(cache_canales)} combinaciones). Evaluando combinaciones en paralelo:\n")
+
+    def _eval_comb(c):
+        s_ms, t_len, a_ruido = c
+        p = params_base.copy()
+        p['smooth_ms'] = s_ms
+        p['target_length'] = t_len
+        p['alpha_ruido'] = a_ruido
+
+        try:
+            X, Y, _, _ = extraer_y_filtrar(
+                mediciones, base_dir, p, aplicar_trevisan, modo_alineacion,
+                pre_pct, post_pct, canales_features, ignorar_ventana_cero=ignorar_ventana_cero,
+                cache_canales_data=cache_canales, verbose=False
+            )
+
+            if len(X) > 5 and len(np.unique(Y)) > 1:
+                pca = PCA(n_components=n_components)
+                X_pca = pca.fit_transform(X)
+                sil_score = silhouette_score(X_pca, Y)
+                acc_score, acc_por_vocal, _, _, _ = evaluar_clustering_no_supervisado(X_pca, Y, f"Grid PCA {n_components}D", algoritmo=algoritmo_clustering, verbose=False)
+                
+                if min(acc_por_vocal) < 1.0:
+                    acc_score = -1.0
+            else:
+                sil_score = -1.0
+                acc_score = -1.0
+        except Exception:
+            sil_score = -1.0
+            acc_score = -1.0
+
+        return {
+            "smooth_ms": s_ms,
+            "target_length": t_len,
+            "alpha_ruido": a_ruido,
+            "accuracy_clasificacion": acc_score,
+            "silhouette_score": sil_score
+        }
+
+    best_acc = -1.0
+    best_sil = -1.0
+    best_config = None
+    historial = []
+    curr = 0
+
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    with ThreadPoolExecutor(max_workers=num_workers) as executor:
+        futures = [executor.submit(_eval_comb, c) for c in combis]
+        for f in as_completed(futures):
+            curr += 1
+            res = f.result()
+            historial.append(res)
+
+            s_ms = res["smooth_ms"]
+            t_len = res["target_length"]
+            a_ruido = res["alpha_ruido"]
+            acc_score = res["accuracy_clasificacion"]
+            sil_score = res["silhouette_score"]
+
+            pct = (curr / total_comb) * 100
+            bar_len = 20
+            filled = int(bar_len * curr // total_comb)
+            bar = '█' * filled + '░' * (bar_len - filled)
+
+            is_best = False
+            if (acc_score > best_acc) or (abs(acc_score - best_acc) < 1e-4 and sil_score > best_sil):
+                best_acc = acc_score
+                best_sil = sil_score
+                best_config = (s_ms, t_len, a_ruido)
+                is_best = True
+
+            tag = " ¡NUEVO ÓPTIMO!" if is_best else ""
+            if acc_score >= 0:
+                score_str = f"Clasificación: {acc_score:.2f}%, Silhouette: {sil_score:.4f}"
+            else:
+                score_str = "Clasificación: N/A (Sobre-suavizado/SNR)"
+
+            logger(f"[{bar}] {pct:5.1f}% ({curr:4d}/{total_comb}) Smooth: {s_ms:3d}ms | Pts: {t_len:3d} | Alpha: {a_ruido:.2f} -> {score_str}{tag}")
+
+    if best_config is not None:
+        logger(f"\n[GRID SEARCH PCA] Búsqueda finalizada al 100%. Configuración óptima: Smooth={best_config[0]}ms, Pts={best_config[1]}, Alpha={best_config[2]} con Clasificación: {best_acc:.2f}% (Silhouette: {best_sil:.4f})")
+
+    if historial:
+        try:
+            df_hist = pd.DataFrame(historial)
+            df_hist.sort_values(by=["accuracy_clasificacion", "silhouette_score"], ascending=False, inplace=True)
+            csv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resultados_grid_search_pca.csv")
+            df_hist.to_csv(csv_path, index=False)
+            logger(f"  [+] Tabla completa con las {len(df_hist)} combinaciones guardada en: {csv_path}")
+        except Exception:
+            pass
+
+    return best_config, best_acc, best_sil, historial
 
 class GeneradorPCAGUI:
     def __init__(self, root):
@@ -1749,11 +1914,125 @@ class GeneradorPCAGUI:
         tk.Radiobutton(visual_frame, text="Sombreado", variable=self.var_estilo_visual, value="Sombreado", bg="#1F2833", fg="white", selectcolor="#0B0C10").pack(side="left", padx=5)
         tk.Radiobutton(visual_frame, text="Fronteras", variable=self.var_estilo_visual, value="Fronteras", bg="#1F2833", fg="white", selectcolor="#0B0C10").pack(side="left", padx=5)
         
-        # --- Botón Procesar ---
-        self.btn_procesar = tk.Button(main_frame, text="Generar Dataset y Visualizar", command=self.iniciar_procesamiento, bg="#45A29E", fg="white", font=("Arial", 12, "bold"))
-        self.btn_procesar.pack(fill="x", pady=5)
+        # --- Botones Procesar y Grid Search ---
+        btn_frame = tk.Frame(main_frame, bg="#0B0C10")
+        btn_frame.pack(fill="x", pady=5)
+
+        grid_frame = tk.Frame(btn_frame, bg="#0B0C10")
+        grid_frame.pack(fill="x", pady=(0, 5))
+        
+        self.btn_grid_search_2d = tk.Button(
+            grid_frame, text="Grid Search (Optimizar 2D)",
+            command=lambda: self.ejecutar_grid_search_ui(n_components=2), bg="#66FCF1", fg="#0B0C10",
+            font=("Arial", 11, "bold")
+        )
+        self.btn_grid_search_2d.pack(side="left", fill="x", expand=True, padx=(0, 2))
+
+        self.btn_grid_search_3d = tk.Button(
+            grid_frame, text="Grid Search (Optimizar 3D)",
+            command=lambda: self.ejecutar_grid_search_ui(n_components=3), bg="#45A29E", fg="#0B0C10",
+            font=("Arial", 11, "bold")
+        )
+        self.btn_grid_search_3d.pack(side="left", fill="x", expand=True, padx=(2, 0))
+
+        self.btn_procesar = tk.Button(
+            btn_frame, text="Generar Dataset y Visualizar",
+            command=self.iniciar_procesamiento, bg="#45A29E", fg="white",
+            font=("Arial", 12, "bold")
+        )
+        self.btn_procesar.pack(fill="x")
         
         self.cargar_mediciones()
+
+    def ejecutar_grid_search_ui(self, n_components=2):
+        seleccionadas = [self.listbox_mediciones.get(i) for i in self.listbox_mediciones.curselection()]
+        if not seleccionadas:
+            messagebox.showwarning("Advertencia", "Debe seleccionar al menos una medición para realizar el Grid Search.")
+            return
+
+        canales_sel = []
+        if self.var_ch0.get(): canales_sel.append("canal_0")
+        if self.var_ch1.get(): canales_sel.append("canal_1")
+        if self.var_ch2.get(): canales_sel.append("canal_2")
+
+        if not canales_sel:
+            messagebox.showwarning("Advertencia", "Debe seleccionar al menos 1 canal muscular.")
+            return
+
+        try:
+            snr_val = float(self.ent_snr_2d.get()) if n_components == 2 else float(self.ent_snr_3d.get())
+            outlier_val = float(self.ent_outliers_2d.get()) if n_components == 2 else float(self.ent_outliers_3d.get())
+            
+            params_base = {
+                "alpha_ruido": 0.5,
+                "snr_threshold": snr_val,
+                "outlier_contamination": outlier_val,
+                "smooth_ms": 90,
+                "target_length": 20,
+                "notch_q": float(self.ent_notch.get()) if hasattr(self, 'ent_notch') and isinstance(self.ent_notch, tk.Entry) else 2.0
+            }
+            val_trevisan = self.var_aplicar_trevisan.get()
+            val_pre_pct = float(self.ent_pre_pct.get())
+            val_post_pct = float(self.ent_post_pct.get())
+            val_align = self.combo_align.get()
+            ignorar_win0 = self.var_ignorar_win0.get()
+        except ValueError:
+            messagebox.showerror("Error", "Parámetros numéricos inválidos en la interfaz.")
+            return
+
+        messagebox.showinfo(
+            "Iniciando Grid Search",
+            "Comenzando la búsqueda de hiperparámetros óptimos para PCA.\n"
+            "Se evaluarán las combinaciones de Envolvente (Smooth), Remuestreo (Puntos) y Alfa de ruido.\n"
+            "Por favor aguarde unos instantes..."
+        )
+
+        best_config, best_score, _ = buscar_mejor_configuracion_pca(
+            seleccionadas, self.base_dir, params_base,
+            aplicar_trevisan=val_trevisan, modo_alineacion=val_align,
+            pre_pct=val_pre_pct, post_pct=val_post_pct,
+            canales_features=canales_sel, ignorar_ventana_cero=ignorar_win0,
+            n_components=n_components
+        )
+
+        if best_config is None or best_score <= -1.0:
+            messagebox.showerror("Error Grid Search", "No se pudo encontrar una configuración válida.")
+            return
+
+        best_smooth, best_pts, best_alpha = best_config
+
+        if n_components == 2:
+            self.ent_alpha_2d.delete(0, tk.END)
+            self.ent_alpha_2d.insert(0, str(best_alpha))
+            self.ent_smooth_2d.delete(0, tk.END)
+            self.ent_smooth_2d.insert(0, str(best_smooth))
+            self.ent_target_len_2d.delete(0, tk.END)
+            self.ent_target_len_2d.insert(0, str(best_pts))
+        elif n_components == 3:
+            self.ent_alpha_3d.delete(0, tk.END)
+            self.ent_alpha_3d.insert(0, str(best_alpha))
+            self.ent_smooth_3d.delete(0, tk.END)
+            self.ent_smooth_3d.insert(0, str(best_smooth))
+            self.ent_target_len_3d.delete(0, tk.END)
+            self.ent_target_len_3d.insert(0, str(best_pts))
+
+        # Actualizar campos UMAP (compartido)
+        self.ent_alpha_umap.delete(0, tk.END)
+        self.ent_alpha_umap.insert(0, str(best_alpha))
+        self.ent_smooth_umap.delete(0, tk.END)
+        self.ent_smooth_umap.insert(0, str(best_smooth))
+        self.ent_target_len_umap.delete(0, tk.END)
+        self.ent_target_len_umap.insert(0, str(best_pts))
+
+        messagebox.showinfo(
+            "Grid Search Finalizado",
+            f"¡Configuración Óptima Encontrada!\n\n"
+            f"- Envolvente (Smooth): {best_smooth} ms\n"
+            f"- Puntos Remuestreo: {best_pts}\n"
+            f"- Alfa Ruido: {best_alpha}\n\n"
+            f"Silhouette Score PCA (2D): {best_score:.4f}\n\n"
+            f"Se han actualizado los campos en la interfaz."
+        )
 
     def cargar_mediciones(self):
         self.listbox_mediciones.delete(0, tk.END)

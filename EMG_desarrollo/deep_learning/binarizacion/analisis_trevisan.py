@@ -1152,7 +1152,10 @@ class ProcessingOptionsDialog(tk.Toplevel):
                         vocal_peaks = np.concatenate([m['picos_norm'][:, idx_ch] for m in sweep_meas_data if m['vocal'] == v])
                         data_por_vocal.append(vocal_peaks)
                     
-                    bp = ax.boxplot(data_por_vocal, labels=vocales_sep, patch_artist=True)
+                    try:
+                        bp = ax.boxplot(data_por_vocal, tick_labels=vocales_sep, patch_artist=True)
+                    except TypeError:
+                        bp = ax.boxplot(data_por_vocal, labels=vocales_sep, patch_artist=True)
                     for patch, color in zip(bp['boxes'], ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2'][:len(vocales_sep)]):
                         patch.set_facecolor(color)
                         patch.set_alpha(0.6)

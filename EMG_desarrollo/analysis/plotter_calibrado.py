@@ -76,7 +76,7 @@ class PlotterConfigDialog(QDialog):
 
     Representa y gestiona las operaciones relacionadas con PlotterConfigDialog.
     """
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, pre_selected_paths=None):
         """
         Ejecuta la funcionalidad de __init__.
 
@@ -106,6 +106,7 @@ class PlotterConfigDialog(QDialog):
             
         self.resultado = None
         self.seleccionadas = []
+        self.pre_selected_paths = pre_selected_paths or []
         
         main_layout = QHBoxLayout(self)
         
@@ -131,10 +132,20 @@ class PlotterConfigDialog(QDialog):
                 for medicion in sorted(os.listdir(fecha_path)):
                     medicion_path = os.path.join(fecha_path, medicion)
                     if os.path.isdir(medicion_path):
-                        self.listbox.addItem(f"{fecha}/{medicion}")
+                        from PySide6.QtWidgets import QListWidgetItem
+                        item = QListWidgetItem(f"{fecha}/{medicion}")
+                        self.listbox.addItem(item)
+                        
+                        norm_pre = [os.path.normpath(p).replace('\\', '/') for p in self.pre_selected_paths] if self.pre_selected_paths else []
+                        if norm_pre and os.path.normpath(f"{fecha}/{medicion}").replace('\\', '/') in norm_pre:
+                            item.setSelected(True)
+                            self.listbox.setCurrentItem(item)
             
         left_layout.addWidget(self.listbox)
         main_layout.addWidget(left_group, stretch=1)
+        
+        if self.pre_selected_paths:
+            left_group.hide()
         
         # --- PANEL DERECHO: CONFIGURACIÓN ---
         right_group = QGroupBox("2. Configuración de Procesamiento")
@@ -235,12 +246,15 @@ class PlotterConfigDialog(QDialog):
         Returns:
             Any: Resultado de la ejecución de la función.
         """
-        selected_items = self.listbox.selectedItems()
-        if not selected_items:
-            QMessageBox.warning(self, "Advertencia", "Debe seleccionar al menos una medición.")
-            return
-            
-        self.seleccionadas = [item.text() for item in selected_items]
+        if self.pre_selected_paths:
+            self.seleccionadas = [os.path.normpath(p).replace('\\', '/') for p in self.pre_selected_paths]
+        else:
+            selected_items = self.listbox.selectedItems()
+            if not selected_items:
+                QMessageBox.warning(self, "Advertencia", "Debe seleccionar al menos una medición.")
+                return
+                
+            self.seleccionadas = [item.text() for item in selected_items]
         
         start, end = None, None
         try:
@@ -599,7 +613,11 @@ def flujo_principal():
     if not app:
         app = QApplication(sys.argv)
         
-    dialog = PlotterConfigDialog()
+    if len(sys.argv) > 1:
+        pre_selected = [os.path.relpath(p, BASE_DIR).replace('\\', '/') for p in sys.argv[1:]]
+        dialog = PlotterConfigDialog(pre_selected_paths=pre_selected)
+    else:
+        dialog = PlotterConfigDialog()
     if dialog.exec() == QDialog.Accepted:
         mediciones = dialog.seleccionadas
         config = dialog.resultado
@@ -627,7 +645,7 @@ def flujo_principal():
             app.processEvents()
             
             print(f"[{i+1}/{total}] Cargando datos...")
-            plotear_medicion_secuencial(nombre_medicion, config, limits_cache)
+            plotear_medicion_secuencial(nombre_medicion, config, limits_cache, mostrar_plot=False)
             
         progress.setValue(total)
 

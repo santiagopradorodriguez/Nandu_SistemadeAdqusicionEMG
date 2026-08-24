@@ -293,6 +293,20 @@ class PatronMuscularViewerWidget(QWidget):
     super().__init__()
     layout = QVBoxLayout(self)
     layout.setContentsMargins(0, 0, 0, 0)
+    
+    top_bar = QHBoxLayout()
+    self.btn_correlacion = QPushButton("Graficar Patrón Muscular Desfasajes")
+    self.btn_correlacion.setStyleSheet("""
+        QPushButton {
+            background-color: #1a1a1a; color: #00ffcc; border: 1px solid #00ffcc;
+            padding: 5px 15px; font-weight: bold; border-radius: 4px; margin: 5px;
+        }
+        QPushButton:hover { background-color: #00ffcc; color: #000; }
+    """)
+    top_bar.addWidget(self.btn_correlacion)
+    top_bar.addStretch()
+    layout.addLayout(top_bar)
+    
     self.img_label = ImageLabel("[Visor de Patrón Muscular]\nAún no hay medición seleccionada")
     self.img_label.setStyleSheet("background-color: #0c0c0c; border: 1px solid #333; color: #555;")
     layout.addWidget(self.img_label)
@@ -396,7 +410,20 @@ class ReaperStyleHub(QMainWindow):
         if sys.platform == "win32":
           subprocess.Popen([sys.executable, script_name] + args, creationflags=subprocess.CREATE_NEW_CONSOLE)
         else:
-          subprocess.Popen([sys.executable, script_name] + args)
+          import shutil
+          terminals = ['xterm', 'konsole', 'gnome-terminal', 'xfce4-terminal']
+          term_cmd = None
+          for t in terminals:
+              if shutil.which(t):
+                  if t == 'xterm': term_cmd = [t, '-e', sys.executable, script_name] + args
+                  elif t == 'konsole': term_cmd = [t, '-e', sys.executable, script_name] + args
+                  elif t == 'gnome-terminal': term_cmd = [t, '--', sys.executable, script_name] + args
+                  else: term_cmd = [t, '-e', sys.executable, script_name] + args
+                  break
+          if term_cmd:
+              subprocess.Popen(term_cmd)
+          else:
+              subprocess.Popen([sys.executable, script_name] + args)
       except Exception as e:
         QMessageBox.critical(self, "Error Crítico", f"Error al abrir {script_name}:\n{e}")
       return
@@ -412,7 +439,20 @@ class ReaperStyleHub(QMainWindow):
       if sys.platform == "win32":
         subprocess.Popen([sys.executable, script_path] + args, creationflags=subprocess.CREATE_NEW_CONSOLE)
       else:
-        subprocess.Popen([sys.executable, script_path] + args)
+        import shutil
+        terminals = ['xterm', 'konsole', 'gnome-terminal', 'xfce4-terminal']
+        term_cmd = None
+        for t in terminals:
+            if shutil.which(t):
+                if t == 'xterm': term_cmd = [t, '-e', sys.executable, script_path] + args
+                elif t == 'konsole': term_cmd = [t, '-e', sys.executable, script_path] + args
+                elif t == 'gnome-terminal': term_cmd = [t, '--', sys.executable, script_path] + args
+                else: term_cmd = [t, '-e', sys.executable, script_path] + args
+                break
+        if term_cmd:
+            subprocess.Popen(term_cmd)
+        else:
+            subprocess.Popen([sys.executable, script_path] + args)
     except Exception as e:
       QMessageBox.critical(self, "Error Crítico", f"Error al abrir {script_name}:\n{e}")
 
@@ -468,12 +508,6 @@ class ReaperStyleHub(QMainWindow):
         ("Segmentador de Secuencias Continuas", "analysis/segmentador_secuencias.py"),
         ("Editar Medición", "utils/editor_mediciones.py"),
         ("Reproductor de Audios", "analysis/reproductor_canal3.py")
-    ])
-
-    create_menu_button(" Graficar", [
-        ("Graficador", "analysis/plotter_calibrado.py"),
-        ("Análisis Correlación", "analysis/correlaciondeseñales.py"),
-        ("Plot 3 Músculos (Paper)", "deep_learning/dataset_tools/plot_3_musculos_standalone.py")
     ])
 
     create_menu_button(" Deep Learning", [
@@ -665,12 +699,15 @@ class ReaperStyleHub(QMainWindow):
     self.tabs_viz.addTab(self.csv_viewer, " Explorador de Señales (CSV)")
     from views.calibrated_viewer_widget import CalibratedViewerWidget
     self.calibrated_viewer = CalibratedViewerWidget()
+    self.calibrated_viewer.request_generate_plots.connect(self._start_plot_generation)
+    self.calibrated_viewer.btn_plot_3m.clicked.connect(self._run_plot_3m)
     self.tabs_viz.addTab(self.calibrated_viewer, " Historial Gráficos Musculares")
     from views.electrode_viewer_widget import ElectrodeViewerWidget
     self.electrode_viewer = ElectrodeViewerWidget()
     self.electrode_viewer.btn_refresh.clicked.connect(self._sync_electrode_viewer)
     self.tabs_viz.addTab(self.electrode_viewer, " Visor de Electrodos (Grilla)")
     self.patron_viewer = PatronMuscularViewerWidget()
+    self.patron_viewer.btn_correlacion.clicked.connect(self._run_correlacion_nativo)
     self.tabs_viz.addTab(self.patron_viewer, " Historial Patrón Muscular")
     lyt_view.addWidget(self.tabs_viz)
     self.tabs.addTab(self.tab_view, "2. VISUALIZACIÓN")
@@ -764,6 +801,8 @@ class ReaperStyleHub(QMainWindow):
     self._refrescar_visor_imagenes()
 
     # Connect the ML tab buttons
+    self.tab_dl_ml.tab_pca.btn_grid_search_2d.clicked.connect(lambda checked=False: self.run_pca_grid_search_nativo(n_components=2))
+    self.tab_dl_ml.tab_pca.btn_grid_search_3d.clicked.connect(lambda checked=False: self.run_pca_grid_search_nativo(n_components=3))
     self.tab_dl_ml.tab_pca.btn_run.clicked.connect(self.run_pca_nativo)
     self.tab_dl_ml.tab_umap.btn_run.clicked.connect(self.run_umap_nativo)
     self.tab_dl_ml.tab_umap_sup.btn_run.clicked.connect(self.run_umap_supervisado_nativo)
@@ -961,6 +1000,81 @@ class ReaperStyleHub(QMainWindow):
       self.calibrated_viewer.load_calibrated_plot(selected_paths[0])
       self.img_viewer.setText(f" ¡Gráficos musculares generados con éxito para {len(selected_paths)} mediciones!\nVe a la pestaña 3. VISUALIZACIÓN.")
 
+  def _start_plot_generation(self, config):
+    selected_paths = self.explorer_widget.get_selected_paths()
+    if not selected_paths:
+      from PySide6.QtWidgets import QMessageBox
+      QMessageBox.warning(self, "Atención", "Por favor, seleccione al menos una medición en el Gestor de Sesiones.")
+      return
+
+    from PySide6.QtWidgets import QProgressDialog
+    self.plot_progress = QProgressDialog("Iniciando procesamiento...", "Cancelar", 0, len(selected_paths), self)
+    self.plot_progress.setWindowTitle("Generando Gráficos")
+    self.plot_progress.setWindowModality(Qt.WindowModal)
+    
+    # Importar QThread localmente para evitar problemas de imports globales
+    from PySide6.QtCore import QThread, Signal
+    import os
+    import traceback
+    
+    class PlotterThread(QThread):
+        progress_update = Signal(int, int, str)
+        finished_all = Signal(list)
+        error_occurred = Signal(str)
+
+        def __init__(self, paths, cfg, parent=None):
+            super().__init__(parent)
+            self.paths = paths
+            self.cfg = cfg
+
+        def run(self):
+            try:
+                from analysis.plotter_calibrado import plotear_medicion_secuencial
+                limits_cache = {}
+                total = len(self.paths)
+                for i, path in enumerate(self.paths):
+                    if self.isInterruptionRequested():
+                        break
+                    self.progress_update.emit(i, total, os.path.basename(path))
+                    plotear_medicion_secuencial(path, self.cfg, limits_cache, mostrar_plot=False)
+                self.finished_all.emit(self.paths)
+            except Exception as e:
+                self.error_occurred.emit(f"{e}\n{traceback.format_exc()}")
+
+    self.plot_thread = PlotterThread(selected_paths, config, self)
+    self.plot_progress.canceled.connect(self.plot_thread.requestInterruption)
+    
+    def on_progress(curr, tot, name):
+        self.plot_progress.setLabelText(f"Procesando {curr+1} de {tot}:\n{name}")
+        self.plot_progress.setValue(curr)
+        
+    def on_finished(paths):
+        self.plot_progress.setValue(len(paths))
+        if paths and hasattr(self, 'calibrated_viewer'):
+            self.calibrated_viewer.load_calibrated_plot(paths[0])
+            if hasattr(self, 'img_viewer'):
+                self.img_viewer.setText(f" ¡Gráfico generado exitosamente!\nMostrando {os.path.basename(paths[0])}.")
+            
+    def on_error(err_msg):
+        from PySide6.QtWidgets import QMessageBox
+        QMessageBox.critical(self, "Error", f"Fallo al graficar:\n{err_msg}")
+        self.plot_progress.close()
+        
+    self.plot_thread.progress_update.connect(on_progress)
+    self.plot_thread.finished_all.connect(on_finished)
+    self.plot_thread.error_occurred.connect(on_error)
+    
+    self.plot_progress.show()
+    self.plot_thread.start()
+
+  def _run_plot_3m(self):
+    selected_paths = self.explorer_widget.get_selected_paths()
+    if not selected_paths:
+      from PySide6.QtWidgets import QMessageBox
+      QMessageBox.warning(self, "Atención", "Por favor, seleccione al menos una medición en el Gestor de Sesiones.")
+      return
+    self._launch_external("deep_learning/dataset_tools/plot_3_musculos_standalone.py", args=[selected_paths[0]])
+
   def _run_correlacion_nativo(self, *args):
     """Ejecuta el script de correlación con la medición seleccionada"""
     selected_paths = self.explorer_widget.get_selected_paths()
@@ -1121,11 +1235,25 @@ finally:
           Any: Resultado de la ejecución de la función.
         """
         import subprocess
-        run_kwargs = {}
+        import sys
+        import shutil
         if sys.platform == "win32":
-          run_kwargs["creationflags"] = subprocess.CREATE_NEW_CONSOLE
-        p = subprocess.run([sys.executable, self.spath], **run_kwargs)
-        self.finished_signal.emit(p.returncode)
+          p = subprocess.run([sys.executable, self.spath], creationflags=subprocess.CREATE_NEW_CONSOLE)
+        else:
+          terminals = ['xterm', 'konsole', 'gnome-terminal', 'xfce4-terminal']
+          term_cmd = None
+          for t in terminals:
+              if shutil.which(t):
+                  if t == 'xterm': term_cmd = [t, '-e', sys.executable, self.spath]
+                  elif t == 'konsole': term_cmd = [t, '--nofork', '-e', sys.executable, self.spath]
+                  elif t == 'gnome-terminal': term_cmd = [t, '--wait', '--', sys.executable, self.spath]
+                  else: term_cmd = [t, '-e', sys.executable, self.spath]
+                  break
+          if term_cmd:
+              p = subprocess.run(term_cmd)
+          else:
+              p = subprocess.run([sys.executable, self.spath])
+        self.finished_signal.emit(getattr(p, 'returncode', 0))
         
     self.comparative_thread = ComparativeRunner(script_path)
     
@@ -1318,11 +1446,25 @@ finally:
         self.spath = spath
       def run(self):
         import subprocess
-        run_kwargs = {}
+        import sys
+        import shutil
         if sys.platform == "win32":
-          run_kwargs["creationflags"] = subprocess.CREATE_NEW_CONSOLE
-        p = subprocess.run([sys.executable, self.spath], **run_kwargs)
-        self.finished_signal.emit(p.returncode)
+          p = subprocess.run([sys.executable, self.spath], creationflags=subprocess.CREATE_NEW_CONSOLE)
+        else:
+          terminals = ['xterm', 'konsole', 'gnome-terminal', 'xfce4-terminal']
+          term_cmd = None
+          for t in terminals:
+              if shutil.which(t):
+                  if t == 'xterm': term_cmd = [t, '-e', sys.executable, self.spath]
+                  elif t == 'konsole': term_cmd = [t, '--nofork', '-e', sys.executable, self.spath]
+                  elif t == 'gnome-terminal': term_cmd = [t, '--wait', '--', sys.executable, self.spath]
+                  else: term_cmd = [t, '-e', sys.executable, self.spath]
+                  break
+          if term_cmd:
+              p = subprocess.run(term_cmd)
+          else:
+              p = subprocess.run([sys.executable, self.spath])
+        self.finished_signal.emit(getattr(p, 'returncode', 0))
         
     self.sesion_thread = SessionRunner(script_path)
     
@@ -1496,6 +1638,133 @@ finally:
     else:
         self.log_console.append("> [Aviso] No se encontró terminal gráfica, lanzando en background...")
         subprocess.Popen([sys.executable, script_path])
+
+  def run_pca_grid_search_nativo(self, n_components=2):
+    base_dir, mediciones = self._generar_base_dir_y_mediciones()
+    if not base_dir or not mediciones:
+        from PySide6.QtWidgets import QMessageBox
+        QMessageBox.warning(self, "Advertencia", "Debe seleccionar al menos una medición en el Gestor de Sesiones.")
+        return
+
+    kwargs = self.tab_dl_ml.get_pca_kwargs()
+    params_key = "params_2d" if n_components == 2 else "params_3d"
+
+    template = """
+import json
+import sys
+import os
+
+project_root = r'{ROOT_PROJECT_DIR}'
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+script_dir = os.path.dirname(os.path.abspath(__file__))
+if script_dir not in sys.path:
+    sys.path.append(script_dir)
+
+with open(r'{TEMP_JSON}', 'r') as f:
+    kwargs = json.load(f)
+
+mediciones = {MEDICIONES}
+base_dir = r'{BASE_DIR}'
+
+import deep_learning.pca_analysis as pca_ana
+
+print("=========================================================")
+print("     INICIANDO BÚSQUEDA DE PARÁMETROS ÓPTIMOS (PCA)     ")
+print("=========================================================")
+
+res = pca_ana.buscar_mejor_configuracion_pca(
+    mediciones=mediciones,
+    base_dir=base_dir,
+    params_base=kwargs.get("{PARAMS_KEY}", {}),
+    aplicar_trevisan=kwargs.get("aplicar_trevisan", False),
+    modo_alineacion=kwargs.get("modo_alineacion", "Pico Volumen Micrófono"),
+    pre_pct=kwargs.get("pre_pct", 0.4),
+    post_pct=kwargs.get("post_pct", 0.6),
+    canales_features=kwargs.get("canales_features", ["canal_0", "canal_1", "canal_2"]),
+    ignorar_ventana_cero=kwargs.get("ignorar_ventana_cero", False),
+    algoritmo_clustering=kwargs.get("algoritmo_clustering_pca", "GMM"),
+    logger=print,
+    n_components={N_COMPONENTS}
+)
+
+if isinstance(res, tuple) and len(res) >= 3:
+    best_config = res[0]
+    best_acc = res[1]
+    best_sil = res[2]
+
+if best_config:
+    best_smooth, best_pts, best_alpha = best_config
+    out_file = os.path.join(project_root, "deep_learning", "parametros_optimos_pca.json")
+    with open(out_file, "w") as f:
+        json.dump({
+            "smooth_ms": best_smooth,
+            "target_length": best_pts,
+            "alpha_ruido": best_alpha,
+            "accuracy_clasificacion": best_acc,
+            "silhouette_score": best_sil
+        }, f, indent=4)
+    print("")
+    print("---------------------------------------------------------")
+    print("¡CONFIGURACIÓN ÓPTIMA HALLADA (MAX CLASIFICACIÓN)! ")
+    print("  - Smooth (Envolvente): " + str(best_smooth) + " ms")
+    print("  - Remuestreo (Pts):    " + str(best_pts))
+    print("  - Alfa Ruido:          " + str(best_alpha))
+    print("  - Clasificación (%):   " + str(best_acc) + " %")
+    print("  - Silhouette Score:    " + str(best_sil))
+    print("---------------------------------------------------------")
+    print("Se cargaron los resultados automáticamente.")
+"""
+    template = template.replace("{PARAMS_KEY}", params_key).replace("{N_COMPONENTS}", str(n_components))
+    self._launch_bridge_script("run_pca_grid", f"GRID SEARCH PCA ({n_components}D)", kwargs, template)
+
+    from PySide6.QtCore import QTimer
+    import os, json
+    
+    def cargar_parametros_optimos():
+        out_file = os.path.join(self.root_dir, "deep_learning", "parametros_optimos_pca.json")
+        if os.path.exists(out_file):
+            try:
+                with open(out_file, "r") as f:
+                    data = json.load(f)
+                best_smooth = data.get("smooth_ms", 90)
+                best_pts = data.get("target_length", 20)
+                best_alpha = data.get("alpha_ruido", 0.5)
+                best_acc = data.get("accuracy_clasificacion", 0.0)
+                best_sil = data.get("silhouette_score", 0.0)
+
+                pca_tab = self.tab_dl_ml.tab_pca
+                if n_components == 2:
+                    pca_tab.inp_alpha_2d.setValue(best_alpha)
+                    pca_tab.inp_smooth_2d.setValue(best_smooth)
+                    pca_tab.inp_pts_2d.setValue(best_pts)
+                elif n_components == 3:
+                    pca_tab.inp_alpha_3d.setValue(best_alpha)
+                    pca_tab.inp_smooth_3d.setValue(best_smooth)
+                    pca_tab.inp_pts_3d.setValue(best_pts)
+
+                from PySide6.QtWidgets import QMessageBox
+                QMessageBox.information(
+                    self,
+                    "Grid Search Finalizado",
+                    f"¡Configuración Óptima Encontrada!\n\n"
+                    f"- Envolvente (Smooth): {best_smooth} ms\n"
+                    f"- Puntos Remuestreo: {best_pts}\n"
+                    f"- Alfa Ruido: {best_alpha}\n\n"
+                    f"Precisión Clasificación (%): {best_acc:.2f}%\n"
+                    f"Silhouette Score (PCA): {best_sil:.4f}\n\n"
+                    f"Se han cargado automáticamente los parámetros en la interfaz."
+                )
+                self.timer_check_opt.stop()
+                os.remove(out_file)
+            except Exception as e:
+                pass
+
+    self.timer_check_opt = QTimer(self)
+    self.timer_check_opt.setInterval(2000)
+    self.timer_check_opt.timeout.connect(cargar_parametros_optimos)
+    self.timer_check_opt.start()
 
   def run_pca_nativo(self):
     from PySide6.QtWidgets import QInputDialog
@@ -1800,12 +2069,26 @@ finally:
           Any: Resultado de la ejecución de la función.
         """
         import subprocess
+        import sys
+        import shutil
         # Run in new console!
-        run_kwargs = {}
         if sys.platform == "win32":
-          run_kwargs["creationflags"] = subprocess.CREATE_NEW_CONSOLE
-        p = subprocess.run([sys.executable, self.spath], **run_kwargs)
-        self.finished_signal.emit(p.returncode)
+          p = subprocess.run([sys.executable, self.spath], creationflags=subprocess.CREATE_NEW_CONSOLE)
+        else:
+          terminals = ['xterm', 'konsole', 'gnome-terminal', 'xfce4-terminal']
+          term_cmd = None
+          for t in terminals:
+              if shutil.which(t):
+                  if t == 'xterm': term_cmd = [t, '-e', sys.executable, self.spath]
+                  elif t == 'konsole': term_cmd = [t, '--nofork', '-e', sys.executable, self.spath]
+                  elif t == 'gnome-terminal': term_cmd = [t, '--wait', '--', sys.executable, self.spath]
+                  else: term_cmd = [t, '-e', sys.executable, self.spath]
+                  break
+          if term_cmd:
+              p = subprocess.run(term_cmd)
+          else:
+              p = subprocess.run([sys.executable, self.spath])
+        self.finished_signal.emit(getattr(p, 'returncode', 0))
         
     self.procesador_thread = ProcessRunner(script_path)
     
