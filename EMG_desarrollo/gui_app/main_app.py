@@ -617,25 +617,45 @@ class ReaperStyleHub(QMainWindow):
     import os
     from pathlib import Path
     
-    # --- NUEVO: Cargar Logo del Programa ---
+    # --- Cargar Logo del Programa ---
     logo_path = None
     try:
-      # Buscar en varias ubicaciones posibles
-      root_dir = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-      gui_dir = Path(os.path.dirname(os.path.abspath(__file__)))
-      assets_dir = gui_dir / "assets"
-      pictures_dir = Path.home() / "Pictures"
-      
-      search_dirs = [assets_dir, gui_dir, root_dir, pictures_dir]
-      
-      for search_dir in search_dirs:
-        if search_dir.exists():
-          for filename in os.listdir(search_dir):
-            if filename.lower().startswith("logo") and filename.lower().endswith((".png", ".jpg", ".jpeg")):
-              logo_path = str(search_dir / filename)
-              break
-        if logo_path:
+      from utils.path_utils import get_resource_path, get_project_root
+      candidate_paths = [
+        get_resource_path("logo_nandu_lsd.png"),
+        get_resource_path("logo.png"),
+        os.path.join(get_project_root(), "logo_nandu_lsd.png"),
+        os.path.join(get_project_root(), "EMG_desarrollo", "logo_nandu_lsd.png"),
+        os.path.join(get_project_root(), "EMG_desarrollo", "gui_app", "assets", "logo_nandu_lsd.png"),
+        os.path.join(get_project_root(), "EMG_desarrollo", "gui_app", "logo_nandu_lsd.png"),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "logo_nandu_lsd.png"),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo_nandu_lsd.png"),
+      ]
+      if hasattr(sys, '_MEIPASS'):
+        candidate_paths.insert(0, os.path.join(sys._MEIPASS, "logo_nandu_lsd.png"))
+        candidate_paths.insert(1, os.path.join(sys._MEIPASS, "logo.png"))
+        
+      for cp in candidate_paths:
+        if cp and os.path.exists(cp):
+          logo_path = cp
           break
+          
+      if not logo_path:
+        root_dir = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        gui_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+        assets_dir = gui_dir / "assets"
+        pictures_dir = Path.home() / "Pictures"
+        search_dirs = [assets_dir, gui_dir, root_dir, Path(get_project_root()), pictures_dir]
+        if hasattr(sys, '_MEIPASS'):
+          search_dirs.insert(0, Path(sys._MEIPASS))
+        for search_dir in search_dirs:
+          if search_dir.exists():
+            for filename in os.listdir(search_dir):
+              if filename.lower().startswith("logo") and filename.lower().endswith((".png", ".jpg", ".jpeg")):
+                logo_path = str(search_dir / filename)
+                break
+          if logo_path:
+            break
     except Exception as e:
       print(f"> Error buscando logo: {e}")
 
@@ -648,11 +668,11 @@ class ReaperStyleHub(QMainWindow):
     if logo_path and os.path.exists(logo_path):
       from PySide6.QtGui import QPixmap
       pix = QPixmap(logo_path)
-      pix = pix.scaled(400, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+      pix = pix.scaled(480, 180, Qt.KeepAspectRatio, Qt.SmoothTransformation)
       lbl_logo.setPixmap(pix)
       lbl_logo.setStyleSheet("padding: 10px; background-color: #050505; border-radius: 8px; border: 1px solid #222;")
     else:
-      lbl_logo.setText("<h2>[ÑANDÚ LSD LOGO]</h2><p style='color:#888;'>Coloca un archivo 'logo.png' en la carpeta Imágenes</p>")
+      lbl_logo.setText("<h2>[ÑANDÚ LSD LOGO]</h2><p style='color:#888;'>Coloca un archivo 'logo_nandu_lsd.png' en la carpeta raíz</p>")
       lbl_logo.setStyleSheet("color: #FF0000; background-color: #111; border: 1px dashed #FF4444; padding: 20px; border-radius: 8px;")
     
     vbox_info.addWidget(lbl_logo)
@@ -662,23 +682,25 @@ class ReaperStyleHub(QMainWindow):
     
     html_intro = f"""
     <div style='padding: 20px;'>
-      <h2 style='color:#00ffff;'>Plataforma de Investigación EMG v6.0</h2>
-      <p>Bienvenido al hub centralizado para adquisición en tiempo real, curación y análisis comparativo de señales electromiográficas.</p>
+      <h2 style='color:#00ffff;'>Plataforma de Investigación EMG v6.1</h2>
+      <p>Bienvenido al hub centralizado para adquisición en tiempo real, curación, procesamiento DSP y análisis de Deep Learning de señales electromiográficas (sEMG).</p>
       
-      <h3 style='color:#00ffaa;'>Novedades Actualización v6.0 (Machine Learning & Deep Learning):</h3>
+      <h3 style='color:#00ffaa;'>Novedades Actualización v6.1 (Deep Learning, Topología & Arquitectura):</h3>
       <ul>
-        <li><b>Integración de Deep Learning:</b> Nueva pestaña con módulos de Análisis XGBoost, Autoencoders, Clustering (PCA y UMAP) y binarización avanzada (Trevisan).</li>
-        <li><b>AutoForge Secuencia Continua:</b> Captura el diccionario entero de forma cíclica en un solo click, autogenerando las etiquetas correctas de Machine Learning (valid_words) para cada pulso en los metadatos.</li>
-        <li><b>Cálculo de Ruido y SNR Dinámico:</b> Análisis automático del ruido de fondo previo a cada estímulo, con offset centrado en base al primer octavo del pulso promedio para lograr gráficos de overlay precisos.</li>
-        <li><b>Sincronización Perfecta:</b> La geometría de búsqueda de pulsos se centra dinámicamente usando como referencia la ventana exacta del beat del metrónomo.</li>
-        <li><b>Framework Moderno PySide6:</b> Estabilidad extrema, estética Cyberpunk, colores persistentes y prevención de caídas de UI frente a errores internos.</li>
+        <li><b>Sistema de Colores y Mapeo Anatómico por Músculo:</b> Convención estandarizada fija por canal: <i>Depresor Anguli Oris</i> (violeta), <i>Mylohyoid</i> (verde), <i>Orbicularis Oris</i> (amarillo) y <i>Micrófono/Canal 3</i> (rojo permanente). Diálogo interactivo al iniciar para confirmar la topografía de electrodos.</li>
+        <li><b>Metadatos y Trazabilidad Enriquecida:</b> Registro unificado de <code>muscles_map</code>, <code>muscles</code> y <code>timestamp</code> en <code>metadata.json</code>, propagado automáticamente en recortes y segmentaciones.</li>
+        <li><b>Motores Analíticos Desacoplados:</b> Nuevos motores independientes para análisis discreto (<code>discrete_motor</code>), barrido paramétrico y entrenamiento (<code>training_motor</code>), reducción dimensional PCA 2D/3D con siluetas y distancias inter-vocálicas (<code>pca_motor</code>), proyecciones UMAP supervisadas y no supervisadas (<code>umap_motor</code>) y generador automático de rankings de experimentos (<code>generar_graficos_y_ranking</code>).</li>
+        <li><b>Autoencoders Convolucionales 1D (PyTorch):</b> Redes neuronales convolucionales profundas para compresión no lineal a espacios latentes 2D/3D y decodificación continua de potenciales mioeléctricos.</li>
+        <li><b>Resolución Centralizada de Rutas (<code>path_utils</code>):</b> Desacople total que garantiza que <code>base_de_datos_electrodos</code> y reportes comparativos residan junto al ejecutable tanto en desarrollo como en distribución compilada.</li>
+        <li><b>Optimización y Depuración:</b> Eliminación de librerías obsoletas (XGBoost) para un sistema más rápido, liviano y enfocado.</li>
       </ul>
 
       <h3 style='color:#ffaa00;'>Instrucciones Rápidas:</h3>
       <ul>
-        <li><b>Adquisición:</b> Haz clic en el botón rojo de la derecha para grabar nuevas mediciones o correr el simulador.</li>
-        <li><b>Curación Individual:</b> Selecciona mediciones en el árbol izquierdo, marca los canales deseados, configura los filtros Notch/Pasabanda y haz clic en Procesar en la pestaña 'Análisis'. Las gráficas aparecerán automáticamente.</li>
-        <li><b>Deep Learning:</b> Selecciona mediciones y lanza los scripts de Machine Learning directamente desde la pestaña 6.</li>
+        <li><b>1. Adquisición:</b> Haz clic en el botón de la derecha para capturar nuevas mediciones con metrónomo y cuenta regresiva, confirmando los músculos en el diálogo inicial.</li>
+        <li><b>2. Visualización:</b> Inspecciona las curvas en el Explorador CSV y visores de electrodos con identificación por color de cada músculo.</li>
+        <li><b>3. Curación y Análisis:</b> Selecciona mediciones en el gestor de sesiones, verifica los canales deseados y haz clic en <i>PROCESAR</i> en la pestaña 3.</li>
+        <li><b>4. Machine Learning & Deep Learning:</b> Accede a la Pestaña 4 para entrenar Autoencoders 1D, calcular proyecciones topológicas PCA/UMAP o binarizar patrones mediante Método Trevisan.</li>
       </ul>
       
       <h3 style='color:#00ff00;'>Fundamento Teórico:</h3>
@@ -1020,7 +1042,9 @@ class ReaperStyleHub(QMainWindow):
         for canal in sorted_canales_totales:
           from PySide6.QtWidgets import QCheckBox
           musc_name = None
-          for p in selected_paths:
+          ch_idx_str = canal.replace('canal_', '')
+          for p in rutas:
+            # 1. Chequear metadata específico de canal
             p_meta = os.path.join(p, canal, "metadata.json")
             if os.path.exists(p_meta):
               try:
@@ -1030,8 +1054,24 @@ class ReaperStyleHub(QMainWindow):
                     musc_name = md_chk['musculo']
                     break
               except Exception: pass
+            # 2. Chequear canal_0/metadata.json centralizado
+            p_meta0 = os.path.join(p, "canal_0", "metadata.json")
+            if os.path.exists(p_meta0) and not musc_name:
+              try:
+                with open(p_meta0, 'r', encoding='utf-8') as fm:
+                  md0 = json.load(fm)
+                  m_map = md0.get('muscles_map', {})
+                  if ch_idx_str in m_map:
+                    musc_name = m_map[ch_idx_str]
+                    break
+                  elif canal in m_map:
+                    musc_name = m_map[canal]
+                    break
+                  elif 'muscles' in md0 and ch_idx_str.isdigit() and int(ch_idx_str) < len(md0['muscles']):
+                    musc_name = md0['muscles'][int(ch_idx_str)]
+                    break
+              except Exception: pass
           if not musc_name:
-            ch_idx_str = canal.replace('canal_', '')
             try:
               from utils.config_manager import ConfigManager
               cm = ConfigManager()
@@ -1298,6 +1338,7 @@ finally:
   input("\\nPresione ENTER para cerrar esta ventana...")
 """
     script_path = os.path.join(emg_root, "gui_app", "temp_comparativo.py")
+    os.makedirs(os.path.dirname(script_path), exist_ok=True)
     with open(script_path, "w", encoding="utf-8") as f:
       f.write(bridge_script)
       
@@ -1537,6 +1578,7 @@ finally:
     input("\\nPresione ENTER para cerrar esta ventana...")
 """
     script_path = os.path.join(emg_root, "gui_app", "temp_sesion.py")
+    os.makedirs(os.path.dirname(script_path), exist_ok=True)
     with open(script_path, "w", encoding="utf-8") as f:
       f.write(bridge_script)
       
@@ -2069,9 +2111,20 @@ gen_sup.ejecutar_procesamiento(
     # Extraer canales seleccionados en la UI
     tab_proc = self.analysis_panel.tab_procesamiento
     canales_elegidos = []
-    if hasattr(tab_proc, 'checkboxes_canales'):
+    if hasattr(tab_proc, 'checkboxes_canales') and tab_proc.checkboxes_canales:
       canales_elegidos = [c for c, chk in tab_proc.checkboxes_canales.items() if chk.isChecked()]
       
+    if not canales_elegidos:
+      # Si los checkboxes no estaban inicializados o quedaron vacíos, auto-detectar canales de las mediciones
+      canales_detectados = set()
+      for r in rutas:
+        if os.path.isdir(r):
+          for item in os.listdir(r):
+            if item.startswith("canal_") and os.path.isdir(os.path.join(r, item)):
+              canales_detectados.add(item)
+      if canales_detectados:
+        canales_elegidos = sorted(list(canales_detectados), key=lambda x: int(x.split('_')[-1]) if x.split('_')[-1].isdigit() else 0)
+        
     if not canales_elegidos:
       self.log_console.append("> ERROR: Selecciona al menos un canal a procesar (Configuración 1).\n")
       return
@@ -2083,11 +2136,11 @@ gen_sup.ejecutar_procesamiento(
     import subprocess
     import sys
     import os
+    from utils.path_utils import get_project_root, get_database_path
     
-    # Rutas relativas para compatibilidad exacta con su Tkinter (Ej: 2026-05-22/Medicion)
-    base_dir = os.path.dirname(os.path.dirname(rutas[0]))
-    nombres_medicion = [f"{os.path.basename(os.path.dirname(r))}/{os.path.basename(r)}" for r in rutas]
-    emg_root = os.path.dirname(base_dir)
+    base_dir = get_database_path()
+    nombres_medicion = [os.path.relpath(r, base_dir).replace('\\', '/') for r in rutas]
+    emg_root = get_project_root()
     
     bridge_script = f"""
 import sys
@@ -2147,6 +2200,7 @@ finally:
   input("\\nPresione ENTER para cerrar esta ventana...")
 """
     script_path = os.path.join(emg_root, "gui_app", "temp_procesar.py")
+    os.makedirs(os.path.dirname(script_path), exist_ok=True)
     with open(script_path, "w", encoding="utf-8") as f:
       f.write(bridge_script)
       

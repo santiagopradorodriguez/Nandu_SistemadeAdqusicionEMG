@@ -28,6 +28,8 @@ def generar_spec():
         ('archivos_md', 'archivos_md'),
         ('papers', 'papers'),
         ('logo_nandu_lsd.png', '.'),
+        ('logo_nandu_lsd.png', 'gui_app/assets'),
+        ('logo_nandu_lsd.png', 'gui_app'),
         ('usb-621x-manual.pdf', '.'),
     ]
     

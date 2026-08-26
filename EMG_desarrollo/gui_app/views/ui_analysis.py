@@ -502,13 +502,20 @@ class PcaTab(QWidget):
             inp_outliers.setValue(0.10)
             inp_outliers.setFixedWidth(60)
             l.addWidget(inp_outliers, 0, 9)
+            l.addWidget(QLabel("Notch Q:"), 0, 10)
+            inp_notch = QDoubleSpinBox()
+            inp_notch.setRange(0.1, 100.0)
+            inp_notch.setSingleStep(0.5)
+            inp_notch.setValue(2.0)
+            inp_notch.setFixedWidth(50)
+            l.addWidget(inp_notch, 0, 11)
             g.setLayout(l)
-            return g, inp_alpha, inp_smooth, inp_pts, inp_snr, inp_outliers
+            return g, inp_alpha, inp_smooth, inp_pts, inp_snr, inp_outliers, inp_notch
 
-        g_dsp_2d, self.inp_alpha_2d, self.inp_smooth_2d, self.inp_pts_2d, self.inp_snr_2d, self.inp_outliers_2d = create_dsp_row("Parámetros DSP y Limpieza (2D)", 90, 0.5)
+        g_dsp_2d, self.inp_alpha_2d, self.inp_smooth_2d, self.inp_pts_2d, self.inp_snr_2d, self.inp_outliers_2d, self.inp_notch_2d = create_dsp_row("Parámetros DSP y Limpieza (2D)", 90, 0.5)
         lay.addWidget(g_dsp_2d)
         
-        g_dsp_3d, self.inp_alpha_3d, self.inp_smooth_3d, self.inp_pts_3d, self.inp_snr_3d, self.inp_outliers_3d = create_dsp_row("Parámetros DSP y Limpieza (3D)", 125, 0.5)
+        g_dsp_3d, self.inp_alpha_3d, self.inp_smooth_3d, self.inp_pts_3d, self.inp_snr_3d, self.inp_outliers_3d, self.inp_notch_3d = create_dsp_row("Parámetros DSP y Limpieza (3D)", 125, 0.5)
         lay.addWidget(g_dsp_3d)
 
         g_cluster = QGroupBox("Algoritmo de Agrupamiento")
@@ -685,6 +692,14 @@ class UmapTab(QWidget):
         self.inp_outliers_u.setValue(0.10)
         self.inp_outliers_u.setFixedWidth(60)
         l_umap.addWidget(self.inp_outliers_u, 1, 7)
+
+        l_umap.addWidget(QLabel("Notch Q:"), 2, 0)
+        self.inp_notch_u = QDoubleSpinBox()
+        self.inp_notch_u.setRange(0.1, 100.0)
+        self.inp_notch_u.setSingleStep(0.5)
+        self.inp_notch_u.setValue(2.0)
+        self.inp_notch_u.setFixedWidth(60)
+        l_umap.addWidget(self.inp_notch_u, 2, 1)
 
         g_umap.setLayout(l_umap)
         lay.addWidget(g_umap)
@@ -1026,7 +1041,7 @@ class MachineLearningPanel(QWidget):
                 'target_length': t.inp_pts_2d.value(),
                 'snr_threshold': t.inp_snr_2d.value(),
                 'outlier_contamination': t.inp_outliers_2d.value(),
-                'notch_q': 2.0
+                'notch_q': t.inp_notch_2d.value()
             },
             'params_3d': {
                 'alpha_ruido': t.inp_alpha_3d.value(),
@@ -1034,7 +1049,7 @@ class MachineLearningPanel(QWidget):
                 'target_length': t.inp_pts_3d.value(),
                 'snr_threshold': t.inp_snr_3d.value(),
                 'outlier_contamination': t.inp_outliers_3d.value(),
-                'notch_q': 2.0
+                'notch_q': t.inp_notch_3d.value()
             },
             'params_umap': {},
             'umap_n_neighbors': 15,
@@ -1072,7 +1087,7 @@ class MachineLearningPanel(QWidget):
                 'target_length': t.inp_pts_u.value(),
                 'snr_threshold': t.inp_snr_u.value(),
                 'outlier_contamination': t.inp_outliers_u.value(),
-                'notch_q': 2.0
+                'notch_q': t.inp_notch_u.value()
             },
             'umap_n_neighbors': t.inp_n_neighbors.value(),
             'umap_min_dist': t.inp_min_dist.value(),
@@ -1102,7 +1117,7 @@ class MachineLearningPanel(QWidget):
             'target_length': t.inp_target_len.value(),
             'snr_threshold': t.inp_snr.value(),
             'outlier_contamination': t.inp_outliers.value(),
-            'notch_q': 2.0,
+            'notch_q': t.inp_notch.value(),
             'umap_n_neighbors': t.inp_umap_nn.value(),
             'umap_min_dist': t.inp_umap_md.value(),
             'umap_metric': t.cmb_metric.currentText(),
