@@ -137,7 +137,12 @@ class AudioPlayer(QMainWindow):
         layout.addLayout(ctrl_layout)
         
     def open_folder(self):
-        root_project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if getattr(sys, 'frozen', False):
+            root_project_dir = os.path.dirname(os.path.abspath(sys.executable))
+            if os.path.basename(root_project_dir) == "_internal":
+                root_project_dir = os.path.dirname(root_project_dir)
+        else:
+            root_project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         default_dir = os.path.join(root_project_dir, "base_de_datos_electrodos")
         if not os.path.exists(default_dir):
             default_dir = root_project_dir

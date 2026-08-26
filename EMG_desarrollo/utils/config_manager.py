@@ -17,6 +17,38 @@ import json
 
 CONFIG_FILE_NAME = "config_general.json"
 
+# Paleta canónica de colores por músculo (y rojo estricto para micrófono / canal 3)
+MUSCLE_COLORS = {
+    "depresor anguli oris": "#8a2be2",     # Violeta / Púrpura
+    "orbicularis oris": "#ffff00",         # Amarillo
+    "mylohyoid": "#39ff14",                # Verde
+    "milohyoid": "#39ff14",
+    "milohioideo": "#39ff14",
+    "milohioide": "#39ff14",
+    "milohiode": "#39ff14",
+    "levatori oris": "#00ffcc",            # Cyan / Celeste brillante
+    "levator labii superioris": "#00ffcc",
+    "anterior belly": "#ffaa00",           # Naranja
+    "zygomaticus major": "#ff00ff",        # Magenta
+    "micrófono": "#ff0000",                # Rojo
+    "microfono": "#ff0000",
+    "mic": "#ff0000",
+    "canal 3": "#ff0000",
+    "canal_3": "#ff0000"
+}
+
+def get_muscle_color(name, default="#00ffcc"):
+    """Devuelve el color hex estandarizado para un músculo dado. El canal 3 / micrófono siempre es rojo."""
+    if not name:
+        return default
+    name_str = str(name).strip().lower()
+    if "mic" in name_str or name_str in ("canal 3", "canal_3", "ch3", "dev1/ai3", "dev2/ai3"):
+        return "#ff0000"
+    for k, v in MUSCLE_COLORS.items():
+        if k in name_str or name_str in k:
+            return v
+    return default
+
 # Valores por defecto para toda la aplicación
 DEFAULT_CONFIG = {
     "estetica_global": {
@@ -27,6 +59,8 @@ DEFAULT_CONFIG = {
     "adquisicion": {
         "frecuencia_muestreo": 2000.0,
         "ruido_segundos": 3.0,
+        "bpm": 60,
+        "tiempo_descanso": 10.0,
         "nidaq_channels": ["Dev1/ai0", "Dev1/ai1", "Dev1/ai2", "Dev1/ai3"]
     },
     "analisis_extractor": {
@@ -35,22 +69,22 @@ DEFAULT_CONFIG = {
     "canales": {
         "Canal 0": {
             "musculo": "Depresor Anguli Oris",
-            "color_hex": "#00ffcc",
+            "color_hex": "#8a2be2",
             "factor_calibracion": 495.0
         },
         "Canal 1": {
             "musculo": "Orbicularis Oris",
-            "color_hex": "#ff00ff",
+            "color_hex": "#ffff00",
             "factor_calibracion": 495.0
         },
         "Canal 2": {
             "musculo": "Mylohyoid",
-            "color_hex": "#ffff00",
+            "color_hex": "#39ff14",
             "factor_calibracion": 495.0
         },
         "Canal 3": {
-            "musculo": "Canal 3",
-            "color_hex": "#ff5500",
+            "musculo": "Micrófono",
+            "color_hex": "#ff0000",
             "factor_calibracion": 495.0
         }
     }
@@ -67,7 +101,8 @@ class ConfigManager:
 
     def _init(self):
         # El archivo de configuración se guardará en la raíz del proyecto
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        from .path_utils import get_project_root
+        base_dir = get_project_root()
         self.config_path = os.path.join(base_dir, CONFIG_FILE_NAME)
         self.config = self._load_config()
 
@@ -130,8 +165,17 @@ class ConfigManager:
     def get_channel_config(self, index):
         """Devuelve dict con la config del canal Ej: index=0 -> 'Canal 0'"""
         ch_key = f"Canal {index}"
-        canales = self.get("canales")
+        canales = self.get("canales") or {}
         if ch_key in canales:
-            return canales[ch_key]
+            ch_data = canales[ch_key].copy()
+            musculo_nom = ch_data.get("musculo", ch_key)
+            if index == 3 or "mic" in musculo_nom.lower():
+                ch_data["color_hex"] = "#ff0000"
+            else:
+                ch_data["color_hex"] = get_muscle_color(musculo_nom, ch_data.get("color_hex", "#00ffcc"))
+            return ch_data
+            
         # Fallback genérico si no existe
-        return {"musculo": ch_key, "color_hex": "#ffffff", "factor_calibracion": 1.0}
+        if index == 3:
+            return {"musculo": "Micrófono", "color_hex": "#ff0000", "factor_calibracion": 1.0}
+        return {"musculo": ch_key, "color_hex": get_muscle_color(ch_key, "#00ffcc"), "factor_calibracion": 1.0}

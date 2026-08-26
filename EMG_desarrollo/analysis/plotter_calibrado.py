@@ -49,8 +49,12 @@ from PySide6.QtCore import Qt
 
 # --- 1. CONFIGURACIÓN GENERAL ---
 
-_current_dir = os.path.dirname(os.path.abspath(__file__))
-root_dir = os.path.dirname(_current_dir)
+if getattr(sys, 'frozen', False):
+    root_dir = os.path.dirname(os.path.abspath(sys.executable))
+    if os.path.basename(root_dir) == "_internal":
+        root_dir = os.path.dirname(root_dir)
+else:
+    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # --- CORRECCIÓN: Apuntar a la base de datos en la raíz del proyecto, no en la carpeta analysis ---
 BASE_DIR = os.path.join(root_dir, "base_de_datos_electrodos")
@@ -197,6 +201,23 @@ class PlotterConfigDialog(QDialog):
         lbl_time_hint = QLabel("Dejar en blanco para graficar todo.")
         lbl_time_hint.setStyleSheet("color: #888; font-size: 10px;")
         right_layout.addWidget(lbl_time_hint)
+
+        # Eje Y
+        y_group = QGroupBox("Límites de Amplitud (µV)")
+        y_layout = QHBoxLayout(y_group)
+        y_layout.addWidget(QLabel("Min:"))
+        self.entry_ymin = QLineEdit()
+        self.entry_ymin.setStyleSheet(self.entry_style)
+        y_layout.addWidget(self.entry_ymin)
+        y_layout.addWidget(QLabel("Max:"))
+        self.entry_ymax = QLineEdit()
+        self.entry_ymax.setStyleSheet(self.entry_style)
+        y_layout.addWidget(self.entry_ymax)
+        right_layout.addWidget(y_group)
+        
+        lbl_y_hint = QLabel("Dejar en blanco para autoescala.")
+        lbl_y_hint.setStyleSheet("color: #888; font-size: 10px;")
+        right_layout.addWidget(lbl_y_hint)
         
         # Opciones extra
         extra_group = QGroupBox("Visualización")
@@ -238,6 +259,11 @@ class PlotterConfigDialog(QDialog):
             self.entry_inicio.setText(str(saved["start_time"]))
         if "end_time" in saved and saved["end_time"] is not None:
             self.entry_fin.setText(str(saved["end_time"]))
+            
+        if "y_min" in saved and saved["y_min"] is not None:
+            self.entry_ymin.setText(str(saved["y_min"]))
+        if "y_max" in saved and saved["y_max"] is not None:
+            self.entry_ymax.setText(str(saved["y_max"]))
 
     def confirmar(self):
         """
@@ -262,6 +288,13 @@ class PlotterConfigDialog(QDialog):
             if self.entry_fin.text().strip(): end = float(self.entry_fin.text())
         except ValueError:
             pass
+
+        ymin, ymax = None, None
+        try:
+            if self.entry_ymin.text().strip(): ymin = float(self.entry_ymin.text())
+            if self.entry_ymax.text().strip(): ymax = float(self.entry_ymax.text())
+        except ValueError:
+            pass
             
         tipo_env = "ninguna"
         if self.rb_hilbert.isChecked(): tipo_env = "hilbert"
@@ -273,6 +306,8 @@ class PlotterConfigDialog(QDialog):
             "tipo_env": tipo_env,
             "start_time": start,
             "end_time": end,
+            "y_min": ymin,
+            "y_max": ymax,
             "graficar_fft": self.chk_fft.isChecked(),
             "tema_oscuro": self.chk_dark_mode.isChecked()
         }
@@ -283,6 +318,8 @@ class PlotterConfigDialog(QDialog):
         config_mgr.set("plotter_config", "tipo_env", tipo_env)
         config_mgr.set("plotter_config", "start_time", start)
         config_mgr.set("plotter_config", "end_time", end)
+        config_mgr.set("plotter_config", "y_min", ymin)
+        config_mgr.set("plotter_config", "y_max", ymax)
         config_mgr.set("plotter_config", "graficar_fft", self.chk_fft.isChecked())
         config_mgr.set("plotter_config", "tema_oscuro", self.chk_dark_mode.isChecked())
         
@@ -322,6 +359,8 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
     tipo_envolvente = config["tipo_env"]
     start_time = config["start_time"]
     end_time = config["end_time"]
+    y_min = config.get("y_min")
+    y_max = config.get("y_max")
 
     # 1. Cargar CSV
     path_medicion = os.path.join(BASE_DIR, nombre_medicion)
@@ -402,10 +441,9 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
         
         raw = df[nombre_canal].values
         
-        # --- CORRECCIÓN: Leer ganancia desde metadata.json si existe ---
+        # --- CORRECCIÓN: Leer ganancia y músculo desde metadata.json si existe ---
         ch_conf = canales_config.get(nom_limpio, {})
         musculo = ch_conf.get("musculo", nom_limpio)
-        color_hex = ch_conf.get("color_hex", "cyan") if is_dark else ch_conf.get("color_hex", "blue")
         ganancia = ch_conf.get("factor_calibracion", 495.0)
         
         try:
@@ -414,11 +452,33 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
             if os.path.exists(meta_path):
                 with open(meta_path, 'r') as f_meta:
                     md_ch = json.load(f_meta)
+                    if 'musculo' in md_ch and md_ch['musculo']:
+                        musculo = md_ch['musculo']
+                    elif 'muscles_map' in md_ch and f"canal_{ch_idx}" in md_ch['muscles_map']:
+                        musculo = md_ch['muscles_map'][f"canal_{ch_idx}"]
                     if 'resistencia_ohm' in md_ch:
                         res_ohm = float(md_ch['resistencia_ohm'])
                         ganancia = 1.0 + (49400.0 / res_ohm)
         except Exception:
             pass
+
+        # Asignar color específico por músculo y forzar rojo para el canal 3 / micrófono
+        try:
+            from utils.config_manager import get_muscle_color
+        except ImportError:
+            def get_muscle_color(name, default="#00ffcc"):
+                return "#ff0000" if ("mic" in str(name).lower() or "canal 3" in str(name).lower()) else default
+
+        try:
+            ch_idx_int = int(nom_limpio.split()[-1])
+        except Exception:
+            ch_idx_int = i
+
+        if ch_idx_int == 3 or "mic" in musculo.lower():
+            color_hex = "#ff0000"
+        else:
+            default_c = "cyan" if is_dark else "blue"
+            color_hex = get_muscle_color(musculo, ch_conf.get("color_hex", default_c))
             
         sig = (raw / ganancia) * 1e6 
 
@@ -430,7 +490,8 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
                 if len(tiempo_actual) > 0 and tiempo_actual[0] < noise_seconds:
                     noise_end_idx = np.searchsorted(tiempo_actual, noise_seconds, side='right')
                     if noise_end_idx > 0:
-                        dc_offset = np.mean(sig[:noise_end_idx])
+                        # Se usa la mediana en lugar de media para descartar automáticamente anomalías/spikes
+                        dc_offset = np.median(sig[:noise_end_idx])
                         sig = sig - dc_offset
                         dc_offset_removido = True
 
@@ -458,7 +519,8 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
                 if len(tiempo_actual) > 0 and tiempo_actual[0] < noise_seconds:
                     noise_end_idx = np.searchsorted(tiempo_actual, noise_seconds, side='right')
                     if noise_end_idx > 0:
-                        noise_level = np.mean(env[:noise_end_idx])
+                        # Se usa la mediana para que las anomalías no afecten el cálculo del offset
+                        noise_level = np.median(env[:noise_end_idx])
                         env = env - noise_level
                         etiqueta_env += " (Offset restado)"
             
@@ -481,7 +543,8 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
                 if len(tiempo_actual) > 0 and tiempo_actual[0] < noise_seconds:
                     noise_end_idx = np.searchsorted(tiempo_actual, noise_seconds, side='right')
                     if noise_end_idx > 0:
-                        noise_level = np.nanmean(env_rms[:noise_end_idx])
+                        # Se usa nanmedian para que las anomalías no afecten el offset RMS
+                        noise_level = np.nanmedian(env_rms[:noise_end_idx])
                         if not np.isnan(noise_level):
                             env_rms = env_rms - noise_level
                             etiqueta_env += " (Offset restado)"
@@ -516,6 +579,13 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
                 if line_t >= df[col_tiempo].iloc[0]:
                     ax.axvline(x=line_t, color='black', ls='--', lw=1, alpha=0.4)
                 k += 1
+
+        if y_min is not None or y_max is not None:
+            current_ymin, current_ymax = ax.get_ylim()
+            ax.set_ylim(
+                y_min if y_min is not None else current_ymin,
+                y_max if y_max is not None else current_ymax
+            )
 
         tit = musculo
         if info_filtros: tit += f" | {', '.join(info_filtros)}"
@@ -651,5 +721,7 @@ def flujo_principal():
 
         print("--- Todas las mediciones procesadas ---")
 
+main = flujo_principal
+
 if __name__ == "__main__":
-    flujo_principal()
+    main()

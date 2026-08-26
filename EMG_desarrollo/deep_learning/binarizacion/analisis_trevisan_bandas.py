@@ -1594,9 +1594,15 @@ class AnalysisGUI:
         self.root = root
         self.root.title("Análisis Trevisan - Método de Binarización (BANDAS)")
         self.root.geometry("500x400")
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        self.BASE_DIR = os.path.join(os.path.dirname(os.path.dirname(script_dir)), "base_de_datos_electrodos")
-        self.OUT_DIR = os.path.join(os.path.dirname(os.path.dirname(script_dir)), "resultados", "resultados_binarizacion")
+        if getattr(sys, 'frozen', False):
+            root_p = os.path.dirname(os.path.abspath(sys.executable))
+            if os.path.basename(root_p) == "_internal":
+                root_p = os.path.dirname(root_p)
+        else:
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            root_p = os.path.dirname(os.path.dirname(script_dir))
+        self.BASE_DIR = os.path.join(root_p, "base_de_datos_electrodos")
+        self.OUT_DIR = os.path.join(root_p, "resultados", "resultados_binarizacion")
         os.makedirs(self.OUT_DIR, exist_ok=True)
         main_frame = tk.Frame(root, padx=15, pady=15, bg="#0B0C10")
         main_frame.pack(fill="both", expand=True)
@@ -1636,7 +1642,10 @@ class AnalysisGUI:
         dialog = ProcessingOptionsDialog(self.root, self.OUT_DIR)
         dialog.populate_channels(self.BASE_DIR, mediciones)
 
-if __name__ == "__main__":
+def main():
     root = tk.Tk()
     app = AnalysisGUI(root)
     root.mainloop()
+
+if __name__ == "__main__":
+    main()

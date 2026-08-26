@@ -29,9 +29,13 @@ pyinstaller EMG_Studio.spec --noconfirm --clean
 cd ..
 
 set CSC_PATH=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe
+if not exist "%CSC_PATH%" set CSC_PATH=C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe
 if exist "%CSC_PATH%" (
     echo Compilando Launcher C# nativo...
     "%CSC_PATH%" /nologo /target:winexe /out:EMG_Ejecutable_Build\dist\NanduLsd_Core\NanduLsd.exe /win32icon:icono.ico herramientas_build\launcher.cs
+) else (
+    echo [Aviso] csc.exe no encontrado. Copiando ejecutable principal...
+    copy /Y "EMG_Ejecutable_Build\dist\NanduLsd_Core\NanduLsd_Core.exe" "EMG_Ejecutable_Build\dist\NanduLsd_Core\NanduLsd.exe"
 )
 
 echo Finalizando estructura de distribucion...

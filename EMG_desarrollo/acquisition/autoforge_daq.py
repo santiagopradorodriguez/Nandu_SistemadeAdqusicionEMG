@@ -1045,14 +1045,22 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.btn_start_acq.setStyleSheet(self.BTN_START_STYLE)
 
     # --- NUEVO: Controles de Protocolo ---
-    self.label_bpm = QtWidgets.QLabel("BPM:")
-    self.spin_bpm = SpinBox(value=60, int=True, bounds=(30, 200), step=1)
-    self.spin_bpm.setFixedWidth(80) # Acortar el recuadro del BPM
-    self.label_noise_duration = QtWidgets.QLabel("Noise (Inicio) (s):")
     adq_conf = self.config_mgr.get("adquisicion") or {}
+    
+    self.label_bpm = QtWidgets.QLabel("BPM:")
+    default_bpm = adq_conf.get("bpm", 60)
+    self.spin_bpm = SpinBox(value=default_bpm, int=True, bounds=(30, 200), step=1)
+    self.spin_bpm.setFixedWidth(80) # Acortar el recuadro del BPM
+    
+    self.label_noise_duration = QtWidgets.QLabel("Noise (Inicio) (s):")
     default_noise = adq_conf.get("ruido_segundos", 3.0)
     self.spin_noise_duration = SpinBox(value=default_noise, dec=True, bounds=(0.5, 20.0), step=0.5)
     self.spin_noise_duration.setFixedWidth(80)
+    
+    self.label_descanso = QtWidgets.QLabel("Descanso (s):")
+    default_descanso = adq_conf.get("tiempo_descanso", 10.0)
+    self.spin_descanso = SpinBox(value=default_descanso, dec=True, bounds=(1.0, 60.0), step=1.0)
+    self.spin_descanso.setFixedWidth(80)
 
     self.config_layout.addWidget(self.label_device, 0, 0)
     self.config_layout.addWidget(self.cmb_device, 0, 1)
@@ -1070,6 +1078,8 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.config_layout.addWidget(self.spin_bpm, 1, 6) # BPM
     self.config_layout.addWidget(self.label_noise_duration, 2, 5)
     self.config_layout.addWidget(self.spin_noise_duration, 2, 6) # Ruido
+    self.config_layout.addWidget(self.label_descanso, 3, 5)
+    self.config_layout.addWidget(self.spin_descanso, 3, 6) # Descanso
     self.config_layout.addWidget(self.label_channels, 2, 0)
     self.config_layout.addLayout(self.channel_layout, 2, 1, 1, 4) # row, col, rowspan, colspan
     
@@ -1400,14 +1410,20 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.colores_curvas = []
     self.nombres_musculos = []
     canales_conf = self.config_mgr.get("canales") or {}
+    try:
+      from utils.config_manager import get_muscle_color
+    except ImportError:
+      def get_muscle_color(name, default="#ffffff"):
+        return "#ff0000" if ("mic" in str(name).lower() or "canal 3" in str(name).lower()) else default
+
     for i in range(16):
       key = f"Canal {i}"
-      if key in canales_conf:
-        self.colores_curvas.append(canales_conf[key].get("color_hex", "#ffffff"))
-        self.nombres_musculos.append(canales_conf[key].get("musculo", f"Canal {i}"))
+      musc = canales_conf.get(key, {}).get("musculo", f"Canal {i}")
+      self.nombres_musculos.append(musc)
+      if i == 3 or "mic" in musc.lower():
+        self.colores_curvas.append("#ff0000")
       else:
-        self.colores_curvas.append("#0074D9")
-        self.nombres_musculos.append(f"Canal {i}")
+        self.colores_curvas.append(get_muscle_color(musc, canales_conf.get(key, {}).get("color_hex", "#0074D9")))
 
   # --- NUEVO: Cambio de modo de conexión en tiempo real ---
   def on_terminal_mode_changed(self):
@@ -2207,12 +2223,25 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     # Crear la estructura de directorios
     import os
-    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if getattr(sys, 'frozen', False):
+      root_dir = os.path.dirname(os.path.abspath(sys.executable))
+      if os.path.basename(root_dir) == "_internal":
+        root_dir = os.path.dirname(root_dir)
+    else:
+      root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     base_dir = os.path.join(root_dir, "base_de_datos_electrodos")
     # --- NUEVO: Crear carpeta de fecha ---
     today_str = datetime.now().strftime('%Y-%m-%d')
     date_dir = os.path.join(base_dir, today_str)
     output_dir = os.path.join(date_dir, measurement_name)
+    
+    # --- NUEVO: Evitar sobrescritura ---
+    original_output_dir = output_dir
+    contador = 2
+    while os.path.exists(output_dir):
+      output_dir = f"{original_output_dir}_v{contador}"
+      contador += 1
+      
     try:
       os.makedirs(output_dir, exist_ok=True)
     except Exception as e:
@@ -2247,11 +2276,18 @@ class RealTimePlotter(QtWidgets.QWidget):
       except Exception as e:
         print(f"Advertencia: No se pudo leer el conteo de pulsos desde metronome_config.json. Error: {e}")
 
-    # --- NUEVO: Guardar metadata.json con la fecha y hora ---
+    now = datetime.now()
+    muscles_list = [self.nombres_musculos[i % len(self.nombres_musculos)] for i in range(self.NUM_CANALES)]
+    muscles_map = {f"canal_{i}": self.nombres_musculos[i % len(self.nombres_musculos)] for i in range(self.NUM_CANALES)}
+
+    # --- NUEVO: Guardar metadata.json con fecha, hora, timestamp y músculos ---
     metadata = {
-      "measurement_date": datetime.now().isoformat(),
+      "measurement_date": now.isoformat(),
+      "timestamp": int(now.timestamp()),
       "sample_rate": self.SAMPLE_RATE,
       "channels": self.CANALES_DAQ,
+      "muscles": muscles_list,
+      "muscles_map": muscles_map,
       "bpm": self.spin_bpm.value(), # BPM se sigue tomando de la GUI del adquisidor
       "noise_seconds": self.spin_noise_duration.value(),
       "pulse_count": pulse_count_from_metronome,
@@ -2262,13 +2298,17 @@ class RealTimePlotter(QtWidgets.QWidget):
       "prueba": details["prueba"],
       "comentario": comentario # <-- NUEVO: Añadir el comentario al metadata
     }
-    # --- CORRECCIÓN: Guardar metadata ÚNICAMENTE en la carpeta de cada canal ---
+    # --- CORRECCIÓN: Guardar metadata ÚNICAMENTE en la carpeta de cada canal con su respectivo músculo ---
     for i in range(self.NUM_CANALES):
       current_dir = os.path.join(output_dir, f"canal_{i}")
       metadata_path = os.path.join(current_dir, "metadata.json")
+      ch_metadata = metadata.copy()
+      ch_metadata["canal"] = f"canal_{i}"
+      ch_metadata["musculo"] = self.nombres_musculos[i % len(self.nombres_musculos)]
+      ch_metadata["physical_channel"] = self.CANALES_DAQ[i] if i < len(self.CANALES_DAQ) else f"ai{i}"
       try:
         with open(metadata_path, 'w', encoding='utf-8') as f:
-          json.dump(metadata, f, indent=4)
+          json.dump(ch_metadata, f, indent=4)
         print(f"  Metadata guardado en: {metadata_path}")
       except Exception as e:
         print(f"--- ERROR AL GUARDAR METADATA.JSON en '{current_dir}' ---\n{e}")
@@ -3169,15 +3209,34 @@ class RealTimePlotter(QtWidgets.QWidget):
       from datetime import datetime
       fecha_str = datetime.now().strftime("%Y-%m-%d")
       folder_name = f"SecuenciaContinua_{self.autoforge_prueba}_{self.autoforge_sujeto}"
-      root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+      if getattr(sys, 'frozen', False):
+        root_dir = os.path.dirname(os.path.abspath(sys.executable))
+        if os.path.basename(root_dir) == "_internal":
+          root_dir = os.path.dirname(root_dir)
+      else:
+        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
       base_dir = Path(root_dir) / "base_de_datos_electrodos" / fecha_str / folder_name
+      
+      # --- NUEVO: Evitar sobrescritura ---
+      contador = 2
+      while base_dir.exists():
+        folder_name_v = f"{folder_name}_v{contador}"
+        base_dir = Path(root_dir) / "base_de_datos_electrodos" / fecha_str / folder_name_v
+        contador += 1
+        
       os.makedirs(base_dir, exist_ok=True)
       
+      now = datetime.now()
+      muscles_list = [self.nombres_musculos[i % len(self.nombres_musculos)] for i in range(self.NUM_CANALES)]
+      muscles_map = {f"canal_{i}": self.nombres_musculos[i % len(self.nombres_musculos)] for i in range(self.NUM_CANALES)}
       total_pulsos = len(self.autoforge_words) * self.autoforge_target_reps
       metadata = {
-        "measurement_date": datetime.now().isoformat(),
+        "measurement_date": now.isoformat(),
+        "timestamp": int(now.timestamp()),
         "sample_rate": self.SAMPLE_RATE,
         "channels": self.CANALES_DAQ,
+        "muscles": muscles_list,
+        "muscles_map": muscles_map,
         "bpm": self.spin_bpm.value(),
         "noise_seconds": self.spin_noise_duration.value(),
         "pulse_count": total_pulsos,
@@ -3193,9 +3252,13 @@ class RealTimePlotter(QtWidgets.QWidget):
         channel_output_dir = os.path.join(base_dir, f"canal_{i}")
         os.makedirs(channel_output_dir, exist_ok=True)
         metadata_path = os.path.join(channel_output_dir, "metadata.json")
+        ch_metadata = metadata.copy()
+        ch_metadata["canal"] = f"canal_{i}"
+        ch_metadata["musculo"] = self.nombres_musculos[i % len(self.nombres_musculos)]
+        ch_metadata["physical_channel"] = self.CANALES_DAQ[i] if i < len(self.CANALES_DAQ) else f"ai{i}"
         try:
           with open(metadata_path, 'w', encoding='utf-8') as f:
-            json.dump(metadata, f, indent=4)
+            json.dump(ch_metadata, f, indent=4)
         except: pass
 
       try: guardar_grabacion_csv(self.current_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion")
@@ -3235,7 +3298,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     """
     bpm = self.spin_bpm.value()
     if bpm <= 0: bpm = 60
-    tiempo_por_palabra = 3.0 + self.spin_noise_duration.value() + (3 * (60.0/bpm)) + (self.autoforge_target_reps * (60.0/bpm)) + 10.0
+    tiempo_por_palabra = 3.0 + self.spin_noise_duration.value() + (3 * (60.0/bpm)) + (self.autoforge_target_reps * (60.0/bpm)) + self.spin_descanso.value()
     self.tiempo_restante_global = int(len(self.autoforge_words) * tiempo_por_palabra)
     
     # Guardar el estado base de la UI
@@ -3509,9 +3572,9 @@ class RealTimePlotter(QtWidgets.QWidget):
       except: pass
       self.word_window_process = None
       
-    # 10 segundos de descanso en pantalla
-    self.autoforge_estado_actual_str = "DESCANSO 10s (GUARDANDO)"
-    self.autoforge_overlay.setText("<div align='center'>DESCANSO 10s<br>GUARDANDO DATOS...</div>")
+    t_descanso = self.spin_descanso.value()
+    self.autoforge_estado_actual_str = f"DESCANSO {t_descanso:.1f}s (GUARDANDO)"
+    self.autoforge_overlay.setText(f"<div align='center'>DESCANSO {t_descanso:.1f}s<br>GUARDANDO DATOS...</div>")
     self.autoforge_overlay.show()
     self.lbl_recording_space.setText("<div align='center' style='color:#777777; font-size:40px;'>DESCANSO</div>")
     
@@ -3529,15 +3592,34 @@ class RealTimePlotter(QtWidgets.QWidget):
       fecha_str = datetime.now().strftime("%Y-%m-%d")
       # Nombre: PALABRA_Prueba_Sujeto
       folder_name = f"{palabra}_{self.autoforge_prueba}_{self.autoforge_sujeto}"
-      root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+      if getattr(sys, 'frozen', False):
+        root_dir = os.path.dirname(os.path.abspath(sys.executable))
+        if os.path.basename(root_dir) == "_internal":
+          root_dir = os.path.dirname(root_dir)
+      else:
+        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
       base_dir = Path(root_dir) / "base_de_datos_electrodos" / fecha_str / folder_name
+      
+      # --- NUEVO: Evitar sobrescritura ---
+      contador = 2
+      while base_dir.exists():
+        folder_name_v = f"{folder_name}_v{contador}"
+        base_dir = Path(root_dir) / "base_de_datos_electrodos" / fecha_str / folder_name_v
+        contador += 1
+        
       os.makedirs(base_dir, exist_ok=True)
       
       # 1. Preparar metadata para UI Analysis
+      now = datetime.now()
+      muscles_list = [self.nombres_musculos[i % len(self.nombres_musculos)] for i in range(self.NUM_CANALES)]
+      muscles_map = {f"canal_{i}": self.nombres_musculos[i % len(self.nombres_musculos)] for i in range(self.NUM_CANALES)}
       metadata = {
-        "measurement_date": datetime.now().isoformat(),
+        "measurement_date": now.isoformat(),
+        "timestamp": int(now.timestamp()),
         "sample_rate": self.SAMPLE_RATE,
         "channels": self.CANALES_DAQ,
+        "muscles": muscles_list,
+        "muscles_map": muscles_map,
         "bpm": self.spin_bpm.value(),
         "noise_seconds": self.spin_noise_duration.value(),
         "pulse_count": self.autoforge_target_reps,
@@ -3553,9 +3635,13 @@ class RealTimePlotter(QtWidgets.QWidget):
         channel_output_dir = os.path.join(base_dir, f"canal_{i}")
         os.makedirs(channel_output_dir, exist_ok=True)
         metadata_path = os.path.join(channel_output_dir, "metadata.json")
+        ch_metadata = metadata.copy()
+        ch_metadata["canal"] = f"canal_{i}"
+        ch_metadata["musculo"] = self.nombres_musculos[i % len(self.nombres_musculos)]
+        ch_metadata["physical_channel"] = self.CANALES_DAQ[i] if i < len(self.CANALES_DAQ) else f"ai{i}"
         try:
           with open(metadata_path, 'w', encoding='utf-8') as f:
-            json.dump(metadata, f, indent=4)
+            json.dump(ch_metadata, f, indent=4)
         except: pass
 
       # 3. Guardar Datos Raw CSV y WAV (las funciones internas ya manejan la división por canales)
@@ -3576,8 +3662,8 @@ class RealTimePlotter(QtWidgets.QWidget):
       
     threading.Thread(target=guardar_async, daemon=True).start()
     
-    # Ir a la siguiente palabra tras los 10 segundos de descanso
-    QtCore.QTimer.singleShot(10000, self.estado_siguiente)
+    # Ir a la siguiente palabra tras los segundos de descanso
+    QtCore.QTimer.singleShot(int(self.spin_descanso.value() * 1000), self.estado_siguiente)
 
   @QtCore.Slot()
   def estado_siguiente(self):
@@ -3626,6 +3712,14 @@ class RealTimePlotter(QtWidgets.QWidget):
     
     # --- NUEVO: Guardar estado de la GUI al cerrar el programa ---
     try:
+      adq = self.config_mgr.config.get("adquisicion", {})
+      adq["bpm"] = self.spin_bpm.value()
+      adq["ruido_segundos"] = self.spin_noise_duration.value()
+      adq["tiempo_descanso"] = self.spin_descanso.value()
+      self.config_mgr.config["adquisicion"] = adq
+      self.config_mgr.save()
+      
+      # Mantenemos esto por si alguna otra parte depende de metronome_config.json
       config_data = {}
       if os.path.exists('metronome_config.json'):
         with open('metronome_config.json', 'r', encoding='utf-8') as f:
@@ -3638,6 +3732,64 @@ class RealTimePlotter(QtWidgets.QWidget):
       print(f"Error guardando configuración al cerrar: {e}")
       
     event.accept() # Acepta el cierre
+
+# =============================================================================
+# --- NUEVO: DIÁLOGO DE SELECCIÓN DE MÚSCULOS AL INICIO ---
+# =============================================================================
+class MuscleSelectionDialog(QtWidgets.QDialog):
+  def __init__(self, parent=None):
+    super().__init__(parent)
+    self.setWindowTitle("Configurar Músculos de la Sesión")
+    self.setMinimumWidth(350)
+    
+    self.config_mgr = ConfigManager()
+    self.canales_conf = self.config_mgr.get("canales") or {}
+    adq = self.config_mgr.get("adquisicion") or {}
+    self.nidaq_chans = adq.get("nidaq_channels", ["Dev1/ai0", "Dev1/ai1", "Dev1/ai2", "Dev1/ai3"])
+    
+    self.layout = QtWidgets.QVBoxLayout(self)
+    
+    self.lbl = QtWidgets.QLabel("A continuación, asigne el músculo a cada canal activo:")
+    self.lbl.setStyleSheet("color: white; font-weight: bold; margin-bottom: 10px;")
+    self.layout.addWidget(self.lbl)
+    
+    self.form_layout = QtWidgets.QFormLayout()
+    self.line_edits = {}
+    
+    for i in range(len(self.nidaq_chans)):
+        key = f"Canal {i}"
+        musculo_actual = self.canales_conf.get(key, {}).get("musculo", f"Canal {i}")
+        le = QtWidgets.QLineEdit(musculo_actual)
+        self.form_layout.addRow(f"[{self.nidaq_chans[i]}] {key}:", le)
+        self.line_edits[key] = le
+        
+    self.layout.addLayout(self.form_layout)
+    
+    self.btn_box = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Save | QtWidgets.QDialogButtonBox.Cancel)
+    self.btn_box.accepted.connect(self.guardar_y_cerrar)
+    self.btn_box.rejected.connect(self.reject)
+    self.layout.addWidget(self.btn_box)
+    
+  def guardar_y_cerrar(self):
+    try:
+      from utils.config_manager import get_muscle_color
+    except ImportError:
+      def get_muscle_color(name, default="#00ffcc"):
+        return "#ff0000" if ("mic" in str(name).lower() or "canal 3" in str(name).lower()) else default
+
+    for key, le in self.line_edits.items():
+        if key not in self.canales_conf:
+            self.canales_conf[key] = {}
+        m_text = le.text().strip()
+        self.canales_conf[key]["musculo"] = m_text
+        if key == "Canal 3" or "mic" in m_text.lower():
+            self.canales_conf[key]["color_hex"] = "#ff0000"
+        else:
+            self.canales_conf[key]["color_hex"] = get_muscle_color(m_text, self.canales_conf[key].get("color_hex", "#00ffcc"))
+    
+    self.config_mgr.config["canales"] = self.canales_conf
+    self.config_mgr.save()
+    self.accept()
 
 # =============================================================================
 # PROGRAMA PRINCIPAL
@@ -3676,6 +3828,24 @@ def main():
       padding: 2px;
     }
   """)
+  
+  # --- NUEVO: Preguntar por los músculos al iniciar ---
+  # Ocultamos temporalmente el splash si existe, para que no tape el messagebox
+  if global_splash:
+      global_splash.hide()
+      
+  respuesta = QtWidgets.QMessageBox.question(
+      None, 
+      "Ñandú LSD - Configuración", 
+      "¿Desea cambiar el conjunto de músculos asignados a los canales?",
+      QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+      QtWidgets.QMessageBox.No
+  )
+  
+  if respuesta == QtWidgets.QMessageBox.Yes:
+      dialog = MuscleSelectionDialog()
+      dialog.exec()
+      
   gui = RealTimePlotter()
   if global_splash:
     global_splash.finish(gui)

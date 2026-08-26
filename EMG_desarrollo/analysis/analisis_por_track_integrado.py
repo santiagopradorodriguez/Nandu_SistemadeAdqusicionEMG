@@ -2490,9 +2490,12 @@ class AnalysisGUI:
         self.root.configure(bg=bg_dark)
 
         # --- CORRECCIÓN: Usar una ruta absoluta para encontrar la carpeta de datos ---
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        emg_root_dir = script_dir
-        while os.path.basename(emg_root_dir) != 'Emg' and emg_root_dir != os.path.dirname(emg_root_dir): emg_root_dir = os.path.dirname(emg_root_dir)
+        if getattr(sys, 'frozen', False):
+            emg_root_dir = os.path.dirname(os.path.abspath(sys.executable))
+            if os.path.basename(emg_root_dir) == "_internal":
+                emg_root_dir = os.path.dirname(emg_root_dir)
+        else:
+            emg_root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.BASE_DIR = os.path.join(emg_root_dir, "base_de_datos_electrodos")
 
         main_frame = tk.Frame(root, padx=15, pady=15, bg=bg_dark)

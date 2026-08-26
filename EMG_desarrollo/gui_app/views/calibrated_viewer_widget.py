@@ -8,7 +8,7 @@
 import os
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QScrollArea, QHBoxLayout, QPushButton,
-    QGroupBox, QCheckBox, QRadioButton, QLineEdit, QFormLayout
+    QGroupBox, QCheckBox, QRadioButton, QLineEdit, QFormLayout, QComboBox
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPixmap
@@ -40,6 +40,23 @@ class CalibratedViewerWidget(QWidget):
         self.btn_plot_3m.setStyleSheet(btn_style)
         
         top_bar.addWidget(self.btn_plot_3m)
+        
+        # NUEVO: Selector de tipo de plot
+        self.cmb_tipo_plot = QComboBox()
+        self.cmb_tipo_plot.addItems([
+            "Vista: Plot Calibrado (Auto)", 
+            "Vista: Plot Paper (Completo)"
+        ])
+        self.cmb_tipo_plot.setStyleSheet("background-color: #1a1a1a; color: #00ffcc; border: 1px solid #00ffcc; padding: 4px; margin-left: 10px; font-weight: bold; border-radius: 4px;")
+        self.cmb_tipo_plot.currentIndexChanged.connect(self._reload_current_plot)
+        top_bar.addWidget(self.cmb_tipo_plot)
+        
+        # NUEVO: Selector de suavizado
+        top_bar.addWidget(QLabel("  Suavizado (ms):"))
+        self.inp_smooth = QLineEdit("250")
+        self.inp_smooth.setMaximumWidth(50)
+        self.inp_smooth.setStyleSheet("background-color: #222; color: white; border: 1px solid gray; padding: 2px;")
+        top_bar.addWidget(self.inp_smooth)
         
         self.btn_zoom_in = QPushButton(" +")
         self.btn_zoom_out = QPushButton(" -")
@@ -102,6 +119,19 @@ class CalibratedViewerWidget(QWidget):
         time_layout.addRow(lbl_hint)
         left_layout.addWidget(time_group)
         
+        # Eje Y
+        y_group = QGroupBox("Límites de Amplitud (µV)")
+        y_group.setStyleSheet("QGroupBox { border: 1px solid #00ffcc; border-radius: 5px; margin-top: 10px; } QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 3px 0 3px; color: #00ffcc; }")
+        y_layout = QFormLayout(y_group)
+        self.entry_ymin = QLineEdit()
+        self.entry_ymax = QLineEdit()
+        y_layout.addRow("Min:", self.entry_ymin)
+        y_layout.addRow("Max:", self.entry_ymax)
+        lbl_y_hint = QLabel("Dejar en blanco para autoescala.")
+        lbl_y_hint.setStyleSheet("color: gray; font-size: 10px;")
+        y_layout.addRow(lbl_y_hint)
+        left_layout.addWidget(y_group)
+        
         # Visualización
         viz_group = QGroupBox("Visualización")
         viz_group.setStyleSheet("QGroupBox { border: 1px solid #00ffcc; border-radius: 5px; margin-top: 10px; } QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 3px 0 3px; color: #00ffcc; }")
@@ -142,6 +172,7 @@ class CalibratedViewerWidget(QWidget):
         self.layout.addLayout(h_layout)
         
         self.current_pixmap = None
+        self.current_measurement_path = None
         self.zoom_factor = 1.0
 
     def _emit_generate_request(self):
@@ -164,6 +195,16 @@ class CalibratedViewerWidget(QWidget):
             from PySide6.QtWidgets import QMessageBox
             QMessageBox.warning(self, "Error", "Los campos de tiempo deben ser numéricos.")
             return
+
+        config["y_min"] = None
+        config["y_max"] = None
+        try:
+            if self.entry_ymin.text().strip(): config["y_min"] = float(self.entry_ymin.text())
+            if self.entry_ymax.text().strip(): config["y_max"] = float(self.entry_ymax.text())
+        except ValueError:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "Error", "Los campos del eje Y deben ser numéricos.")
+            return
             
         self.request_generate_plots.emit(config)
         self.current_pixmap = None
@@ -171,29 +212,58 @@ class CalibratedViewerWidget(QWidget):
 
     def load_calibrated_plot(self, measurement_path):
         """Busca y carga el gráfico calibrado asociado a esta medición"""
+        self.current_measurement_path = measurement_path
+        self._reload_current_plot()
+        
+    def _reload_current_plot(self):
+        if getattr(self, 'current_measurement_path', None) is None:
+            return
+            
+        measurement_path = self.current_measurement_path
+        tipo_plot = self.cmb_tipo_plot.currentIndex()
+        
         self.lbl_status.setText(f"Buscando gráfico para: {os.path.basename(measurement_path)} ...")
         
-        # 1. Buscar en la propia carpeta de la medición
-        # Usar la misma lógica de nombre que en plotter_calibrado (Fecha_Medicion)
         padre = os.path.basename(os.path.dirname(measurement_path))
         hijo = os.path.basename(measurement_path)
         rel_path = f"{padre}_{hijo}"
         nombre_limpio = rel_path.replace("/", "_").replace("\\", "_")
-        nombre_archivo = f"plot_calibrado_{nombre_limpio}.png"
         
-        ruta_img = os.path.join(measurement_path, nombre_archivo)
-        
-        # 2. Si no está ahí, buscar en analisis_comparativos (como fallback por retrocompatibilidad)
-        if not os.path.exists(ruta_img):
-            root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            ruta_img = os.path.join(root_dir, "analisis_comparativos", nombre_archivo)
+        if tipo_plot == 0:
+            nombre_archivo = f"plot_calibrado_{nombre_limpio}.png"
+            ruta_img = os.path.join(measurement_path, nombre_archivo)
+            
+            # Fallback a analisis_comparativos
+            if not os.path.exists(ruta_img):
+                root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                ruta_img = os.path.join(root_dir, "analisis_comparativos", nombre_archivo)
+        else:
+            nombre_archivo = "plot_paper_combined.png"
+            ruta_img = os.path.join(measurement_path, nombre_archivo)
             
         if os.path.exists(ruta_img):
             pixmap = QPixmap(ruta_img)
             if not pixmap.isNull():
                 self.current_pixmap = pixmap
                 self.zoom_reset()
-                self.lbl_status.setText(f"Mostrando: {nombre_archivo}")
+                
+                # Leer información de músculos desde metadata.json
+                meta_info = ""
+                meta_p = os.path.join(measurement_path, "canal_0", "metadata.json")
+                if not os.path.exists(meta_p):
+                    meta_p = os.path.join(measurement_path, "metadata.json")
+                if os.path.exists(meta_p):
+                    try:
+                        import json
+                        with open(meta_p, 'r', encoding='utf-8') as fm:
+                            m_data = json.load(fm)
+                            musc_list = m_data.get("muscles", [])
+                            if musc_list:
+                                meta_info = f" | Músculos: {', '.join(musc_list)}"
+                    except Exception:
+                        pass
+                        
+                self.lbl_status.setText(f"Mostrando: {nombre_archivo}{meta_info}")
             else:
                 self.current_pixmap = None
                 self.image_label.clear()
@@ -202,7 +272,8 @@ class CalibratedViewerWidget(QWidget):
         else:
             self.current_pixmap = None
             self.image_label.clear()
-            self.image_label.setText("No se encontró ningún gráfico procesado para esta medición.\nEjecuta el Plotter Calibrado primero.")
+            msg = "No se encontró ningún gráfico procesado.\nEjecuta 'Generar Gráficos' primero." if tipo_plot == 0 else "No se encontró el plot de paper.\nEjecuta 'Plot para Paper' primero."
+            self.image_label.setText(msg)
             self.lbl_status.setText("Gráfico no encontrado.")
 
     def zoom_in(self):

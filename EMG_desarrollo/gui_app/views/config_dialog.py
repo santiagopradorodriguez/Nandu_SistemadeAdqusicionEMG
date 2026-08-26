@@ -66,6 +66,13 @@ class ConfiguracionDialog(QDialog):
         self.spin_noise.setRange(0.5, 30.0)
         self.spin_noise.setSingleStep(0.5)
         
+        self.spin_bpm = QSpinBox()
+        self.spin_bpm.setRange(30, 250)
+        
+        self.spin_descanso = QDoubleSpinBox()
+        self.spin_descanso.setRange(1.0, 60.0)
+        self.spin_descanso.setSingleStep(1.0)
+        
         self.list_channels = QListWidget()
         self.btn_add_chan = QPushButton("+ Agregar")
         self.btn_remove_chan = QPushButton("- Quitar")
@@ -76,6 +83,8 @@ class ConfiguracionDialog(QDialog):
         
         self.form_adq.addRow("Frecuencia Muestreo por defecto (Hz):", self.spin_fs)
         self.form_adq.addRow("Segundos de Ruido por defecto:", self.spin_noise)
+        self.form_adq.addRow("BPM (Metrónomo) por defecto:", self.spin_bpm)
+        self.form_adq.addRow("Tiempo de Descanso (s):", self.spin_descanso)
         self.form_adq.addRow("Canales Físicos NIDAQ:", self.list_channels)
         self.form_adq.addRow("", btn_layout)
         
@@ -126,6 +135,8 @@ class ConfiguracionDialog(QDialog):
         adq = config_mgr.get("adquisicion") or {}
         self.spin_fs.setValue(adq.get("frecuencia_muestreo", 2000.0))
         self.spin_noise.setValue(adq.get("ruido_segundos", 3.0))
+        self.spin_bpm.setValue(adq.get("bpm", 60))
+        self.spin_descanso.setValue(adq.get("tiempo_descanso", 10.0))
         
         nidaq_chans = adq.get("nidaq_channels", ["Dev1/ai0", "Dev1/ai1", "Dev1/ai2", "Dev1/ai3"])
         for ch in nidaq_chans:
@@ -219,6 +230,8 @@ class ConfiguracionDialog(QDialog):
         adq = config_mgr.get("adquisicion") or {}
         adq["frecuencia_muestreo"] = self.spin_fs.value()
         adq["ruido_segundos"] = self.spin_noise.value()
+        adq["bpm"] = self.spin_bpm.value()
+        adq["tiempo_descanso"] = self.spin_descanso.value()
         
         nidaq_chans = []
         for i in range(self.list_channels.count()):

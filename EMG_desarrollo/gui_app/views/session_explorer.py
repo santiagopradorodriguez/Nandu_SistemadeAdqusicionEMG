@@ -64,7 +64,10 @@ class SessionExplorer(QWidget):
         self.tree.clear()
         date_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}$")
         if not os.path.exists(self.root_path):
-            return
+            try:
+                os.makedirs(self.root_path, exist_ok=True)
+            except Exception:
+                return
             
         items = sorted(os.listdir(self.root_path), reverse=True)
         fechas = [d for d in items if os.path.isdir(os.path.join(self.root_path, d)) and date_pattern.match(d)]

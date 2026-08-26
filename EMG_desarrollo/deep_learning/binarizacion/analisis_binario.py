@@ -25,24 +25,29 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button
 
-# --- Reutilizar funciones del motor de analisis principal ---
-from analisis_por_track_integrado import (
-
-import sys
-import os
 script_dir_abs = os.path.dirname(os.path.abspath(__file__))
-deep_learning_dir = os.path.dirname(script_dir_abs)
-if os.path.basename(deep_learning_dir) == "deep_learning":
-    sys.path.append(os.path.join(deep_learning_dir, "pca_umap_clustering"))
-    sys.path.append(os.path.join(deep_learning_dir, "dataset_tools"))
-    sys.path.append(os.path.join(deep_learning_dir, "binarizacion"))
-    sys.path.append(os.path.dirname(deep_learning_dir)) # EMG_desarrollo root
+emg_root = os.path.dirname(os.path.dirname(script_dir_abs))
+if emg_root not in sys.path:
+    sys.path.insert(0, emg_root)
+analysis_dir = os.path.join(emg_root, "analysis")
+if analysis_dir not in sys.path:
+    sys.path.insert(0, analysis_dir)
 
-    _read_wav_mono,
-    _compute_env_full,
-    _estimate_noise_window,
-    _detect_maxima_and_extract,
-)
+# --- Reutilizar funciones del motor de analisis principal ---
+try:
+    from analysis.analisis_por_track_integrado import (
+        _read_wav_mono,
+        _compute_env_full,
+        _estimate_noise_window,
+        _detect_maxima_and_extract,
+    )
+except ImportError:
+    from analisis_por_track_integrado import (
+        _read_wav_mono,
+        _compute_env_full,
+        _estimate_noise_window,
+        _detect_maxima_and_extract,
+    )
 
 plt.rcParams.update({
     "font.size": 12,
@@ -560,7 +565,7 @@ def procesar_medicion_binario(
 # =====================================================================
 # CLI
 # =====================================================================
-if __name__ == "__main__":
+def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="Pipeline de Binarizacion EMG - Proyecto Nandu LSD")
@@ -598,3 +603,6 @@ if __name__ == "__main__":
         umbral_binarizacion_pct=args.umbral_pct,
         umbral_silencio_abs=args.umbral_silencio,
     )
+
+if __name__ == "__main__":
+    main()

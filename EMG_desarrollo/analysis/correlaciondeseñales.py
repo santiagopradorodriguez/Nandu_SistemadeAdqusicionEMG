@@ -765,13 +765,31 @@ def _plot_muscle_overlay(measure_name, channels_dict, out_dir, master_name=None,
                 ch_conf = canales_config.get(conf_key, {})
                 
                 lbl = ch_conf.get("musculo", f"Canal {ch_idx_str}")
+                meta_ch_path = os.path.join(out_dir, ch, "metadata.json")
+                if os.path.exists(meta_ch_path):
+                    try:
+                        with open(meta_ch_path, 'r', encoding='utf-8') as f_mch:
+                            mch_data = json.load(f_mch)
+                            if 'musculo' in mch_data and mch_data['musculo']:
+                                lbl = mch_data['musculo']
+                    except Exception:
+                        pass
                 if ch == master_name:
                     lbl += " (Master Normalizado)"
-                col = ch_conf.get("color_hex", fallback_colors.get(ch, 'gray'))
                 
-                if ch == 'canal_3':
-                    lbl = ch_conf.get("musculo", "Micrófono")
+                try:
+                    from utils.config_manager import get_muscle_color
+                except ImportError:
+                    def get_muscle_color(name, default='gray'):
+                        return 'red' if ("mic" in str(name).lower() or "canal_3" in str(name).lower()) else default
+
+                if ch == 'canal_3' or "mic" in lbl.lower():
                     col = 'red'
+                else:
+                    col = get_muscle_color(lbl, ch_conf.get("color_hex", fallback_colors.get(ch, 'gray')))
+                
+                if ch == 'canal_3' and (lbl == f"Canal {ch_idx_str}" or "Master" not in lbl):
+                    lbl = "Micrófono"
                 
                 plt.plot(t, y, label=lbl, color=col, linewidth=2, alpha=0.8)
                 plt.fill_between(t, y - err, y + err, color=col, alpha=0.2)
@@ -1504,10 +1522,12 @@ class AnalysisGUI:
         self.root.title(f"Lanzador v{__version__}")
         self.root.geometry("500x400")
         
-        s_dir = os.path.dirname(os.path.abspath(__file__))
-        r = s_dir
-        while os.path.basename(r) != 'Emg' and os.path.dirname(r) != r:
-            r = os.path.dirname(r)
+        if getattr(sys, 'frozen', False):
+            r = os.path.dirname(os.path.abspath(sys.executable))
+            if os.path.basename(r) == "_internal":
+                r = os.path.dirname(r)
+        else:
+            r = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.BASE_DIR = os.path.join(r, "base_de_datos_electrodos")
 
         self.lst = tk.Listbox(root, selectmode=tk.EXTENDED)

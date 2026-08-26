@@ -68,7 +68,13 @@ class SegmentadorWindow(QtWidgets.QMainWindow):
             QComboBox { background-color: #12182b; border: 1px solid #08F7FE; color: white; padding: 5px; }
         """)
         
-        self.base_dir = Path(__file__).resolve().parent.parent / "base_de_datos_electrodos"
+        if getattr(sys, 'frozen', False):
+            root_p = os.path.dirname(os.path.abspath(sys.executable))
+            if os.path.basename(root_p) == "_internal":
+                root_p = os.path.dirname(root_p)
+            self.base_dir = Path(root_p) / "base_de_datos_electrodos"
+        else:
+            self.base_dir = Path(__file__).resolve().parent.parent / "base_de_datos_electrodos"
         
         # Data
         self.current_folder = None
@@ -410,8 +416,11 @@ class SegmentadorWindow(QtWidgets.QMainWindow):
             
             sub_metadata = {
                 "measurement_date": self.metadata.get("measurement_date", ""),
+                "timestamp": self.metadata.get("timestamp", int(time.time()) if 'time' in globals() else 0),
                 "sample_rate": self.samplerate,
                 "channels": self.metadata.get("channels", []),
+                "muscles": self.metadata.get("muscles", []),
+                "muscles_map": self.metadata.get("muscles_map", {}),
                 "bpm": self.bpm,
                 "noise_seconds": self.noise_seconds,
                 "pulse_count": len(lista_pulsos),
@@ -429,8 +438,14 @@ class SegmentadorWindow(QtWidgets.QMainWindow):
                 ch_col = canales_req[ch_idx]
                 ch_dir = pulse_dir / f"canal_{ch_idx}"
                 ch_dir.mkdir(parents=True, exist_ok=True)
+                ch_sub_meta = sub_metadata.copy()
+                ch_sub_meta["canal"] = f"canal_{ch_idx}"
+                if "muscles" in self.metadata and ch_idx < len(self.metadata["muscles"]):
+                    ch_sub_meta["musculo"] = self.metadata["muscles"][ch_idx]
+                elif "muscles_map" in self.metadata and f"canal_{ch_idx}" in self.metadata["muscles_map"]:
+                    ch_sub_meta["musculo"] = self.metadata["muscles_map"][f"canal_{ch_idx}"]
                 with open(ch_dir / "metadata.json", "w", encoding="utf-8") as f:
-                    json.dump(sub_metadata, f, indent=4)
+                    json.dump(ch_sub_meta, f, indent=4)
                     
                 # Exportar datos de este canal como WAV
                 try:

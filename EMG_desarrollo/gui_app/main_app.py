@@ -15,17 +15,38 @@ if not getattr(sys, 'frozen', False):
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # --- MULTIPLEXOR PARA PYINSTALLER (SINGLE EXECUTABLE) ---
-if getattr(sys, 'frozen', False) and len(sys.argv) > 1 and sys.argv[1].endswith('.py'):
-  script_name = sys.argv[1]
-  # Remover el nombre del script de los argumentos
-  sys.argv = [script_name] + sys.argv[2:]
-  
-  # Transformar 'acquisition/manual_daq.py' -> 'acquisition.manual_daq'
-  module_name = script_name.replace('\\', '/').replace('.py', '').replace('/', '.')
-  
+if getattr(sys, 'frozen', False) and len(sys.argv) > 1 and (sys.argv[1].endswith('.py') or sys.argv[1].endswith('.pyw')):
+  raw_arg = sys.argv[1]
+
+  # 1. Si el archivo existe físicamente en el disco (ej. temp_run_pca.py, temp_comparativo.py, scripts temporales)
+  if os.path.exists(raw_arg):
+    import runpy
+    script_abs = os.path.abspath(raw_arg)
+    sys.argv = [script_abs] + sys.argv[2:]
+    script_dir = os.path.dirname(script_abs)
+    if script_dir not in sys.path:
+      sys.path.insert(0, script_dir)
+    try:
+      runpy.run_path(script_abs, run_name="__main__")
+    except Exception as e:
+      import traceback
+      print(f"Error al ejecutar script en disco ({script_abs}): {e}\n{traceback.format_exc()}")
+      input("\nPresiona ENTER para cerrar esta ventana...")
+    sys.exit(0)
+
+  # 2. Si es un módulo empaquetado interno (ej. 'acquisition/manual_daq.py' o 'acquisition.manual_daq')
+  sys.argv = [raw_arg] + sys.argv[2:]
+  clean_name = os.path.normpath(raw_arg).replace('\\', '/')
+  if clean_name.endswith('.py') or clean_name.endswith('.pyw'):
+    clean_name = os.path.splitext(clean_name)[0]
+  module_name = clean_name.replace('/', '.')
+  while module_name.startswith('.'):
+    module_name = module_name[1:]
+  for prefix in ['EMG_desarrollo.', 'EMG_Ejecutable_Build.']:
+    if module_name.startswith(prefix):
+      module_name = module_name[len(prefix):]
+
   try:
-    # Importaciones explícitas para forzar a PyInstaller a empaquetarlas en el PYZ.
-    # Si se usa importlib dinámico, PyInstaller puede ignorarlas.
     if module_name == 'acquisition.manual_daq':
       import acquisition.manual_daq as module
     elif module_name == 'acquisition.autoforge_daq':
@@ -36,37 +57,70 @@ if getattr(sys, 'frozen', False) and len(sys.argv) > 1 and sys.argv[1].endswith(
       import acquisition.metronomo_visual as module
     elif module_name == 'acquisition.ventana_palabras':
       import acquisition.ventana_palabras as module
+    elif module_name == 'acquisition.modulo_de_entrenamiento':
+      import acquisition.modulo_de_entrenamiento as module
     elif module_name == 'analysis.reproductor_canal3':
       import analysis.reproductor_canal3 as module
+    elif module_name == 'analysis.segmentador_secuencias':
+      import analysis.segmentador_secuencias as module
+    elif module_name == 'analysis.plotter_calibrado':
+      import analysis.plotter_calibrado as module
+    elif module_name in ('analysis.correlaciondeseñales', 'analysis.correlaciondesenales'):
+      import analysis.correlaciondeseñales as module
+    elif module_name == 'analysis.electrode_viewer_4':
+      import analysis.electrode_viewer_4 as module
     elif module_name == 'utils.editor_mediciones':
       import utils.editor_mediciones as module
     elif module_name == 'utils.actualizar_metadata':
       import utils.actualizar_metadata as module
     elif module_name == 'utils.migrar_mediciones_por_fecha':
       import utils.migrar_mediciones_por_fecha as module
-    elif module_name == 'analysis.segmentador_secuencias':
-      import analysis.segmentador_secuencias as module
     elif module_name == 'deep_learning.pca_umap_clustering.generador_pca_umap':
       import deep_learning.pca_umap_clustering.generador_pca_umap as module
     elif module_name == 'deep_learning.binarizacion.analisis_trevisan':
       import deep_learning.binarizacion.analisis_trevisan as module
+    elif module_name == 'deep_learning.binarizacion.analisis_trevisan_bandas':
+      import deep_learning.binarizacion.analisis_trevisan_bandas as module
+    elif module_name == 'deep_learning.binarizacion.analisis_binario':
+      import deep_learning.binarizacion.analisis_binario as module
+    elif module_name == 'deep_learning.machine_learning.analisis_xgboost':
+      import deep_learning.machine_learning.analisis_xgboost as module
+    elif module_name == 'deep_learning.pipeline_autoencoder_gui':
+      import deep_learning.pipeline_autoencoder_gui as module
+    elif module_name == 'deep_learning.dataset_tools.visor_features':
+      import deep_learning.dataset_tools.visor_features as module
+    elif module_name == 'deep_learning.dataset_tools.plot_3_musculos_standalone':
+      import deep_learning.dataset_tools.plot_3_musculos_standalone as module
+    elif module_name == 'deep_learning.dataset_tools.plot_derivadas_standalone':
+      import deep_learning.dataset_tools.plot_derivadas_standalone as module
+    elif module_name == 'deep_learning.dataset_tools.generador_pca_tensorial':
+      import deep_learning.dataset_tools.generador_pca_tensorial as module
+    elif module_name == 'deep_learning.generador_umap_supervisado':
+      import deep_learning.generador_umap_supervisado as module
+    elif module_name == 'deep_learning.pca_analysis':
+      import deep_learning.pca_analysis as module
+    elif module_name == 'deep_learning.umap_analysis':
+      import deep_learning.umap_analysis as module
     else:
       import importlib
       module = importlib.import_module(module_name)
-      
+
     if hasattr(module, 'main'):
       module.main()
+    elif hasattr(module, 'flujo_principal'):
+      module.flujo_principal()
     else:
-      print(f"Error: {module_name} no tiene una función main().")
+      import runpy
+      runpy.run_module(module_name, run_name="__main__")
   except Exception as e:
     import traceback
     error_msg = f"Error al ejecutar {module_name}: {e}\n{traceback.format_exc()}"
     print(error_msg)
     try:
-        with open("multiplexer_error.log", "w", encoding="utf-8") as f:
-            f.write(error_msg)
+      with open("multiplexer_error.log", "w", encoding="utf-8") as f:
+        f.write(error_msg)
     except:
-        pass
+      pass
     print("\nPresiona ENTER para cerrar esta ventana...")
     input()
   sys.exit(0)
@@ -97,6 +151,13 @@ if not app:
 from core.threads import EmittingStream, Worker
 from views.session_explorer import SessionExplorer
 from views.ui_analysis import AnalysisPanel, MachineLearningPanel
+from utils.path_utils import (
+    get_project_root,
+    get_database_path,
+    get_comparative_path,
+    get_session_analysis_path,
+    get_resource_path,
+)
 
 # Importar la lógica de negocio original
 try:
@@ -428,7 +489,7 @@ class ReaperStyleHub(QMainWindow):
         QMessageBox.critical(self, "Error Crítico", f"Error al abrir {script_name}:\n{e}")
       return
 
-    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    root_dir = get_project_root()
     script_path = os.path.join(root_dir, script_name)
     
     if not os.path.exists(script_path):
@@ -823,12 +884,11 @@ class ReaperStyleHub(QMainWindow):
     
     import os
     from views.comparative_explorer_widget import ComparativeViewerWidget
-    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    comparative_path = os.path.join(root_dir, "analisis_comparativos")
+    comparative_path = get_comparative_path()
     self.comparative_viewer = ComparativeViewerWidget(root_path=comparative_path)
     self.tabs_historial.addTab(self.comparative_viewer, "Historial de Comparativas")
     
-    session_path = os.path.join(root_dir, "analisis_de_sesiones")
+    session_path = get_session_analysis_path()
     if not os.path.exists(session_path):
         os.makedirs(session_path)
     self.session_viewer = ComparativeViewerWidget(root_path=session_path)
@@ -843,8 +903,7 @@ class ReaperStyleHub(QMainWindow):
     self.dock_explorer.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
     
     # Le pasamos la ruta absoluta apuntando directo a base_de_datos_electrodos
-    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    db_path = os.path.join(root_dir, "base_de_datos_electrodos")
+    db_path = get_database_path()
     
     self.explorer_widget = SessionExplorer(root_path=db_path)
     self.explorer_widget.medicion_seleccionada.connect(self._on_medicion_selected_for_csv)
@@ -945,7 +1004,28 @@ class ReaperStyleHub(QMainWindow):
         tab_proc.checkboxes_canales = {}
         for canal in sorted_canales_totales:
           from PySide6.QtWidgets import QCheckBox
-          chk = QCheckBox(canal)
+          musc_name = None
+          for p in selected_paths:
+            p_meta = os.path.join(p, canal, "metadata.json")
+            if os.path.exists(p_meta):
+              try:
+                with open(p_meta, 'r', encoding='utf-8') as fm:
+                  md_chk = json.load(fm)
+                  if 'musculo' in md_chk and md_chk['musculo']:
+                    musc_name = md_chk['musculo']
+                    break
+              except Exception: pass
+          if not musc_name:
+            ch_idx_str = canal.replace('canal_', '')
+            try:
+              from utils.config_manager import ConfigManager
+              cm = ConfigManager()
+              c_conf = cm.get("canales") or {}
+              musc_name = c_conf.get(f"Canal {ch_idx_str}", {}).get("musculo", "")
+            except Exception: pass
+          
+          label_chk = f"{canal} - {musc_name}" if musc_name else canal
+          chk = QCheckBox(label_chk)
           chk.setChecked(True)
           tab_proc.checkboxes_canales[canal] = chk
           tab_proc.lyt_canales_procesar.addWidget(chk)
@@ -1073,7 +1153,14 @@ class ReaperStyleHub(QMainWindow):
       from PySide6.QtWidgets import QMessageBox
       QMessageBox.warning(self, "Atención", "Por favor, seleccione al menos una medición en el Gestor de Sesiones.")
       return
-    self._launch_external("deep_learning/dataset_tools/plot_3_musculos_standalone.py", args=[selected_paths[0]])
+    theme = "dark" if self.calibrated_viewer.chk_oscuro.isChecked() else "light"
+    
+    try:
+        smooth_ms = float(self.calibrated_viewer.inp_smooth.text())
+    except:
+        smooth_ms = 250.0
+        
+    self._launch_external("deep_learning/dataset_tools/plot_3_musculos_standalone.py", args=[selected_paths[0], theme, str(smooth_ms)])
 
   def _run_correlacion_nativo(self, *args):
     """Ejecuta el script de correlación con la medición seleccionada"""
@@ -1603,7 +1690,7 @@ finally:
         json.dump(kwargs, f)
         
     script_path = os.path.join(os.getcwd(), f"temp_{name}{suffix}")
-    root_project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    root_project_dir = get_project_root()
     
     bridge_script = bridge_template.replace("{TEMP_JSON}", temp_json)\
                                    .replace("{BASE_DIR}", base_dir)\
@@ -1617,27 +1704,38 @@ finally:
     
     import subprocess
     import shutil
-    terminals = ['konsole', 'gnome-terminal', 'xfce4-terminal', 'xterm']
-    term_cmd = None
-    
-    for t in terminals:
-        if shutil.which(t):
-            if t == 'gnome-terminal':
-                term_cmd = [t, '--', 'bash', '-c', f"{sys.executable} {script_path}; echo '\nProceso finalizado. Presiona Enter para salir...'; read"]
-            else:
-                term_cmd = [t, '-e', f"bash -c \"{sys.executable} {script_path}; echo '\nProceso finalizado. Presiona Enter para salir...'; read\""]
-            break
-            
-    if term_cmd:
+
+    if sys.platform == "win32" or os.name == 'nt':
+        # En Windows lanzamos en una consola dedicada para ver los logs
         try:
-            subprocess.Popen(term_cmd)
-            self.log_console.append(f"> SCRIPT LANZADO EN TERMINAL ({term_cmd[0]})")
+            cmd_win = ['cmd.exe', '/c', 'start', f'Ñandú LSD - {title}', 'cmd.exe', '/k', sys.executable, script_path]
+            subprocess.Popen(cmd_win, shell=True)
+            self.log_console.append("> SCRIPT LANZADO EN CONSOLA WINDOWS")
         except Exception as e:
-            self.log_console.append(f"> [Error] Falló el lanzamiento en terminal: {str(e)}")
-            subprocess.Popen([sys.executable, script_path])
+            self.log_console.append(f"> [Error] Falló el lanzamiento en consola: {str(e)}")
+            subprocess.Popen([sys.executable, script_path], creationflags=getattr(subprocess, 'CREATE_NEW_CONSOLE', 0))
     else:
-        self.log_console.append("> [Aviso] No se encontró terminal gráfica, lanzando en background...")
-        subprocess.Popen([sys.executable, script_path])
+        terminals = ['konsole', 'gnome-terminal', 'xfce4-terminal', 'mate-terminal', 'xterm']
+        term_cmd = None
+        
+        for t in terminals:
+            if shutil.which(t):
+                if t == 'gnome-terminal':
+                    term_cmd = [t, '--', 'bash', '-c', f"{sys.executable} '{script_path}'; echo '\nProceso finalizado. Presiona Enter para salir...'; read"]
+                else:
+                    term_cmd = [t, '-e', f"bash -c \"{sys.executable} '{script_path}'; echo '\nProceso finalizado. Presiona Enter para salir...'; read\""]
+                break
+                
+        if term_cmd:
+            try:
+                subprocess.Popen(term_cmd)
+                self.log_console.append(f"> SCRIPT LANZADO EN TERMINAL ({term_cmd[0]})")
+            except Exception as e:
+                self.log_console.append(f"> [Error] Falló el lanzamiento en terminal: {str(e)}")
+                subprocess.Popen([sys.executable, script_path])
+        else:
+            self.log_console.append("> [Aviso] No se encontró terminal gráfica, lanzando en background...")
+            subprocess.Popen([sys.executable, script_path])
 
   def run_pca_grid_search_nativo(self, n_components=2):
     base_dir, mediciones = self._generar_base_dir_y_mediciones()
@@ -2239,7 +2337,7 @@ finally:
     if getattr(sys, 'frozen', False):
       cmd = [sys.executable, script_rel_path] + rutas
     else:
-      root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+      root_dir = get_project_root()
       script_abs_path = os.path.join(root_dir, script_rel_path.replace("/", os.sep))
       
       if not os.path.exists(script_abs_path):

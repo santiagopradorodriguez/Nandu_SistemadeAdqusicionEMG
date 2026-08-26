@@ -87,6 +87,7 @@ additional_modules = [
     'utils.actualizar_metadata',
     'utils.migrar_mediciones_por_fecha',
     'utils.config_manager',
+    'utils.path_utils',
     'utils.logger',
     'instrucciones_uso',
     'views.config_dialog',

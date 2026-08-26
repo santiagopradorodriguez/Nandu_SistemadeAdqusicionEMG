@@ -1523,8 +1523,14 @@ class GeneradorPCAGUI:
         self.root.title("Generador Dataset UMAP")
         self.root.geometry("600x850")
         
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        self.base_dir = os.path.join(os.path.dirname(os.path.dirname(script_dir)), "base_de_datos_electrodos")
+        if getattr(sys, 'frozen', False):
+            root_p = os.path.dirname(os.path.abspath(sys.executable))
+            if os.path.basename(root_p) == "_internal":
+                root_p = os.path.dirname(root_p)
+        else:
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            root_p = os.path.dirname(os.path.dirname(script_dir))
+        self.base_dir = os.path.join(root_p, "base_de_datos_electrodos")
         
         main_frame = tk.Frame(root, padx=15, pady=15, bg="#0B0C10")
         main_frame.pack(fill="both", expand=True)

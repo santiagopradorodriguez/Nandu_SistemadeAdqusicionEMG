@@ -160,14 +160,17 @@ class Channel:
         self.path = path
         self.name = os.path.basename(path)
         
-        # Mapear nombre del canal
+        self.analysis_snr, self.analysis_snr_uncertainty = read_analysis_results(path)
+        self.metadata = read_channel_metadata(path)
+
+        # Mapear nombre del canal (Prioridad: metadata.json > config_general.json > nombre carpeta)
         canales_conf = config_mgr.get("canales") or {}
         idx_str = self.name.replace("canal_", "")
         key = f"Canal {idx_str}"
-        self.display_name = canales_conf.get(key, {}).get("musculo", self.name)
-        
-        self.analysis_snr, self.analysis_snr_uncertainty = read_analysis_results(path)
-        self.metadata = read_channel_metadata(path)
+        musculo_meta = self.metadata.get("musculo") if self.metadata else None
+        if not musculo_meta and self.metadata and "muscles_map" in self.metadata:
+            musculo_meta = self.metadata["muscles_map"].get(self.name)
+        self.display_name = musculo_meta or canales_conf.get(key, {}).get("musculo", self.name)
 
         # Diccionario para almacenar los gráficos encontrados
         self.plots = {
@@ -334,8 +337,13 @@ class Magnifier:
 class App:
     def __init__(self, root):
         self.root = root
-        root.title(f"Electrode Viewer - v{VERSION}")
-        self.base_folder = "base_de_datos_electrodos" # <-- CARPETA POR DEFECTO
+        if getattr(sys, 'frozen', False):
+            root_p = os.path.dirname(os.path.abspath(sys.executable))
+            if os.path.basename(root_p) == "_internal":
+                root_p = os.path.dirname(root_p)
+        else:
+            root_p = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.base_folder = os.path.join(root_p, "base_de_datos_electrodos")
         self.measurements_by_date = {}
         self.dates = []
         self.current_date = None

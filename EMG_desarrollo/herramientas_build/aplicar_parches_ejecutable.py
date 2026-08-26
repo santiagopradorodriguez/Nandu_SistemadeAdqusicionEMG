@@ -180,10 +180,26 @@ def lanzar_script(script_name, args=[]):
         (r"self\.destino_dir\s*=\s*[\"']base_de_datos_letras[\"']", r"self.destino_dir = user_data_path('base_de_datos_letras')")
     ]
     archivos_auxiliares = [
+        "acquisition/manual_daq.py",
+        "acquisition/autoforge_daq.py",
+        "acquisition/autoforge_daq_experimental.py",
+        "acquisition/modulo_de_entrenamiento.py",
         "analysis/plotter_calibrado.py", 
-        "analysis/electrode_viewer_4.py", "utils/editor_mediciones.py", "analysis/analisis_por_track_integrado.py", 
-        "analysis/correlaciondeseñales.py", "analysis/segmentador_secuencias.py", 
-        "utils/actualizar_metadata.py", "utils/migrar_mediciones_por_fecha.py"
+        "analysis/electrode_viewer_4.py", 
+        "utils/editor_mediciones.py", 
+        "analysis/analisis_por_track_integrado.py", 
+        "analysis/correlaciondeseñales.py", 
+        "analysis/segmentador_secuencias.py", 
+        "analysis/reproductor_canal3.py",
+        "utils/actualizar_metadata.py", 
+        "utils/migrar_mediciones_por_fecha.py",
+        "deep_learning/binarizacion/analisis_trevisan.py",
+        "deep_learning/binarizacion/analisis_trevisan_bandas.py",
+        "deep_learning/pca_umap_clustering/generador_pca_umap.py",
+        "deep_learning/generador_umap_supervisado.py",
+        "deep_learning/pca_analysis.py",
+        "deep_learning/umap_analysis.py",
+        "deep_learning/pipeline_autoencoder_gui.py",
     ]
     for archivo in archivos_auxiliares:
         ruta = os.path.join(build_dir, archivo)

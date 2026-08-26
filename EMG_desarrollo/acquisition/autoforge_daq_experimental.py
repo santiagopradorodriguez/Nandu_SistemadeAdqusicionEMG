@@ -1710,14 +1710,20 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.colores_curvas = []
     self.nombres_musculos = []
     canales_conf = self.config_mgr.get("canales") or {}
+    try:
+      from utils.config_manager import get_muscle_color
+    except ImportError:
+      def get_muscle_color(name, default="#ffffff"):
+        return "#ff0000" if ("mic" in str(name).lower() or "canal 3" in str(name).lower()) else default
+
     for i in range(16):
       key = f"Canal {i}"
-      if key in canales_conf:
-        self.colores_curvas.append(canales_conf[key].get("color_hex", "#ffffff"))
-        self.nombres_musculos.append(canales_conf[key].get("musculo", f"Canal {i}"))
+      musc = canales_conf.get(key, {}).get("musculo", f"Canal {i}")
+      self.nombres_musculos.append(musc)
+      if i == 3 or "mic" in musc.lower():
+        self.colores_curvas.append("#ff0000")
       else:
-        self.colores_curvas.append("#0074D9")
-        self.nombres_musculos.append(f"Canal {i}")
+        self.colores_curvas.append(get_muscle_color(musc, canales_conf.get(key, {}).get("color_hex", "#0074D9")))
 
   # --- NUEVO: Cambio de modo de conexión en tiempo real ---
   def on_terminal_mode_changed(self):
@@ -2631,7 +2637,12 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     # Crear la estructura de directorios
     import os
-    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if getattr(sys, 'frozen', False):
+      root_dir = os.path.dirname(os.path.abspath(sys.executable))
+      if os.path.basename(root_dir) == "_internal":
+        root_dir = os.path.dirname(root_dir)
+    else:
+      root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     base_dir = os.path.join(root_dir, "base_de_datos_electrodos")
     # --- NUEVO: Crear carpeta de fecha ---
     today_str = datetime.now().strftime('%Y-%m-%d')
@@ -2663,11 +2674,18 @@ class RealTimePlotter(QtWidgets.QWidget):
     else:
       pulse_count_from_metronome = 0
 
-    # --- NUEVO: Guardar metadata.json con la fecha y hora ---
+    now = datetime.now()
+    muscles_list = [self.nombres_musculos[i % len(self.nombres_musculos)] for i in range(self.NUM_CANALES)]
+    muscles_map = {f"canal_{i}": self.nombres_musculos[i % len(self.nombres_musculos)] for i in range(self.NUM_CANALES)}
+
+    # --- NUEVO: Guardar metadata.json con la fecha, hora, timestamp y músculos ---
     metadata = {
-      "measurement_date": datetime.now().isoformat(),
+      "measurement_date": now.isoformat(),
+      "timestamp": int(now.timestamp()),
       "sample_rate": self.SAMPLE_RATE,
       "channels": self.CANALES_DAQ,
+      "muscles": muscles_list,
+      "muscles_map": muscles_map,
       "bpm": self.spin_bpm.value(), # BPM se sigue tomando de la GUI del adquisidor
       "noise_seconds": self.spin_noise_duration.value(),
       "pulse_count": pulse_count_from_metronome,
@@ -2678,13 +2696,17 @@ class RealTimePlotter(QtWidgets.QWidget):
       "prueba": details["prueba"],
       "comentario": comentario # <-- NUEVO: Añadir el comentario al metadata
     }
-    # --- CORRECCIÓN: Guardar metadata ÚNICAMENTE en la carpeta de cada canal ---
+    # --- CORRECCIÓN: Guardar metadata ÚNICAMENTE en la carpeta de cada canal con su respectivo músculo ---
     for i in range(self.NUM_CANALES):
       current_dir = os.path.join(output_dir, f"canal_{i}")
       metadata_path = os.path.join(current_dir, "metadata.json")
+      ch_metadata = metadata.copy()
+      ch_metadata["canal"] = f"canal_{i}"
+      ch_metadata["musculo"] = self.nombres_musculos[i % len(self.nombres_musculos)]
+      ch_metadata["physical_channel"] = self.CANALES_DAQ[i] if i < len(self.CANALES_DAQ) else f"ai{i}"
       try:
         with open(metadata_path, 'w', encoding='utf-8') as f:
-          json.dump(metadata, f, indent=4)
+          json.dump(ch_metadata, f, indent=4)
         print(f"  Metadata guardado en: {metadata_path}")
       except Exception as e:
         print(f"--- ERROR AL GUARDAR METADATA.JSON en '{current_dir}' ---\n{e}")
@@ -3715,7 +3737,12 @@ class RealTimePlotter(QtWidgets.QWidget):
       from datetime import datetime
       fecha_str = datetime.now().strftime("%Y-%m-%d")
       folder_name = f"SecuenciaContinua_{self.autoforge_prueba}_{self.autoforge_sujeto}"
-      root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+      if getattr(sys, 'frozen', False):
+        root_dir = os.path.dirname(os.path.abspath(sys.executable))
+        if os.path.basename(root_dir) == "_internal":
+          root_dir = os.path.dirname(root_dir)
+      else:
+        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
       base_dir = Path(root_dir) / "base_de_datos_electrodos" / fecha_str / folder_name
       os.makedirs(base_dir, exist_ok=True)
       
@@ -3725,10 +3752,17 @@ class RealTimePlotter(QtWidgets.QWidget):
       for i in range(total_pulsos):
           full_word_sequence.append(self.autoforge_words[i % len(self.autoforge_words)])
           
+      now = datetime.now()
+      muscles_list = [self.nombres_musculos[i % len(self.nombres_musculos)] for i in range(self.NUM_CANALES)]
+      muscles_map = {f"canal_{i}": self.nombres_musculos[i % len(self.nombres_musculos)] for i in range(self.NUM_CANALES)}
+      
       metadata = {
-        "measurement_date": datetime.now().isoformat(),
+        "measurement_date": now.isoformat(),
+        "timestamp": int(now.timestamp()),
         "sample_rate": self.SAMPLE_RATE,
         "channels": self.CANALES_DAQ,
+        "muscles": muscles_list,
+        "muscles_map": muscles_map,
         "bpm": self.spin_bpm.value(),
         "noise_seconds": self.spin_noise_duration.value(),
         "pulse_count": total_pulsos,
@@ -3744,9 +3778,13 @@ class RealTimePlotter(QtWidgets.QWidget):
         channel_output_dir = os.path.join(base_dir, f"canal_{i}")
         os.makedirs(channel_output_dir, exist_ok=True)
         metadata_path = os.path.join(channel_output_dir, "metadata.json")
+        ch_metadata = metadata.copy()
+        ch_metadata["canal"] = f"canal_{i}"
+        ch_metadata["musculo"] = self.nombres_musculos[i % len(self.nombres_musculos)]
+        ch_metadata["physical_channel"] = self.CANALES_DAQ[i] if i < len(self.CANALES_DAQ) else f"ai{i}"
         try:
           with open(metadata_path, 'w', encoding='utf-8') as f:
-            json.dump(metadata, f, indent=4)
+            json.dump(ch_metadata, f, indent=4)
         except: pass
 
       try: guardar_grabacion_csv(local_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion")
@@ -4082,15 +4120,26 @@ class RealTimePlotter(QtWidgets.QWidget):
       fecha_str = datetime.now().strftime("%Y-%m-%d")
       # Nombre: PALABRA_Prueba_Sujeto
       folder_name = f"{palabra}_{self.autoforge_prueba}_{self.autoforge_sujeto}"
-      root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+      if getattr(sys, 'frozen', False):
+        root_dir = os.path.dirname(os.path.abspath(sys.executable))
+        if os.path.basename(root_dir) == "_internal":
+          root_dir = os.path.dirname(root_dir)
+      else:
+        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
       base_dir = Path(root_dir) / "base_de_datos_electrodos" / fecha_str / folder_name
       os.makedirs(base_dir, exist_ok=True)
       
       # 1. Preparar metadata para UI Analysis
+      now = datetime.now()
+      muscles_list = [self.nombres_musculos[i % len(self.nombres_musculos)] for i in range(self.NUM_CANALES)]
+      muscles_map = {f"canal_{i}": self.nombres_musculos[i % len(self.nombres_musculos)] for i in range(self.NUM_CANALES)}
       metadata = {
-        "measurement_date": datetime.now().isoformat(),
+        "measurement_date": now.isoformat(),
+        "timestamp": int(now.timestamp()),
         "sample_rate": self.SAMPLE_RATE,
         "channels": self.CANALES_DAQ,
+        "muscles": muscles_list,
+        "muscles_map": muscles_map,
         "bpm": self.spin_bpm.value(),
         "noise_seconds": self.spin_noise_duration.value(),
         "pulse_count": self.autoforge_target_reps,
@@ -4106,9 +4155,13 @@ class RealTimePlotter(QtWidgets.QWidget):
         channel_output_dir = os.path.join(base_dir, f"canal_{i}")
         os.makedirs(channel_output_dir, exist_ok=True)
         metadata_path = os.path.join(channel_output_dir, "metadata.json")
+        ch_metadata = metadata.copy()
+        ch_metadata["canal"] = f"canal_{i}"
+        ch_metadata["musculo"] = self.nombres_musculos[i % len(self.nombres_musculos)]
+        ch_metadata["physical_channel"] = self.CANALES_DAQ[i] if i < len(self.CANALES_DAQ) else f"ai{i}"
         try:
           with open(metadata_path, 'w', encoding='utf-8') as f:
-            json.dump(metadata, f, indent=4)
+            json.dump(ch_metadata, f, indent=4)
         except: pass
 
       # 3. Guardar Datos Raw CSV y WAV (las funciones internas ya manejan la división por canales)

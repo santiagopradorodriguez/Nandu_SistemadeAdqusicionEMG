@@ -307,6 +307,7 @@ class ElectrodeViewerWidget(QWidget):
         for canal in canales:
             canal_path = os.path.join(path, canal)
             canal_tab = QTabWidget()
+            canal_musculo = None
             canal_tab.setStyleSheet("""
                 QTabBar::tab { font-size: 12px; padding: 5px 15px; background: #111; color: #888; border: 1px solid #222; }
                 QTabBar::tab:selected { background: #333; color: #fff; border-color: #555; font-weight: bold; }
@@ -320,6 +321,8 @@ class ElectrodeViewerWidget(QWidget):
                 with open(meta_path, 'r', encoding='utf-8') as f:
                     try:
                         md = json.load(f)
+                        if 'musculo' in md and md['musculo']:
+                            canal_musculo = md['musculo']
                         scroll_meta = QScrollArea()
                         scroll_meta.setWidgetResizable(True)
                         lbl_meta = QLabel(json.dumps(md, indent=2))
@@ -373,7 +376,8 @@ class ElectrodeViewerWidget(QWidget):
                         canal_tab.setCurrentIndex(j)
                         break
                         
-            self.tabs_channels.addTab(canal_tab, canal.upper())
+            tab_title = f"{canal.upper()} ({canal_musculo})" if canal_musculo else canal.upper()
+            self.tabs_channels.addTab(canal_tab, tab_title)
             
         # Restaurar la pestaña principal
         if current_main_tab_text:

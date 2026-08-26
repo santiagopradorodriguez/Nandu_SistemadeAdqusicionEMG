@@ -13,12 +13,12 @@ from datetime import datetime
 import numpy as np
 import matplotlib
 matplotlib.use('TkAgg')
-sys.path.append("c:/Users/MSI/OneDrive/Documentos/DOCUMENTOS SANTIAGO/santiago-prado-repositorio/EMG_desarrollo")
+sys.path.append("/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo")
 import analysis.analisis_por_track_integrado as api
 
-mediciones_a_comparar = ['2026-06-03/SC_VOCALESAUTK1_Lucas', '2026-06-03/SC_VOCALESAUTK2_Lucas', '2026-06-03/SC_VOCALESAUTK3_Lucas', '2026-06-03/SC_VOCALESAUTK4_Lucas', '2026-06-03/SC_VOCALESAUTK5_Lucas']
-base_dir = "c:/Users/MSI/OneDrive/Documentos/DOCUMENTOS SANTIAGO/santiago-prado-repositorio/EMG_desarrollo/base_de_datos_electrodos"
-nombre_custom = ""
+mediciones_a_comparar = ['2026-07-10/A_T1_Lucas', '2026-07-10/A_T2_Lucas']
+base_dir = "/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos"
+nombre_custom = "comparacion"
 
 try:
     mediciones_data = []
@@ -110,7 +110,7 @@ try:
     timestamp = datetime.now().strftime("%H%M%S")
     
     nombre_carpeta = nombre_custom if nombre_custom else f"Sesion_{timestamp}"
-    output_comp_dir = os.path.join("c:/Users/MSI/OneDrive/Documentos/DOCUMENTOS SANTIAGO/santiago-prado-repositorio/EMG_desarrollo", "analisis_de_sesiones", today_str, nombre_carpeta)
+    output_comp_dir = os.path.join("/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo", "analisis_de_sesiones", today_str, nombre_carpeta)
     os.makedirs(output_comp_dir, exist_ok=True)
     
     nombre_salida_base = os.path.join(output_comp_dir, "Sesion")

@@ -891,12 +891,14 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.btn_start_acq.setStyleSheet(self.BTN_START_STYLE)
 
         # --- NUEVO: Controles de Protocolo ---
-        self.label_bpm = QtWidgets.QLabel("BPM:")
-        self.spin_bpm = SpinBox(value=60, int=True, bounds=(30, 200), step=1)
-        self.spin_bpm.setFixedWidth(80) # Acortar el recuadro del BPM
-        self.label_noise_duration = QtWidgets.QLabel("Noise (Inicio) (s):")
-        
         adq_conf = config_mgr.get("adquisicion") or {}
+        
+        self.label_bpm = QtWidgets.QLabel("BPM:")
+        default_bpm = adq_conf.get("bpm", 60)
+        self.spin_bpm = SpinBox(value=default_bpm, int=True, bounds=(30, 200), step=1)
+        self.spin_bpm.setFixedWidth(80) # Acortar el recuadro del BPM
+        
+        self.label_noise_duration = QtWidgets.QLabel("Noise (Inicio) (s):")
         noise_def = adq_conf.get("ruido_segundos", 3.0)
         self.spin_noise_duration = SpinBox(value=noise_def, dec=True, bounds=(0.5, 20.0), step=0.5)
         self.spin_noise_duration.setFixedWidth(80)
@@ -1152,19 +1154,22 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.curvas = []
         self.config_mgr = ConfigManager()
         self.colores_curvas = []
-        for i in range(8):
-            color_hex = self.config_mgr.config.get("canales", {}).get(f"Canal {i}", {}).get("color_hex", "#ffffff")
-            self.colores_curvas.append(color_hex)
         self.nombres_musculos = []
-        canales_conf = config_mgr.get("canales")
+        canales_conf = self.config_mgr.get("canales") or {}
+        try:
+            from utils.config_manager import get_muscle_color
+        except ImportError:
+            def get_muscle_color(name, default="#ffffff"):
+                return "#ff0000" if ("mic" in str(name).lower() or "canal 3" in str(name).lower()) else default
+
         for i in range(16):
             key = f"Canal {i}"
-            if key in canales_conf:
-                self.colores_curvas.append(canales_conf[key].get("color_hex", "#ffffff"))
-                self.nombres_musculos.append(canales_conf[key].get("musculo", f"Canal {i}"))
+            musc = canales_conf.get(key, {}).get("musculo", f"Canal {i}")
+            self.nombres_musculos.append(musc)
+            if i == 3 or "mic" in musc.lower():
+                self.colores_curvas.append("#ff0000")
             else:
-                self.colores_curvas.append("#0074D9")
-                self.nombres_musculos.append(f"Canal {i}")
+                self.colores_curvas.append(get_muscle_color(musc, canales_conf.get(key, {}).get("color_hex", "#0074D9")))
 
     # --- NUEVO: Cambio de modo de conexión en tiempo real ---
     def on_terminal_mode_changed(self):
@@ -1862,7 +1867,13 @@ class RealTimePlotter(QtWidgets.QWidget):
             return # El usuario canceló
 
         # Crear la estructura de directorios
-        base_dir = "base_de_datos_electrodos"
+        if getattr(sys, 'frozen', False):
+            root_dir = os.path.dirname(os.path.abspath(sys.executable))
+            if os.path.basename(root_dir) == "_internal":
+                root_dir = os.path.dirname(root_dir)
+        else:
+            root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        base_dir = os.path.join(root_dir, "base_de_datos_electrodos")
         # --- NUEVO: Crear carpeta de fecha ---
         today_str = datetime.now().strftime('%Y-%m-%d')
         date_dir = os.path.join(base_dir, today_str)
@@ -1901,11 +1912,18 @@ class RealTimePlotter(QtWidgets.QWidget):
             except Exception as e:
                 print(f"Advertencia: No se pudo leer el conteo de pulsos desde metronome_config.json. Error: {e}")
 
-        # --- NUEVO: Guardar metadata.json con la fecha y hora ---
+        now = datetime.now()
+        muscles_list = [self.nombres_musculos[i % len(self.nombres_musculos)] for i in range(self.NUM_CANALES)]
+        muscles_map = {f"canal_{i}": self.nombres_musculos[i % len(self.nombres_musculos)] for i in range(self.NUM_CANALES)}
+
+        # --- NUEVO: Guardar metadata.json con la fecha, hora, timestamp y músculos ---
         metadata = {
-            "measurement_date": datetime.now().isoformat(),
+            "measurement_date": now.isoformat(),
+            "timestamp": int(now.timestamp()),
             "sample_rate": self.SAMPLE_RATE,
             "channels": self.CANALES_DAQ,
+            "muscles": muscles_list,
+            "muscles_map": muscles_map,
             "bpm": self.spin_bpm.value(), # BPM se sigue tomando de la GUI del adquisidor
             "noise_seconds": self.spin_noise_duration.value(),
             "pulse_count": pulse_count_from_metronome,
@@ -1916,13 +1934,17 @@ class RealTimePlotter(QtWidgets.QWidget):
             "prueba": details["prueba"],
             "comentario": comentario # <-- NUEVO: Añadir el comentario al metadata
         }
-        # --- CORRECCIÓN: Guardar metadata ÚNICAMENTE en la carpeta de cada canal ---
+        # --- CORRECCIÓN: Guardar metadata ÚNICAMENTE en la carpeta de cada canal con su respectivo músculo ---
         for i in range(self.NUM_CANALES):
             current_dir = os.path.join(output_dir, f"canal_{i}")
             metadata_path = os.path.join(current_dir, "metadata.json")
+            ch_metadata = metadata.copy()
+            ch_metadata["canal"] = f"canal_{i}"
+            ch_metadata["musculo"] = self.nombres_musculos[i % len(self.nombres_musculos)]
+            ch_metadata["physical_channel"] = self.CANALES_DAQ[i] if i < len(self.CANALES_DAQ) else f"ai{i}"
             try:
                 with open(metadata_path, 'w', encoding='utf-8') as f:
-                    json.dump(metadata, f, indent=4)
+                    json.dump(ch_metadata, f, indent=4)
                 print(f"   [OK] Metadata guardado en: {metadata_path}")
             except Exception as e:
                 print(f"--- [ERROR] ERROR AL GUARDAR METADATA.JSON en '{current_dir}' ---\n{e}")
@@ -2338,6 +2360,13 @@ class RealTimePlotter(QtWidgets.QWidget):
         
         # --- NUEVO: Guardar estado de la GUI al cerrar el programa ---
         try:
+            adq = config_mgr.config.get("adquisicion", {})
+            adq["bpm"] = self.spin_bpm.value()
+            adq["ruido_segundos"] = self.spin_noise_duration.value()
+            config_mgr.config["adquisicion"] = adq
+            config_mgr.save()
+            
+            # Mantenemos esto por si alguna otra parte depende de metronome_config.json
             config_data = {}
             if os.path.exists('metronome_config.json'):
                 with open('metronome_config.json', 'r', encoding='utf-8') as f:
@@ -2350,6 +2379,64 @@ class RealTimePlotter(QtWidgets.QWidget):
             print(f"Error guardando configuración al cerrar: {e}")
             
         event.accept() # Acepta el cierre
+
+# =============================================================================
+# --- NUEVO: DIÁLOGO DE SELECCIÓN DE MÚSCULOS AL INICIO ---
+# =============================================================================
+class MuscleSelectionDialog(QtWidgets.QDialog):
+  def __init__(self, parent=None):
+    super().__init__(parent)
+    self.setWindowTitle("Configurar Músculos de la Sesión")
+    self.setMinimumWidth(350)
+    
+    self.config_mgr = config_mgr
+    self.canales_conf = self.config_mgr.get("canales") or {}
+    adq = self.config_mgr.get("adquisicion") or {}
+    self.nidaq_chans = adq.get("nidaq_channels", ["Dev1/ai0", "Dev1/ai1", "Dev1/ai2", "Dev1/ai3"])
+    
+    self.layout = QtWidgets.QVBoxLayout(self)
+    
+    self.lbl = QtWidgets.QLabel("A continuación, asigne el músculo a cada canal activo:")
+    self.lbl.setStyleSheet("color: white; font-weight: bold; margin-bottom: 10px;")
+    self.layout.addWidget(self.lbl)
+    
+    self.form_layout = QtWidgets.QFormLayout()
+    self.line_edits = {}
+    
+    for i in range(len(self.nidaq_chans)):
+        key = f"Canal {i}"
+        musculo_actual = self.canales_conf.get(key, {}).get("musculo", f"Canal {i}")
+        le = QtWidgets.QLineEdit(musculo_actual)
+        self.form_layout.addRow(f"[{self.nidaq_chans[i]}] {key}:", le)
+        self.line_edits[key] = le
+        
+    self.layout.addLayout(self.form_layout)
+    
+    self.btn_box = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Save | QtWidgets.QDialogButtonBox.Cancel)
+    self.btn_box.accepted.connect(self.guardar_y_cerrar)
+    self.btn_box.rejected.connect(self.reject)
+    self.layout.addWidget(self.btn_box)
+    
+  def guardar_y_cerrar(self):
+    try:
+      from utils.config_manager import get_muscle_color
+    except ImportError:
+      def get_muscle_color(name, default="#00ffcc"):
+        return "#ff0000" if ("mic" in str(name).lower() or "canal 3" in str(name).lower()) else default
+
+    for key, le in self.line_edits.items():
+        if key not in self.canales_conf:
+            self.canales_conf[key] = {}
+        m_text = le.text().strip()
+        self.canales_conf[key]["musculo"] = m_text
+        if key == "Canal 3" or "mic" in m_text.lower():
+            self.canales_conf[key]["color_hex"] = "#ff0000"
+        else:
+            self.canales_conf[key]["color_hex"] = get_muscle_color(m_text, self.canales_conf[key].get("color_hex", "#00ffcc"))
+    
+    self.config_mgr.config["canales"] = self.canales_conf
+    self.config_mgr.save()
+    self.accept()
 
 # =============================================================================
 # PROGRAMA PRINCIPAL
@@ -2388,6 +2475,23 @@ def main():
             padding: 2px;
         }
     """)
+    
+    # --- NUEVO: Preguntar por los músculos al iniciar ---
+    if global_splash:
+        global_splash.hide()
+        
+    respuesta = QtWidgets.QMessageBox.question(
+        None, 
+        "Ñandú LSD - Configuración", 
+        "¿Desea cambiar el conjunto de músculos asignados a los canales?",
+        QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+        QtWidgets.QMessageBox.No
+    )
+    
+    if respuesta == QtWidgets.QMessageBox.Yes:
+        dialog = MuscleSelectionDialog()
+        dialog.exec()
+        
     gui = RealTimePlotter()
     if global_splash:
         global_splash.finish(gui)

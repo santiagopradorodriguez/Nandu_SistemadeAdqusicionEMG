@@ -384,6 +384,8 @@ class CsvViewerWidget(QWidget):
         
         # Guardar data original y crear checkboxes
         self.canales_originales.clear()
+        medicion_dir = os.path.dirname(self.current_filepath) if hasattr(self, 'current_filepath') and self.current_filepath else None
+        
         for idx, canal in enumerate(canales):
             self.canales_originales[canal] = self.df[canal].values
             
@@ -393,7 +395,35 @@ class CsvViewerWidget(QWidget):
                 ch_num = idx
                 
             nombre_musc = self.canal_nombres[ch_num] if ch_num < len(self.canal_nombres) else canal
-            color_canal = self.channel_colors[ch_num] if ch_num < len(self.channel_colors) else '#ffffff'
+            if medicion_dir:
+                meta_ch_path = os.path.join(medicion_dir, f"canal_{ch_num}", "metadata.json")
+                if os.path.exists(meta_ch_path):
+                    try:
+                        with open(meta_ch_path, 'r', encoding='utf-8') as f_meta:
+                            m_data = json.load(f_meta)
+                            if 'musculo' in m_data and m_data['musculo']:
+                                nombre_musc = m_data['musculo']
+                    except Exception:
+                        pass
+                else:
+                    meta_ch0 = os.path.join(medicion_dir, "canal_0", "metadata.json")
+                    if os.path.exists(meta_ch0):
+                        try:
+                            with open(meta_ch0, 'r', encoding='utf-8') as f_meta0:
+                                m0_data = json.load(f_meta0)
+                                if 'muscles_map' in m0_data and f"canal_{ch_num}" in m0_data['muscles_map']:
+                                    nombre_musc = m0_data['muscles_map'][f"canal_{ch_num}"]
+                        except Exception:
+                            pass
+            try:
+                from utils.config_manager import get_muscle_color
+                if ch_num == 3 or "mic" in nombre_musc.lower():
+                    color_canal = "#ff0000"
+                else:
+                    default_c = self.channel_colors[ch_num] if ch_num < len(self.channel_colors) else '#ffffff'
+                    color_canal = get_muscle_color(nombre_musc, default_c)
+            except Exception:
+                color_canal = "#ff0000" if ch_num == 3 else (self.channel_colors[ch_num] if ch_num < len(self.channel_colors) else '#ffffff')
             
             row_widget = QWidget()
             row_layout = QHBoxLayout(row_widget)

@@ -11,16 +11,16 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 if script_dir not in sys.path:
     sys.path.append(script_dir)
 
-with open(r'/tmp/tmp097wh4lg.json', 'r') as f:
+with open(r'/tmp/tmp4640mj24.json', 'r') as f:
     kwargs = json.load(f)
 
-mediciones = ['2026-08-21/A_Prueba1silicona_petra', '2026-08-21/A_silicona_aeiou_petra', '2026-08-21/E_Prueba1silicona_petra', '2026-08-21/E_silicona_aeiou_petra', '2026-08-21/I_Prueba1silicona_petra', '2026-08-21/I_silicona_aeiou_petra', '2026-08-21/O_Prueba1silicona_petra', '2026-08-21/O_silicona_aeiou_petra', '2026-08-21/U_Prueba1silicona_petra', '2026-08-21/U_silicona_aeiou_petra']
+mediciones = ['2026-08-25/a_Prueba1_Candela', '2026-08-25/e_Prueba1_Candela', '2026-08-25/i_Prueba1_Candela', '2026-08-25/o_Prueba1_Candela', '2026-08-25/u_Prueba1_Candela']
 base_dir = r'/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos'
 
 import deep_learning.pca_umap_clustering.generador_pca_umap as generador
 
 # Define explicit out_dir based on user input
-pca_umap_dir = os.path.join(project_root, "deep_learning", "pca_umap_clustering", "resultados_pca_umap", "pca3d?")
+pca_umap_dir = os.path.join(project_root, "deep_learning", "pca_umap_clustering", "resultados_pca_umap", "candela")
 os.makedirs(pca_umap_dir, exist_ok=True)
 
 # Save the kwargs into the folder

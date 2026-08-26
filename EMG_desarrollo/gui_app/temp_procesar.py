@@ -7,7 +7,7 @@ matplotlib.use('TkAgg')
 sys.path.append(r"/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo")
 import analysis.analisis_por_track_integrado as api
 
-mediciones = ['2026-07-10/A_T1_Lucas', '2026-07-10/A_T2_Lucas']
+mediciones = ['2026-07-10/A_T1_Lucas', '2026-07-10/A_T2_Lucas', '2026-07-10/A_T3_Lucas']
 base_dir = r"/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos"
 
 try:
@@ -24,7 +24,7 @@ try:
   # Inyectar los parámetros de nuestra GUI PySide6 a su GUI Tkinter
   dialog.var_mostrar_recortes.set(True)
   dialog.var_mostrar_senal_cruda.set(False)
-  dialog.var_mostrar_espectrograma.set(False)
+  dialog.var_mostrar_espectrograma.set(True)
   dialog.var_frecuenciamaxima.set("5000")
   dialog.var_notch_filter.set(True)
   dialog.var_notch_q_factor.set("2.0")
@@ -44,7 +44,7 @@ try:
 
   print("\n> Orquestador Tkinter Aislado Inicializado. Ejecutando Rutina original de ProcessingOptionsDialog...")
   # Ejecutar su propia rutina que ya maneja pop-ups, metadatos y curación
-  dialog.procesar(interactivo=True)
+  dialog.procesar(interactivo=False)
 
 except Exception as e:
   import traceback

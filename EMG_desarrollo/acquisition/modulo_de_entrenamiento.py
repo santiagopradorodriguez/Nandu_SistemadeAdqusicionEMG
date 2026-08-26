@@ -104,13 +104,32 @@ class ModuloEntrenamiento(QWidget):
         self.timer_rest.timeout.connect(self.next_word)
 
     def get_words(self):
-        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        path = os.path.join(root_dir, "palabras.txt")
-        if not os.path.exists(path):
-            return ["A", "E", "I", "O", "U"]
-        with open(path, 'r', encoding='utf-8') as f:
-            words = [l.strip() for l in f if l.strip()]
-        return words if words else ["A", "E", "I", "O", "U"]
+        candidates = []
+        if getattr(sys, 'frozen', False):
+            base_path = os.path.dirname(os.path.abspath(sys.executable))
+            if os.path.basename(base_path) == "_internal":
+                base_path = os.path.dirname(base_path)
+            candidates.append(os.path.join(base_path, "palabras.txt"))
+            candidates.append(os.path.join(base_path, "acquisition", "palabras.txt"))
+        else:
+            root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            candidates.append(os.path.join(root_dir, "palabras.txt"))
+            candidates.append(os.path.join(root_dir, "acquisition", "palabras.txt"))
+
+        if hasattr(sys, '_MEIPASS'):
+            candidates.append(os.path.join(sys._MEIPASS, "palabras.txt"))
+            candidates.append(os.path.join(sys._MEIPASS, "acquisition", "palabras.txt"))
+
+        for path in candidates:
+            if os.path.exists(path):
+                try:
+                    with open(path, 'r', encoding='utf-8') as f:
+                        words = [l.strip() for l in f if l.strip()]
+                    if words:
+                        return words
+                except Exception:
+                    pass
+        return ["A", "E", "I", "O", "U"]
 
     def start_training(self):
         words = self.get_words()
@@ -151,16 +170,23 @@ class ModuloEntrenamiento(QWidget):
         if self.word_process:
             try: self.word_process.kill()
             except: pass
-        script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ventana_palabras.py')
-        self.word_process = subprocess.Popen([sys.executable, script_path, f'--word={text}'])
+        if getattr(sys, 'frozen', False):
+            cmd = [sys.executable, 'acquisition/ventana_palabras.py', f'--word={text}']
+        else:
+            script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ventana_palabras.py')
+            cmd = [sys.executable, script_path, f'--word={text}']
+        self.word_process = subprocess.Popen(cmd)
         
     def launch_metronome(self, count_in=True):
         if self.metronome_process:
             try: self.metronome_process.kill()
             except: pass
-        script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'metronomo_visual.py')
         bpm = self.spin_bpm.value()
-        args = [sys.executable, script_path, '--autostart', '--count', f'--bpm={bpm}']
+        if getattr(sys, 'frozen', False):
+            args = [sys.executable, 'acquisition/metronomo_visual.py', '--autostart', '--count', f'--bpm={bpm}']
+        else:
+            script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'metronomo_visual.py')
+            args = [sys.executable, script_path, '--autostart', '--count', f'--bpm={bpm}']
         if count_in:
             args.append('--count-in=4')
         self.metronome_process = subprocess.Popen(args, stdin=subprocess.PIPE, text=True)
@@ -213,8 +239,17 @@ class ModuloEntrenamiento(QWidget):
         self.stop_training()
         event.accept()
 
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
+def main():
+    app = QApplication.instance()
+    is_standalone = False
+    if not app:
+        app = QApplication(sys.argv)
+        is_standalone = True
     window = ModuloEntrenamiento()
     window.show()
-    sys.exit(app.exec())
+    if is_standalone:
+        sys.exit(app.exec())
+    return window
+
+if __name__ == "__main__":
+    main()

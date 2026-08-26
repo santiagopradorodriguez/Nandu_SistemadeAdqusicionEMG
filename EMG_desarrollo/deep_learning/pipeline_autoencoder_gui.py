@@ -34,8 +34,14 @@ class PipelineAutoencoderGUI:
         
         self.rutas_preseleccionadas = rutas_preseleccionadas or []
         
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        self.base_dir = os.path.join(os.path.dirname(script_dir), "base_de_datos_electrodos")
+        if getattr(sys, 'frozen', False):
+            root_p = os.path.dirname(os.path.abspath(sys.executable))
+            if os.path.basename(root_p) == "_internal":
+                root_p = os.path.dirname(root_p)
+        else:
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            root_p = os.path.dirname(script_dir)
+        self.base_dir = os.path.join(root_p, "base_de_datos_electrodos")
         
         self.setup_ui()
         
@@ -389,8 +395,11 @@ class PipelineAutoencoderGUI:
         import subprocess
         subprocess.Popen([sys.executable, plot_path])
 
-if __name__ == "__main__":
+def main():
     root = tk.Tk()
     rutas = sys.argv[1:] if len(sys.argv) > 1 else None
     app = PipelineAutoencoderGUI(root, rutas_preseleccionadas=rutas)
     root.mainloop()
+
+if __name__ == "__main__":
+    main()

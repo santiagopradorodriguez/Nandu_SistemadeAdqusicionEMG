@@ -13,13 +13,13 @@ import json
 from datetime import datetime
 import matplotlib
 matplotlib.use('TkAgg') # Garantizar ventana comparativa en Windows
-sys.path.append("c:/Users/MSI/OneDrive/Documentos/DOCUMENTOS SANTIAGO/santiago-prado-repositorio/EMG_desarrollo")
+sys.path.append("/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo")
 import analysis.analisis_por_track_integrado as api
 
-mediciones = ['2026-06-03/A_Prueba1_Lucas', '2026-06-03/E_Prueba1_Lucas', '2026-06-03/I_Prueba1_Lucas', '2026-06-03/O_Prueba1_Lucas', '2026-06-03/U_Prueba1_Lucas']
-base_dir = "c:/Users/MSI/OneDrive/Documentos/DOCUMENTOS SANTIAGO/santiago-prado-repositorio/EMG_desarrollo/base_de_datos_electrodos"
-canal = "canal_0"
-nombre_custom = ""
+mediciones = ['2026-07-10/A_T1_Lucas', '2026-07-10/A_T2_Lucas']
+base_dir = "/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos"
+canal = "canal_1"
+nombre_custom = "comparacion"
 
 try:
   resultados_globales = {}
@@ -52,11 +52,11 @@ try:
     timestamp = datetime.now().strftime("%H%M%S")
     nombre_carpeta = nombre_custom if nombre_custom else f"comparacion_{timestamp}"
     
-    out_dir = os.path.join("c:/Users/MSI/OneDrive/Documentos/DOCUMENTOS SANTIAGO/santiago-prado-repositorio/EMG_desarrollo", "analisis_comparativos", today_str, nombre_carpeta)
+    out_dir = os.path.join("/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo", "analisis_comparativos", today_str, nombre_carpeta)
     os.makedirs(out_dir, exist_ok=True)
     out_png = os.path.join(out_dir, "comparativa.png")
     
-    api._comparative_plots(promedios_globales, tiempos_globales, nombres_globales, resultados_globales, out_png, **{'show_overlay': True, 'show_snr': True, 'show_amplitude': True, 'show_table': True, 'show_snr_time': True, 'show_amp_time': True})
+    api._comparative_plots(promedios_globales, tiempos_globales, nombres_globales, resultados_globales, out_png, **{'show_overlay': True, 'show_snr': True, 'show_amplitude': True, 'show_snr_time': True, 'show_amp_time': True, 'show_table': True})
     print(f"ANÁLISIS COMPARATIVO FINALIZADO. Guardado en: {out_dir}")
   else:
     print("No hay suficientes resultados válidos cargados.")
