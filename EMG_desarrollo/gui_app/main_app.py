@@ -69,6 +69,22 @@ if getattr(sys, 'frozen', False) and len(sys.argv) > 1 and (sys.argv[1].endswith
       import analysis.correlaciondeseñales as module
     elif module_name == 'analysis.electrode_viewer_4':
       import analysis.electrode_viewer_4 as module
+    elif module_name == 'analysis.analisis_estadistico_pulsos':
+      import analysis.analisis_estadistico_pulsos as module
+    elif module_name == 'analysis.discrete_motor':
+      import analysis.discrete_motor as module
+    elif module_name == 'analysis.pca_motor':
+      import analysis.pca_motor as module
+    elif module_name == 'analysis.training_motor':
+      import analysis.training_motor as module
+    elif module_name == 'analysis.umap_motor':
+      import analysis.umap_motor as module
+    elif module_name == 'analysis.generar_graficos_y_ranking':
+      import analysis.generar_graficos_y_ranking as module
+    elif module_name == 'analysis.plot_metricas_tesis':
+      import analysis.plot_metricas_tesis as module
+    elif module_name == 'instrucciones_uso':
+      import instrucciones_uso as module
     elif module_name == 'utils.editor_mediciones':
       import utils.editor_mediciones as module
     elif module_name == 'utils.actualizar_metadata':
@@ -101,6 +117,8 @@ if getattr(sys, 'frozen', False) and len(sys.argv) > 1 and (sys.argv[1].endswith
       import deep_learning.pca_analysis as module
     elif module_name == 'deep_learning.umap_analysis':
       import deep_learning.umap_analysis as module
+    elif module_name == 'deep_learning.experimento_grid_search_3_autoencoder':
+      import deep_learning.experimento_grid_search_3_autoencoder as module
     else:
       import importlib
       module = importlib.import_module(module_name)
@@ -2413,7 +2431,9 @@ def main():
     assets_dir = gui_dir / "assets"
     pictures_dir = Path.home() / "Pictures"
     
-    search_dirs = [assets_dir, gui_dir, root_dir, pictures_dir]
+    search_dirs = [assets_dir, gui_dir, root_dir, Path(get_project_root()), pictures_dir]
+    if hasattr(sys, '_MEIPASS'):
+      search_dirs.insert(0, Path(sys._MEIPASS))
     for search_dir in search_dirs:
       if search_dir.exists():
         for filename in os.listdir(search_dir):

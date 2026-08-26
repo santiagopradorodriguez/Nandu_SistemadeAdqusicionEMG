@@ -5,13 +5,6 @@
 # Descripción: Prepara el entorno y dependencias para generar el ejecutable.
 # ==============================================================================
 
-# ==============================================================================
-# Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
-# Autores: Lucas Braunstein y Santiago Prado
-# Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
-# Descripción: Prepara el entorno y dependencias para generar el ejecutable.
-# ==============================================================================
-
 import os
 import shutil
 
@@ -26,8 +19,22 @@ def crear_entorno_seguro():
     else:
         print(f"La carpeta ya existe: {dest_dir}")
 
-    # Ignoramos bases de datos, entornos y nuestra nueva carpeta de herramientas
-    ignorar_carpetas = {'base_de_datos_electrodos', 'base_de_datos_letras', 'analisis_comparativos', 'venv', '__pycache__', '.git', 'EMG_Ejecutable_Build', 'herramientas_build'}
+    # Ignoramos bases de datos, entornos, logs, resultados pesados y herramientas
+    ignorar_carpetas = {
+        'base_de_datos_electrodos', 'base_de_datos_letras', 'analisis_comparativos',
+        'analisis_de_sesiones', 'resultados', 'logs', 'venv', '__pycache__', '.git',
+        'EMG_Ejecutable_Build', 'herramientas_build', 'tests', 'build_linux',
+        'build_windows', 'dist', 'build', '.pytest_cache'
+    }
+
+    def ignorar_rutas(directorio, archivos):
+        ignorar = set()
+        for a in archivos:
+            if a in ('__pycache__', 'resultados_pca_umap', 'resultados_umap_supervisado', 'resultados_autoencoder', '.pytest_cache', '.git'):
+                ignorar.add(a)
+            elif a.endswith(('.pyc', '.pth', '.tar', '.zip', '.tmp')):
+                ignorar.add(a)
+        return ignorar
 
     for item in os.listdir(src_dir):
         src_path = os.path.join(src_dir, item)
@@ -37,11 +44,11 @@ def crear_entorno_seguro():
             if item not in ignorar_carpetas:
                 if os.path.exists(dest_path):
                     shutil.rmtree(dest_path)
-                shutil.copytree(src_path, dest_path)
+                shutil.copytree(src_path, dest_path, ignore=ignorar_rutas)
                 print(f"[OK] Copiada carpeta: {item}")
         else:
-            # Copiamos todos los archivos (excepto este mismo script)
-            if item != "crear_entorno_ejecutable.py":
+            # Copiamos todos los archivos fuente y recursos (excepto scripts de build o temporales)
+            if item not in ["crear_entorno_ejecutable.py", "argv_log.txt", "multiplexer_error.log"] and not item.endswith(('.pyc', '.tmp')):
                 shutil.copy2(src_path, dest_path)
                 print(f"[OK] Copiado archivo: {item}")
 
