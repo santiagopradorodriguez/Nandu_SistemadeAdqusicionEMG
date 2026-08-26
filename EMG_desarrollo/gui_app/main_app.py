@@ -99,8 +99,6 @@ if getattr(sys, 'frozen', False) and len(sys.argv) > 1 and (sys.argv[1].endswith
       import deep_learning.binarizacion.analisis_trevisan_bandas as module
     elif module_name == 'deep_learning.binarizacion.analisis_binario':
       import deep_learning.binarizacion.analisis_binario as module
-    elif module_name == 'deep_learning.machine_learning.analisis_xgboost':
-      import deep_learning.machine_learning.analisis_xgboost as module
     elif module_name == 'deep_learning.pipeline_autoencoder_gui':
       import deep_learning.pipeline_autoencoder_gui as module
     elif module_name == 'deep_learning.dataset_tools.visor_features':
@@ -887,8 +885,7 @@ class ReaperStyleHub(QMainWindow):
     self.tab_dl_ml.tab_umap_sup.btn_run.clicked.connect(self.run_umap_supervisado_nativo)
     # (Botones btn_run_motor y btn_run_training se conectarán en un futuro cuando sus respectivos scripts nativos estén implementados)
     
-    # Conectar los otros clasificadores (XGBoost, Trevisan, Autoencoders, Visor)
-    self.tab_dl_ml.btn_xgboost.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/machine_learning/analisis_xgboost.py"))
+    # Conectar los otros clasificadores (Trevisan, Autoencoders, Visor)
     self.tab_dl_ml.btn_trevisan.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/binarizacion/analisis_trevisan.py"))
     self.tab_dl_ml.btn_autoencoders.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/pipeline_autoencoder_gui.py"))
     self.tab_dl_ml.btn_visor_features.clicked.connect(lambda: self._launch_external("deep_learning/dataset_tools/visor_features.py"))

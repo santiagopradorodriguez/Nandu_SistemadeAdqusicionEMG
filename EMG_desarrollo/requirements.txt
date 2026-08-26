@@ -19,7 +19,6 @@ pyinstaller
 scikit-learn
 umap-learn
 seaborn
-xgboost
 tensorly
 numba
 pynndescent

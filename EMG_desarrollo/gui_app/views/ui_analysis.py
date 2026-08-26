@@ -572,10 +572,10 @@ class PcaTab(QWidget):
         self.layout.addWidget(scroll)
         
         l_grid_btns = QHBoxLayout()
-        self.btn_grid_search_2d = QPushButton(" 🔍 GRID SEARCH (2D)")
+        self.btn_grid_search_2d = QPushButton(" GRID SEARCH (2D)")
         self.btn_grid_search_2d.setStyleSheet("background-color: #66FCF1; color: black; font-weight: bold; padding: 10px; margin-bottom: 5px;")
         
-        self.btn_grid_search_3d = QPushButton(" 🔍 GRID SEARCH (3D)")
+        self.btn_grid_search_3d = QPushButton(" GRID SEARCH (3D)")
         self.btn_grid_search_3d.setStyleSheet("background-color: #45A29E; color: black; font-weight: bold; padding: 10px; margin-bottom: 5px;")
         
         l_grid_btns.addWidget(self.btn_grid_search_2d)
@@ -975,18 +975,15 @@ class MachineLearningPanel(QWidget):
         # 6. Otros Clasificadores y Herramientas
         self.tab_otros = QWidget()
         lyt_otros = QVBoxLayout(self.tab_otros)
-        self.btn_xgboost = QPushButton("Machine Learning: XGBoost")
-        self.btn_xgboost.setStyleSheet("padding: 15px; font-size: 14px; background-color: #331a00; color: #ffaa00; border: 1px solid #ffaa00;")
         self.btn_trevisan = QPushButton("Análisis de Binarización (Trevisan)")
         self.btn_trevisan.setStyleSheet("padding: 15px; font-size: 14px; background-color: #001a33; color: #00ffff; border: 1px solid #00ffff;")
         self.btn_visor_features = QPushButton("Visualizador de Features (PCA/UMAP)")
         self.btn_visor_features.setStyleSheet("padding: 15px; font-size: 14px; background-color: #330033; color: #ff00ff; border: 1px solid #ff00ff;")
         
-        lyt_otros.addWidget(self.btn_xgboost)
         lyt_otros.addWidget(self.btn_trevisan)
         lyt_otros.addWidget(self.btn_visor_features)
         lyt_otros.addStretch()
-        # self.tabs.addTab(self.tab_otros, "Herramientas Extra (XGBoost, Visor)")
+        # self.tabs.addTab(self.tab_otros, "Herramientas Extra (Trevisan, Visor)")
         
         self.layout.addWidget(self.tabs)
 

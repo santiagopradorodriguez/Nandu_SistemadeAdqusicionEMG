@@ -1670,7 +1670,7 @@ def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_tr
             pct = (curr / total_comb) * 100
             bar_len = 20
             filled = int(bar_len * curr // total_comb)
-            bar = '█' * filled + '░' * (bar_len - filled)
+            bar = '#' * filled + '-' * (bar_len - filled)
 
             is_best = False
             if (acc_score > best_acc) or (abs(acc_score - best_acc) < 1e-4 and sil_score > best_sil):
