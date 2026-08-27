@@ -22,7 +22,7 @@ if torch.cuda.is_available():
 from dataset_emg import EMGDataset
 from modelos import ConvAutoencoder1D
 
-def train_autoencoder(csv_path, epochs=150, batch_size=32, lr=1e-3, latent_dim=16, kernel_size=5, force_epochs=False, alpha=0.5, verbose=True, save_model=True):
+def train_autoencoder(csv_path, epochs=150, batch_size=16, lr=1e-3, latent_dim=8, kernel_size=5, force_epochs=False, alpha=0.5, verbose=True, save_model=True):
     # Forzar reproducibilidad absoluta EN CADA LLAMADA a la función
     SEED = 42
     random.seed(SEED)

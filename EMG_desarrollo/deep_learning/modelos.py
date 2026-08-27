@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 class ConvAutoencoder1D(nn.Module):
-    def __init__(self, latent_dim=32, target_length=100, kernel_size=5):
+    def __init__(self, latent_dim=8, target_length=100, kernel_size=5):
         super(ConvAutoencoder1D, self).__init__()
         self.target_length = target_length
         self.kernel_size = kernel_size

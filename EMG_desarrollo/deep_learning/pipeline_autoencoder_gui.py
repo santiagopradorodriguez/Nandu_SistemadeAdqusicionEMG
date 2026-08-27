@@ -108,8 +108,8 @@ class PipelineAutoencoderGUI:
         
         params_nn = [
             ("Épocas:", "150", "ent_epochs"),
-            ("Batch Size:", "32", "ent_batch"),
-            ("Latent Dim:", "16", "ent_latent"),
+            ("Batch Size:", "16", "ent_batch"),
+            ("Latent Dim:", "8", "ent_latent"),
             ("Kernel Size:", "5", "ent_kernel"),
             ("Alpha Loss:", "0.5", "ent_alpha_loss")
         ]
