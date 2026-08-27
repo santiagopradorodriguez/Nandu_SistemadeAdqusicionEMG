@@ -95,9 +95,30 @@ def decodificar_secuencia(carpeta_secuencia, modelo_path, alpha_ruido=1.0, smoot
         print("No se detectaron picos en el micrófono.")
         return
 
-    TARGET_LEN = target_length
+    # 3. Cargar Modelo y Deducir Arquitectura Dinámica
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Cargando modelo en dispositivo: {device}")
+    
+    checkpoint = torch.load(modelo_path, map_location=device)
+    state_dict = checkpoint if isinstance(checkpoint, dict) else checkpoint.state_dict()
+    
+    inferred_latent_dim = 16
+    inferred_target_length = target_length
+    
+    if 'encoder_fc.3.weight' in state_dict:
+        inferred_latent_dim = state_dict['encoder_fc.3.weight'].shape[0]
+    if 'encoder_fc.0.weight' in state_dict:
+        inferred_target_length = state_dict['encoder_fc.0.weight'].shape[1] // 32
+        
+    print(f"Arquitectura detectada en checkpoint -> Latent Dim: {inferred_latent_dim}D, Target Length por Canal: {inferred_target_length}")
+    
+    model = ConvAutoencoder1D(latent_dim=inferred_latent_dim, target_length=inferred_target_length).to(device)
+    model.load_state_dict(state_dict)
+    model.eval()
+
+    TARGET_LEN = inferred_target_length
     X_tensores = []
-    ventanas_validas_grafico = [] # Guardar las formas de onda crudas para plotear
+    ventanas_validas_grafico = [] # Guardar las formas de onda para plotear
     
     for win_idx, pico in enumerate(picos_mic):
         pre_samples = int(muestras_pulso * 0.4)
@@ -157,23 +178,15 @@ def decodificar_secuencia(carpeta_secuencia, modelo_path, alpha_ruido=1.0, smoot
             seg_rs[seg_rs < 0] = 0.0
             vector_concatenado.append(seg_rs)
             
-        tensor_sample = np.stack(vector_concatenado) # (3, 100)
+        tensor_sample = np.stack(vector_concatenado) # (3, TARGET_LEN)
         X_tensores.append(tensor_sample)
-        ventanas_validas_grafico.append(vector_concatenado) # Las 3 señales remuestreadas para plotear
+        ventanas_validas_grafico.append(vector_concatenado)
 
     if len(X_tensores) == 0:
         print("Ninguna ventana fue válida tras la extracción.")
         return
 
     # 4. Inferencia con la Red Neuronal
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Cargando modelo en dispositivo: {device}")
-    
-    # Asumimos latent_dim=16 como entrenamos por defecto
-    model = ConvAutoencoder1D(latent_dim=16).to(device)
-    model.load_state_dict(torch.load(modelo_path, map_location=device, weights_only=True))
-    model.eval()
-    
     X_torch = torch.tensor(np.array(X_tensores), dtype=torch.float32).to(device)
     
     mapa_vocales = {0: 'A', 1: 'E', 2: 'I', 3: 'O', 4: 'U'}
@@ -183,7 +196,7 @@ def decodificar_secuencia(carpeta_secuencia, modelo_path, alpha_ruido=1.0, smoot
         _, _, logits = model(X_torch)
         preds = torch.argmax(logits, dim=1).cpu().numpy()
         for p in preds:
-            predicciones.append(mapa_vocales[p])
+            predicciones.append(mapa_vocales.get(p, "?"))
             
     # Imprimir predicciones como texto
     print("\n--- SECUENCIA DE VOCALES PREDICHAS ---")
@@ -192,15 +205,16 @@ def decodificar_secuencia(carpeta_secuencia, modelo_path, alpha_ruido=1.0, smoot
 
     # 5. Graficar resultados ventana por ventana
     n_wins = len(ventanas_validas_grafico)
-    cols = 5
-    rows = int(np.ceil(n_wins / cols))
+    cols = min(5, n_wins) if n_wins > 0 else 1
+    rows = int(np.ceil(n_wins / cols)) if n_wins > 0 else 1
     
-    fig, axes = plt.subplots(rows, cols, figsize=(cols * 3, rows * 2.5))
-    fig.suptitle(f"Decodificación de Secuencia Continua: {os.path.basename(carpeta_secuencia)}", fontsize=16)
+    fig, axes = plt.subplots(rows, cols, figsize=(cols * 3.2, rows * 2.5))
+    fig.suptitle(f"Decodificación de Secuencia Continua: {os.path.basename(carpeta_secuencia)}", fontsize=14, fontweight='bold')
     
-    # Asegurar que axes sea iterable y plano
     if n_wins == 1:
         axes = [axes]
+    elif rows == 1 and cols > 1:
+        axes = list(axes)
     else:
         axes = axes.flatten()
         
@@ -210,20 +224,37 @@ def decodificar_secuencia(carpeta_secuencia, modelo_path, alpha_ruido=1.0, smoot
             sigs = ventanas_validas_grafico[idx]
             vocal_pred = predicciones[idx]
             
-            ax.plot(sigs[0], label="C0 (Masetero)", color='blue')
-            ax.plot(sigs[1], label="C1 (Digástrico)", color='red')
-            ax.plot(sigs[2], label="C2 (Risorio)", color='green')
+            ax.plot(sigs[0], label="C0 (DAO)", color='#7000FF', linewidth=1.5)
+            ax.plot(sigs[1], label="C1 (Milohioideo)", color='#00FF88', linewidth=1.5)
+            ax.plot(sigs[2], label="C2 (Orbicular)", color='#FFE600', linewidth=1.5)
             
-            ax.set_title(f"Win {idx} -> {vocal_pred}", fontsize=12, fontweight='bold')
+            ax.set_title(f"Win {idx+1} -> Vocal: {vocal_pred}", fontsize=11, fontweight='bold')
             ax.set_xticks([])
             ax.set_yticks([])
+            ax.grid(True, alpha=0.2)
             if idx == 0:
-                ax.legend(fontsize=8)
+                ax.legend(fontsize=7, loc='upper right')
         else:
-            ax.axis('off') # Ocultar subplots sobrantes
+            ax.axis('off')
             
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    plt.show()
+    
+    out_dir = os.path.join(base_repo_dir, "resultados", "resultados_autoencoder")
+    os.makedirs(out_dir, exist_ok=True)
+    plot_path = os.path.join(out_dir, f"decodificacion_{os.path.basename(carpeta_secuencia)}.png")
+    plt.savefig(plot_path)
+    print(f"Gráfico de decodificación guardado en: {plot_path}")
+    plt.close(fig)
+    
+    # Abrir gráfico con visor del sistema
+    import subprocess
+    try:
+        if os.name == 'nt':
+            os.startfile(plot_path)
+        else:
+            subprocess.Popen(["xdg-open", plot_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
@@ -232,5 +263,7 @@ if __name__ == "__main__":
         print("Uso: python decodificador_continuo.py <ruta_carpeta_secuencia>")
         sys.exit(1)
         
-    modelo_path = os.path.join(base_repo_dir, "resultados", "resultados_autoencoder", "autoencoder_emg_16d.pth")
+    modelo_path = os.path.join(base_repo_dir, "resultados", "resultados_autoencoder", "autoencoder_emg.pth")
+    if not os.path.exists(modelo_path):
+        modelo_path = os.path.join(base_repo_dir, "resultados", "resultados_autoencoder", "autoencoder_emg_16d.pth")
     decodificar_secuencia(carpeta, modelo_path)

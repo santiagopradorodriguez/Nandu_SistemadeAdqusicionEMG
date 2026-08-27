@@ -418,7 +418,12 @@ class PipelineAutoencoderGUI:
             sys.stdout = LogWriter(self.log)
             
             import deep_learning.decodificador_continuo as dc
-            modelo_path = self._find_model_file()
+            try:
+                _, _, v_latent, _, _ = self.get_params_nn()
+            except ValueError:
+                v_latent = None
+                
+            modelo_path = self._find_model_file(v_latent)
             if not modelo_path:
                 raise Exception("No se encontró ningún modelo de Autoencoder (.pth) entrenado.")
                 
