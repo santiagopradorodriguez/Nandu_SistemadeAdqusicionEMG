@@ -48,15 +48,15 @@ class FeatureViewerApp:
         # Selector de Fuente de Datos
         self.fuente_var = tk.StringVar(value="PCA/UMAP")
         self.fuente_selector = ttk.Combobox(left_panel, textvariable=self.fuente_var, values=["PCA/UMAP", "Tensorial (Autoencoder)"], state="readonly")
-        self.fuente_selector.pack(fill="x", pady=(0, 10))
+        self.fuente_selector.pack(fill="x", pady=(0, 5))
         self.fuente_selector.bind("<<ComboboxSelected>>", self.on_fuente_selected)
         
-        # Ocultamos el selector de Datasets que venía por defecto si solo usamos los exports
-        # (Si se prefiere mantener el load manual, lo dejamos)
-        self.dataset_var = tk.StringVar()
-        # No mostramos el dataset_selector antiguo
-        # self.dataset_selector = ttk.Combobox(left_panel, textvariable=self.dataset_var, state="readonly")
-        # self.dataset_selector.pack(fill="x", pady=(0, 10))
+        # Selector de Sets / Corridas detectadas
+        self.available_sets = {}
+        self.set_var = tk.StringVar()
+        self.set_selector = ttk.Combobox(left_panel, textvariable=self.set_var, state="readonly")
+        self.set_selector.pack(fill="x", pady=(0, 10))
+        self.set_selector.bind("<<ComboboxSelected>>", self.on_set_selected)
         
         self.lbl_info = tk.Label(left_panel, text="No hay archivo cargado", bg=self.bg_dark, fg=self.fg_text, wraplength=280)
         self.lbl_info.pack(fill="x", pady=(0, 10))
@@ -102,30 +102,71 @@ class FeatureViewerApp:
             
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.right_panel)
         self.canvas.get_tk_widget().pack(fill="both", expand=True)
-        self.ax.set_title("Selecciona una toma de la lista para visualizar las 300 variables")
+        self.ax.set_title("Selecciona una toma de la lista para visualizar las variables")
 
     def auto_load_default(self):
-        self.on_fuente_selected(None)
+        if len(sys.argv) > 1 and os.path.exists(sys.argv[1]) and sys.argv[1].endswith(".csv"):
+            self.process_csv(sys.argv[1])
+        else:
+            self.on_fuente_selected(None)
 
     def on_fuente_selected(self, event):
         fuente = self.fuente_var.get()
         script_dir = os.path.dirname(os.path.abspath(__file__))
         base_repo_dir = os.path.abspath(os.path.join(script_dir, "..", ".."))
         
+        search_dirs = []
         if fuente == "PCA/UMAP":
-            path = os.path.join(base_repo_dir, "resultados", "resultados_pca_umap", "caracteristicas_exportadas.csv")
+            search_dirs = [
+                os.path.join(base_repo_dir, "deep_learning", "pca_umap_clustering", "resultados_pca_umap"),
+                os.path.join(base_repo_dir, "resultados", "resultados_pca_umap"),
+                os.path.join(base_repo_dir, "resultados_pca_umap"),
+            ]
         else:
-            path = os.path.join(base_repo_dir, "resultados", "resultados_pca_tensorial", "caracteristicas_exportadas.csv")
+            search_dirs = [
+                os.path.join(base_repo_dir, "resultados", "resultados_pca_tensorial"),
+                os.path.join(base_repo_dir, "deep_learning", "resultados_pca_tensorial"),
+                os.path.join(base_repo_dir, "resultados_pca_tensorial"),
+            ]
             
-        if os.path.exists(path):
-            self.process_csv(path)
+        self.available_sets = {}
+        for s_dir in search_dirs:
+            if not os.path.exists(s_dir):
+                continue
+            # Archivo en la raiz del directorio de resultados
+            root_csv = os.path.join(s_dir, "caracteristicas_exportadas.csv")
+            if os.path.exists(root_csv):
+                self.available_sets["(Último / Raíz)"] = root_csv
+            # Buscar en subcarpetas (sets de experimentos nombrados)
+            for item in os.listdir(s_dir):
+                subpath = os.path.join(s_dir, item)
+                if os.path.isdir(subpath):
+                    cand_csv = os.path.join(subpath, "caracteristicas_exportadas.csv")
+                    if os.path.exists(cand_csv):
+                        mtime = os.path.getmtime(cand_csv)
+                        self.available_sets[item] = cand_csv
+
+        if self.available_sets:
+            # Ordenar por fecha de modificación más reciente
+            sorted_sets = sorted(self.available_sets.keys(), key=lambda k: os.path.getmtime(self.available_sets[k]), reverse=True)
+            self.set_selector['values'] = sorted_sets
+            first_set = sorted_sets[0]
+            self.set_var.set(first_set)
+            self.process_csv(self.available_sets[first_set])
         else:
+            self.set_selector['values'] = []
+            self.set_var.set("")
             self.data = []
             self.tomas = []
             self.listbox.delete(0, tk.END)
-            self.lbl_info.config(text=f"No se encontró:\n{os.path.basename(os.path.dirname(path))}/caracteristicas_exportadas.csv")
+            self.lbl_info.config(text="No se encontraron archivos 'caracteristicas_exportadas.csv'.\nEjecuta PCA o carga un CSV manualmente.")
             self.ax.clear()
             self.canvas.draw()
+
+    def on_set_selected(self, event):
+        selected = self.set_var.get()
+        if selected in self.available_sets:
+            self.process_csv(self.available_sets[selected])
 
     def load_csv(self):
         file_path = filedialog.askopenfilename(
@@ -173,86 +214,40 @@ class FeatureViewerApp:
     def plot_data(self, idx):
         row = self.data[idx]
         
-        ch0_vals = []
-        ch1_vals = []
-        ch2_vals = []
-        
-        # Auto-detectar la resolución de los datos (ej: 100, 250, 500 puntos)
+        # Auto-detectar canales presentes
+        channels_found = []
+        for ch_idx in range(8):
+            if f"Ch{ch_idx}_T0" in row:
+                channels_found.append(ch_idx)
+                
+        if not channels_found:
+            messagebox.showwarning("Aviso", "No se encontraron columnas de canales (ChX_T0).")
+            return
+            
+        # Auto-detectar la resolución de los datos (t_max)
         t_max = 0
-        while f"Ch0_T{t_max}" in row:
+        first_ch = channels_found[0]
+        while f"Ch{first_ch}_T{t_max}" in row:
             t_max += 1
             
         if t_max == 0:
-            messagebox.showwarning("Aviso", "No se encontraron columnas de tiempo (Ch0_TX).")
+            messagebox.showwarning("Aviso", "No se encontraron puntos temporales.")
             return
-            
+
+        channel_data = {}
         try:
-            for t in range(t_max):
-                v0 = row.get(f"Ch0_T{t}", "0.0")
-                v1 = row.get(f"Ch1_T{t}", "0.0")
-                v2 = row.get(f"Ch2_T{t}", "0.0")
-                
-                if v0 == "": v0 = "0.0"
-                if v1 == "": v1 = "0.0"
-                if v2 == "": v2 = "0.0"
-                
-                ch0_vals.append(float(v0))
-                ch1_vals.append(float(v1))
-                ch2_vals.append(float(v2))
+            for ch in channels_found:
+                vals = []
+                for t in range(t_max):
+                    v = row.get(f"Ch{ch}_T{t}", "0.0")
+                    if v == "" or v is None: v = "0.0"
+                    vals.append(float(v))
+                channel_data[ch] = vals
         except ValueError:
             messagebox.showwarning("Aviso", "Error al parsear los datos numéricos.")
             return
 
         self.fig.clear()
-        is_stft = "stft" in self.dataset_var.get().lower()
-        
-        if is_stft:
-            ax0 = self.fig.add_subplot(311)
-            ax1 = self.fig.add_subplot(312)
-            ax2 = self.fig.add_subplot(313)
-            
-            for ax in [ax0, ax1, ax2]:
-                ax.set_facecolor(self.bg_panel)
-                ax.tick_params(colors="white")
-                for spine in ax.spines.values():
-                    spine.set_edgecolor(self.fg_text)
-                    
-            # Intentar deducir la resolución de frecuencia (f_bins) basándose en la longitud del array aplanado
-            f_bins_options = [251, 51] # 251 bins = ventana 250ms (mejor para EMG), 51 bins = ventana 50ms
-            f_bins = None
-            t_bins = None
-            
-            for possible_f in f_bins_options:
-                if t_max % possible_f == 0:
-                    f_bins = possible_f
-                    t_bins = t_max // f_bins
-                    break
-                    
-            if f_bins is not None:
-                img0 = np.array(ch0_vals).reshape(f_bins, t_bins)
-                img1 = np.array(ch1_vals).reshape(f_bins, t_bins)
-                img2 = np.array(ch2_vals).reshape(f_bins, t_bins)
-                
-                # Para mayor visibilidad, aplicamos un poco de contraste
-                vmax = np.max([img0.max(), img1.max(), img2.max()]) * 0.8
-                
-                ax0.imshow(img0, aspect='auto', origin='lower', cmap='magma', vmax=vmax)
-                ax1.imshow(img1, aspect='auto', origin='lower', cmap='magma', vmax=vmax)
-                ax2.imshow(img2, aspect='auto', origin='lower', cmap='magma', vmax=vmax)
-                
-                ax0.set_title(f"Canal 0 (Masetero) - STFT ({t_bins}x{f_bins})", color=self.cyan_neon)
-                ax1.set_title("Canal 1 (Orbicular) - STFT", color=self.cyan_neon)
-                ax2.set_title("Canal 2 (Cigomático) - STFT", color=self.cyan_neon)
-                
-                ax2.set_xlabel("Ventanas temporales", color="white")
-                ax1.set_ylabel("Frecuencia (bins)", color="white")
-            else:
-                ax0.set_title(f"Error STFT: {t_max} no es divisible por {f_bins} bins.", color="red")
-                
-            self.fig.tight_layout()
-            self.canvas.draw()
-            return
-
         self.ax = self.fig.add_subplot(111)
         self.ax.set_facecolor(self.bg_panel)
         self.ax.tick_params(colors="white")
@@ -262,30 +257,39 @@ class FeatureViewerApp:
         for spine in self.ax.spines.values():
             spine.set_edgecolor(self.fg_text)
             
-        time_axis = np.linspace(-50, 50, t_max) # Asumiendo ventana centrada en %
+        time_axis = np.linspace(-50, 50, t_max) # Ventana normalizada (%)
         
-        self.ax.plot(time_axis, ch0_vals, label='Canal 0 (Masetero)', color='#45B7D1', linewidth=2)
-        self.ax.plot(time_axis, ch1_vals, label='Canal 1 (Orbicular)', color='#FF6B6B', linewidth=2)
-        self.ax.plot(time_axis, ch2_vals, label='Canal 2 (Cigomático)', color='#C5C6C7', linewidth=2)
+        channel_meta = {
+            0: {"name": "Canal 0 (DAO)", "color": "#7000FF"},
+            1: {"name": "Canal 1 (Milohioideo)", "color": "#00FF88"},
+            2: {"name": "Canal 2 (Orbicular)", "color": "#FFE600"},
+            3: {"name": "Canal 3 (Micrófono)", "color": "#FF003C"},
+        }
+        
+        default_colors = ["#7000FF", "#00FF88", "#FFE600", "#FF003C", "#00FFFF", "#FF00FF"]
         
         # Encontrar y graficar los picos de las derivadas
         def plot_peak(ch_np, color):
-            if np.max(ch_np) == 0: return
+            if len(ch_np) == 0 or np.max(ch_np) == 0: return
             grad = np.gradient(ch_np)
-            win = max(1, len(ch_np) // 10) # Suavizado ligero adaptativo
+            win = max(1, len(ch_np) // 10)
             if win > 1: grad = np.convolve(grad, np.ones(win)/win, mode='same')
             idx_pico = np.argmax(grad)
-            self.ax.plot(time_axis[idx_pico], ch_np[idx_pico], 'o', color=color, markersize=8)
-            self.ax.axvline(time_axis[idx_pico], color=color, linestyle=':', alpha=0.5)
+            self.ax.plot(time_axis[idx_pico], ch_np[idx_pico], 'o', color=color, markersize=7)
+            self.ax.axvline(time_axis[idx_pico], color=color, linestyle=':', alpha=0.4)
 
-        plot_peak(np.array(ch0_vals), '#45B7D1')
-        plot_peak(np.array(ch1_vals), '#FF6B6B')
-        plot_peak(np.array(ch2_vals), '#C5C6C7')
+        for ch in channels_found:
+            meta = channel_meta.get(ch, {"name": f"Canal {ch}", "color": default_colors[ch % len(default_colors)]})
+            c_name = meta["name"]
+            c_color = meta["color"]
+            c_vals = channel_data[ch]
+            self.ax.plot(time_axis, c_vals, label=c_name, color=c_color, linewidth=2)
+            plot_peak(np.array(c_vals), c_color)
         
-        self.ax.axvline(x=0, color='#F3E94C', linestyle='--', linewidth=2, alpha=0.8, label='Centro Ventana (Pico/Onset Micrófono)')
+        self.ax.axvline(x=0, color='#66FCF1', linestyle='--', linewidth=2, alpha=0.8, label='Centro Ventana (Onset)')
         
-        self.ax.set_title(f"Características Dinámicas - Toma: {row['Toma']}", color=self.cyan_neon)
-        self.ax.set_xlabel('Tiempo relativo al pico del micrófono (%)')
+        self.ax.set_title(f"Características Dinámicas - Toma: {row.get('Toma', '')} [Vocal: {row.get('Vocal', '')}]", color=self.cyan_neon)
+        self.ax.set_xlabel('Tiempo relativo al Onset (%)')
         self.ax.set_ylabel('Amplitud Normalizada')
         self.ax.legend(facecolor=self.bg_dark, edgecolor=self.cyan_neon, labelcolor='white', loc='upper right')
         self.ax.grid(True, color=self.fg_text, alpha=0.2)

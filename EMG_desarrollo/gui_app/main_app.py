@@ -903,6 +903,7 @@ class ReaperStyleHub(QMainWindow):
     self.tab_dl_ml.tab_pca.btn_grid_search_2d.clicked.connect(lambda checked=False: self.run_pca_grid_search_nativo(n_components=2))
     self.tab_dl_ml.tab_pca.btn_grid_search_3d.clicked.connect(lambda checked=False: self.run_pca_grid_search_nativo(n_components=3))
     self.tab_dl_ml.tab_pca.btn_run.clicked.connect(self.run_pca_nativo)
+    self.tab_dl_ml.tab_pca.btn_visor_features.clicked.connect(lambda: self._launch_external("deep_learning/dataset_tools/visor_features.py"))
     self.tab_dl_ml.tab_umap.btn_run.clicked.connect(self.run_umap_nativo)
     self.tab_dl_ml.tab_umap_sup.btn_run.clicked.connect(self.run_umap_supervisado_nativo)
     # (Botones btn_run_motor y btn_run_training se conectarán en un futuro cuando sus respectivos scripts nativos estén implementados)
@@ -910,7 +911,8 @@ class ReaperStyleHub(QMainWindow):
     # Conectar los otros clasificadores (Trevisan, Autoencoders, Visor)
     self.tab_dl_ml.btn_trevisan.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/binarizacion/analisis_trevisan.py"))
     self.tab_dl_ml.btn_autoencoders.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/pipeline_autoencoder_gui.py"))
-    self.tab_dl_ml.btn_visor_features.clicked.connect(lambda: self._launch_external("deep_learning/dataset_tools/visor_features.py"))
+    if hasattr(self.tab_dl_ml, 'btn_visor_features'):
+      self.tab_dl_ml.btn_visor_features.clicked.connect(lambda: self._launch_external("deep_learning/dataset_tools/visor_features.py"))
     
     self.tabs.addTab(self.tab_dl_ml, "4. MACHINE LEARNING")
 
@@ -1850,13 +1852,18 @@ if isinstance(res, tuple) and len(res) >= 3:
     best_sil = res[2]
 
 if best_config:
-    best_smooth, best_pts, best_alpha = best_config
+    if len(best_config) == 4:
+        best_smooth, best_pts, best_alpha, best_notch = best_config
+    else:
+        best_smooth, best_pts, best_alpha = best_config[:3]
+        best_notch = 2.0
     out_file = os.path.join(project_root, "deep_learning", "parametros_optimos_pca.json")
     with open(out_file, "w") as f:
         json.dump({
             "smooth_ms": best_smooth,
             "target_length": best_pts,
             "alpha_ruido": best_alpha,
+            "notch_q": best_notch,
             "accuracy_clasificacion": best_acc,
             "silhouette_score": best_sil
         }, f, indent=4)
@@ -1866,6 +1873,7 @@ if best_config:
     print("  - Smooth (Envolvente): " + str(best_smooth) + " ms")
     print("  - Remuestreo (Pts):    " + str(best_pts))
     print("  - Alfa Ruido:          " + str(best_alpha))
+    print("  - Notch Q:             " + str(best_notch))
     print("  - Clasificación (%):   " + str(best_acc) + " %")
     print("  - Silhouette Score:    " + str(best_sil))
     print("---------------------------------------------------------")
@@ -1886,6 +1894,7 @@ if best_config:
                 best_smooth = data.get("smooth_ms", 90)
                 best_pts = data.get("target_length", 20)
                 best_alpha = data.get("alpha_ruido", 0.5)
+                best_notch = data.get("notch_q", 2.0)
                 best_acc = data.get("accuracy_clasificacion", 0.0)
                 best_sil = data.get("silhouette_score", 0.0)
 
@@ -1894,10 +1903,12 @@ if best_config:
                     pca_tab.inp_alpha_2d.setValue(best_alpha)
                     pca_tab.inp_smooth_2d.setValue(best_smooth)
                     pca_tab.inp_pts_2d.setValue(best_pts)
+                    pca_tab.inp_notch_2d.setValue(best_notch)
                 elif n_components == 3:
                     pca_tab.inp_alpha_3d.setValue(best_alpha)
                     pca_tab.inp_smooth_3d.setValue(best_smooth)
                     pca_tab.inp_pts_3d.setValue(best_pts)
+                    pca_tab.inp_notch_3d.setValue(best_notch)
 
                 from PySide6.QtWidgets import QMessageBox
                 QMessageBox.information(
@@ -1906,7 +1917,8 @@ if best_config:
                     f"¡Configuración Óptima Encontrada!\n\n"
                     f"- Envolvente (Smooth): {best_smooth} ms\n"
                     f"- Puntos Remuestreo: {best_pts}\n"
-                    f"- Alfa Ruido: {best_alpha}\n\n"
+                    f"- Alfa Ruido: {best_alpha}\n"
+                    f"- Notch Q: {best_notch}\n\n"
                     f"Precisión Clasificación (%): {best_acc:.2f}%\n"
                     f"Silhouette Score (PCA): {best_sil:.4f}\n\n"
                     f"Se han cargado automáticamente los parámetros en la interfaz."

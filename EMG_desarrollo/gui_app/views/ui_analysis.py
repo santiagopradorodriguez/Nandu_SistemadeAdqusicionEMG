@@ -593,6 +593,10 @@ class PcaTab(QWidget):
         self.btn_run.setStyleSheet("background-color: #00ffcc; color: black; font-weight: bold; padding: 10px;")
         self.layout.addWidget(self.btn_run)
 
+        self.btn_visor_features = QPushButton(" VISUALIZADOR DE FEATURES (PCA / UMAP)")
+        self.btn_visor_features.setStyleSheet("background-color: #2b0938; color: #e879f9; font-weight: bold; border: 1px solid #e879f9; padding: 10px; margin-top: 4px;")
+        self.layout.addWidget(self.btn_visor_features)
+
 class UmapTab(QWidget):
     def __init__(self):
         super().__init__()
