@@ -107,7 +107,7 @@ class PipelineAutoencoderGUI:
         grid_nn.pack(fill="x")
         
         params_nn = [
-            ("Épocas:", "150", "ent_epochs"),
+            ("Épocas:", "80", "ent_epochs"),
             ("Batch Size:", "16", "ent_batch"),
             ("Latent Dim:", "8", "ent_latent"),
             ("Kernel Size:", "5", "ent_kernel"),

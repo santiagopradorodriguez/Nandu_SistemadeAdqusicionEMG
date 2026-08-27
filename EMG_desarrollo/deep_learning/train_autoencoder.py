@@ -22,16 +22,17 @@ if torch.cuda.is_available():
 from dataset_emg import EMGDataset
 from modelos import ConvAutoencoder1D
 
-def train_autoencoder(csv_path, epochs=150, batch_size=16, lr=1e-3, latent_dim=8, kernel_size=5, force_epochs=False, alpha=0.5, verbose=True, save_model=True):
-    # Forzar reproducibilidad absoluta EN CADA LLAMADA a la función
-    SEED = 42
-    random.seed(SEED)
-    np.random.seed(SEED)
-    torch.manual_seed(SEED)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(SEED)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
+def train_autoencoder(csv_path, epochs=80, batch_size=16, lr=1e-3, latent_dim=8, kernel_size=5, force_epochs=False, alpha=0.5, verbose=True, save_model=True):
+    def _set_seed(seed=42):
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
+            
+    _set_seed(42)
         
     if verbose:
         print(f"==================================================")
@@ -48,8 +49,6 @@ def train_autoencoder(csv_path, epochs=150, batch_size=16, lr=1e-3, latent_dim=8
     # ---------------------------------------------------------
     
     todas_las_tomas = dataset_train.tomas
-    # Extraer el identificador físico de la sesión (ej. 'T1_Lucas' de 'A_T1_Lucas_Win0')
-    # El formato es {Vocal}_{Toma}_{Paciente}_Win{X}
     def get_session_id(toma_str):
         parts = toma_str.split('_')
         if len(parts) >= 3:
@@ -57,16 +56,17 @@ def train_autoencoder(csv_path, epochs=150, batch_size=16, lr=1e-3, latent_dim=8
         return toma_str.split('_Win')[0]
         
     sesiones_base = [get_session_id(toma) for toma in todas_las_tomas]
-    sesiones_unicas = list(set(sesiones_base))
+    sesiones_unicas = sorted(list(set(sesiones_base)))
     
-    # Ordenar y mezclar de forma determinista (la semilla ya está fijada arriba)
-    sesiones_unicas.sort()
+    _set_seed(42)
     np.random.shuffle(sesiones_unicas)
     
     # 80% Sesiones para Train, 20% Sesiones para Validación
-    train_sesiones_size = int(0.8 * len(sesiones_unicas))
+    train_sesiones_size = max(1, int(0.8 * len(sesiones_unicas)))
     train_sesiones = set(sesiones_unicas[:train_sesiones_size])
     val_sesiones = set(sesiones_unicas[train_sesiones_size:])
+    if not val_sesiones:
+        val_sesiones = train_sesiones
     
     train_indices = [i for i, sesion in enumerate(sesiones_base) if sesion in train_sesiones]
     val_indices = [i for i, sesion in enumerate(sesiones_base) if sesion in val_sesiones]
@@ -84,6 +84,7 @@ def train_autoencoder(csv_path, epochs=150, batch_size=16, lr=1e-3, latent_dim=8
     train_dataset = torch.utils.data.Subset(dataset_train, train_indices)
     val_dataset = torch.utils.data.Subset(dataset_val, val_indices)
     
+    _set_seed(42)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
     
@@ -98,7 +99,7 @@ def train_autoencoder(csv_path, epochs=150, batch_size=16, lr=1e-3, latent_dim=8
     criterion_mse = nn.MSELoss() # Reconstrucción
     criterion_ce = nn.CrossEntropyLoss() # Clasificación
     optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=8)
     
     # Historial para graficar
     train_losses = []
