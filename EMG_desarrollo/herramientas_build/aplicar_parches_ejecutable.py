@@ -209,6 +209,8 @@ def lanzar_script(script_name, args=[]):
         "deep_learning/umap_analysis.py",
         "deep_learning/pipeline_autoencoder_gui.py",
         "deep_learning/experimento_grid_search_3_autoencoder.py",
+        "deep_learning/dataset_tools/visor_features.py",
+        "deep_learning/dataset_tools/generador_pca_tensorial.py",
     ]
     for archivo in archivos_auxiliares:
         ruta = os.path.join(build_dir, archivo)
