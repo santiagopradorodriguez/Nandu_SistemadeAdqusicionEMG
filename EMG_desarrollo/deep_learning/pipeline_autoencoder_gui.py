@@ -142,16 +142,16 @@ class PipelineAutoencoderGUI:
         self.btn_plotear.pack(side="left", fill="x", expand=True, padx=2, ipady=8)
         
         # --- LOG CONSOLE ---
-        self.log_text = tk.Text(main_frame, height=8, bg="#111111", fg="#00FF00", font=("Consolas", 9), state="disabled")
-        self.log_text.pack(fill="both", expand=True, pady=5)
+        self.log_text = tk.Text(main_frame, height=5, bg="#111111", fg="#00FF00", font=("Consolas", 9), state="disabled")
+        self.log_text.pack(fill="x", expand=False, pady=5)
         
         # --- HERRAMIENTAS ADICIONALES ---
-        frame_tools = tk.Frame(main_frame, bg=self.bg_dark)
-        frame_tools.pack(fill="x", pady=15)
+        frame_tools = tk.LabelFrame(main_frame, text=" 4. Herramientas Avanzadas y Búsqueda ", bg=self.bg_panel, fg=self.cyan_neon, font=("Arial", 11, "bold"), padx=10, pady=8)
+        frame_tools.pack(fill="x", pady=8)
         
-        tk.Button(frame_tools, text="VISUALIZADOR DE FEATURES", bg="#333333", fg="white", font=("Arial", 10, "bold"), command=self.lanzar_visor).pack(fill="x", expand=True, padx=2, pady=2, ipady=5)
-        tk.Button(frame_tools, text="GRID SEARCH AUTOENCODER (36 COMBINACIONES)", bg="#333333", fg="#FFE600", font=("Arial", 10, "bold"), command=self.ejecutar_grid_search).pack(fill="x", expand=True, padx=2, pady=2, ipady=5)
-        tk.Button(frame_tools, text="DECODIFICAR SECUENCIA CONTINUA", bg="#333333", fg="#00FFFF", font=("Arial", 10, "bold"), command=self.lanzar_decodificador_continuo).pack(fill="x", expand=True, padx=2, pady=2, ipady=5)
+        tk.Button(frame_tools, text="VISOR DE FEATURES", bg="#222222", fg="white", font=("Arial", 9, "bold"), command=self.lanzar_visor).pack(side="left", fill="x", expand=True, padx=3, ipady=6)
+        tk.Button(frame_tools, text="GRID SEARCH (36 COMB.)", bg="#2b2600", fg="#FFE600", font=("Arial", 9, "bold"), command=self.ejecutar_grid_search).pack(side="left", fill="x", expand=True, padx=3, ipady=6)
+        tk.Button(frame_tools, text="DECODIFICADOR CONTINUO", bg="#002b33", fg="#00FFFF", font=("Arial", 9, "bold"), command=self.lanzar_decodificador_continuo).pack(side="left", fill="x", expand=True, padx=3, ipady=6)
         
         self.cargar_mediciones()
 

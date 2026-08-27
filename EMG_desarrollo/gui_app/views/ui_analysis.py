@@ -985,9 +985,23 @@ class MachineLearningPanel(QWidget):
         # 5. Autoencoders
         self.tab_autoencoders = QWidget()
         lyt_autoencoders = QVBoxLayout(self.tab_autoencoders)
-        self.btn_autoencoders = QPushButton("Pipeline Maestro: Autoencoder")
-        self.btn_autoencoders.setStyleSheet("padding: 15px; font-size: 14px; background-color: #00331a; color: #00ffaa; border: 1px solid #00ffaa;")
+        
+        self.btn_autoencoders = QPushButton("Pipeline Maestro: Autoencoder (GUI)")
+        self.btn_autoencoders.setStyleSheet("padding: 14px; font-size: 13px; font-weight: bold; background-color: #00331a; color: #00ffaa; border: 1px solid #00ffaa; border-radius: 4px;")
+        
+        self.btn_grid_search_ae = QPushButton("Grid Search: Autoencoder (36 Combinaciones)")
+        self.btn_grid_search_ae.setStyleSheet("padding: 14px; font-size: 13px; font-weight: bold; background-color: #332b00; color: #ffe600; border: 1px solid #ffe600; border-radius: 4px;")
+        
+        self.btn_decodificador_ae = QPushButton("Decodificador de Secuencia Continua")
+        self.btn_decodificador_ae.setStyleSheet("padding: 14px; font-size: 13px; font-weight: bold; background-color: #002b33; color: #00ffff; border: 1px solid #00ffff; border-radius: 4px;")
+        
+        self.btn_visor_features_ae = QPushButton("Visualizador de Features (Matriz de Tensores)")
+        self.btn_visor_features_ae.setStyleSheet("padding: 14px; font-size: 13px; font-weight: bold; background-color: #330033; color: #ff00ff; border: 1px solid #ff00ff; border-radius: 4px;")
+        
         lyt_autoencoders.addWidget(self.btn_autoencoders)
+        lyt_autoencoders.addWidget(self.btn_grid_search_ae)
+        lyt_autoencoders.addWidget(self.btn_decodificador_ae)
+        lyt_autoencoders.addWidget(self.btn_visor_features_ae)
         lyt_autoencoders.addStretch()
         self.tabs.addTab(self.tab_autoencoders, "Autoencoders")
         

@@ -911,6 +911,12 @@ class ReaperStyleHub(QMainWindow):
     # Conectar los otros clasificadores (Trevisan, Autoencoders, Visor)
     self.tab_dl_ml.btn_trevisan.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/binarizacion/analisis_trevisan.py"))
     self.tab_dl_ml.btn_autoencoders.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/pipeline_autoencoder_gui.py"))
+    if hasattr(self.tab_dl_ml, 'btn_grid_search_ae'):
+      self.tab_dl_ml.btn_grid_search_ae.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/grid_search_autoencoder.py"))
+    if hasattr(self.tab_dl_ml, 'btn_decodificador_ae'):
+      self.tab_dl_ml.btn_decodificador_ae.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/decodificador_continuo.py"))
+    if hasattr(self.tab_dl_ml, 'btn_visor_features_ae'):
+      self.tab_dl_ml.btn_visor_features_ae.clicked.connect(lambda: self._launch_external("deep_learning/dataset_tools/visor_features.py"))
     if hasattr(self.tab_dl_ml, 'btn_visor_features'):
       self.tab_dl_ml.btn_visor_features.clicked.connect(lambda: self._launch_external("deep_learning/dataset_tools/visor_features.py"))
     
