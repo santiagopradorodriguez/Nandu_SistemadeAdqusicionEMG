@@ -259,6 +259,63 @@ class PipelineAutoencoderGUI:
         self.log("=========================================")
         threading.Thread(target=self._entrenamiento_thread, args=params).start()
 
+    def _find_dataset_csv(self):
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        base_repo_dir = os.path.abspath(os.path.join(script_dir, ".."))
+        
+        candidates = [
+            os.path.join(base_repo_dir, "resultados", "resultados_pca_tensorial", "caracteristicas_exportadas.csv"),
+            os.path.join(base_repo_dir, "resultados", "resultados_pca_umap", "caracteristicas_exportadas.csv"),
+            os.path.join(base_repo_dir, "deep_learning", "pca_umap_clustering", "resultados_pca_umap", "caracteristicas_exportadas.csv"),
+            os.path.join(base_repo_dir, "resultados_pca_tensorial", "caracteristicas_exportadas.csv"),
+            os.path.join(base_repo_dir, "resultados_pca_umap", "caracteristicas_exportadas.csv"),
+        ]
+        
+        umap_res_dir = os.path.join(base_repo_dir, "deep_learning", "pca_umap_clustering", "resultados_pca_umap")
+        if os.path.exists(umap_res_dir):
+            for item in os.listdir(umap_res_dir):
+                subpath = os.path.join(umap_res_dir, item)
+                if os.path.isdir(subpath):
+                    cand_csv = os.path.join(subpath, "caracteristicas_exportadas.csv")
+                    if os.path.exists(cand_csv):
+                        candidates.append(cand_csv)
+                        
+        for p in candidates:
+            if os.path.exists(p):
+                return p
+        return None
+
+    def _find_model_file(self, v_latent=None):
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        base_repo_dir = os.path.abspath(os.path.join(script_dir, ".."))
+        res_dir = os.path.join(base_repo_dir, "resultados", "resultados_autoencoder")
+        
+        candidates = []
+        if v_latent is not None:
+            candidates.append(os.path.join(res_dir, f"autoencoder_emg_{v_latent}d.pth"))
+            candidates.append(os.path.join(script_dir, f"autoencoder_emg_{v_latent}d.pth"))
+            
+        candidates.extend([
+            os.path.join(res_dir, "autoencoder_emg.pth"),
+            os.path.join(res_dir, "autoencoder_emg_16d.pth"),
+            os.path.join(res_dir, "autoencoder_emg_3d.pth"),
+            os.path.join(res_dir, "autoencoder_emg_2d.pth"),
+            os.path.join(script_dir, "autoencoder_emg.pth"),
+            os.path.join(script_dir, "autoencoder_emg_16d.pth"),
+        ])
+        
+        for p in candidates:
+            if os.path.exists(p):
+                return p
+                
+        if os.path.exists(res_dir):
+            pths = [os.path.join(res_dir, f) for f in os.listdir(res_dir) if f.endswith(".pth")]
+            if pths:
+                pths.sort(key=os.path.getmtime, reverse=True)
+                return pths[0]
+                
+        return None
+
     def _entrenamiento_thread(self, v_epochs, v_batch, v_latent, v_alpha_loss, v_force):
         import traceback
         try:
@@ -270,13 +327,11 @@ class PipelineAutoencoderGUI:
                 def flush(self): pass
             sys.stdout = LogWriter(self.log)
             
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            base_repo_dir = os.path.abspath(os.path.join(script_dir, ".."))
-            csv_file = os.path.join(base_repo_dir, "resultados", "resultados_pca_tensorial", "caracteristicas_exportadas.csv")
-            
-            if not os.path.exists(csv_file):
-                raise Exception(f"No se encontró el dataset en {csv_file}\nDebes extraer el dataset primero.")
+            csv_file = self._find_dataset_csv()
+            if not csv_file:
+                raise Exception("No se encontró el dataset 'caracteristicas_exportadas.csv'.\nDebes hacer clic en '1. EXTRAER DATASET' primero.")
                 
+            self.log(f"Usando dataset: {csv_file}")
             ta.train_autoencoder(csv_file, epochs=v_epochs, batch_size=v_batch, latent_dim=v_latent, force_epochs=v_force, alpha=v_alpha_loss)
             
             sys.stdout = old_stdout
@@ -313,14 +368,16 @@ class PipelineAutoencoderGUI:
                 def flush(self): pass
             sys.stdout = LogWriter(self.log)
             
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            base_repo_dir = os.path.abspath(os.path.join(script_dir, ".."))
-            csv_file = os.path.join(base_repo_dir, "resultados", "resultados_pca_tensorial", "caracteristicas_exportadas.csv")
-            model_path = os.path.join(base_repo_dir, "resultados", "resultados_autoencoder", f"autoencoder_emg_{v_latent}d.pth")
-            
-            if not os.path.exists(csv_file) or not os.path.exists(model_path):
-                raise Exception("Faltan archivos.\nDebes extraer el dataset y entrenar el modelo primero.")
+            csv_file = self._find_dataset_csv()
+            if not csv_file:
+                raise Exception("Falta el archivo de características exportadas (caracteristicas_exportadas.csv).\nDebes hacer clic en '1. EXTRAER DATASET' primero.")
                 
+            model_path = self._find_model_file(v_latent)
+            if not model_path:
+                raise Exception("No se encontró ningún modelo de Autoencoder entrenado (.pth).\nDebes hacer clic en '2. ENTRENAR AUTOENCODER' primero.")
+                
+            self.log(f"Dataset de evaluación: {csv_file}")
+            self.log(f"Modelo cargado: {model_path}")
             pls.plot_latent_space(csv_file, model_path, latent_dim=v_latent)
             
             sys.stdout = old_stdout
@@ -347,7 +404,6 @@ class PipelineAutoencoderGUI:
         self.log(f"Lanzando Decodificador Continuo para: {os.path.basename(carpeta)}...")
         self.toggle_buttons("disabled")
         
-        # Ejecutar en un hilo para mostrar prints en el log de la GUI
         threading.Thread(target=self._decodificador_thread, args=(carpeta,)).start()
 
     def _decodificador_thread(self, carpeta):
@@ -361,11 +417,11 @@ class PipelineAutoencoderGUI:
                 def flush(self): pass
             sys.stdout = LogWriter(self.log)
             
-            # Importar e invocar la funcion directamente en lugar de subproceso
             import deep_learning.decodificador_continuo as dc
-            modelo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "resultados", "resultados_autoencoder", "autoencoder_emg_16d.pth")
-            
-            # Traer parametros de ruido/notch actuales de la GUI si se quiere
+            modelo_path = self._find_model_file()
+            if not modelo_path:
+                raise Exception("No se encontró ningún modelo de Autoencoder (.pth) entrenado.")
+                
             val_alpha, _, _, val_smooth, val_target, val_notch_q, val_manual = self.get_params_dsp()
             
             dc.decodificar_secuencia(carpeta, modelo_path, alpha_ruido=val_alpha, smooth_ms=val_smooth, notch_q=val_notch_q, use_manual_exclusions=val_manual, target_length=val_target)

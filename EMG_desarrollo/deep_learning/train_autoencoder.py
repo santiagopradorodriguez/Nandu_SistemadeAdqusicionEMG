@@ -198,9 +198,13 @@ def train_autoencoder(csv_path, epochs=150, batch_size=32, lr=1e-3, latent_dim=1
     if save_model:
         out_dir = os.path.join(base_repo_dir, "resultados", "resultados_autoencoder")
         os.makedirs(out_dir, exist_ok=True)
-        model_path = os.path.join(out_dir, "autoencoder_emg_16d.pth")
-        torch.save(best_model_wts if best_model_wts and not force_epochs else model.state_dict(), model_path)
-        if verbose: print(f"Modelo guardado en: {model_path}")
+        model_path = os.path.join(out_dir, f"autoencoder_emg_{latent_dim}d.pth")
+        weights_to_save = best_model_wts if best_model_wts and not force_epochs else model.state_dict()
+        torch.save(weights_to_save, model_path)
+        # Guardar también un alias global autoencoder_emg.pth
+        alias_path = os.path.join(out_dir, "autoencoder_emg.pth")
+        torch.save(weights_to_save, alias_path)
+        if verbose: print(f"Modelo guardado exitosamente en:\n  - {model_path}\n  - {alias_path}")
     
     # Graficar curva de Loss y Accuracy
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
