@@ -3,8 +3,9 @@ import torch
 import numpy as np
 import pandas as pd
 import umap
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-import seaborn as sns
 import seaborn as sns
 from sklearn.metrics import silhouette_score, confusion_matrix, accuracy_score
 
