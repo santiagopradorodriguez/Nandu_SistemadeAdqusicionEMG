@@ -36,13 +36,15 @@ def plot_latent_space(csv_path, model_path, latent_dim=16):
     else:
         target_length = inferred_target_length
         
-    print(f"Dimensiones activas -> Latent Dim: {latent_dim}D, Target Length por Canal: {target_length}")
+    kernel_size = state_dict['encoder_cnn.0.weight'].shape[2] if 'encoder_cnn.0.weight' in state_dict else 5
+        
+    print(f"Dimensiones activas -> Latent Dim: {latent_dim}D, Target Length por Canal: {target_length}, Kernel Size: {kernel_size}")
     
     # Si la dimensión del dataset no coincide con el target_length del modelo, recargar con ese target
     if dataset.tensors.shape[2] != target_length:
         dataset = EMGDataset(csv_path, target_length=target_length, apply_augmentation=False)
     
-    model = ConvAutoencoder1D(latent_dim=latent_dim, target_length=target_length).to(device)
+    model = ConvAutoencoder1D(latent_dim=latent_dim, target_length=target_length, kernel_size=kernel_size).to(device)
     model.load_state_dict(state_dict)
     model.eval()
     

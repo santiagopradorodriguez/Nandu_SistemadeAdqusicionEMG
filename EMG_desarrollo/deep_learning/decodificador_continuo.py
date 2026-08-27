@@ -106,15 +106,18 @@ def decodificar_secuencia(carpeta_secuencia, modelo_path, alpha_ruido=1.0, smoot
     
     inferred_latent_dim = 16
     inferred_target_length = target_length
+    inferred_kernel_size = 5
     
     if 'encoder_fc.3.weight' in state_dict:
         inferred_latent_dim = state_dict['encoder_fc.3.weight'].shape[0]
     if 'encoder_fc.0.weight' in state_dict:
         inferred_target_length = state_dict['encoder_fc.0.weight'].shape[1] // 32
+    if 'encoder_cnn.0.weight' in state_dict:
+        inferred_kernel_size = state_dict['encoder_cnn.0.weight'].shape[2]
         
-    print(f"Arquitectura detectada en checkpoint -> Latent Dim: {inferred_latent_dim}D, Target Length por Canal: {inferred_target_length}")
+    print(f"Arquitectura detectada en checkpoint -> Latent Dim: {inferred_latent_dim}D, Target Length por Canal: {inferred_target_length}, Kernel Size: {inferred_kernel_size}")
     
-    model = ConvAutoencoder1D(latent_dim=inferred_latent_dim, target_length=inferred_target_length).to(device)
+    model = ConvAutoencoder1D(latent_dim=inferred_latent_dim, target_length=inferred_target_length, kernel_size=inferred_kernel_size).to(device)
     model.load_state_dict(state_dict)
     model.eval()
 

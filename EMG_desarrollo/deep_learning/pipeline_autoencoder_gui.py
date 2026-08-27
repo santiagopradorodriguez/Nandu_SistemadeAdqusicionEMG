@@ -110,20 +110,23 @@ class PipelineAutoencoderGUI:
             ("Épocas:", "150", "ent_epochs"),
             ("Batch Size:", "32", "ent_batch"),
             ("Latent Dim:", "16", "ent_latent"),
+            ("Kernel Size:", "5", "ent_kernel"),
             ("Alpha Loss:", "0.5", "ent_alpha_loss")
         ]
         
         for i, (label_text, default_val, attr_name) in enumerate(params_nn):
-            tk.Label(grid_nn, text=label_text, bg=self.bg_panel, fg=self.fg_text).grid(row=0, column=i*2, sticky="e", padx=5, pady=5)
+            row = 0 if i < 3 else 1
+            col = (i % 3) * 2
+            tk.Label(grid_nn, text=label_text, bg=self.bg_panel, fg=self.fg_text).grid(row=row, column=col, sticky="e", padx=5, pady=5)
             ent = tk.Entry(grid_nn, width=8, bg="#111111", fg="white", insertbackground="white")
             ent.insert(0, default_val)
-            ent.grid(row=0, column=i*2+1, sticky="w", padx=5, pady=5)
+            ent.grid(row=row, column=col+1, sticky="w", padx=5, pady=5)
             setattr(self, attr_name, ent)
             
         # Checkbox forzar épocas
         self.var_force_epochs = tk.BooleanVar(value=False)
         self.chk_force_epochs = tk.Checkbutton(grid_nn, text="Forzar Épocas (Ignorar Checkpoint)", variable=self.var_force_epochs, bg=self.bg_panel, fg=self.fg_text, selectcolor=self.bg_dark)
-        self.chk_force_epochs.grid(row=1, column=0, columnspan=6, sticky="w", padx=5, pady=5)
+        self.chk_force_epochs.grid(row=2, column=0, columnspan=6, sticky="w", padx=5, pady=5)
             
         # --- BOTONES DE EJECUCION ---
         frame_btns = tk.Frame(main_frame, bg=self.bg_dark)
@@ -147,6 +150,7 @@ class PipelineAutoencoderGUI:
         frame_tools.pack(fill="x", pady=15)
         
         tk.Button(frame_tools, text="VISUALIZADOR DE FEATURES", bg="#333333", fg="white", font=("Arial", 10, "bold"), command=self.lanzar_visor).pack(fill="x", expand=True, padx=2, pady=2, ipady=5)
+        tk.Button(frame_tools, text="GRID SEARCH AUTOENCODER (36 COMBINACIONES)", bg="#333333", fg="#FFE600", font=("Arial", 10, "bold"), command=self.ejecutar_grid_search).pack(fill="x", expand=True, padx=2, pady=2, ipady=5)
         tk.Button(frame_tools, text="DECODIFICAR SECUENCIA CONTINUA", bg="#333333", fg="#00FFFF", font=("Arial", 10, "bold"), command=self.lanzar_decodificador_continuo).pack(fill="x", expand=True, padx=2, pady=2, ipady=5)
         
         self.cargar_mediciones()
@@ -180,6 +184,7 @@ class PipelineAutoencoderGUI:
             int(self.ent_epochs.get()),
             int(self.ent_batch.get()),
             int(self.ent_latent.get()),
+            int(self.ent_kernel.get()),
             float(self.ent_alpha_loss.get()),
             self.var_force_epochs.get()
         )
@@ -331,7 +336,7 @@ class PipelineAutoencoderGUI:
                 
         return None
 
-    def _entrenamiento_thread(self, v_epochs, v_batch, v_latent, v_alpha_loss, v_force):
+    def _entrenamiento_thread(self, v_epochs, v_batch, v_latent, v_kernel, v_alpha_loss, v_force):
         import traceback
         try:
             old_stdout = sys.stdout
@@ -347,7 +352,7 @@ class PipelineAutoencoderGUI:
                 raise Exception("No se encontró el dataset 'caracteristicas_exportadas.csv'.\nDebes hacer clic en '1. EXTRAER DATASET' primero.")
                 
             self.log(f"Usando dataset: {csv_file}")
-            ta.train_autoencoder(csv_file, epochs=v_epochs, batch_size=v_batch, latent_dim=v_latent, force_epochs=v_force, alpha=v_alpha_loss)
+            ta.train_autoencoder(csv_file, epochs=v_epochs, batch_size=v_batch, latent_dim=v_latent, kernel_size=v_kernel, force_epochs=v_force, alpha=v_alpha_loss)
             
             sys.stdout = old_stdout
             self.log("\n>>> ENTRENAMIENTO COMPLETADO <<<")
@@ -361,7 +366,7 @@ class PipelineAutoencoderGUI:
 
     def ejecutar_ploteo(self):
         try:
-            _, _, v_latent, _, _ = self.get_params_nn()
+            _, _, v_latent, _, _, _ = self.get_params_nn()
         except ValueError:
             self.show_error("Error", "Latent Dim inválido.")
             return
@@ -404,6 +409,56 @@ class PipelineAutoencoderGUI:
             self.show_error("Error", f"Ocurrió un error:\n{e}")
         finally:
             self.toggle_buttons("normal")
+
+    def ejecutar_grid_search(self):
+        try:
+            v_epochs, _, _, _, _, _ = self.get_params_nn()
+        except ValueError:
+            v_epochs = 60
+            
+        self.toggle_buttons("disabled")
+        self.log("=========================================")
+        self.log("INICIANDO GRID SEARCH AUTOENCODER (36 COMB.)")
+        self.log("=========================================")
+        threading.Thread(target=self._grid_search_thread, args=(v_epochs,)).start()
+
+    def _grid_search_thread(self, v_epochs):
+        import traceback
+        try:
+            old_stdout = sys.stdout
+            class LogWriter:
+                def __init__(self, log_func): self.log_func = log_func
+                def write(self, t): 
+                    if t.strip(): self.log_func(t.strip())
+                def flush(self): pass
+            sys.stdout = LogWriter(self.log)
+            
+            csv_file = self._find_dataset_csv()
+            if not csv_file:
+                raise Exception("Falta el archivo de características exportadas (caracteristicas_exportadas.csv).\nDebes hacer clic en '1. EXTRAER DATASET' primero.")
+                
+            import deep_learning.grid_search_autoencoder as gsa
+            df_res, campeon = gsa.run_grid_search(csv_file, epochs=min(v_epochs, 80))
+            
+            sys.stdout = old_stdout
+            self.log(f"\n>>> GRID SEARCH COMPLETADO <<<")
+            self.log(f"Modelo Campeón: LatentDim={campeon['latent_dim']}D, Kernel={campeon['kernel_size']}, Alpha={campeon['alpha']} -> Val Acc: {campeon['val_acc']}%")
+            
+            base_repo_dir = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+            heatmap_path = os.path.join(base_repo_dir, "resultados", "resultados_autoencoder", "grid_search_heatmap.png")
+            if os.path.exists(heatmap_path):
+                import subprocess
+                if os.name == 'nt':
+                    os.startfile(heatmap_path)
+                else:
+                    subprocess.Popen(["xdg-open", heatmap_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception as e:
+            sys.stdout = old_stdout
+            self.log(f"\n[ERROR] El Grid Search falló: {e}")
+            self.log(traceback.format_exc())
+            self.show_error("Error", f"Ocurrió un error en Grid Search:\n{e}")
+        finally:
+            self.toggle_buttons("normal")
             
     def lanzar_decodificador_continuo(self):
         from tkinter import filedialog
@@ -434,7 +489,7 @@ class PipelineAutoencoderGUI:
             
             import deep_learning.decodificador_continuo as dc
             try:
-                _, _, v_latent, _, _ = self.get_params_nn()
+                _, _, v_latent, _, _, _ = self.get_params_nn()
             except ValueError:
                 v_latent = None
                 

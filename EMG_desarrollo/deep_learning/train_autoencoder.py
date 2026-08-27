@@ -22,7 +22,7 @@ if torch.cuda.is_available():
 from dataset_emg import EMGDataset
 from modelos import ConvAutoencoder1D
 
-def train_autoencoder(csv_path, epochs=150, batch_size=32, lr=1e-3, latent_dim=16, force_epochs=False, alpha=0.5, verbose=True, save_model=True):
+def train_autoencoder(csv_path, epochs=150, batch_size=32, lr=1e-3, latent_dim=16, kernel_size=5, force_epochs=False, alpha=0.5, verbose=True, save_model=True):
     # Forzar reproducibilidad absoluta EN CADA LLAMADA a la función
     SEED = 42
     random.seed(SEED)
@@ -37,7 +37,7 @@ def train_autoencoder(csv_path, epochs=150, batch_size=32, lr=1e-3, latent_dim=1
         print(f"==================================================")
         print(f"Iniciando entrenamiento del Autoencoder Convolucional...")
         print(f"Usando archivo de entrenamiento: {os.path.abspath(csv_path)}")
-        print(f"Parametros: Epochs={epochs}, BatchSize={batch_size}, LR={lr}, LatentDim={latent_dim}, Alpha={alpha}")
+        print(f"Parametros: Epochs={epochs}, BatchSize={batch_size}, LR={lr}, LatentDim={latent_dim}, KernelSize={kernel_size}, Alpha={alpha}")
         print(f"==================================================")
     
     dataset_train = EMGDataset(csv_path, apply_augmentation=True)
@@ -92,7 +92,7 @@ def train_autoencoder(csv_path, epochs=150, batch_size=32, lr=1e-3, latent_dim=1
     print(f"Dispositivo de entrenamiento: {device}")
     
     inferred_target_length = dataset_train.tensors.shape[2]
-    model = ConvAutoencoder1D(latent_dim=latent_dim, target_length=inferred_target_length).to(device)
+    model = ConvAutoencoder1D(latent_dim=latent_dim, target_length=inferred_target_length, kernel_size=kernel_size).to(device)
     
     # Criterio y Optimizador
     criterion_mse = nn.MSELoss() # Reconstrucción
