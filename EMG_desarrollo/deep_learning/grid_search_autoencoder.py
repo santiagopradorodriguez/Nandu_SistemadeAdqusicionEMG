@@ -61,7 +61,7 @@ def run_grid_search(
     if kernel_sizes is None:
         kernel_sizes = [3, 5, 7]
     if alphas is None:
-        alphas = [0.3, 0.7]
+        alphas = [0.3, 0.5]
         
     total_combinaciones = len(latent_dims) * len(kernel_sizes) * len(alphas)
     
