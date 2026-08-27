@@ -151,13 +151,6 @@ class PipelineAutoencoderGUI:
         
         self.cargar_mediciones()
 
-    def log(self, mensaje):
-        self.log_text.config(state="normal")
-        self.log_text.insert(tk.END, mensaje + "\n")
-        self.log_text.see(tk.END)
-        self.log_text.config(state="disabled")
-        self.root.update_idletasks()
-
     def cargar_mediciones(self):
         mediciones = gpt.procesar_mediciones(self.base_dir)
         for i, med in enumerate(mediciones):
@@ -190,11 +183,33 @@ class PipelineAutoencoderGUI:
             float(self.ent_alpha_loss.get()),
             self.var_force_epochs.get()
         )
-        
+
+    def log(self, mensaje):
+        def _append():
+            self.log_text.config(state="normal")
+            self.log_text.insert(tk.END, str(mensaje) + "\n")
+            self.log_text.see(tk.END)
+            self.log_text.config(state="disabled")
+        if threading.current_thread() is threading.main_thread():
+            _append()
+        else:
+            self.root.after(0, _append)
+
+    def show_error(self, title, msg):
+        self.root.after(0, lambda: messagebox.showerror(title, msg))
+
+    def show_warning(self, title, msg):
+        self.root.after(0, lambda: messagebox.showwarning(title, msg))
+
     def toggle_buttons(self, state):
-        self.btn_extraer.config(state=state)
-        self.btn_entrenar.config(state=state)
-        self.btn_plotear.config(state=state)
+        def _toggle():
+            self.btn_extraer.config(state=state)
+            self.btn_entrenar.config(state=state)
+            self.btn_plotear.config(state=state)
+        if threading.current_thread() is threading.main_thread():
+            _toggle()
+        else:
+            self.root.after(0, _toggle)
 
     def ejecutar_extraccion(self):
         seleccionadas = [self.listbox_med.get(i) for i in self.listbox_med.curselection()]
@@ -242,7 +257,7 @@ class PipelineAutoencoderGUI:
             sys.stdout = old_stdout
             self.log(f"\n[ERROR] El proceso falló: {e}")
             self.log(traceback.format_exc())
-            messagebox.showerror("Error", f"Ocurrió un error:\n{e}")
+            self.show_error("Error", f"Ocurrió un error:\n{e}")
         finally:
             self.toggle_buttons("normal")
 
@@ -250,7 +265,7 @@ class PipelineAutoencoderGUI:
         try:
             params = self.get_params_nn()
         except ValueError:
-            messagebox.showerror("Error", "Parámetros numéricos inválidos en Red Neuronal.")
+            self.show_error("Error", "Parámetros numéricos inválidos en Red Neuronal.")
             return
             
         self.toggle_buttons("disabled")
@@ -340,7 +355,7 @@ class PipelineAutoencoderGUI:
             sys.stdout = old_stdout
             self.log(f"\n[ERROR] El proceso falló: {e}")
             self.log(traceback.format_exc())
-            messagebox.showerror("Error", f"Ocurrió un error:\n{e}")
+            self.show_error("Error", f"Ocurrió un error:\n{e}")
         finally:
             self.toggle_buttons("normal")
 
@@ -348,7 +363,7 @@ class PipelineAutoencoderGUI:
         try:
             _, _, v_latent, _, _ = self.get_params_nn()
         except ValueError:
-            messagebox.showerror("Error", "Latent Dim inválido.")
+            self.show_error("Error", "Latent Dim inválido.")
             return
             
         self.toggle_buttons("disabled")
@@ -386,7 +401,7 @@ class PipelineAutoencoderGUI:
             sys.stdout = old_stdout
             self.log(f"\n[ERROR] El proceso falló: {e}")
             self.log(traceback.format_exc())
-            messagebox.showerror("Error", f"Ocurrió un error:\n{e}")
+            self.show_error("Error", f"Ocurrió un error:\n{e}")
         finally:
             self.toggle_buttons("normal")
             
@@ -398,7 +413,7 @@ class PipelineAutoencoderGUI:
             
         script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "decodificador_continuo.py")
         if not os.path.exists(script_path):
-            messagebox.showerror("Error", f"No se encontró {script_path}")
+            self.show_error("Error", f"No se encontró {script_path}")
             return
             
         self.log(f"Lanzando Decodificador Continuo para: {os.path.basename(carpeta)}...")
@@ -437,7 +452,7 @@ class PipelineAutoencoderGUI:
             sys.stdout = old_stdout
             self.log(f"\n[ERROR] El decodificador falló: {e}")
             self.log(traceback.format_exc())
-            messagebox.showerror("Error", f"Ocurrió un error:\n{e}")
+            self.show_error("Error", f"Ocurrió un error:\n{e}")
         finally:
             self.toggle_buttons("normal")
 
