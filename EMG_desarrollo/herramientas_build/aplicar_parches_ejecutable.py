@@ -117,7 +117,7 @@ def lanzar_script(script_name, args=[]):
         (r"\[\s*python_executable,\s*script_path,\s*(.*?)\]", r"lanzar_script('acquisition/metronomo_visual.py', [\1])"),
         (r"\[\s*python_executable,\s*word_script_path,\s*(.*?)\]", r"lanzar_script('acquisition/ventana_palabras.py', [\1])")
     ]
-    for archivo in ["acquisition/manual_daq.py", "acquisition/autoforge_daq.py"]:
+    for archivo in ["acquisition/manual_daq.py", "acquisition/autoforge_daq.py", "acquisition/autoforge_daq_experimental.py"]:
         ruta = os.path.join(build_dir, archivo)
         if os.path.exists(ruta):
             parchear_archivo(ruta, reemplazos_daq, reemplazos_regex_daq)
