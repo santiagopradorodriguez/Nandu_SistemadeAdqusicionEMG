@@ -20,25 +20,53 @@ namespace NanduLsdLauncher
             this.Size = new Size(400, 250);
             this.BackColor = Color.FromArgb(10, 10, 15);
             
-            Label lblTitle = new Label();
-            lblTitle.Text = "Nandu LSD";
-            lblTitle.ForeColor = Color.Cyan;
-            lblTitle.Font = new Font("Courier New", 24, FontStyle.Bold);
-            lblTitle.AutoSize = false;
-            lblTitle.TextAlign = ContentAlignment.MiddleCenter;
-            lblTitle.Dock = DockStyle.Top;
-            lblTitle.Height = 120;
-            
             Label lblSub = new Label();
             lblSub.Text = "Iniciando motor DSP y cargando Python...";
             lblSub.ForeColor = Color.White;
             lblSub.Font = new Font("Segoe UI", 10, FontStyle.Regular);
             lblSub.AutoSize = false;
             lblSub.TextAlign = ContentAlignment.MiddleCenter;
-            lblSub.Dock = DockStyle.Fill;
-            
+            lblSub.Dock = DockStyle.Bottom;
+            lblSub.Height = 50;
             this.Controls.Add(lblSub);
-            this.Controls.Add(lblTitle);
+
+            string logoPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logo_nandu_lsd.png");
+            if (!File.Exists(logoPath)) logoPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "_internal", "logo_nandu_lsd.png");
+            if (!File.Exists(logoPath)) logoPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "gui_app", "assets", "logo_nandu_lsd.png");
+
+            if (File.Exists(logoPath))
+            {
+                try
+                {
+                    PictureBox pic = new PictureBox();
+                    pic.Image = Image.FromFile(logoPath);
+                    pic.SizeMode = PictureBoxSizeMode.Zoom;
+                    pic.Dock = DockStyle.Fill;
+                    this.Controls.Add(pic);
+                }
+                catch
+                {
+                    Label lblTitle = new Label();
+                    lblTitle.Text = "Ñandú LSD";
+                    lblTitle.ForeColor = Color.Cyan;
+                    lblTitle.Font = new Font("Courier New", 24, FontStyle.Bold);
+                    lblTitle.AutoSize = false;
+                    lblTitle.TextAlign = ContentAlignment.MiddleCenter;
+                    lblTitle.Dock = DockStyle.Fill;
+                    this.Controls.Add(lblTitle);
+                }
+            }
+            else
+            {
+                Label lblTitle = new Label();
+                lblTitle.Text = "Ñandú LSD";
+                lblTitle.ForeColor = Color.Cyan;
+                lblTitle.Font = new Font("Courier New", 24, FontStyle.Bold);
+                lblTitle.AutoSize = false;
+                lblTitle.TextAlign = ContentAlignment.MiddleCenter;
+                lblTitle.Dock = DockStyle.Fill;
+                this.Controls.Add(lblTitle);
+            }
 
             try {
                 this.Icon = new Icon("icono.ico");
