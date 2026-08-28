@@ -369,14 +369,23 @@ def _estimate_noise_window(signal_recortada, samplerate, noise_seconds, smooth_m
             env_noise = np.array([])
         
         if len(env_noise) >= 5:
+            # Filtrar outliers de deglución en la envolvente de ruido usando IQR
+            q25, q75 = np.percentile(env_noise, [25, 75])
+            iqr = q75 - q25
+            clean_env = env_noise[env_noise <= q75 + 1.5 * iqr]
+            if len(clean_env) >= 3:
+                umbral = float(np.mean(clean_env))
+                noise_rms_from_noise_window = float(rms(clean_env))
+            else:
+                umbral = float(np.median(env_noise))
+                noise_rms_from_noise_window = float(rms(env_noise))
             mad = np.median(np.abs(env_noise - np.median(env_noise)))
             sigma_est = mad * 1.4826
         else:
             sigma_est = np.std(env_noise) if len(env_noise) > 0 else 0.0
-
-        umbral = np.mean(env_noise) if len(env_noise) > 0 else 0.0
-        noise_rms_from_noise_window = rms(env_noise) if len(env_noise) > 0 else 0.0
-        print(f"[Ruido Inicial] {noise_seconds}s, Umbral={umbral:.5e}")
+            umbral = np.mean(env_noise) if len(env_noise) > 0 else 0.0
+            noise_rms_from_noise_window = rms(env_noise) if len(env_noise) > 0 else 0.0
+        print(f"[Ruido Inicial Robusto] {noise_seconds}s, Umbral={umbral:.5e}")
         return start_sample_noise, env_noise, sigma_est, umbral, noise_rms_from_noise_window
     else:
         print(f"[Ruido] No se definió ventana de ruido.")
@@ -1045,12 +1054,19 @@ def procesar_wavs_promedio(
         signal = (raw_signal / ganancia) * 1e6
         print(f"[Calibración] Factor: {calibration_factor:.4f}, Ganancia: {ganancia:.1f} -> Convertido a µV")
         
-        # Offset
+        # Offset robusto ante anomalías de deglución en la ventana de ruido
         ns_samples = int(noise_seconds * samplerate)
         if ns_samples > 0 and ns_samples < len(signal):
-            dc_offset = np.mean(signal[:ns_samples])
+            noise_segment = signal[:ns_samples]
+            q25, q75 = np.percentile(noise_segment, [25, 75])
+            iqr = q75 - q25
+            clean_noise = noise_segment[(noise_segment >= q25 - 1.5 * iqr) & (noise_segment <= q75 + 1.5 * iqr)]
+            if len(clean_noise) > 0:
+                dc_offset = float(np.mean(clean_noise))
+            else:
+                dc_offset = float(np.median(noise_segment))
             signal = signal - dc_offset
-            print(f"[Offset] Restado nivel DC base: {dc_offset:.5f} V")
+            print(f"[Offset] Restado nivel DC base robusto: {dc_offset:.5f} µV")
 
         # Pasa-Altos
         if highpass_cutoff_hz is not None and highpass_cutoff_hz > 0:

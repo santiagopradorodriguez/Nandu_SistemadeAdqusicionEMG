@@ -133,17 +133,24 @@ def _estimate_noise_window(signal_recortada, samplerate, noise_seconds, smooth_m
             env_noise = np.array([])
         
         if len(env_noise) >= 5:
+            # Filtrar outliers de deglución en la envolvente de ruido usando IQR
+            q25, q75 = np.percentile(env_noise, [25, 75])
+            iqr = q75 - q25
+            clean_env = env_noise[env_noise <= q75 + 1.5 * iqr]
+            if len(clean_env) >= 3:
+                umbral = float(np.mean(clean_env))
+                noise_rms_from_noise_window = float(rms(clean_env))
+            else:
+                umbral = float(np.median(env_noise))
+                noise_rms_from_noise_window = float(rms(env_noise))
             mad = np.median(np.abs(env_noise - np.median(env_noise)))
             sigma_est = mad * 1.4826
         else:
             sigma_est = np.std(env_noise) if len(env_noise) > 0 else 0.0
+            umbral = np.mean(env_noise) if len(env_noise) > 0 else 0.0
+            noise_rms_from_noise_window = rms(env_noise) if len(env_noise) > 0 else 0.0
 
-        # --- MODIFICACIÓN: El umbral ahora es el promedio de la ventana de ruido ---
-        umbral = np.mean(env_noise) if len(env_noise) > 0 else 0.0
-        noise_rms_from_noise_window = rms(env_noise) if len(env_noise) > 0 else 0.0
-
-        print(f"[Umbral por ventana inicial] noise_seconds={noise_seconds}s, umbral (promedio)={umbral:.5e}, noise_rms_window={noise_rms_from_noise_window:.5e}")
-        # Se mantiene el cálculo de sigma_est por si se usa en otro lado (ej. incertidumbre)
+        print(f"[Umbral por ventana inicial Robusto] noise_seconds={noise_seconds}s, umbral={umbral:.5e}, noise_rms={noise_rms_from_noise_window:.5e}")
         return start_sample_noise, env_noise, sigma_est, umbral, noise_rms_from_noise_window
     else:
         print(f"[Umbral] no se proporcionó ventana de ruido valida (noise_seconds={noise_seconds}).")

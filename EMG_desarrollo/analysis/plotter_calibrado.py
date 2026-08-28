@@ -493,15 +493,19 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
         is_mic = ch_meta["is_mic"]
             
         sig = (raw / ganancia) * 1e6 
+        tiempo_actual = df[col_tiempo].values
 
-        # Restar offset DC antes de filtrar (solo para modos con envolvente)
+        # Restar offset DC antes de filtrar (solo para modos con envolvente) de forma robusta
         if tipo_envolvente in ['hilbert', 'rms']:
             if noise_seconds is not None and noise_seconds > 0:
-                tiempo_actual = df[col_tiempo].values
                 if len(tiempo_actual) > 0 and tiempo_actual[0] < noise_seconds:
                     noise_end_idx = np.searchsorted(tiempo_actual, noise_seconds, side='right')
                     if noise_end_idx > 0:
-                        dc_offset = np.median(sig[:noise_end_idx])
+                        noise_seg = sig[:noise_end_idx]
+                        q25, q75 = np.percentile(noise_seg, [25, 75])
+                        iqr = q75 - q25
+                        clean_seg = noise_seg[(noise_seg >= q25 - 1.5 * iqr) & (noise_seg <= q75 + 1.5 * iqr)]
+                        dc_offset = np.median(clean_seg) if len(clean_seg) > 0 else np.median(noise_seg)
                         sig = sig - dc_offset
 
         info_filtros = []
@@ -522,11 +526,14 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
             env = np.abs(signal.hilbert(sig))
             etiqueta_env = " | Env. Hilbert"
             if noise_seconds is not None and noise_seconds > 0:
-                tiempo_actual = df[col_tiempo].values
                 if len(tiempo_actual) > 0 and tiempo_actual[0] < noise_seconds:
                     noise_end_idx = np.searchsorted(tiempo_actual, noise_seconds, side='right')
                     if noise_end_idx > 0:
-                        noise_level = np.median(env[:noise_end_idx])
+                        noise_seg = env[:noise_end_idx]
+                        q25, q75 = np.percentile(noise_seg, [25, 75])
+                        iqr = q75 - q25
+                        clean_seg = noise_seg[noise_seg <= q75 + 1.5 * iqr]
+                        noise_level = np.median(clean_seg) if len(clean_seg) > 0 else np.median(noise_seg)
                         env = env - noise_level
                         etiqueta_env += " (Offset restado)"
             y_plot = env
@@ -535,11 +542,14 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
             env_rms = calcular_rms(sig, fs, RMS_WINDOW_MS)
             etiqueta_env = " | Env. RMS"
             if noise_seconds is not None and noise_seconds > 0:
-                tiempo_actual = df[col_tiempo].values
                 if len(tiempo_actual) > 0 and tiempo_actual[0] < noise_seconds:
                     noise_end_idx = np.searchsorted(tiempo_actual, noise_seconds, side='right')
                     if noise_end_idx > 0:
-                        noise_level = np.nanmedian(env_rms[:noise_end_idx])
+                        noise_seg = env_rms[:noise_end_idx]
+                        q25, q75 = np.percentile(noise_seg, [25, 75])
+                        iqr = q75 - q25
+                        clean_seg = noise_seg[noise_seg <= q75 + 1.5 * iqr]
+                        noise_level = np.nanmedian(clean_seg) if len(clean_seg) > 0 else np.nanmedian(noise_seg)
                         if not np.isnan(noise_level):
                             env_rms = env_rms - noise_level
                             etiqueta_env += " (Offset restado)"
@@ -699,21 +709,27 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
                 except Exception:
                     pass
 
-            # Dibujar marcadores sutiles de picos y línea de media
+            # Dibujar marcadores sutiles de picos, franja de desviación estándar y línea de media
             if len(picos_y) > 0:
                 media_picos = float(np.mean(picos_y))
+                std_picos = float(np.std(picos_y))
                 
-                # Puntos discretos en la cúspide de cada ciclo
-                ax.scatter(picos_t, picos_y, color=color_hex, s=26, alpha=0.75, zorder=5,
-                           edgecolors='white' if is_dark else '#222222', linewidths=0.6)
+                # Franja ancha transparente con la desviación estándar (+- 1 sigma)
+                if std_picos > 0:
+                    ax.axhspan(max(0.0, media_picos - std_picos), media_picos + std_picos,
+                               color=color_hex, alpha=0.18, zorder=3)
                 
                 # Línea horizontal con la media de amplitud de los picos
-                ax.axhline(y=media_picos, color=color_hex, ls=':', lw=1.3, alpha=0.65, zorder=4)
+                ax.axhline(y=media_picos, color=color_hex, ls=':', lw=1.5, alpha=0.85, zorder=4)
                 
-                # Etiqueta con el valor numérico medio
-                ax.text(t_max, media_picos, f"  μ_picos = {media_picos:.1f} µV",
-                        color=color_hex, fontsize=13, va='center', ha='left',
-                        fontweight='bold', alpha=0.9, zorder=6)
+                # Puntos discretos en la cúspide de cada ciclo
+                ax.scatter(picos_t, picos_y, color=color_hex, s=26, alpha=0.85, zorder=5,
+                           edgecolors='white' if is_dark else '#222222', linewidths=0.6)
+                
+                # Etiqueta con el valor numérico medio y desvío estándar
+                ax.text(t_max, media_picos, f"  μ = {media_picos:.1f} ± {std_picos:.1f} µV",
+                        color=color_hex, fontsize=12, va='center', ha='left',
+                        fontweight='bold', alpha=0.95, zorder=6)
 
         tit = musculo
         if ch["info_filtros"]: tit += f" | {', '.join(ch['info_filtros'])}"
