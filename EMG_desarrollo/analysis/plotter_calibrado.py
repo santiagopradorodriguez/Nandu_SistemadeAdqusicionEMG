@@ -433,15 +433,12 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
             if graficar_fft:
                 plt.setp(axs[i, 1].get_xticklabels(), visible=False)
     
-    canales_config = config_mgr.get("canales")
+    canales_config = config_mgr.get("canales") or {}
 
+    # --- NUEVO: Extraer metadatos y resolver colores únicos sin repeticiones ---
+    ch_info_list = []
     for i, nombre_canal in enumerate(cols_canales):
-        ax = axs[i, 0]
         nom_limpio = nombre_canal.strip()
-        
-        raw = df[nombre_canal].values
-        
-        # --- CORRECCIÓN: Leer ganancia y músculo desde metadata.json si existe ---
         ch_conf = canales_config.get(nom_limpio, {})
         musculo = ch_conf.get("musculo", nom_limpio)
         ganancia = ch_conf.get("factor_calibracion", 495.0)
@@ -450,7 +447,7 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
             ch_idx = int(nom_limpio.split()[-1])
             meta_path = os.path.join(path_medicion, f"canal_{ch_idx}", "metadata.json")
             if os.path.exists(meta_path):
-                with open(meta_path, 'r') as f_meta:
+                with open(meta_path, 'r', encoding='utf-8') as f_meta:
                     md_ch = json.load(f_meta)
                     if 'musculo' in md_ch and md_ch['musculo']:
                         musculo = md_ch['musculo']
@@ -462,23 +459,36 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
         except Exception:
             pass
 
-        # Asignar color específico por músculo y forzar rojo para el canal 3 / micrófono
-        try:
-            from utils.config_manager import get_muscle_color
-        except ImportError:
-            def get_muscle_color(name, default="#00ffcc"):
-                return "#ff0000" if ("mic" in str(name).lower() or "canal 3" in str(name).lower()) else default
-
         try:
             ch_idx_int = int(nom_limpio.split()[-1])
         except Exception:
             ch_idx_int = i
 
-        if ch_idx_int == 3 or "mic" in musculo.lower():
-            color_hex = "#ff0000"
-        else:
-            default_c = "cyan" if is_dark else "blue"
-            color_hex = get_muscle_color(musculo, ch_conf.get("color_hex", default_c))
+        is_mic = (ch_idx_int == 3 or "mic" in musculo.lower())
+        ch_info_list.append({
+            "idx": ch_idx_int,
+            "col_name": nombre_canal,
+            "musculo": musculo,
+            "ganancia": ganancia,
+            "color_hex": ch_conf.get("color_hex"),
+            "is_mic": is_mic
+        })
+
+    try:
+        from utils.config_manager import get_unique_channel_colors
+        colores_canales = get_unique_channel_colors(ch_info_list)
+    except Exception:
+        colores_canales = ["#ffaa00", "#39ff14", "#ffff00", "#ff0000"]
+
+    for i, ch_meta in enumerate(ch_info_list):
+        nombre_canal = ch_meta["col_name"]
+        ax = axs[i, 0]
+        nom_limpio = nombre_canal.strip()
+        
+        raw = df[nombre_canal].values
+        musculo = ch_meta["musculo"]
+        ganancia = ch_meta["ganancia"]
+        color_hex = colores_canales[i]
             
         sig = (raw / ganancia) * 1e6 
 

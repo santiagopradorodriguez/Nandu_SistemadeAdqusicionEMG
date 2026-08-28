@@ -781,10 +781,10 @@ def _plot_muscle_overlay(measure_name, channels_dict, out_dir, master_name=None,
                     from utils.config_manager import get_muscle_color
                 except ImportError:
                     def get_muscle_color(name, default='gray'):
-                        return 'red' if ("mic" in str(name).lower() or "canal_3" in str(name).lower()) else default
+                        return '#ff0000' if ("mic" in str(name).lower() or "canal_3" in str(name).lower()) else default
 
                 if ch == 'canal_3' or "mic" in lbl.lower():
-                    col = 'red'
+                    col = '#ff0000'
                 else:
                     col = get_muscle_color(lbl, ch_conf.get("color_hex", fallback_colors.get(ch, 'gray')))
                 

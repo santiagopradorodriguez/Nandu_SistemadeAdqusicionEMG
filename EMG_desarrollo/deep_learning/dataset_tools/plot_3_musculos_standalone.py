@@ -153,8 +153,7 @@ def main():
     config_mgr = ConfigManager()
     
     labels = []
-    colors = []
-    default_colors = ['#39ff14', '#8a2be2', '#ffd700', 'red']
+    ch_info_list = []
     
     for i in range(3):
         ch_conf = config_mgr.get_channel_config(i)
@@ -167,13 +166,19 @@ def main():
                     if 'musculo' in m_data and m_data['musculo']:
                         musculo = m_data['musculo']
             except: pass
-        try:
-            from utils.config_manager import get_muscle_color
-            ch_col = get_muscle_color(musculo, ch_conf.get("color_hex", default_colors[i]))
-        except ImportError:
-            ch_col = ch_conf.get("color_hex", default_colors[i])
         labels.append(f"{musculo} (Ch{i})")
-        colors.append(ch_col)
+        ch_info_list.append({
+            "idx": i,
+            "musculo": musculo,
+            "color_hex": ch_conf.get("color_hex"),
+            "is_mic": False
+        })
+        
+    try:
+        from utils.config_manager import get_unique_channel_colors
+        colors = get_unique_channel_colors(ch_info_list)
+    except Exception:
+        colors = ['#ffaa00', '#39ff14', '#ffff00']
         
     # Obtener configuración del micrófono (Canal 3) - SIEMPRE ROJO
     mic_conf = config_mgr.get_channel_config(3)

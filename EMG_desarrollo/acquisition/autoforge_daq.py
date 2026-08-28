@@ -1463,23 +1463,26 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     # --- Curvas del Plot ---
     self.curvas = []
-    self.colores_curvas = []
     self.nombres_musculos = []
     canales_conf = self.config_mgr.get("canales") or {}
-    try:
-      from utils.config_manager import get_muscle_color
-    except ImportError:
-      def get_muscle_color(name, default="#ffffff"):
-        return "#ff0000" if ("mic" in str(name).lower() or "canal 3" in str(name).lower()) else default
 
+    canales_info = []
     for i in range(16):
       key = f"Canal {i}"
       musc = canales_conf.get(key, {}).get("musculo", f"Canal {i}")
       self.nombres_musculos.append(musc)
-      if i == 3 or "mic" in musc.lower():
-        self.colores_curvas.append("#ff0000")
-      else:
-        self.colores_curvas.append(get_muscle_color(musc, canales_conf.get(key, {}).get("color_hex", "#0074D9")))
+      canales_info.append({
+          "idx": i,
+          "musculo": musc,
+          "color_hex": canales_conf.get(key, {}).get("color_hex"),
+          "is_mic": (i == 3 or "mic" in musc.lower())
+      })
+      
+    try:
+      from utils.config_manager import get_unique_channel_colors
+      self.colores_curvas = get_unique_channel_colors(canales_info)
+    except Exception:
+      self.colores_curvas = ["#ffaa00", "#39ff14", "#ffff00", "#ff0000"] + ["#00ffcc"] * 12
 
   # --- NUEVO: Cambio de modo de conexión en tiempo real ---
   def on_terminal_mode_changed(self):
@@ -3867,20 +3870,24 @@ class MuscleSelectionDialog(QtWidgets.QDialog):
     
   def guardar_y_cerrar(self):
     try:
-      from utils.config_manager import get_muscle_color
+      from utils.config_manager import get_unique_channel_colors
     except ImportError:
-      def get_muscle_color(name, default="#00ffcc"):
-        return "#ff0000" if ("mic" in str(name).lower() or "canal 3" in str(name).lower()) else default
+      def get_unique_channel_colors(items):
+        return ["#ffaa00", "#39ff14", "#ffff00", "#ff0000"]
 
-    for key, le in self.line_edits.items():
-        if key not in self.canales_conf:
-            self.canales_conf[key] = {}
-        m_text = le.text().strip()
-        self.canales_conf[key]["musculo"] = m_text
-        if key == "Canal 3" or "mic" in m_text.lower():
-            self.canales_conf[key]["color_hex"] = "#ff0000"
-        else:
-            self.canales_conf[key]["color_hex"] = get_muscle_color(m_text, self.canales_conf[key].get("color_hex", "#00ffcc"))
+    keys = list(self.line_edits.keys())
+    ch_list = []
+    for key in keys:
+      m_text = self.line_edits[key].text().strip()
+      ch_list.append({"musculo": m_text, "is_mic": (key == "Canal 3" or "mic" in m_text.lower())})
+      
+    unique_cols = get_unique_channel_colors(ch_list)
+    for idx, key in enumerate(keys):
+      if key not in self.canales_conf:
+        self.canales_conf[key] = {}
+      m_text = self.line_edits[key].text().strip()
+      self.canales_conf[key]["musculo"] = m_text
+      self.canales_conf[key]["color_hex"] = unique_cols[idx]
     
     self.config_mgr.config["canales"] = self.canales_conf
     self.config_mgr.save()
