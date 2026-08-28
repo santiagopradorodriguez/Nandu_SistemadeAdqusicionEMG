@@ -67,8 +67,6 @@ def procesar_mediciones(base_dir):
     for date_folder in sorted(os.listdir(base_dir), reverse=True):
         date_path = os.path.join(base_dir, date_folder)
         if os.path.isdir(date_path) and date_pattern.match(date_folder):
-            if date_folder != "2026-07-10":
-                continue
             for med_folder in sorted(os.listdir(date_path)):
                 med_path = os.path.join(date_path, med_folder)
                 if os.path.isdir(med_path):

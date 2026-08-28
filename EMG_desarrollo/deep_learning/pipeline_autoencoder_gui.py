@@ -157,15 +157,30 @@ class PipelineAutoencoderGUI:
 
     def cargar_mediciones(self):
         mediciones = gpt.procesar_mediciones(self.base_dir)
+        
+        # Normalizar rutas preseleccionadas si vienen desde el gestor de sesiones de main_app
+        rutas_norm = []
+        if self.rutas_preseleccionadas:
+            for rp in self.rutas_preseleccionadas:
+                r_norm = os.path.normpath(rp)
+                rutas_norm.append(r_norm)
+                try:
+                    r_rel = os.path.relpath(rp, self.base_dir)
+                    rutas_norm.append(os.path.normpath(r_rel))
+                except Exception:
+                    pass
+
+        has_selection = False
         for i, med in enumerate(mediciones):
             self.listbox_med.insert(tk.END, med)
-            if self.rutas_preseleccionadas:
-                # Si viene preseleccionado desde main_app
-                if any(med.replace("/", "\\") in rp.replace("/", "\\") for rp in self.rutas_preseleccionadas):
+            if rutas_norm:
+                med_norm = os.path.normpath(med)
+                if any(med_norm in rn or rn in med_norm for rn in rutas_norm):
                     self.listbox_med.selection_set(i)
+                    has_selection = True
         
-        if not self.rutas_preseleccionadas and mediciones:
-            # Seleccionar todas por defecto
+        # Si no había preselección desde main_app, seleccionar todas por defecto
+        if not has_selection and mediciones:
             self.listbox_med.select_set(0, tk.END)
 
     def get_params_dsp(self):
