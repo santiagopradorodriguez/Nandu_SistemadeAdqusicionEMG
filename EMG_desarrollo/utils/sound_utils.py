@@ -34,18 +34,21 @@ def _play_sounddevice(freq, duration_ms, volume=0.3):
 
 def play_beep(freq=1000, duration_ms=100, async_play=True):
     """
-    Emite un tono/beep de audio multiplataforma (Linux, Windows, macOS).
+    Emite un tono/beep de audio multiplataforma.
+    En Windows usa winsound.Beep nativo (clásico, nítido y sin latencia).
+    En Linux/macOS usa sounddevice con onda senoidal sintética.
     """
     def _execute():
+        if winsound is not None:
+            try:
+                winsound.Beep(int(freq), int(duration_ms))
+                return
+            except Exception:
+                pass
         if sd is not None:
             try:
                 _play_sounddevice(freq, duration_ms)
                 return
-            except Exception:
-                pass
-        if winsound is not None:
-            try:
-                winsound.Beep(int(freq), int(duration_ms))
             except Exception:
                 pass
 

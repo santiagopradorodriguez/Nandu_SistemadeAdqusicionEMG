@@ -3649,27 +3649,42 @@ class RealTimePlotter(QtWidgets.QWidget):
       Returns:
         Any: Resultado de la ejecución de la función.
       """
-      import os, json
+      import os, json, re
       from pathlib import Path
       from datetime import datetime
       fecha_str = datetime.now().strftime("%Y-%m-%d")
-      # Nombre: PALABRA_Prueba_Sujeto
-      folder_name = f"{palabra}_{self.autoforge_prueba}_{self.autoforge_sujeto}"
+      
+      # Calcular la prueba actual según la repetición de la palabra en la lista (ej. T1, T2, etc.)
+      ocurrencia = self.autoforge_words[:self.autoforge_word_idx + 1].count(palabra)
+      
+      m = re.match(r"^([a-zA-Z]+)(\d+)$", self.autoforge_prueba)
+      if m:
+        prefix, num_str = m.groups()
+        base_num = int(num_str)
+        prueba_actual = f"{prefix}{base_num + ocurrencia - 1}"
+      elif ocurrencia > 1:
+        prueba_actual = f"{self.autoforge_prueba}_{ocurrencia}"
+      else:
+        prueba_actual = self.autoforge_prueba
+
       if getattr(sys, 'frozen', False):
         root_dir = os.path.dirname(os.path.abspath(sys.executable))
         if os.path.basename(root_dir) == "_internal":
           root_dir = os.path.dirname(root_dir)
       else:
         root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-      base_dir = Path(root_dir) / "base_de_datos_electrodos" / fecha_str / folder_name
-      
-      # --- NUEVO: Evitar sobrescritura ---
-      contador = 2
-      while base_dir.exists():
-        folder_name_v = f"{folder_name}_v{contador}"
-        base_dir = Path(root_dir) / "base_de_datos_electrodos" / fecha_str / folder_name_v
-        contador += 1
         
+      # Verificar si ya existe en disco y auto-incrementar para NUNCA sobreescribir
+      base_dir = Path(root_dir) / "base_de_datos_electrodos" / fecha_str / f"{palabra}_{prueba_actual}_{self.autoforge_sujeto}"
+      reintento = 0
+      while base_dir.exists() and any(base_dir.iterdir()):
+        reintento += 1
+        if m:
+          prueba_actual = f"{prefix}{base_num + ocurrencia - 1 + reintento}"
+        else:
+          prueba_actual = f"{self.autoforge_prueba}_{ocurrencia + reintento}"
+        base_dir = Path(root_dir) / "base_de_datos_electrodos" / fecha_str / f"{palabra}_{prueba_actual}_{self.autoforge_sujeto}"
+
       os.makedirs(base_dir, exist_ok=True)
       
       # 1. Preparar metadata para UI Analysis
@@ -3689,7 +3704,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         "is_formal": False,
         "sujeto": self.autoforge_sujeto,
         "letra": palabra,
-        "prueba": self.autoforge_prueba,
+        "prueba": prueba_actual,
         "comentario": "Grabado mediante AutoForge"
       }
       
