@@ -908,15 +908,22 @@ class ReaperStyleHub(QMainWindow):
     self.tab_dl_ml.tab_umap_sup.btn_run.clicked.connect(self.run_umap_supervisado_nativo)
     # (Botones btn_run_motor y btn_run_training se conectarán en un futuro cuando sus respectivos scripts nativos estén implementados)
     
-    # Conectar los otros clasificadores (Trevisan, Autoencoders, Visor)
+    # Conectar los clasificadores (Trevisan, Autoencoders, Visor)
     self.tab_dl_ml.btn_trevisan.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/binarizacion/analisis_trevisan.py"))
-    self.tab_dl_ml.btn_autoencoders.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/pipeline_autoencoder_gui.py"))
-    if hasattr(self.tab_dl_ml, 'btn_grid_search_ae'):
-      self.tab_dl_ml.btn_grid_search_ae.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/grid_search_autoencoder.py"))
-    if hasattr(self.tab_dl_ml, 'btn_decodificador_ae'):
-      self.tab_dl_ml.btn_decodificador_ae.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/decodificador_continuo.py"))
-    if hasattr(self.tab_dl_ml, 'btn_visor_features_ae'):
-      self.tab_dl_ml.btn_visor_features_ae.clicked.connect(lambda: self._launch_external("deep_learning/dataset_tools/visor_features.py"))
+    if hasattr(self.tab_dl_ml, 'btn_autoencoders'):
+      self.tab_dl_ml.btn_autoencoders.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/pipeline_autoencoder_gui.py"))
+    
+    # Conexiones nativas de la pestaña Autoencoders
+    if hasattr(self.tab_dl_ml, 'tab_autoencoders'):
+      ae = self.tab_dl_ml.tab_autoencoders
+      ae.btn_grid_search.clicked.connect(self.run_autoencoder_grid_search_nativo)
+      ae.btn_extraer.clicked.connect(self.run_autoencoder_extraer_nativo)
+      ae.btn_entrenar.clicked.connect(self.run_autoencoder_entrenar_nativo)
+      ae.btn_plotear.clicked.connect(self.run_autoencoder_plotear_nativo)
+      ae.btn_decodificador.clicked.connect(self.run_autoencoder_decodificador_nativo)
+      ae.btn_visor_features.clicked.connect(lambda: self._launch_external("deep_learning/dataset_tools/visor_features.py"))
+      ae.btn_pipeline_gui.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/pipeline_autoencoder_gui.py"))
+    
     if hasattr(self.tab_dl_ml, 'btn_visor_features'):
       self.tab_dl_ml.btn_visor_features.clicked.connect(lambda: self._launch_external("deep_learning/dataset_tools/visor_features.py"))
     
@@ -2079,6 +2086,213 @@ gen_sup.ejecutar_procesamiento(
 )
 """
     self._launch_bridge_script("run_umap_sup", "UMAP SUPERVISADO", kwargs, template)
+
+  def run_autoencoder_extraer_nativo(self):
+    rutas = self.explorer_widget.get_selected_paths()
+    if not rutas:
+      self.log_console.append("> ERROR: Selecciona al menos una medición en el Gestor de Sesiones para extraer el dataset del Autoencoder.\n")
+      return
+
+    kwargs = self.tab_dl_ml.get_autoencoder_kwargs()
+    template = """
+import json
+import sys
+import os
+
+project_root = r'{ROOT_PROJECT_DIR}'
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+with open(r'{TEMP_JSON}', 'r') as f:
+    kwargs = json.load(f)
+
+mediciones = {MEDICIONES}
+base_dir = r'{BASE_DIR}'
+
+import deep_learning.dataset_tools.generador_pca_tensorial as gpt
+
+print("==================================================")
+print("EXTRAYENDO DATASET TENSORIAL PARA AUTOENCODER...")
+print(f"Mediciones seleccionadas: {len(mediciones)}")
+print("==================================================")
+
+X, Y, Tomas = gpt.extraer_features_concatenadas(
+    base_dir=base_dir,
+    mediciones=mediciones,
+    alpha_ruido=kwargs.get('alpha_ruido', 1.0),
+    smooth_ms=kwargs.get('smooth_ms', 150),
+    notch_q=kwargs.get('notch_q', 2.0),
+    target_length=kwargs.get('target_length', 100),
+    use_manual_exclusions=kwargs.get('use_manual_exclusions', True),
+    verbose=True
+)
+
+out_dir = os.path.join(project_root, "resultados", "resultados_pca_tensorial")
+os.makedirs(out_dir, exist_ok=True)
+csv_out = os.path.join(out_dir, "caracteristicas_exportadas.csv")
+
+import pandas as pd
+df = pd.DataFrame(X)
+df.insert(0, 'Toma', Tomas)
+df.insert(0, 'Vocal', Y)
+df.to_csv(csv_out, index=False)
+print(f"\\n>>> DATASET EXPORTADO EXITOSAMENTE ({len(df)} muestras) EN: {csv_out} <<<")
+"""
+    self._launch_bridge_script("extraer_autoencoder", "EXTRACCION DATASET AUTOENCODER", kwargs, template)
+
+  def run_autoencoder_entrenar_nativo(self):
+    kwargs = self.tab_dl_ml.get_autoencoder_kwargs()
+    template = """
+import json
+import sys
+import os
+
+project_root = r'{ROOT_PROJECT_DIR}'
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+with open(r'{TEMP_JSON}', 'r') as f:
+    kwargs = json.load(f)
+
+csv_candidates = [
+    os.path.join(project_root, "resultados", "resultados_pca_tensorial", "caracteristicas_exportadas.csv"),
+    os.path.join(project_root, "resultados", "resultados_pca_umap", "caracteristicas_exportadas.csv"),
+    os.path.join(project_root, "deep_learning", "caracteristicas_exportadas.csv"),
+]
+csv_file = None
+for c in csv_candidates:
+    if os.path.exists(c):
+        csv_file = c
+        break
+
+if not csv_file:
+    print("> ERROR: No se encontró 'caracteristicas_exportadas.csv'. Ejecuta primero '1. EXTRAER DATASET'.")
+    sys.exit(1)
+
+import deep_learning.train_autoencoder as ta
+ta.train_autoencoder(
+    csv_path=csv_file,
+    epochs=kwargs.get('epochs', 80),
+    batch_size=kwargs.get('batch_size', 16),
+    latent_dim=kwargs.get('latent_dim', 8),
+    kernel_size=kwargs.get('kernel_size', 5),
+    force_epochs=kwargs.get('force_epochs', False),
+    alpha=kwargs.get('alpha_loss', 0.5),
+    verbose=True
+)
+"""
+    self._launch_bridge_script("entrenar_autoencoder", "ENTRENAMIENTO AUTOENCODER", kwargs, template)
+
+  def run_autoencoder_plotear_nativo(self):
+    kwargs = self.tab_dl_ml.get_autoencoder_kwargs()
+    template = """
+import json
+import sys
+import os
+
+project_root = r'{ROOT_PROJECT_DIR}'
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+with open(r'{TEMP_JSON}', 'r') as f:
+    kwargs = json.load(f)
+
+csv_candidates = [
+    os.path.join(project_root, "resultados", "resultados_pca_tensorial", "caracteristicas_exportadas.csv"),
+    os.path.join(project_root, "resultados", "resultados_pca_umap", "caracteristicas_exportadas.csv"),
+]
+csv_file = next((c for c in csv_candidates if os.path.exists(c)), None)
+if not csv_file:
+    print("> ERROR: No se encontró 'caracteristicas_exportadas.csv'.")
+    sys.exit(1)
+
+out_dir = os.path.join(project_root, "resultados", "resultados_autoencoder")
+l_dim = kwargs.get('latent_dim', 8)
+model_candidates = [
+    os.path.join(out_dir, f"autoencoder_emg_{l_dim}d.pth"),
+    os.path.join(out_dir, "autoencoder_campeon.pth"),
+    os.path.join(out_dir, "autoencoder_emg.pth"),
+]
+model_path = next((m for m in model_candidates if os.path.exists(m)), None)
+if not model_path:
+    print("> ERROR: No se encontró ningún modelo (.pth) entrenado.")
+    sys.exit(1)
+
+import deep_learning.plot_latent_space as pls
+pls.plot_latent_space(csv_file, model_path, latent_dim=l_dim)
+"""
+    self._launch_bridge_script("plotear_latente", "PLOTEO ESPACIO LATENTE", kwargs, template)
+
+  def run_autoencoder_grid_search_nativo(self):
+    kwargs = self.tab_dl_ml.get_autoencoder_kwargs()
+    template = """
+import json
+import sys
+import os
+
+project_root = r'{ROOT_PROJECT_DIR}'
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+with open(r'{TEMP_JSON}', 'r') as f:
+    kwargs = json.load(f)
+
+import deep_learning.grid_search_autoencoder as gsa
+df_res, campeon = gsa.run_grid_search(epochs=min(kwargs.get('epochs', 80), 80))
+"""
+    self._launch_bridge_script("grid_search_ae", "GRID SEARCH AUTOENCODER (36 COMB.)", kwargs, template)
+
+  def run_autoencoder_decodificador_nativo(self):
+    rutas = self.explorer_widget.get_selected_paths()
+    carpeta = rutas[0] if rutas else None
+    if not carpeta or not os.path.isdir(carpeta):
+        from PySide6.QtWidgets import QFileDialog
+        root_dir = get_project_root()
+        base_dir = os.path.join(root_dir, "base_de_datos_electrodos")
+        carpeta = QFileDialog.getExistingDirectory(self, "Seleccione la carpeta de Secuencia Continua", base_dir)
+        if not carpeta:
+            return
+
+    kwargs = self.tab_dl_ml.get_autoencoder_kwargs()
+    carpeta_clean = carpeta.replace("\\\\", "/")
+    template = f'''
+import json
+import sys
+import os
+
+project_root = r'{{ROOT_PROJECT_DIR}}'
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+with open(r'{{TEMP_JSON}}', 'r') as f:
+    kwargs = json.load(f)
+
+carpeta_secuencia = r"{carpeta_clean}"
+
+out_dir = os.path.join(project_root, "resultados", "resultados_autoencoder")
+l_dim = kwargs.get('latent_dim', 8)
+model_candidates = [
+    os.path.join(out_dir, f"autoencoder_emg_{{l_dim}}d.pth"),
+    os.path.join(out_dir, "autoencoder_campeon.pth"),
+    os.path.join(out_dir, "autoencoder_emg.pth"),
+]
+model_path = next((m for m in model_candidates if os.path.exists(m)), None)
+if not model_path:
+    print("> ERROR: No se encontró ningún modelo (.pth) entrenado.")
+    sys.exit(1)
+
+import deep_learning.decodificador_continuo as dc
+dc.decodificar_secuencia(
+    carpeta_secuencia=carpeta_secuencia,
+    modelo_path=model_path,
+    alpha_ruido=kwargs.get('alpha_ruido', 1.0),
+    smooth_ms=kwargs.get('smooth_ms', 150),
+    notch_q=kwargs.get('notch_q', 2.0),
+    use_manual_exclusions=kwargs.get('use_manual_exclusions', True),
+    target_length=kwargs.get('target_length', 100)
+)
+'''
+    self._launch_bridge_script("decodificador_continuo", f"DECODIFICADOR CONTINUO ({os.path.basename(carpeta)})", kwargs, template)
 
   def _sync_electrode_viewer(self):
     """Sincroniza el visor de electrodos con las mediciones seleccionadas en el gestor."""

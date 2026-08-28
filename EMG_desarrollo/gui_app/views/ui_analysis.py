@@ -854,6 +854,162 @@ class UmapSupervisadoTab(QWidget):
         self.btn_run.setStyleSheet("background-color: #45A29E; color: white; font-weight: bold; padding: 10px;")
         self.layout.addWidget(self.btn_run)
 
+class AutoencodersTab(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(5, 5, 5, 5)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        content = QWidget()
+        lay = QVBoxLayout(content)
+
+        # 1. Parámetros DSP y Extracción Tensorial
+        g_dsp = QGroupBox("1. Parámetros DSP y Extracción Tensorial")
+        l_dsp = QGridLayout()
+        
+        l_dsp.addWidget(QLabel("Alpha:"), 0, 0)
+        self.inp_alpha = QDoubleSpinBox()
+        self.inp_alpha.setRange(0.0, 5.0)
+        self.inp_alpha.setSingleStep(0.1)
+        self.inp_alpha.setValue(1.0)
+        self.inp_alpha.setFixedWidth(60)
+        l_dsp.addWidget(self.inp_alpha, 0, 1)
+
+        l_dsp.addWidget(QLabel("Smooth:"), 0, 2)
+        self.inp_smooth = QSpinBox()
+        self.inp_smooth.setRange(10, 1000)
+        self.inp_smooth.setSingleStep(10)
+        self.inp_smooth.setValue(150)
+        self.inp_smooth.setFixedWidth(60)
+        l_dsp.addWidget(self.inp_smooth, 0, 3)
+
+        l_dsp.addWidget(QLabel("Pts:"), 0, 4)
+        self.inp_pts = QSpinBox()
+        self.inp_pts.setRange(10, 500)
+        self.inp_pts.setSingleStep(10)
+        self.inp_pts.setValue(100)
+        self.inp_pts.setFixedWidth(60)
+        l_dsp.addWidget(self.inp_pts, 0, 5)
+
+        l_dsp.addWidget(QLabel("SNR:"), 0, 6)
+        self.inp_snr = QDoubleSpinBox()
+        self.inp_snr.setRange(0.0, 50.0)
+        self.inp_snr.setSingleStep(0.1)
+        self.inp_snr.setValue(0.5)
+        self.inp_snr.setFixedWidth(60)
+        l_dsp.addWidget(self.inp_snr, 0, 7)
+
+        l_dsp.addWidget(QLabel("Outliers:"), 0, 8)
+        self.inp_outliers = QDoubleSpinBox()
+        self.inp_outliers.setRange(0.0, 0.99)
+        self.inp_outliers.setSingleStep(0.01)
+        self.inp_outliers.setValue(0.05)
+        self.inp_outliers.setFixedWidth(60)
+        l_dsp.addWidget(self.inp_outliers, 0, 9)
+
+        l_dsp.addWidget(QLabel("Notch Q:"), 0, 10)
+        self.inp_notch = QDoubleSpinBox()
+        self.inp_notch.setRange(0.1, 100.0)
+        self.inp_notch.setSingleStep(0.5)
+        self.inp_notch.setValue(2.0)
+        self.inp_notch.setFixedWidth(50)
+        l_dsp.addWidget(self.inp_notch, 0, 11)
+
+        g_dsp.setLayout(l_dsp)
+        lay.addWidget(g_dsp)
+
+        # 2. Parámetros de Red Neuronal
+        g_nn = QGroupBox("2. Parámetros de Red Neuronal (Autoencoder 1D)")
+        l_nn = QGridLayout()
+
+        l_nn.addWidget(QLabel("Épocas:"), 0, 0)
+        self.inp_epochs = QSpinBox()
+        self.inp_epochs.setRange(1, 1000)
+        self.inp_epochs.setValue(80)
+        self.inp_epochs.setFixedWidth(60)
+        l_nn.addWidget(self.inp_epochs, 0, 1)
+
+        l_nn.addWidget(QLabel("Batch Size:"), 0, 2)
+        self.inp_batch = QSpinBox()
+        self.inp_batch.setRange(1, 512)
+        self.inp_batch.setValue(16)
+        self.inp_batch.setFixedWidth(60)
+        l_nn.addWidget(self.inp_batch, 0, 3)
+
+        l_nn.addWidget(QLabel("Latent Dim:"), 0, 4)
+        self.inp_latent = QSpinBox()
+        self.inp_latent.setRange(1, 256)
+        self.inp_latent.setValue(8)
+        self.inp_latent.setFixedWidth(60)
+        l_nn.addWidget(self.inp_latent, 0, 5)
+
+        l_nn.addWidget(QLabel("Kernel Size:"), 0, 6)
+        self.inp_kernel = QSpinBox()
+        self.inp_kernel.setRange(1, 31)
+        self.inp_kernel.setSingleStep(2)
+        self.inp_kernel.setValue(5)
+        self.inp_kernel.setFixedWidth(60)
+        l_nn.addWidget(self.inp_kernel, 0, 7)
+
+        l_nn.addWidget(QLabel("Alpha Loss:"), 0, 8)
+        self.inp_alpha_loss = QDoubleSpinBox()
+        self.inp_alpha_loss.setRange(0.0, 1.0)
+        self.inp_alpha_loss.setSingleStep(0.05)
+        self.inp_alpha_loss.setValue(0.5)
+        self.inp_alpha_loss.setFixedWidth(60)
+        l_nn.addWidget(self.inp_alpha_loss, 0, 9)
+
+        g_nn.setLayout(l_nn)
+        lay.addWidget(g_nn)
+
+        # 3. Opciones y Exclusiones
+        g_opt = QGroupBox("3. Opciones de Entrenamiento y Exclusiones")
+        l_opt = QHBoxLayout()
+        self.chk_manual_excl = QCheckBox("Aplicar Exclusiones Manuales (metadata.json)")
+        self.chk_manual_excl.setChecked(True)
+        l_opt.addWidget(self.chk_manual_excl)
+
+        self.chk_force_epochs = QCheckBox("Forzar Épocas (Ignorar Checkpoint)")
+        self.chk_force_epochs.setChecked(False)
+        l_opt.addWidget(self.chk_force_epochs)
+        g_opt.setLayout(l_opt)
+        lay.addWidget(g_opt)
+
+        lay.addStretch()
+        scroll.setWidget(content)
+        self.layout.addWidget(scroll)
+
+        # Botones de Acción (Estilo Cyberpunk)
+        self.btn_grid_search = QPushButton(" GRID SEARCH AUTOENCODER (36 COMBINACIONES)")
+        self.btn_grid_search.setStyleSheet("background-color: #ffe600; color: black; font-weight: bold; padding: 10px; margin-bottom: 3px;")
+        self.layout.addWidget(self.btn_grid_search)
+
+        l_main_btns = QHBoxLayout()
+        self.btn_extraer = QPushButton("1. EXTRAER DATASET")
+        self.btn_extraer.setStyleSheet("background-color: #45A29E; color: black; font-weight: bold; padding: 10px;")
+        self.btn_entrenar = QPushButton("2. ENTRENAR AUTOENCODER")
+        self.btn_entrenar.setStyleSheet("background-color: #66FCF1; color: black; font-weight: bold; padding: 10px;")
+        self.btn_plotear = QPushButton("3. PLOTEAR ESPACIO LATENTE")
+        self.btn_plotear.setStyleSheet("background-color: #00FF00; color: black; font-weight: bold; padding: 10px;")
+        l_main_btns.addWidget(self.btn_extraer)
+        l_main_btns.addWidget(self.btn_entrenar)
+        l_main_btns.addWidget(self.btn_plotear)
+        self.layout.addLayout(l_main_btns)
+
+        l_sub_btns = QHBoxLayout()
+        self.btn_decodificador = QPushButton(" DECODIFICAR SECUENCIA CONTINUA")
+        self.btn_decodificador.setStyleSheet("background-color: #003344; color: #00FFFF; border: 1px solid #00FFFF; font-weight: bold; padding: 9px;")
+        self.btn_visor_features = QPushButton(" VISUALIZADOR DE FEATURES")
+        self.btn_visor_features.setStyleSheet("background-color: #2b0938; color: #e879f9; border: 1px solid #e879f9; font-weight: bold; padding: 9px;")
+        self.btn_pipeline_gui = QPushButton(" PIPELINE MAESTRO (GUI)")
+        self.btn_pipeline_gui.setStyleSheet("background-color: #1a1a1a; color: #66FCF1; border: 1px solid #66FCF1; font-weight: bold; padding: 9px;")
+        l_sub_btns.addWidget(self.btn_decodificador)
+        l_sub_btns.addWidget(self.btn_visor_features)
+        l_sub_btns.addWidget(self.btn_pipeline_gui)
+        self.layout.addLayout(l_sub_btns)
+
 class MachineLearningTab(QWidget):
     def __init__(self):
         super().__init__()
@@ -865,10 +1021,12 @@ class MachineLearningTab(QWidget):
         self.tab_pca = PcaTab()
         self.tab_umap = UmapTab()
         self.tab_umap_sup = UmapSupervisadoTab()
+        self.tab_autoencoders = AutoencodersTab()
         
         self.tabs.addTab(self.tab_pca, "PCA")
         self.tabs.addTab(self.tab_umap, "UMAP No-Lineal")
         self.tabs.addTab(self.tab_umap_sup, "UMAP Supervisado")
+        self.tabs.addTab(self.tab_autoencoders, "Autoencoders")
         
         layout.addWidget(self.tabs)
 
@@ -983,26 +1141,7 @@ class MachineLearningPanel(QWidget):
         self.tabs.addTab(self.tab_umap_sup, "UMAP Supervisado")
         
         # 5. Autoencoders
-        self.tab_autoencoders = QWidget()
-        lyt_autoencoders = QVBoxLayout(self.tab_autoencoders)
-        
-        self.btn_autoencoders = QPushButton("Pipeline Maestro: Autoencoder (GUI)")
-        self.btn_autoencoders.setStyleSheet("padding: 14px; font-size: 13px; font-weight: bold; background-color: #00331a; color: #00ffaa; border: 1px solid #00ffaa; border-radius: 4px;")
-        
-        self.btn_grid_search_ae = QPushButton("Grid Search: Autoencoder (36 Combinaciones)")
-        self.btn_grid_search_ae.setStyleSheet("padding: 14px; font-size: 13px; font-weight: bold; background-color: #332b00; color: #ffe600; border: 1px solid #ffe600; border-radius: 4px;")
-        
-        self.btn_decodificador_ae = QPushButton("Decodificador de Secuencia Continua")
-        self.btn_decodificador_ae.setStyleSheet("padding: 14px; font-size: 13px; font-weight: bold; background-color: #002b33; color: #00ffff; border: 1px solid #00ffff; border-radius: 4px;")
-        
-        self.btn_visor_features_ae = QPushButton("Visualizador de Features (Matriz de Tensores)")
-        self.btn_visor_features_ae.setStyleSheet("padding: 14px; font-size: 13px; font-weight: bold; background-color: #330033; color: #ff00ff; border: 1px solid #ff00ff; border-radius: 4px;")
-        
-        lyt_autoencoders.addWidget(self.btn_autoencoders)
-        lyt_autoencoders.addWidget(self.btn_grid_search_ae)
-        lyt_autoencoders.addWidget(self.btn_decodificador_ae)
-        lyt_autoencoders.addWidget(self.btn_visor_features_ae)
-        lyt_autoencoders.addStretch()
+        self.tab_autoencoders = AutoencodersTab()
         self.tabs.addTab(self.tab_autoencoders, "Autoencoders")
         
         # 6. Otros Clasificadores y Herramientas
@@ -1147,6 +1286,24 @@ class MachineLearningPanel(QWidget):
             'post_pct': t_umap.inp_post_pct.value(),
             'modo_alineacion': t_umap.cmb_align.currentText(),
             'canales_features': canales
+        }
+
+    def get_autoencoder_kwargs(self):
+        t = self.tab_autoencoders
+        return {
+            'alpha_ruido': t.inp_alpha.value(),
+            'smooth_ms': t.inp_smooth.value(),
+            'target_length': t.inp_pts.value(),
+            'snr_min': t.inp_snr.value(),
+            'outliers_pct': t.inp_outliers.value(),
+            'notch_q': t.inp_notch.value(),
+            'use_manual_exclusions': t.chk_manual_excl.isChecked(),
+            'epochs': t.inp_epochs.value(),
+            'batch_size': t.inp_batch.value(),
+            'latent_dim': t.inp_latent.value(),
+            'kernel_size': t.inp_kernel.value(),
+            'alpha_loss': t.inp_alpha_loss.value(),
+            'force_epochs': t.chk_force_epochs.isChecked()
         }
 
 class TrainTestSplitDialog(QDialog):
