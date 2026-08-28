@@ -20,6 +20,13 @@ namespace NanduLsdLauncher
             this.Size = new Size(400, 250);
             this.BackColor = Color.FromArgb(10, 10, 15);
             
+            ProgressBar progressBar = new ProgressBar();
+            progressBar.Style = ProgressBarStyle.Marquee;
+            progressBar.MarqueeAnimationSpeed = 25;
+            progressBar.Dock = DockStyle.Bottom;
+            progressBar.Height = 8;
+            this.Controls.Add(progressBar);
+
             Label lblSub = new Label();
             lblSub.Text = "Iniciando motor DSP y cargando Python...";
             lblSub.ForeColor = Color.White;
@@ -27,7 +34,7 @@ namespace NanduLsdLauncher
             lblSub.AutoSize = false;
             lblSub.TextAlign = ContentAlignment.MiddleCenter;
             lblSub.Dock = DockStyle.Bottom;
-            lblSub.Height = 50;
+            lblSub.Height = 45;
             this.Controls.Add(lblSub);
 
             string logoPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logo_nandu_lsd.png");

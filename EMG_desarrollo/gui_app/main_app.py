@@ -2733,16 +2733,26 @@ def main():
     pixmap = QPixmap(logo_path)
     if pixmap.width() > 800:
       pixmap = pixmap.scaledToWidth(800, Qt.SmoothTransformation)
+    from PySide6.QtWidgets import QProgressBar
     splash = QSplashScreen(pixmap, Qt.WindowStaysOnTopHint)
+    
+    splash_progress = QProgressBar(splash)
+    splash_progress.setGeometry(15, pixmap.height() - 28, pixmap.width() - 30, 16)
+    splash_progress.setStyleSheet("QProgressBar { border: 1px solid #555555; border-radius: 4px; text-align: center; color: white; font-weight: bold; background-color: #111111; } QProgressBar::chunk { background-color: #00ffcc; border-radius: 3px; }")
+    splash_progress.setValue(35)
+    splash_progress.show()
+    
     splash.show()
     splash.showMessage("Iniciando Ñandú LSD EMG Analytics...", Qt.AlignBottom | Qt.AlignCenter, QColor("white"))
     app.processEvents()
-    time.sleep(1.0) # Delay para asegurar que el usuario vea el logo (estilo software pro)
+    time.sleep(0.8)
     
   if qdarkstyle:
     app.setStyleSheet(qdarkstyle.load_stylesheet(qt_api='pyside6'))
     
   if splash:
+    if 'splash_progress' in locals() and splash_progress:
+      splash_progress.setValue(75)
     splash.showMessage("Cargando módulos y base de datos...", Qt.AlignBottom | Qt.AlignCenter, QColor("white"))
     app.processEvents()
     
@@ -2751,6 +2761,9 @@ def main():
   window._setup_styles()
   
   if splash:
+    if 'splash_progress' in locals() and splash_progress:
+      splash_progress.setValue(100)
+      app.processEvents()
     splash.finish(window)
     
   window.show()
