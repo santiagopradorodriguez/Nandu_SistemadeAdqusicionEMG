@@ -1230,7 +1230,7 @@ class RealTimePlotter(QtWidgets.QWidget):
       except Exception:
         pass # Usar defaults si hay error
     self.spin_bpm.setValue(bpm)
-    self.chk_notch_enable.setChecked(notch_enabled) # Aplicar a la casilla
+    self.chk_notch_enable.setChecked(True) # Filtro Notch 50Hz forzado siempre activo por defecto
 
   def _setup_ui_layouts(self):
     """
@@ -1842,7 +1842,13 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.spectrogram_view.setVisible(enabled and self.chk_spectrogram_enable.isChecked())
     self.filter_groupbox.setEnabled(enabled)
     self.chk_filter_enable.setEnabled(enabled and SCIPY_DISPONIBLE)
-    self.chk_notch_enable.setEnabled(enabled and SCIPY_DISPONIBLE)
+    # El filtro Notch debe permanecer siempre activado y bloqueado durante la medición
+    if enabled:
+      self.chk_notch_enable.setChecked(True)
+      self.chk_notch_enable.setEnabled(False) # No permitir desactivarlo mientras se mide
+    else:
+      self.chk_notch_enable.setChecked(True)
+      self.chk_notch_enable.setEnabled(SCIPY_DISPONIBLE)
     # El resto de controles del filtro dependen del checkbox
     is_filter_enabled = enabled and self.chk_filter_enable.isChecked()
     self.spin_low_cut.setEnabled(is_filter_enabled)
