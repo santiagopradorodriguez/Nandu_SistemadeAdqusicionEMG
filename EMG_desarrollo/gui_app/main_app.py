@@ -155,7 +155,7 @@ from PySide6.QtWidgets import (
   QToolBar, QPushButton, QSizePolicy, QMessageBox, QComboBox,
   QTableWidget, QTableWidgetItem, QScrollArea, QDialog
 )
-from PySide6.QtCore import Qt, QThreadPool, QSize
+from PySide6.QtCore import Qt, QThreadPool, QSize, QTimer
 from PySide6.QtGui import QFont, QColor, QTextCursor, QAction, QPixmap, QIcon, QCursor
 
 app = QApplication.instance()
@@ -221,6 +221,11 @@ class ZoomableImageWidget(QWidget):
     self._scale_factor = 1.0
     self._fit_mode = True
 
+    # Debounce timer para evitar loops de resize con el window manager
+    self._resize_timer = QTimer(self)
+    self._resize_timer.setSingleShot(True)
+    self._resize_timer.timeout.connect(self._on_debounced_resize)
+
     layout = QVBoxLayout(self)
     layout.setContentsMargins(0, 0, 0, 0)
     layout.setSpacing(4)
@@ -254,13 +259,17 @@ class ZoomableImageWidget(QWidget):
 
     # Scroll area containing the image label
     self.scroll_area = QScrollArea()
-    self.scroll_area.setWidgetResizable(False)
+    self.scroll_area.setWidgetResizable(True)
     self.scroll_area.setAlignment(Qt.AlignCenter)
     self.scroll_area.setStyleSheet("background-color: #0c0c0c; border: 1px solid #222;")
+    self.scroll_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+    self.scroll_area.setMinimumSize(100, 100)
 
     self.img_label = QLabel(self.placeholder_text)
     self.img_label.setAlignment(Qt.AlignCenter)
     self.img_label.setStyleSheet("background-color: #0c0c0c; color: #666; font-size: 13px;")
+    self.img_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+    self.img_label.setScaledContents(False)
     self.img_label.setCursor(Qt.PointingHandCursor)
     self.scroll_area.setWidget(self.img_label)
     layout.addWidget(self.scroll_area, stretch=1)
@@ -316,19 +325,26 @@ class ZoomableImageWidget(QWidget):
   def fit_to_view(self):
     if self._pixmap is None or self._pixmap.isNull(): return
     self._fit_mode = True
+    self.scroll_area.setWidgetResizable(True)
+    self.img_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
     vp_size = self.scroll_area.viewport().size()
-    w_ratio = (vp_size.width() - 10) / max(self._pixmap.width(), 1)
-    h_ratio = (vp_size.height() - 10) / max(self._pixmap.height(), 1)
-    self._scale_factor = max(0.05, min(w_ratio, h_ratio, 1.0))
-    self._apply_zoom(fit_text=True)
+    scaled_pix = self._pixmap.scaled(vp_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+    self.img_label.setPixmap(scaled_pix)
+    self.lbl_zoom.setText("Ajustado")
 
   def _apply_zoom(self, fit_text=False):
     if self._pixmap is None or self._pixmap.isNull(): return
+    if self._fit_mode:
+      self.fit_to_view()
+      return
+    self.scroll_area.setWidgetResizable(False)
+    self.img_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
     target_w = max(10, int(self._pixmap.width() * self._scale_factor))
     target_h = max(10, int(self._pixmap.height() * self._scale_factor))
-    scaled_pix = self._pixmap.scaled(target_w, target_h, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-    self.img_label.resize(scaled_pix.size())
+    target_size = QSize(target_w, target_h)
+    scaled_pix = self._pixmap.scaled(target_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
     self.img_label.setPixmap(scaled_pix)
+    self.img_label.resize(target_size)
     if fit_text:
       self.lbl_zoom.setText("Ajustado")
     else:
@@ -336,6 +352,10 @@ class ZoomableImageWidget(QWidget):
 
   def resizeEvent(self, event):
     super().resizeEvent(event)
+    if self._fit_mode and self._pixmap is not None and not self._pixmap.isNull():
+      self._resize_timer.start(50)
+
+  def _on_debounced_resize(self):
     if self._fit_mode and self._pixmap is not None and not self._pixmap.isNull():
       self.fit_to_view()
 

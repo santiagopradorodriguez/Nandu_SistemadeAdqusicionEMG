@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QGroupBox, QCheckBox, QRadioButton, QLineEdit, QFormLayout, QComboBox,
     QDialog, QSizePolicy
 )
-from PySide6.QtCore import Qt, Signal, QSize, QEvent
+from PySide6.QtCore import Qt, Signal, QSize, QEvent, QTimer
 from PySide6.QtGui import QPixmap, QCursor
 
 class CalibratedViewerWidget(QWidget):
@@ -27,6 +27,11 @@ class CalibratedViewerWidget(QWidget):
         self.current_measurement_path = None
         self.zoom_factor = 1.0
         self.fit_to_window = True
+
+        # Debounce timer para evitar bucles de redimensionamiento
+        self._resize_timer = QTimer(self)
+        self._resize_timer.setSingleShot(True)
+        self._resize_timer.timeout.connect(self._on_debounced_resize)
 
         # Barra superior
         top_bar = QHBoxLayout()
@@ -204,13 +209,17 @@ class CalibratedViewerWidget(QWidget):
 
         # --- ÁREA DERECHA: Scroll para la imagen ---
         self.scroll_area = QScrollArea()
-        self.scroll_area.setWidgetResizable(False)
+        self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setAlignment(Qt.AlignCenter)
         self.scroll_area.setStyleSheet("background-color: #0c0c0c; border: 1px solid #222;")
+        self.scroll_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.scroll_area.setMinimumSize(150, 150)
         
         self.image_label = QLabel()
         self.image_label.setAlignment(Qt.AlignCenter)
         self.image_label.setStyleSheet("background-color: #0c0c0c; color: #666; font-size: 13px;")
+        self.image_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+        self.image_label.setScaledContents(False)
         self.image_label.setCursor(Qt.PointingHandCursor)
         self.image_label.mouseDoubleClickEvent = lambda e: self.show_fullscreen()
         self.scroll_area.setWidget(self.image_label)
@@ -366,17 +375,22 @@ class CalibratedViewerWidget(QWidget):
             return
             
         if self.fit_to_window:
+            self.scroll_area.setWidgetResizable(True)
+            self.image_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+            
             vp_size = self.scroll_area.viewport().size()
-            vp_w = max(50, vp_size.width() - 8)
-            vp_h = max(50, vp_size.height() - 8)
+            vp_w = max(50, vp_size.width())
+            vp_h = max(50, vp_size.height())
             
             scaled_pixmap = self.current_pixmap.scaled(
                 QSize(vp_w, vp_h), Qt.KeepAspectRatio, Qt.SmoothTransformation
             )
             self.image_label.setPixmap(scaled_pixmap)
-            self.image_label.resize(scaled_pixmap.size())
             self.lbl_zoom_indicator.setText("Auto-Ajustado")
         else:
+            self.scroll_area.setWidgetResizable(False)
+            self.image_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+            
             target_w = max(1, int(self.current_pixmap.width() * self.zoom_factor))
             target_h = max(1, int(self.current_pixmap.height() * self.zoom_factor))
             target_size = QSize(target_w, target_h)
@@ -390,6 +404,10 @@ class CalibratedViewerWidget(QWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if getattr(self, 'fit_to_window', True) and getattr(self, 'current_pixmap', None) and not self.current_pixmap.isNull():
+            self._resize_timer.start(50)
+
+    def _on_debounced_resize(self):
+        if self.fit_to_window and self.current_pixmap and not self.current_pixmap.isNull():
             self.update_image_display()
 
     def show_fullscreen(self):
