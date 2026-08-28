@@ -1403,14 +1403,14 @@ class RealTimePlotter(QtWidgets.QWidget):
     
     # --- NUEVO: Toggles UI para mostrar/ocultar regiones ---
     self.chk_show_noise = QtWidgets.QCheckBox("Mostrar Ruido")
-    self.chk_show_noise.setChecked(True)
+    self.chk_show_noise.setChecked(False) # Desactivado por defecto
     self.chk_show_noise.setToolTip("Muestra u oculta las regiones de ruido.")
     self.chk_show_noise.clicked.connect(self.toggle_noise_regions)
     self.filter_layout.addWidget(self.chk_show_noise)
     self.filter_layout.addSpacing(20)
 
     self.chk_show_peaks = QtWidgets.QCheckBox("Mostrar Picos")
-    self.chk_show_peaks.setChecked(True)
+    self.chk_show_peaks.setChecked(False) # Desactivado por defecto
     self.chk_show_peaks.setToolTip("Muestra u oculta los marcadores de picos (Peak-Hold).")
     self.chk_show_peaks.clicked.connect(self.toggle_peak_scatter)
     self.filter_layout.addWidget(self.chk_show_peaks)
@@ -2110,6 +2110,7 @@ class RealTimePlotter(QtWidgets.QWidget):
       
       # --- NUEVO: Marcador visual para el pico máximo (SNR) ---
       scatter = pg.ScatterPlotItem(size=12, pen=pg.mkPen('w', width=1.5), brush=pg.mkBrush(color))
+      scatter.setVisible(self.chk_show_peaks.isChecked())
       self.plot.addItem(scatter)
       self.peak_scatters.append(scatter)
       
@@ -2117,7 +2118,7 @@ class RealTimePlotter(QtWidgets.QWidget):
       dyn_region = pg.LinearRegionItem(orientation='horizontal', brush=pg.mkBrush(0, 255, 0, 40), movable=False)
       dyn_region.lines[0].setPen(pg.mkPen(None))
       dyn_region.lines[1].setPen(pg.mkPen(None))
-      dyn_region.hide()
+      dyn_region.setVisible(self.chk_show_noise.isChecked())
       self.plot.addItem(dyn_region)
       self.dynamic_noise_regions.append(dyn_region)
 
@@ -2140,6 +2141,7 @@ class RealTimePlotter(QtWidgets.QWidget):
       label_ruido.setStyleSheet("color: gray; font-size: 11px; background-color: transparent;")
       label_ruido.setWordWrap(True)
       label_ruido.setMinimumWidth(0)
+      label_ruido.setVisible(self.chk_show_noise.isChecked())
       frame_layout.addWidget(label_ruido)
       self.noise_status_labels.append(label_ruido)
       
@@ -2945,11 +2947,12 @@ class RealTimePlotter(QtWidgets.QWidget):
                   self.initial_noise_std[i] = np.std(all_noise_env)
                   
                   self.noise_lines[i].setPos(self.noise_levels[i])
-                  self.noise_lines[i].show()
                   self.noise_lines_neg[i].setPos(-self.noise_levels[i])
-                  self.noise_lines_neg[i].show()
                   self.noise_regions[i].setRegion([-self.noise_levels[i], self.noise_levels[i]])
-                  self.noise_regions[i].show()
+                  show_noise = self.chk_show_noise.isChecked()
+                  self.noise_lines[i].setVisible(show_noise)
+                  self.noise_lines_neg[i].setVisible(show_noise)
+                  self.noise_regions[i].setVisible(show_noise)
                   
                   if hasattr(self, 'noise_status_labels'):
                     self.noise_status_labels[i].setText(f"Ruido Base: x̄={self.initial_noise_mean[i]:.1f}µV, σ={self.initial_noise_std[i]:.1f}µV")
@@ -3709,11 +3712,12 @@ class RealTimePlotter(QtWidgets.QWidget):
           self.initial_noise_std[i] = np.std(all_noise_env)
           
           self.noise_lines[i].setPos(self.noise_levels[i])
-          self.noise_lines[i].show()
           self.noise_lines_neg[i].setPos(-self.noise_levels[i])
-          self.noise_lines_neg[i].show()
           self.noise_regions[i].setRegion([-self.noise_levels[i], self.noise_levels[i]])
-          self.noise_regions[i].show()
+          show_noise = self.chk_show_noise.isChecked()
+          self.noise_lines[i].setVisible(show_noise)
+          self.noise_lines_neg[i].setVisible(show_noise)
+          self.noise_regions[i].setVisible(show_noise)
           
           if hasattr(self, 'noise_status_labels'):
             self.noise_status_labels[i].setText(f"Ruido Base: x̄={self.initial_noise_mean[i]:.1f}µV, s={self.initial_noise_std[i]:.1f}µV")
@@ -4057,11 +4061,12 @@ class RealTimePlotter(QtWidgets.QWidget):
           self.initial_noise_std[i] = np.std(all_noise_env)
           
           self.noise_lines[i].setPos(self.noise_levels[i])
-          self.noise_lines[i].show()
           self.noise_lines_neg[i].setPos(-self.noise_levels[i])
-          self.noise_lines_neg[i].show()
           self.noise_regions[i].setRegion([-self.noise_levels[i], self.noise_levels[i]])
-          self.noise_regions[i].show()
+          show_noise = self.chk_show_noise.isChecked()
+          self.noise_lines[i].setVisible(show_noise)
+          self.noise_lines_neg[i].setVisible(show_noise)
+          self.noise_regions[i].setVisible(show_noise)
           
           if hasattr(self, 'noise_status_labels'):
             self.noise_status_labels[i].setText(f"Ruido Base: x̄={self.initial_noise_mean[i]:.1f}µV, s={self.initial_noise_std[i]:.1f}µV")
