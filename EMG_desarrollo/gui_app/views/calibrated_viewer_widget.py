@@ -410,6 +410,16 @@ class CalibratedViewerWidget(QWidget):
         if self.fit_to_window and self.current_pixmap and not self.current_pixmap.isNull():
             self.update_image_display()
 
+    def wheelEvent(self, event):
+        if event.modifiers() & Qt.ControlModifier:
+            if event.angleDelta().y() > 0:
+                self.zoom_in()
+            else:
+                self.zoom_out()
+            event.accept()
+        else:
+            super().wheelEvent(event)
+
     def show_fullscreen(self):
         """Abre un diálogo modal para visualizar la imagen a resolución completa y en pantalla completa."""
         if not self.current_pixmap or self.current_pixmap.isNull():
@@ -419,20 +429,102 @@ class CalibratedViewerWidget(QWidget):
         dialog.setWindowTitle("Ñandú LSD - Visor de Gráficos de Alta Resolución")
         dialog.setStyleSheet("background-color: #050505; color: #fff;")
         dlg_lyt = QVBoxLayout(dialog)
-        dlg_lyt.setContentsMargins(5, 5, 5, 5)
+        dlg_lyt.setContentsMargins(8, 8, 8, 8)
         
+        # Toolbar en la ventana modal
+        tb = QHBoxLayout()
+        btn_in = QPushButton("+ Zoom")
+        btn_out = QPushButton("- Zoom")
+        btn_fit = QPushButton("Ajustar")
+        btn_100 = QPushButton("100% (1:1)")
+        btn_close = QPushButton("Cerrar")
+        
+        btn_style = """
+            QPushButton {
+                background-color: #151515; color: #00ffcc; border: 1px solid #333;
+                padding: 4px 12px; font-size: 12px; font-weight: bold; border-radius: 3px;
+            }
+            QPushButton:hover { background-color: #00ffcc; color: #000; }
+        """
+        for b in [btn_in, btn_out, btn_fit, btn_100]:
+            b.setStyleSheet(btn_style)
+            tb.addWidget(b)
+            
+        btn_close.setStyleSheet("""
+            QPushButton {
+                background-color: #331111; color: #ff5555; border: 1px solid #ff3333;
+                padding: 4px 12px; font-size: 12px; font-weight: bold; border-radius: 3px;
+            }
+            QPushButton:hover { background-color: #ff3333; color: #fff; }
+        """)
+        btn_close.clicked.connect(dialog.accept)
+        tb.addStretch()
+        dlg_lyt.addLayout(tb)
+        
+        # Scroll area con ImageLabel responsivo
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setStyleSheet("border: none; background: #000;")
+        scroll.setStyleSheet("border: 1px solid #222; background: #000;")
+        scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         
         lbl = QLabel()
         lbl.setAlignment(Qt.AlignCenter)
-        lbl.setPixmap(self.current_pixmap)
+        lbl.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+        lbl.setStyleSheet("background-color: #000;")
         scroll.setWidget(lbl)
-        dlg_lyt.addWidget(scroll)
+        dlg_lyt.addWidget(scroll, stretch=1)
         
-        screen = self.screen().availableGeometry()
-        max_w = int(screen.width() * 0.95)
-        max_h = int(screen.height() * 0.95)
-        dialog.resize(min(self.current_pixmap.width() + 40, max_w), min(self.current_pixmap.height() + 40, max_h))
+        # Estado interno de zoom del modal
+        modal_state = {"fit": True, "scale": 1.0}
+        
+        def update_modal_display():
+            if not self.current_pixmap: return
+            if modal_state["fit"]:
+                scroll.setWidgetResizable(True)
+                lbl.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+                vp_s = scroll.viewport().size()
+                sc = self.current_pixmap.scaled(vp_s, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                lbl.setPixmap(sc)
+            else:
+                scroll.setWidgetResizable(False)
+                lbl.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+                tw = max(10, int(self.current_pixmap.width() * modal_state["scale"]))
+                th = max(10, int(self.current_pixmap.height() * modal_state["scale"]))
+                sc = self.current_pixmap.scaled(QSize(tw, th), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                lbl.setPixmap(sc)
+                lbl.resize(QSize(tw, th))
+                
+        def modal_zoom_in():
+            modal_state["fit"] = False
+            modal_state["scale"] = min(modal_state["scale"] * 1.25, 8.0)
+            update_modal_display()
+            
+        def modal_zoom_out():
+            modal_state["fit"] = False
+            modal_state["scale"] = max(modal_state["scale"] / 1.25, 0.1)
+            update_modal_display()
+            
+        def modal_zoom_fit():
+            modal_state["fit"] = True
+            update_modal_display()
+            
+        def modal_zoom_100():
+            modal_state["fit"] = False
+            modal_state["scale"] = 1.0
+            update_modal_display()
+            
+        btn_in.clicked.connect(modal_zoom_in)
+        btn_out.clicked.connect(modal_zoom_out)
+        btn_fit.clicked.connect(modal_zoom_fit)
+        btn_100.clicked.connect(modal_zoom_100)
+        
+        orig_resize = dialog.resizeEvent
+        def modal_resize(e):
+            orig_resize(e)
+            if modal_state["fit"]:
+                QTimer.singleShot(10, update_modal_display)
+        dialog.resizeEvent = modal_resize
+        
+        dialog.showMaximized()
+        QTimer.singleShot(60, update_modal_display)
         dialog.exec()

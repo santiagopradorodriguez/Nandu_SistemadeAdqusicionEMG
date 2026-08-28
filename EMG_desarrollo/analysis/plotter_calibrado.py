@@ -411,7 +411,8 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
     graficar_fft = config.get("graficar_fft", False)
     num_canales = len(cols_canales)
     ncols = 2 if graficar_fft else 1
-    ancho_fig = 24 if graficar_fft else 16
+    ancho_fig = 26 if graficar_fft else 20
+    alto_fig = max(8.0, 3.2 * num_canales)
     
     # Estética global / local
     is_dark = config.get("tema_oscuro", True)
@@ -420,7 +421,7 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
     else:
         plt.style.use('default')
 
-    fig, axs = plt.subplots(num_canales, ncols, figsize=(ancho_fig, 5 * num_canales), squeeze=False)
+    fig, axs = plt.subplots(num_canales, ncols, figsize=(ancho_fig, alto_fig), squeeze=False)
     
     # Compartir ejes X por columna para mantener sincronización y ocultar labels internos
     if num_canales > 1:
@@ -758,7 +759,7 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
     nombre_archivo = f"plot_calibrado_{nombre_limpio}.png"
     ruta_guardado = os.path.join(path_medicion, nombre_archivo)
     
-    plt.savefig(ruta_guardado, dpi=100)
+    plt.savefig(ruta_guardado, dpi=110, bbox_inches='tight')
     print(f"[OK] Guardado en medición: {ruta_guardado}")
     
     # NUEVO: Guardar copia en el historial de comparativas
@@ -767,7 +768,7 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
         os.makedirs(carpeta_comparativas)
         
     ruta_comparativa = os.path.join(carpeta_comparativas, nombre_archivo)
-    plt.savefig(ruta_comparativa, dpi=100)
+    plt.savefig(ruta_comparativa, dpi=110, bbox_inches='tight')
     print(f"[OK] Copia guardada en historial: {ruta_comparativa}")
     
     # --- VISUALIZACIÓN BLOQUEANTE ---
