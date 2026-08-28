@@ -240,7 +240,8 @@ Nandu_SistemadeAdqusicionEMG/
 ### 1. Prerrequisitos de Hardware y Software
 - **Python:** 3.10 o superior (compatible con Python 3.10, 3.11, 3.12).
 - **Placa de Adquisición:** Compatible con NI-DAQmx (National Instruments, ej. NI USB-6212).
-- **Modo Simulador:** Si no se dispone de tarjeta física NI, el software permite activar la opción **"Usar Micrófono"** para operar el pipeline analítico completo utilizando cualquier placa de sonido convencional.
+- **Modo Simulador:** Si no se dispone de tarjeta física NI, el software permite activar la opción **"Usar Micrófono"** para operar la cadena analítica de procesamiento completa utilizando cualquier placa de sonido convencional.
+- **Descargas Directas:** Consulta [descargas.md](descargas.md) para acceder a los ejecutables portables (Linux y Windows) y controladores NI-DAQmx.
 
 ### 2. Configuración del Entorno Virtual
 
@@ -269,6 +270,8 @@ pip install -r requirements_linux.txt
 ### 3. Driver NI-DAQmx (Requerido para Hardware Físico)
 Para operar con placas National Instruments, se debe instalar el controlador oficial **NI-DAQmx**:
 - [Descarga oficial de NI-DAQmx para Windows](https://download.ni.com/support/nipkg/products/ni-d/ni-daqmx/25.8/online/ni-daqmx_25.8_online.exe)
+- [Página de Drivers NI-DAQmx (National Instruments)](https://www.ni.com/es/support/downloads/drivers/download.ni-daq-mx.html)
+- Para más detalles sobre la configuración del driver, revisa [descargas.md](descargas.md).
 
 ---
 
