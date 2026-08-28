@@ -480,30 +480,28 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
     except Exception:
         colores_canales = ["#ffaa00", "#39ff14", "#ffff00", "#ff0000"]
 
+    # --- PASO 1: Procesar todas las señales ---
+    processed_channels = []
     for i, ch_meta in enumerate(ch_info_list):
         nombre_canal = ch_meta["col_name"]
-        ax = axs[i, 0]
         nom_limpio = nombre_canal.strip()
-        
         raw = df[nombre_canal].values
         musculo = ch_meta["musculo"]
         ganancia = ch_meta["ganancia"]
         color_hex = colores_canales[i]
+        is_mic = ch_meta["is_mic"]
             
         sig = (raw / ganancia) * 1e6 
 
-        # --- NUEVO: Restar offset DC antes de filtrar (solo para modos con envolvente) ---
-        dc_offset_removido = False
+        # Restar offset DC antes de filtrar (solo para modos con envolvente)
         if tipo_envolvente in ['hilbert', 'rms']:
             if noise_seconds is not None and noise_seconds > 0:
                 tiempo_actual = df[col_tiempo].values
                 if len(tiempo_actual) > 0 and tiempo_actual[0] < noise_seconds:
                     noise_end_idx = np.searchsorted(tiempo_actual, noise_seconds, side='right')
                     if noise_end_idx > 0:
-                        # Se usa la mediana en lugar de media para descartar automáticamente anomalías/spikes
                         dc_offset = np.median(sig[:noise_end_idx])
                         sig = sig - dc_offset
-                        dc_offset_removido = True
 
         info_filtros = []
         if aplicar_notch:
@@ -522,95 +520,205 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
         if tipo_envolvente == 'hilbert':
             env = np.abs(signal.hilbert(sig))
             etiqueta_env = " | Env. Hilbert"
-
-            # Restar ruido si está disponible
             if noise_seconds is not None and noise_seconds > 0:
                 tiempo_actual = df[col_tiempo].values
                 if len(tiempo_actual) > 0 and tiempo_actual[0] < noise_seconds:
                     noise_end_idx = np.searchsorted(tiempo_actual, noise_seconds, side='right')
                     if noise_end_idx > 0:
-                        # Se usa la mediana para que las anomalías no afecten el cálculo del offset
                         noise_level = np.median(env[:noise_end_idx])
                         env = env - noise_level
                         etiqueta_env += " (Offset restado)"
-            
-            ax.plot(df[col_tiempo], env, color=color_hex, lw=1.2)
-            
-            # Auto-escala Y-axis (Hilbert)
-            min_val = np.nanmin(env)
-            max_val = np.nanmax(env)
-            if max_val > min_val:
-                margin = (max_val - min_val) * 0.10
-                ax.set_ylim(min_val - margin, max_val + margin)
-
+            y_plot = env
+            lw = 1.2
         elif tipo_envolvente == 'rms':
             env_rms = calcular_rms(sig, fs, RMS_WINDOW_MS)
             etiqueta_env = " | Env. RMS"
-
-            # Restar ruido si está disponible
             if noise_seconds is not None and noise_seconds > 0:
                 tiempo_actual = df[col_tiempo].values
                 if len(tiempo_actual) > 0 and tiempo_actual[0] < noise_seconds:
                     noise_end_idx = np.searchsorted(tiempo_actual, noise_seconds, side='right')
                     if noise_end_idx > 0:
-                        # Se usa nanmedian para que las anomalías no afecten el offset RMS
                         noise_level = np.nanmedian(env_rms[:noise_end_idx])
                         if not np.isnan(noise_level):
                             env_rms = env_rms - noise_level
                             etiqueta_env += " (Offset restado)"
-
-            ax.plot(df[col_tiempo], env_rms, color=color_hex, lw=1.5, label='RMS')
-            
-            # Auto-escala Y-axis (RMS)
-            min_val = np.nanmin(env_rms)
-            max_val = np.nanmax(env_rms)
-            if max_val > min_val:
-                margin = (max_val - min_val) * 0.10
-                ax.set_ylim(min_val - margin, max_val + margin)
-                
+            y_plot = env_rms
+            lw = 1.5
         else:
-            ax.plot(df[col_tiempo], sig, color=color_hex, lw=0.8)
-            
-            # Auto-escala Y-axis (Original)
-            min_val = np.nanmin(sig)
-            max_val = np.nanmax(sig)
-            if max_val > min_val:
-                margin = (max_val - min_val) * 0.10
-                ax.set_ylim(min_val - margin, max_val + margin)
+            y_plot = sig
+            lw = 0.8
+
+        min_val = float(np.nanmin(y_plot)) if len(y_plot) > 0 else 0.0
+        max_val = float(np.nanmax(y_plot)) if len(y_plot) > 0 else 1.0
+
+        processed_channels.append({
+            "idx": i,
+            "nombre_canal": nombre_canal,
+            "musculo": musculo,
+            "color_hex": color_hex,
+            "sig_fft": sig,
+            "y_plot": y_plot,
+            "lw": lw,
+            "min_val": min_val,
+            "max_val": max_val,
+            "is_mic": is_mic,
+            "info_filtros": info_filtros,
+            "etiqueta_env": etiqueta_env
+        })
+
+    # --- PASO 2: Calcular escala Y compartida para los 3 primeros canales musculares ---
+    muscle_channels = [ch for ch in processed_channels if not ch["is_mic"]]
+    shared_muscle_ylim = None
+    if muscle_channels:
+        g_min = min(ch["min_val"] for ch in muscle_channels)
+        g_max = max(ch["max_val"] for ch in muscle_channels)
+        if g_max > g_min:
+            m_margin = (g_max - g_min) * 0.08
+            shared_muscle_ylim = (g_min - m_margin, g_max + m_margin)
+        else:
+            shared_muscle_ylim = (g_min - 5.0, g_max + 5.0)
+
+    # --- PASO 3: Graficar cada canal en su subplot ---
+    t_min = df[col_tiempo].iloc[0]
+    t_max = df[col_tiempo].iloc[-1]
+
+    for i, ch in enumerate(processed_channels):
+        ax = axs[i, 0]
+        y_plot = ch["y_plot"]
+        color_hex = ch["color_hex"]
+        musculo = ch["musculo"]
+        is_mic = ch["is_mic"]
         
+        ax.plot(df[col_tiempo], y_plot, color=color_hex, lw=ch["lw"])
+        
+        # Asignar escala Y
+        if y_min is not None or y_max is not None:
+            cur_y0, cur_y1 = ax.get_ylim()
+            ax.set_ylim(
+                y_min if y_min is not None else cur_y0,
+                y_max if y_max is not None else cur_y1
+            )
+        elif not is_mic and shared_muscle_ylim is not None:
+            # Los canales musculares comparten exactamente la misma escala para comparar amplitudes
+            ax.set_ylim(shared_muscle_ylim)
+        else:
+            # Micrófono / canal 3 con auto-escala independiente
+            min_v = ch["min_val"]
+            max_v = ch["max_val"]
+            if max_v > min_v:
+                m_margin = (max_v - min_v) * 0.08
+                ax.set_ylim(min_v - m_margin, max_v + m_margin)
+
+        # Señalar ruido basal al comienzo
+        if noise_seconds is not None and noise_seconds > 0 and noise_seconds >= t_min:
+            span_color = '#00e5ff' if is_dark else '#0074D9'
+            ax.axvspan(max(0.0, t_min), min(noise_seconds, t_max), color=span_color, alpha=0.12)
+            ax.axvline(x=noise_seconds, color=span_color, ls='--', lw=1.5, alpha=0.75)
+            
+            # Etiqueta textual 'Ruido Basal'
+            y_bounds = ax.get_ylim()
+            y_text = y_bounds[1] - 0.08 * (y_bounds[1] - y_bounds[0])
+            ax.text(noise_seconds / 2.0, y_text, "Ruido Basal", color=span_color,
+                    fontsize=13, ha='center', va='top', fontweight='bold', alpha=0.9)
+
+        # Líneas de cada ventana alrededor del metrónomo (+- tau / 2)
         if bpm and noise_seconds is not None:
-            tau = 60.0/bpm
-            t_max = df[col_tiempo].iloc[-1]
+            tau = 60.0 / bpm
+            win_color = '#ffffff' if is_dark else '#333333'
+            beat_color = '#ffaa00' if is_dark else '#d35400'
+            
+            # Primera frontera antes del primer pulso si está dentro del rango
+            first_bound = noise_seconds - tau / 2.0
+            if t_min <= first_bound <= t_max:
+                ax.axvline(x=first_bound, color=win_color, ls='--', lw=1.0, alpha=0.4)
+                
             k = 0
             while True:
-               #la ventana esta entre tau y menos tau sobre 2
-                line_t = noise_seconds + k*tau + tau/2
-                if line_t > t_max: break
-                if line_t >= df[col_tiempo].iloc[0]:
-                    ax.axvline(x=line_t, color='black', ls='--', lw=1, alpha=0.4)
+                t_beat = noise_seconds + k * tau
+                t_bound = t_beat + tau / 2.0
+                
+                # Línea central del metrónomo / beat
+                if t_min <= t_beat <= t_max:
+                    ax.axvline(x=t_beat, color=beat_color, ls=':', lw=0.9, alpha=0.35)
+                    
+                if t_bound > t_max:
+                    break
+                if t_bound >= t_min:
+                    ax.axvline(x=t_bound, color=win_color, ls='--', lw=1.0, alpha=0.4)
                 k += 1
+                    
+        # --- Detección y marcado sutil de picos + Línea de media de amplitud de picos ---
+        if not is_mic:
+            picos_t = []
+            picos_y = []
+            t_arr = df[col_tiempo].values
+            
+            if bpm and noise_seconds is not None:
+                tau = 60.0 / bpm
+                k_p = 0
+                while True:
+                    t_beat_k = noise_seconds + k_p * tau
+                    t_w_start = t_beat_k - tau / 2.0
+                    t_w_end = t_beat_k + tau / 2.0
+                    
+                    if t_w_start > t_max:
+                        break
+                    
+                    # Extraer el pico máximo dentro de cada ventana periódica
+                    mask_win = (t_arr >= max(t_min, t_w_start)) & (t_arr < min(t_max, t_w_end))
+                    if np.any(mask_win):
+                        sub_t = t_arr[mask_win]
+                        sub_y = y_plot[mask_win]
+                        if len(sub_y) > 0:
+                            idx_max = np.argmax(sub_y)
+                            p_val = sub_y[idx_max]
+                            p_t = sub_t[idx_max]
+                            if p_val > 0:
+                                picos_t.append(p_t)
+                                picos_y.append(p_val)
+                    k_p += 1
+            else:
+                try:
+                    min_dist = max(1, int(fs * 0.3))
+                    h_thresh = max(0.0, float(np.mean(y_plot)))
+                    p_indices, _ = signal.find_peaks(y_plot, distance=min_dist, height=h_thresh)
+                    if len(p_indices) > 0:
+                        picos_t = t_arr[p_indices].tolist()
+                        picos_y = y_plot[p_indices].tolist()
+                except Exception:
+                    pass
 
-        if y_min is not None or y_max is not None:
-            current_ymin, current_ymax = ax.get_ylim()
-            ax.set_ylim(
-                y_min if y_min is not None else current_ymin,
-                y_max if y_max is not None else current_ymax
-            )
+            # Dibujar marcadores sutiles de picos y línea de media
+            if len(picos_y) > 0:
+                media_picos = float(np.mean(picos_y))
+                
+                # Puntos discretos en la cúspide de cada ciclo
+                ax.scatter(picos_t, picos_y, color=color_hex, s=26, alpha=0.75, zorder=5,
+                           edgecolors='white' if is_dark else '#222222', linewidths=0.6)
+                
+                # Línea horizontal con la media de amplitud de los picos
+                ax.axhline(y=media_picos, color=color_hex, ls=':', lw=1.3, alpha=0.65, zorder=4)
+                
+                # Etiqueta con el valor numérico medio
+                ax.text(t_max, media_picos, f"  μ_picos = {media_picos:.1f} µV",
+                        color=color_hex, fontsize=13, va='center', ha='left',
+                        fontweight='bold', alpha=0.9, zorder=6)
 
         tit = musculo
-        if info_filtros: tit += f" | {', '.join(info_filtros)}"
-        tit += etiqueta_env
+        if ch["info_filtros"]: tit += f" | {', '.join(ch['info_filtros'])}"
+        tit += ch["etiqueta_env"]
         ax.set_title(tit, fontsize=25)
-        ax.set_ylabel("Amplitud (µV)", fontsize=27)
+        ax.set_ylabel("Amplitud (µV)" if not is_mic else "Micrófono", fontsize=27)
         ax.grid(True, alpha=0.5, ls='--')
         ax.tick_params(axis='both', which='major', labelsize=20)
 
-        # --- NUEVO: Espectro de frecuencias (FFT) ---
+        # --- Espectro de frecuencias (FFT) ---
         if graficar_fft:
             ax_fft = axs[i, 1]
-            N = len(sig)
+            sig_fft = ch["sig_fft"]
+            N = len(sig_fft)
             freqs = np.fft.rfftfreq(N, d=1.0/fs)
-            fft_mag = np.abs(np.fft.rfft(sig))
+            fft_mag = np.abs(np.fft.rfft(sig_fft))
             
             ax_fft.plot(freqs, fft_mag, color=color_hex, lw=1.5)
             ax_fft.set_title(f"Espectro - {musculo}", fontsize=25)
