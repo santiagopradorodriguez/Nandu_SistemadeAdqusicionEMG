@@ -4319,6 +4319,64 @@ class RealTimePlotter(QtWidgets.QWidget):
     event.accept() # Acepta el cierre
 
 # =============================================================================
+# --- DIÁLOGO DE SELECCIÓN DE MÚSCULOS AL INICIO ---
+# =============================================================================
+class MuscleSelectionDialog(QtWidgets.QDialog):
+  def __init__(self, parent=None):
+    super().__init__(parent)
+    self.setWindowTitle("Configurar Músculos de la Sesión")
+    self.setMinimumWidth(350)
+    
+    self.config_mgr = ConfigManager()
+    self.canales_conf = self.config_mgr.get("canales") or {}
+    adq = self.config_mgr.get("adquisicion") or {}
+    self.nidaq_chans = adq.get("nidaq_channels", ["Dev1/ai0", "Dev1/ai1", "Dev1/ai2", "Dev1/ai3"])
+    
+    self.layout = QtWidgets.QVBoxLayout(self)
+    
+    self.lbl = QtWidgets.QLabel("A continuación, asigne el músculo a cada canal activo:")
+    self.lbl.setStyleSheet("color: white; font-weight: bold; margin-bottom: 10px;")
+    self.layout.addWidget(self.lbl)
+    
+    self.form_layout = QtWidgets.QFormLayout()
+    self.line_edits = {}
+    
+    for i in range(len(self.nidaq_chans)):
+        key = f"Canal {i}"
+        musculo_actual = self.canales_conf.get(key, {}).get("musculo", f"Canal {i}")
+        le = QtWidgets.QLineEdit(musculo_actual)
+        self.form_layout.addRow(f"[{self.nidaq_chans[i]}] {key}:", le)
+        self.line_edits[key] = le
+        
+    self.layout.addLayout(self.form_layout)
+    
+    self.btn_box = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Save | QtWidgets.QDialogButtonBox.Cancel)
+    self.btn_box.accepted.connect(self.guardar_y_cerrar)
+    self.btn_box.rejected.connect(self.reject)
+    self.layout.addWidget(self.btn_box)
+    
+  def guardar_y_cerrar(self):
+    try:
+      from utils.config_manager import get_muscle_color
+    except ImportError:
+      def get_muscle_color(name, default="#00ffcc"):
+        return "#ff0000" if ("mic" in str(name).lower() or "canal 3" in str(name).lower()) else default
+
+    for key, le in self.line_edits.items():
+        if key not in self.canales_conf:
+            self.canales_conf[key] = {}
+        m_text = le.text().strip()
+        self.canales_conf[key]["musculo"] = m_text
+        if key == "Canal 3" or "mic" in m_text.lower():
+            self.canales_conf[key]["color_hex"] = "#ff0000"
+        else:
+            self.canales_conf[key]["color_hex"] = get_muscle_color(m_text, self.canales_conf[key].get("color_hex", "#00ffcc"))
+    
+    self.config_mgr.config["canales"] = self.canales_conf
+    self.config_mgr.save()
+    self.accept()
+
+# =============================================================================
 # PROGRAMA PRINCIPAL
 # =============================================================================
 def main():
@@ -4355,6 +4413,23 @@ def main():
       padding: 2px;
     }
   """)
+  
+  # --- Preguntar por los músculos al iniciar ---
+  if global_splash:
+      global_splash.hide()
+      
+  respuesta = QtWidgets.QMessageBox.question(
+      None, 
+      "Ñandú LSD - Configuración", 
+      "¿Desea cambiar el conjunto de músculos asignados a los canales?",
+      QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+      QtWidgets.QMessageBox.No
+  )
+  
+  if respuesta == QtWidgets.QMessageBox.Yes:
+      dialog = MuscleSelectionDialog()
+      dialog.exec()
+
   gui = RealTimePlotter()
   if global_splash:
     global_splash.finish(gui)
