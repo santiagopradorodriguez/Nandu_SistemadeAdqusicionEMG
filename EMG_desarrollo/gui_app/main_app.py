@@ -570,6 +570,10 @@ class ReaperStyleHub(QMainWindow):
     """
     toolbar = QToolBar("Herramientas Adicionales")
     toolbar.setIconSize(QSize(16, 16))
+    toolbar.setMovable(False)
+    toolbar.setFloatable(False)
+    self.setCorner(Qt.TopLeftCorner, Qt.LeftDockWidgetArea)
+    self.setCorner(Qt.BottomLeftCorner, Qt.LeftDockWidgetArea)
     self.addToolBar(Qt.TopToolBarArea, toolbar)
     from PySide6.QtWidgets import QToolButton, QMenu
     

@@ -26,33 +26,32 @@ class CalibratedViewerWidget(QWidget):
         self.current_pixmap = None
         self.current_measurement_path = None
         self.zoom_factor = 1.0
-        self.fit_to_window = True
+        self.fit_mode = "width"  # Modos: 'width' (ajuste panorámico), 'window' (ajuste completo), 'manual'
 
         # Debounce timer para evitar bucles de redimensionamiento
         self._resize_timer = QTimer(self)
         self._resize_timer.setSingleShot(True)
         self._resize_timer.timeout.connect(self._on_debounced_resize)
 
-        # Barra superior
-        top_bar = QHBoxLayout()
-        top_bar.setSpacing(5)
+        # Barra superior Fila 1: Información de medición y selector de plot
+        top_bar_1 = QHBoxLayout()
+        top_bar_1.setSpacing(6)
         
         self.lbl_status = QLabel("Listo. Seleccione una medición en el Gestor de Sesiones.")
-        self.lbl_status.setStyleSheet("color: #888; font-family: monospace; font-size: 11px;")
-        top_bar.addWidget(self.lbl_status)
-        
-        top_bar.addStretch()
+        self.lbl_status.setStyleSheet("color: #00ffcc; font-family: monospace; font-size: 11px; font-weight: bold;")
+        self.lbl_status.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        top_bar_1.addWidget(self.lbl_status, stretch=1)
         
         btn_style = """
             QPushButton {
                 background-color: #1a1a1a; color: #00ffcc; border: 1px solid #00ffcc;
-                padding: 4px 12px; font-weight: bold; border-radius: 4px; margin: 1px; font-size: 11px;
+                padding: 4px 10px; font-weight: bold; border-radius: 4px; margin: 1px; font-size: 11px;
             }
             QPushButton:hover { background-color: #00ffcc; color: #000; }
         """
         self.btn_plot_3m = QPushButton("Plot para Paper (3 Músculos)")
         self.btn_plot_3m.setStyleSheet(btn_style)
-        top_bar.addWidget(self.btn_plot_3m)
+        top_bar_1.addWidget(self.btn_plot_3m)
         
         # Selector de tipo de plot
         self.cmb_tipo_plot = QComboBox()
@@ -60,22 +59,31 @@ class CalibratedViewerWidget(QWidget):
             "Vista: Plot Calibrado (Auto)", 
             "Vista: Plot Paper (Completo)"
         ])
-        self.cmb_tipo_plot.setStyleSheet("background-color: #1a1a1a; color: #00ffcc; border: 1px solid #00ffcc; padding: 3px; font-weight: bold; border-radius: 4px; font-size: 11px;")
+        self.cmb_tipo_plot.setStyleSheet("background-color: #1a1a1a; color: #00ffcc; border: 1px solid #00ffcc; padding: 3px 6px; font-weight: bold; border-radius: 4px; font-size: 11px;")
         self.cmb_tipo_plot.currentIndexChanged.connect(self._reload_current_plot)
-        top_bar.addWidget(self.cmb_tipo_plot)
-        
+        top_bar_1.addWidget(self.cmb_tipo_plot)
+        self.layout.addLayout(top_bar_1)
+
+        # Barra superior Fila 2: Controles de visualización y zoom
+        top_bar_2 = QHBoxLayout()
+        top_bar_2.setSpacing(4)
+
         # Selector de suavizado
         lbl_smooth = QLabel("Suavizado (ms):")
-        lbl_smooth.setStyleSheet("font-size: 11px; color: #ccc;")
-        top_bar.addWidget(lbl_smooth)
+        lbl_smooth.setStyleSheet("font-size: 11px; color: #aaa;")
+        top_bar_2.addWidget(lbl_smooth)
         self.inp_smooth = QLineEdit("250")
-        self.inp_smooth.setMaximumWidth(45)
+        self.inp_smooth.setMaximumWidth(42)
         self.inp_smooth.setStyleSheet("background-color: #222; color: white; border: 1px solid gray; padding: 2px; font-size: 11px;")
-        top_bar.addWidget(self.inp_smooth)
+        top_bar_2.addWidget(self.inp_smooth)
         
+        top_bar_2.addSpacing(10)
+
         # Controles de Zoom y Ajuste
-        self.btn_zoom_fit = QPushButton(" Ajustar")
-        self.btn_zoom_fit.setToolTip("Ajustar imagen a la ventana (Auto-Fit)")
+        self.btn_zoom_fit_w = QPushButton(" Ajustar Ancho")
+        self.btn_zoom_fit_w.setToolTip("Ajustar al ancho disponible (ideal para ver señales panorámicas)")
+        self.btn_zoom_fit_h = QPushButton(" Ajustar Alto")
+        self.btn_zoom_fit_h.setToolTip("Ajustar toda la imagen a la ventana sin scroll")
         self.btn_zoom_reset = QPushButton(" 1:1")
         self.btn_zoom_reset.setToolTip("Tamaño real 100%")
         self.btn_zoom_out = QPushButton(" -")
@@ -85,21 +93,23 @@ class CalibratedViewerWidget(QWidget):
         self.btn_fullscreen = QPushButton(" Pantalla Completa")
         self.btn_fullscreen.setToolTip("Ver en alta resolución a pantalla completa")
         
-        for btn in [self.btn_zoom_fit, self.btn_zoom_reset, self.btn_zoom_out, self.btn_zoom_in, self.btn_fullscreen]:
+        for btn in [self.btn_zoom_fit_w, self.btn_zoom_fit_h, self.btn_zoom_reset, self.btn_zoom_out, self.btn_zoom_in, self.btn_fullscreen]:
             btn.setStyleSheet(btn_style)
-            top_bar.addWidget(btn)
+            top_bar_2.addWidget(btn)
 
-        self.btn_zoom_fit.clicked.connect(self.fit_to_view)
+        self.btn_zoom_fit_w.clicked.connect(self.fit_to_width)
+        self.btn_zoom_fit_h.clicked.connect(self.fit_to_view)
         self.btn_zoom_reset.clicked.connect(self.zoom_reset)
         self.btn_zoom_out.clicked.connect(self.zoom_out)
         self.btn_zoom_in.clicked.connect(self.zoom_in)
         self.btn_fullscreen.clicked.connect(self.show_fullscreen)
         
-        self.lbl_zoom_indicator = QLabel("Auto-Ajustado")
-        self.lbl_zoom_indicator.setStyleSheet("color: #888; font-size: 11px; padding-left: 2px;")
-        top_bar.addWidget(self.lbl_zoom_indicator)
+        self.lbl_zoom_indicator = QLabel("Ajustado al Ancho")
+        self.lbl_zoom_indicator.setStyleSheet("color: #888; font-size: 11px; padding-left: 6px;")
+        top_bar_2.addWidget(self.lbl_zoom_indicator)
+        top_bar_2.addStretch()
         
-        self.layout.addLayout(top_bar)
+        self.layout.addLayout(top_bar_2)
 
         # Layout horizontal para panel izquierdo y área de imagen
         h_layout = QHBoxLayout()
@@ -261,7 +271,6 @@ class CalibratedViewerWidget(QWidget):
         self.request_generate_plots.emit(config)
         self.current_pixmap = None
         self.zoom_factor = 1.0
-        self.fit_to_window = True
 
     def load_calibrated_plot(self, measurement_path):
         """Busca y carga el gráfico calibrado asociado a esta medición"""
@@ -298,7 +307,7 @@ class CalibratedViewerWidget(QWidget):
             pixmap = QPixmap(ruta_img)
             if not pixmap.isNull():
                 self.current_pixmap = pixmap
-                self.fit_to_view()
+                self.update_image_display()
                 
                 # Leer información de músculos desde metadata.json
                 meta_info = ""
@@ -331,50 +340,73 @@ class CalibratedViewerWidget(QWidget):
             self.lbl_status.setText("Gráfico no encontrado.")
             self.lbl_zoom_indicator.setText("-")
 
+    def fit_to_width(self):
+        """Ajusta la imagen al ancho completo disponible con scroll vertical libre."""
+        if self.current_pixmap is None or self.current_pixmap.isNull():
+            return
+        self.fit_mode = "width"
+        self.update_image_display()
+
     def fit_to_view(self):
         """Ajusta la imagen exactamente al tamaño disponible en el visor manteniendo la relación de aspecto."""
         if self.current_pixmap is None or self.current_pixmap.isNull():
             return
-        self.fit_to_window = True
+        self.fit_mode = "window"
         self.update_image_display()
 
     def zoom_fit(self):
-        self.fit_to_view()
+        self.fit_to_width()
 
     def zoom_reset(self):
         """Restaura la escala al 100% (1:1 tamaño real de píxeles)."""
         if self.current_pixmap is None or self.current_pixmap.isNull():
             return
-        self.fit_to_window = False
+        self.fit_mode = "manual"
         self.zoom_factor = 1.0
         self.update_image_display()
 
     def zoom_in(self):
         if self.current_pixmap is None or self.current_pixmap.isNull():
             return
-        if self.fit_to_window:
+        if self.fit_mode != "manual":
             cur_w = self.image_label.pixmap().width() if self.image_label.pixmap() else self.current_pixmap.width()
             self.zoom_factor = cur_w / max(1, self.current_pixmap.width())
-            self.fit_to_window = False
+            self.fit_mode = "manual"
         self.zoom_factor = min(self.zoom_factor * 1.25, 8.0)
         self.update_image_display()
 
     def zoom_out(self):
         if self.current_pixmap is None or self.current_pixmap.isNull():
             return
-        if self.fit_to_window:
+        if self.fit_mode != "manual":
             cur_w = self.image_label.pixmap().width() if self.image_label.pixmap() else self.current_pixmap.width()
             self.zoom_factor = cur_w / max(1, self.current_pixmap.width())
-            self.fit_to_window = False
-        self.zoom_factor = max(self.zoom_factor / 1.25, 0.1)
+            self.fit_mode = "manual"
+        self.zoom_factor = max(self.zoom_factor / 1.25, 0.05)
         self.update_image_display()
 
     def update_image_display(self):
-        """Renderiza la imagen en el QLabel según el modo de ajuste o el factor de zoom actual."""
+        """Renderiza la imagen en el QLabel según el modo de ajuste (ancho, ventana completa o zoom manual)."""
         if not self.current_pixmap or self.current_pixmap.isNull():
             return
             
-        if self.fit_to_window:
+        if self.fit_mode == "width":
+            self.scroll_area.setWidgetResizable(False)
+            self.image_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
+            
+            vp_w = max(50, self.scroll_area.viewport().width() - 16)
+            ratio = vp_w / max(1, self.current_pixmap.width())
+            target_h = max(50, int(self.current_pixmap.height() * ratio))
+            target_size = QSize(vp_w, target_h)
+            
+            scaled_pixmap = self.current_pixmap.scaled(
+                target_size, Qt.KeepAspectRatio, Qt.SmoothTransformation
+            )
+            self.image_label.setPixmap(scaled_pixmap)
+            self.image_label.resize(target_size)
+            self.lbl_zoom_indicator.setText("Ajustado al Ancho")
+            
+        elif self.fit_mode == "window":
             self.scroll_area.setWidgetResizable(True)
             self.image_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
             
@@ -386,8 +418,9 @@ class CalibratedViewerWidget(QWidget):
                 QSize(vp_w, vp_h), Qt.KeepAspectRatio, Qt.SmoothTransformation
             )
             self.image_label.setPixmap(scaled_pixmap)
-            self.lbl_zoom_indicator.setText("Auto-Ajustado")
-        else:
+            self.lbl_zoom_indicator.setText("Ajustado a Ventana")
+            
+        else: # modo manual
             self.scroll_area.setWidgetResizable(False)
             self.image_label.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
             
@@ -403,11 +436,11 @@ class CalibratedViewerWidget(QWidget):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        if getattr(self, 'fit_to_window', True) and getattr(self, 'current_pixmap', None) and not self.current_pixmap.isNull():
+        if getattr(self, 'fit_mode', 'width') in ('width', 'window') and getattr(self, 'current_pixmap', None) and not self.current_pixmap.isNull():
             self._resize_timer.start(50)
 
     def _on_debounced_resize(self):
-        if self.fit_to_window and self.current_pixmap and not self.current_pixmap.isNull():
+        if getattr(self, 'fit_mode', 'width') in ('width', 'window') and self.current_pixmap and not self.current_pixmap.isNull():
             self.update_image_display()
 
     def wheelEvent(self, event):
