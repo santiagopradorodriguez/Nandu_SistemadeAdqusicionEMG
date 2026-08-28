@@ -1186,7 +1186,20 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     # --- Configurar la ventana principal ---
     self.setWindowTitle(f"Ñandú LSD - Visor y Grabador de Señales Emg v{__version__}")
-    self.resize(1200, 800)
+    
+    # --- Detección y Adaptación de Escala de Pantalla (Responsive) ---
+    screen = QtGui.QGuiApplication.primaryScreen()
+    if screen:
+      avail = screen.availableGeometry()
+      self.screen_w = avail.width()
+      self.screen_h = avail.height()
+    else:
+      self.screen_w, self.screen_h = 1920, 1080
+    
+    self.is_compact_screen = (self.screen_h <= 850 or self.screen_w <= 1400)
+    init_w = min(1200, int(self.screen_w * 0.95))
+    init_h = min(750, int(self.screen_h * 0.92))
+    self.resize(init_w, init_h)
     
     # --- REFACTOR: Dividir la configuración de la UI en métodos ---
     self._setup_ui_layouts()
@@ -1240,9 +1253,16 @@ class RealTimePlotter(QtWidgets.QWidget):
       Any: Resultado de la ejecución de la función.
     """
     self.main_layout = QtWidgets.QVBoxLayout()
+    if getattr(self, 'is_compact_screen', False):
+      self.main_layout.setContentsMargins(6, 6, 6, 6)
+      self.main_layout.setSpacing(4)
     self.setLayout(self.main_layout)
     
     self.config_layout = QtWidgets.QGridLayout()
+    if getattr(self, 'is_compact_screen', False):
+      self.config_layout.setContentsMargins(6, 4, 6, 4)
+      self.config_layout.setHorizontalSpacing(6)
+      self.config_layout.setVerticalSpacing(4)
     self.config_groupbox = QtWidgets.QGroupBox("Configuración de Adquisición")
     self.config_groupbox.setLayout(self.config_layout)
     
@@ -1661,35 +1681,37 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
     self.splitter.addWidget(self.plot_container)
     self.splitter.addWidget(self.spectrogram_view)
-    self.splitter.setSizes([600, 200]) # Tamaños iniciales
+    plot_h = int(self.screen_h * 0.45) if hasattr(self, 'screen_h') else 350
+    spec_h = int(self.screen_h * 0.15) if hasattr(self, 'screen_h') else 120
+    self.splitter.setSizes([plot_h, spec_h]) # Proporcional a la pantalla
 
     # --- NUEVO: QStackedWidget para ocultar Configuración durante grabación ---
     self.config_stack = QtWidgets.QStackedWidget()
-    self.config_stack.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
-    self.config_groupbox.setMinimumHeight(180)
-    self.config_stack.setMinimumHeight(180)
+    self.config_stack.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
+    min_config_h = 120 if getattr(self, 'is_compact_screen', False) else 150
+    self.config_groupbox.setMinimumHeight(min_config_h)
+    self.config_stack.setMinimumHeight(min_config_h)
     self.config_stack.addWidget(self.config_groupbox)
     
     self.empty_recording_widget = QtWidgets.QWidget()
     self.empty_recording_widget.setStyleSheet("background-color: #050505;")
     
+    lbl_font_size = "30px" if getattr(self, 'is_compact_screen', False) else "42px"
     self.lbl_recording_space = QtWidgets.QLabel("VENTANAS EXTERNAS ACTIVAS", self.empty_recording_widget)
     self.lbl_recording_space.setAlignment(QtCore.Qt.AlignCenter)
     self.lbl_recording_space.setWordWrap(True)
-    self.lbl_recording_space.setStyleSheet("background-color: #050510; color: #00FF00; font-family: 'Courier New', monospace; font-size: 45px; font-weight: 900; border: 2px dashed #FF0055; padding: 10px;")
+    self.lbl_recording_space.setStyleSheet(f"background-color: #050510; color: #00FF00; font-family: 'Courier New', monospace; font-size: {lbl_font_size}; font-weight: 900; border: 2px dashed #FF0055; padding: 6px;")
     
-    # En lugar de usar un layout que puede forzar anchos mínimos, usamos un layout con restricciones duras
+    # En lugar de usar un layout que puede forzar anchos mínimos, usamos un layout con restricciones elásticas
     self.empty_recording_layout = QtWidgets.QHBoxLayout(self.empty_recording_widget)
-    self.empty_recording_layout.setContentsMargins(10, 0, 10, 0)
+    self.empty_recording_layout.setContentsMargins(6, 0, 6, 0)
     self.empty_recording_layout.addWidget(self.lbl_recording_space, stretch=4)
     
     self._setup_native_metronome()
     self.empty_recording_layout.addWidget(self.metronome_container, stretch=1) # Añadir fijo al recuadro de arriba
     
     self.empty_recording_widget.setLayout(self.empty_recording_layout)
-    
-    # FUERZA BRUTA HORIZONTAL: NUNCA podrá expandir la pantalla principal
-    self.empty_recording_widget.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Fixed)
+    self.empty_recording_widget.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
     
     self.config_stack.addWidget(self.empty_recording_widget)
     
@@ -2633,8 +2655,6 @@ class RealTimePlotter(QtWidgets.QWidget):
           label.setText("Ruido inter-pulso: Evaluando base...")
           label.setStyleSheet("color: gray; font-size: 11px; background-color: transparent;")
       
-      target_h = self.config_groupbox.height()
-      self.empty_recording_widget.setFixedHeight(target_h)
       self.config_stack.setCurrentIndex(1) # Ocultar configuración
       
       # --- NUEVO: Re-lanzar el metrónomo con count-in (mismo beep que autograbado) al inicio de grabar ruido ---
@@ -3631,8 +3651,6 @@ class RealTimePlotter(QtWidgets.QWidget):
   def estado_iniciar_secuencia_continua(self):
     self.is_recording = False
     self.label_rec_time.setVisible(True)
-    target_h = self.config_groupbox.height()
-    self.empty_recording_widget.setFixedHeight(target_h)
     self.config_stack.setCurrentIndex(1) # Ocultar configuración
     
     total_pulsos = len(self.autoforge_words) * self.autoforge_target_reps
@@ -3963,8 +3981,6 @@ class RealTimePlotter(QtWidgets.QWidget):
     palabra = self.autoforge_words[self.autoforge_word_idx]
     self.is_recording = False
     self.label_rec_time.setVisible(True) # --- NUEVO: Habilitado para no dar sensación de "congelamiento"
-    target_h = self.config_groupbox.height()
-    self.empty_recording_widget.setFixedHeight(target_h)
     self.config_stack.setCurrentIndex(1) # Ocultar configuración
     
     palabra_num = self.autoforge_word_idx + 1

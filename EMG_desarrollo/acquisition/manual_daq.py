@@ -763,7 +763,20 @@ class RealTimePlotter(QtWidgets.QWidget):
 
         # --- Configurar la ventana principal ---
         self.setWindowTitle(f"Ñandú LSD - Visor y Grabador de Señales Emg v{__version__}")
-        self.resize(1200, 800)
+        
+        # --- Detección y Adaptación de Escala de Pantalla (Responsive) ---
+        screen = QtGui.QGuiApplication.primaryScreen()
+        if screen:
+            avail = screen.availableGeometry()
+            self.screen_w = avail.width()
+            self.screen_h = avail.height()
+        else:
+            self.screen_w, self.screen_h = 1920, 1080
+        
+        self.is_compact_screen = (self.screen_h <= 850 or self.screen_w <= 1400)
+        init_w = min(1200, int(self.screen_w * 0.95))
+        init_h = min(750, int(self.screen_h * 0.92))
+        self.resize(init_w, init_h)
         
         # --- REFACTOR: Dividir la configuración de la UI en métodos ---
         self._setup_ui_layouts()
@@ -1100,7 +1113,9 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.splitter = QtWidgets.QSplitter(QtCore.Qt.Vertical)
         self.splitter.addWidget(self.plot_widget)
         self.splitter.addWidget(self.spectrogram_view)
-        self.splitter.setSizes([600, 200]) # Tamaños iniciales
+        plot_h = int(self.screen_h * 0.45) if hasattr(self, 'screen_h') else 350
+        spec_h = int(self.screen_h * 0.15) if hasattr(self, 'screen_h') else 120
+        self.splitter.setSizes([plot_h, spec_h]) # Proporcional a la pantalla
 
         # --- Añadir layouts a la ventana ---
         self.main_layout.addWidget(self.config_groupbox)
