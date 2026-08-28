@@ -142,6 +142,10 @@ class ConfigManager:
         except Exception as e:
             print(f"Error guardando config: {e}")
 
+    def save(self):
+        """Alias compatible para save_config."""
+        self.save_config()
+
     def get(self, section, key=None):
         """
         Obtiene un valor de configuración.
@@ -153,13 +157,19 @@ class ConfigManager:
             return self.config[section]
         return self.config[section].get(key)
 
-    def set(self, section, key, value):
+    def set(self, section, key, value=None):
         """
         Actualiza un valor y guarda automáticamente.
+        Soporta:
+        - set('canales', dict_canales)
+        - set('adquisicion', 'bpm', 60)
         """
-        if section not in self.config:
-            self.config[section] = {}
-        self.config[section][key] = value
+        if value is None:
+            self.config[section] = key
+        else:
+            if section not in self.config:
+                self.config[section] = {}
+            self.config[section][key] = value
         self.save_config()
 
     def get_channel_config(self, index):
