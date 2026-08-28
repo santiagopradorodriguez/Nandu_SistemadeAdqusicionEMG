@@ -549,8 +549,18 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
             y_plot = sig
             lw = 0.8
 
-        min_val = float(np.nanmin(y_plot)) if len(y_plot) > 0 else 0.0
-        max_val = float(np.nanmax(y_plot)) if len(y_plot) > 0 else 1.0
+        # Para autoescala, evaluar amplitudes fuera de la ventana de ruido basal (evitar sesgo por degluciones/movimientos iniciales)
+        if noise_seconds is not None and noise_seconds > 0:
+            post_noise_mask = (tiempo_actual >= noise_seconds)
+            if np.any(post_noise_mask):
+                y_eval = y_plot[post_noise_mask]
+            else:
+                y_eval = y_plot
+        else:
+            y_eval = y_plot
+
+        min_val = float(np.nanmin(y_eval)) if len(y_eval) > 0 else 0.0
+        max_val = float(np.nanmax(y_eval)) if len(y_eval) > 0 else 1.0
 
         processed_channels.append({
             "idx": i,
@@ -708,10 +718,10 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
         tit = musculo
         if ch["info_filtros"]: tit += f" | {', '.join(ch['info_filtros'])}"
         tit += ch["etiqueta_env"]
-        ax.set_title(tit, fontsize=25)
-        ax.set_ylabel("Amplitud (µV)" if not is_mic else "Micrófono", fontsize=27)
+        ax.set_title(tit, fontsize=21)
+        ax.set_ylabel("Amplitud (µV)" if not is_mic else "Micrófono", fontsize=21)
         ax.grid(False)
-        ax.tick_params(axis='both', which='major', labelsize=20)
+        ax.tick_params(axis='both', which='major', labelsize=16)
 
         # --- Espectro de frecuencias (FFT) ---
         if graficar_fft:
@@ -722,18 +732,18 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
             fft_mag = np.abs(np.fft.rfft(sig_fft))
             
             ax_fft.plot(freqs, fft_mag, color=color_hex, lw=1.5)
-            ax_fft.set_title(f"Espectro - {musculo}", fontsize=25)
-            ax_fft.set_ylabel("Magnitud FFT", fontsize=27)
+            ax_fft.set_title(f"Espectro - {musculo}", fontsize=21)
+            ax_fft.set_ylabel("Magnitud FFT", fontsize=21)
             ax_fft.grid(False)
-            ax_fft.tick_params(axis='both', which='major', labelsize=20)
+            ax_fft.tick_params(axis='both', which='major', labelsize=16)
             
             limite_frecuencia = min(500, fs/2)
             ax_fft.set_xlim(0, limite_frecuencia)
 
-    axs[-1, 0].set_xlabel("Tiempo (s)", fontsize=27)
+    axs[-1, 0].set_xlabel("Tiempo (s)", fontsize=21)
     if graficar_fft:
-        axs[-1, 1].set_xlabel("Frecuencia (Hz)", fontsize=27)
-    plt.tight_layout(rect=[0, 0.03, 1, 0.92])
+        axs[-1, 1].set_xlabel("Frecuencia (Hz)", fontsize=21)
+    plt.tight_layout(rect=[0, 0.02, 1, 0.96], h_pad=1.2)
 
     # Aplicar límites guardados si existen
     if "xlim" in limits_cache:
