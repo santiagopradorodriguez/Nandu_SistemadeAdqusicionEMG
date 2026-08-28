@@ -52,7 +52,6 @@ from PyInstaller.utils.hooks import collect_all, copy_metadata
 nidaqmx_datas, nidaqmx_binaries, nidaqmx_hiddenimports = collect_all('nidaqmx')
 sd_datas, sd_binaries, sd_hiddenimports = collect_all('sounddevice')
 sf_datas, sf_binaries, sf_hiddenimports = collect_all('soundfile')
-xgb_datas, xgb_binaries, xgb_hiddenimports = collect_all('xgboost')
 umap_datas, umap_binaries, umap_hiddenimports = collect_all('umap')
 sns_datas, sns_binaries, sns_hiddenimports = collect_all('seaborn')
 tly_datas, tly_binaries, tly_hiddenimports = collect_all('tensorly')
@@ -101,7 +100,6 @@ additional_modules = [
     'gui_app.views.ui_analysis',
     'deep_learning.pipeline_autoencoder_gui',
     'deep_learning.pca_umap_clustering.generador_pca_umap',
-    'deep_learning.machine_learning.analisis_xgboost',
     'deep_learning.binarizacion.analisis_trevisan',
     'deep_learning.binarizacion.analisis_binario',
     'deep_learning.binarizacion.analisis_trevisan_bandas',
@@ -129,13 +127,13 @@ hidden_imports = [
     'tzlocal', 'hightime', 'sklearn', 'sklearn.utils._typedefs',
     'sklearn.neighbors._typedefs', 'sklearn.neighbors._quad_tree',
     'sklearn.tree._utils', 'pynndescent',
-] + additional_modules + nidaqmx_hiddenimports + sd_hiddenimports + sf_hiddenimports + xgb_hiddenimports + umap_hiddenimports + sns_hiddenimports + tly_hiddenimports + numba_hiddenimports + pynndescent_hiddenimports + tqdm_hiddenimports
+] + additional_modules + nidaqmx_hiddenimports + sd_hiddenimports + sf_hiddenimports + umap_hiddenimports + sns_hiddenimports + tly_hiddenimports + numba_hiddenimports + pynndescent_hiddenimports + tqdm_hiddenimports
 
 datas = [
         {datas_str}
-] + nidaqmx_datas + sd_datas + sf_datas + xgb_datas + umap_datas + sns_datas + tly_datas + numba_datas + pynndescent_datas + tqdm_datas + nitypes_metadata
+] + nidaqmx_datas + sd_datas + sf_datas + umap_datas + sns_datas + tly_datas + numba_datas + pynndescent_datas + tqdm_datas + nitypes_metadata
 
-binaries = nidaqmx_binaries + sd_binaries + sf_binaries + xgb_binaries + umap_binaries + sns_binaries + tly_binaries + numba_binaries + pynndescent_binaries + tqdm_binaries
+binaries = nidaqmx_binaries + sd_binaries + sf_binaries + umap_binaries + sns_binaries + tly_binaries + numba_binaries + pynndescent_binaries + tqdm_binaries
 
 a = Analysis(
     ['gui_app/main_app.py'],
