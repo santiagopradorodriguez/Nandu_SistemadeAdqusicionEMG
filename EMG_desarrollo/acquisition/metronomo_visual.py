@@ -29,11 +29,16 @@ import json
 import os
 from tkinter import font
 
-# --- NUEVO: Import para sonido de metrónomo ---
+# --- Audio Multiplataforma (Linux / Windows) ---
 try:
-    import winsound
+    from utils.sound_utils import play_beep
 except ImportError:
-    winsound = None # winsound solo está disponible en Windows
+    try:
+        sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from utils.sound_utils import play_beep
+    except Exception:
+        def play_beep(freq=1000, duration_ms=100, async_play=True):
+            pass
 
 class MetronomeApp:
     def __init__(self, root, start_x=None, start_y=None, start_w=None, start_h=None):
@@ -284,16 +289,16 @@ class MetronomeApp:
                     self.beat_count.set(str(current + 1))
                         
             # Sonidos de metrónomo (Graves para cuenta atrás, Agudo para GO, Normal el resto)
-            if winsound and not self.is_muted:
+            if not self.is_muted:
                 try:
                     if count_in > 1:
-                        threading.Thread(target=winsound.Beep, args=(800, 200), daemon=True).start()
+                        play_beep(800, 200)
                     elif count_in == 1:
-                        threading.Thread(target=winsound.Beep, args=(1200, 500), daemon=True).start()
+                        play_beep(1200, 500)
                     else:
-                        threading.Thread(target=winsound.Beep, args=(1000, 100), daemon=True).start()
+                        play_beep(1000, 100)
                 except Exception as e:
-                    print(f"Error al reproducir sonido con winsound: {e}")
+                    print(f"Error al reproducir sonido: {e}")
 
             self.root.after(50, lambda: self.pulse_frame.config(bg=self.COLOR_IDLE))
 
@@ -301,9 +306,9 @@ class MetronomeApp:
             # --- LÓGICA DEL SUB-PULSO (EL "2, 3, 4...") ---
             self.pulse_frame.config(bg="#00AAAA") # Cian más oscuro
             self.root.after(50, lambda: self.pulse_frame.config(bg=self.COLOR_IDLE))
-            if winsound and not self.is_muted:
+            if not self.is_muted:
                 try:
-                    threading.Thread(target=winsound.Beep, args=(1600, 50), daemon=True).start()
+                    play_beep(1600, 50)
                 except Exception as e:
                     print(f"Error al reproducir sonido de sub-beat: {e}")
 
