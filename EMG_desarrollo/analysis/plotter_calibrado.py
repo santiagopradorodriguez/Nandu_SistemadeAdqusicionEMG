@@ -710,7 +710,7 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
         tit += ch["etiqueta_env"]
         ax.set_title(tit, fontsize=25)
         ax.set_ylabel("Amplitud (µV)" if not is_mic else "Micrófono", fontsize=27)
-        ax.grid(True, alpha=0.5, ls='--')
+        ax.grid(False)
         ax.tick_params(axis='both', which='major', labelsize=20)
 
         # --- Espectro de frecuencias (FFT) ---
@@ -724,7 +724,7 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
             ax_fft.plot(freqs, fft_mag, color=color_hex, lw=1.5)
             ax_fft.set_title(f"Espectro - {musculo}", fontsize=25)
             ax_fft.set_ylabel("Magnitud FFT", fontsize=27)
-            ax_fft.grid(True, alpha=0.5, ls='--')
+            ax_fft.grid(False)
             ax_fft.tick_params(axis='both', which='major', labelsize=20)
             
             limite_frecuencia = min(500, fs/2)
