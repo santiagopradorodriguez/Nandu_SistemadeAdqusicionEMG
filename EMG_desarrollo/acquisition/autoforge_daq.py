@@ -84,9 +84,9 @@ import json
 import subprocess
 
 try:
-  import winsound
+  from utils.sound_utils import play_beep
 except ImportError:
-  winsound = None
+  def play_beep(freq=1000, duration_ms=100, async_play=True): pass
 
 if global_progress: global_progress.setValue(30); global_splash.showMessage("Cargando PyQtGraph...", Qt.AlignBottom | Qt.AlignCenter, QColor("white")); app.processEvents()
 import pyqtgraph as pg
@@ -754,7 +754,14 @@ class AutoForgeDialog(QtWidgets.QDialog):
     """
     super().__init__(parent)
     self.setWindowTitle("Ñandú LSD - Configuración de Autograbado")
-    self.setMinimumWidth(300)
+    self.setMinimumWidth(380)
+    self.setStyleSheet("""
+      QDialog { background-color: #0d0d0d; color: #00ffff; font-family: 'Courier New', monospace; }
+      QLabel { color: #00ffcc; font-weight: bold; }
+      QLineEdit, QSpinBox, QComboBox { background-color: #1a1a1a; color: #00ffcc; border: 1px solid #00ffcc; padding: 4px; border-radius: 3px; }
+      QGroupBox { border: 1px solid #ff00ff; border-radius: 4px; margin-top: 10px; padding-top: 10px; font-weight: bold; color: #ff00ff; }
+      QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 0 5px; }
+    """)
     
     self.layout = QtWidgets.QFormLayout(self)
     
@@ -776,11 +783,44 @@ class AutoForgeDialog(QtWidgets.QDialog):
     self.btn_edit_words.setStyleSheet("background-color: #333333; color: white; font-weight: bold; font-family: 'Courier New'; font-size: 14px; padding: 5px; border: 2px solid #555555; border-radius: 4px;")
     self.btn_edit_words.clicked.connect(self.abrir_editor_palabras)
     self.layout.addRow("", self.btn_edit_words)
+
+    # --- Asignación de Músculos ---
+    self.group_muscles = QtWidgets.QGroupBox("Asignación de Músculos")
+    self.layout_muscles = QtWidgets.QFormLayout(self.group_muscles)
+    self.muscle_inputs = []
+    
+    num_chans = getattr(parent, 'NUM_CANALES', 4)
+    parent_muscles = getattr(parent, 'nombres_musculos', [])
+    
+    musculos_sugeridos = [
+      "Masetero", "Risorio", "Depresor", "Micrófono", 
+      "Vientre Anterior del Digástrico", "Orbicular de los Labios", 
+      "Cigomático Mayor", "Temporal"
+    ]
+    
+    for i in range(num_chans):
+      default_val = parent_muscles[i] if i < len(parent_muscles) else f"Canal {i}"
+      cmb = QtWidgets.QComboBox()
+      cmb.setEditable(True)
+      for m in musculos_sugeridos:
+        cmb.addItem(m)
+      if default_val not in musculos_sugeridos:
+        cmb.insertItem(0, default_val)
+      cmb.setCurrentText(default_val)
+      
+      lbl = QtWidgets.QLabel(f"Canal {i}:")
+      self.layout_muscles.addRow(lbl, cmb)
+      self.muscle_inputs.append(cmb)
+      
+    self.layout.addRow(self.group_muscles)
     
     self.buttonBox = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
     self.buttonBox.accepted.connect(self.accept)
     self.buttonBox.rejected.connect(self.reject)
     self.layout.addWidget(self.buttonBox)
+
+  def get_muscle_names(self):
+    return [inp.currentText().strip() for inp in self.muscle_inputs]
 
   def abrir_editor_palabras(self):
     """
@@ -2469,9 +2509,7 @@ class RealTimePlotter(QtWidgets.QWidget):
                 if not hasattr(self, 'last_countdown') or self.last_countdown != current_countdown:
                   self.last_countdown = current_countdown
                   self.countdown_text.setPos(-self.PLOT_DURATION_S/2.0, 0)
-                  if winsound:
-                    import threading
-                    threading.Thread(target=winsound.Beep, args=(800, 200), daemon=True).start()
+                  play_beep(800, 200)
                 
                 self.countdown_text.setText(f"PREPÁRATE...\n{current_countdown}")
                 self.countdown_text.show()
@@ -2484,9 +2522,8 @@ class RealTimePlotter(QtWidgets.QWidget):
           if not getattr(self, 'noise_calculated', False):
             if not getattr(self, 'noise_initialized', False):
               # --- GO! ---
-              if winsound and getattr(self, 'countdown_active', False) and not getattr(self, 'is_autoforge_running', False) and not self.chk_use_metronome.isChecked():
-                import threading
-                threading.Thread(target=winsound.Beep, args=(1200, 500), daemon=True).start()
+              if getattr(self, 'countdown_active', False) and not getattr(self, 'is_autoforge_running', False) and not self.chk_use_metronome.isChecked():
+                play_beep(1200, 500)
               self.countdown_text.setText("¡GO!")
               QtCore.QTimer.singleShot(1000, self.countdown_text.hide)
               self.countdown_active = False
@@ -2905,6 +2942,19 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.autoforge_target_reps = dialog.spin_reps.value()
         bpm = dialog.spin_bpm.value()
         
+        # Actualizar nombres de músculos elegidos
+        muscles = dialog.get_muscle_names()
+        if muscles:
+          self.nombres_musculos = muscles
+          canales_conf = self.config_mgr.get("canales") or {}
+          for i, m in enumerate(muscles):
+            key = f"Canal {i}"
+            if key not in canales_conf:
+              canales_conf[key] = {}
+            canales_conf[key]["musculo"] = m
+          self.config_mgr.set("canales", canales_conf)
+          self.config_mgr.save()
+
         # Actualizar el spinbox principal de BPM si existe
         try:
           self.spin_bpm.setValue(bpm)
@@ -2988,6 +3038,19 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.autoforge_target_reps = dialog.spin_reps.value() # Total cycles
         bpm = dialog.spin_bpm.value()
         
+        # Actualizar nombres de músculos elegidos
+        muscles = dialog.get_muscle_names()
+        if muscles:
+          self.nombres_musculos = muscles
+          canales_conf = self.config_mgr.get("canales") or {}
+          for i, m in enumerate(muscles):
+            key = f"Canal {i}"
+            if key not in canales_conf:
+              canales_conf[key] = {}
+            canales_conf[key]["musculo"] = m
+          self.config_mgr.set("canales", canales_conf)
+          self.config_mgr.save()
+
         try:
           self.spin_bpm.setValue(bpm)
           self._save_metronome_config()

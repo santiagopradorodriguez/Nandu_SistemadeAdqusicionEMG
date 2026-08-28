@@ -39,8 +39,6 @@ def procesar_mediciones(base_dir):
     for date_folder in sorted(os.listdir(base_dir), reverse=True):
         date_path = os.path.join(base_dir, date_folder)
         if os.path.isdir(date_path) and date_pattern.match(date_folder):
-            if date_folder != "2026-07-10":
-                continue
             for med_folder in sorted(os.listdir(date_path)):
                 med_path = os.path.join(date_path, med_folder)
                 if os.path.isdir(med_path):
@@ -387,114 +385,17 @@ def ejecutar_procesamiento(mediciones, alpha_ruido=1.0, snr_threshold=0.5, outli
     Tomas = np.array(Tomas_clean)
     print(f"  -> Total outliers removidos: {outliers_detectados}")
     print(f"  -> Repeticiones finales válidas: {len(X)}")
-    Y = np.array(Y)
-    
-    # La normalización por pulso ya se aplicó dentro del bucle
-    X_scaled = X
-
-    import tensorly as tl
-    from tensorly.decomposition import tucker
-    print(f"\nAplicando Multilinear PCA (Tucker Tensor) y UMAP...")
     
     base_repo_dir = os.path.abspath(os.path.join(script_dir, "..", ".."))
     out_dir = os.path.join(base_repo_dir, "resultados", "resultados_pca_tensorial")
     os.makedirs(out_dir, exist_ok=True)
     
-    # ------------------ MPCA (Multilinear PCA) ------------------
-    # Convertimos a tensorly tensor
-    X_tensor = tl.tensor(X_scaled)
-    # Forma de X_tensor: (N_muestras, 3_canales, 100_tiempos)
+    # ------------------ Exportar Dataset para Autoencoder ------------------
+    print("\n4. Exportando matriz de características limpias...")
     
-    # Reducimos la dimensión temporal de 100 a 15 componentes principales temporales,
-    # manteniendo los 3 canales intactos. Así NO destruimos la temporalidad.
-    tiempo_reducido = 15
-    core, factors = tucker(X_tensor, rank=[X_tensor.shape[0], 3, tiempo_reducido])
-    
-    # core es de forma (N, 3, 15). Lo aplanamos para obtener (N, 45) características tensoriales puras.
-    X_mpca_features = np.array(core).reshape(X_tensor.shape[0], 3 * tiempo_reducido)
-    
-    # Para graficar en 2D y 3D, le pasamos estas 45 features a un PCA clásico final
-    pca_sobre_mpca_2d = PCA(n_components=2)
-    X_mpca_2d = pca_sobre_mpca_2d.fit_transform(X_mpca_features)
-    
-    pca_sobre_mpca_3d = PCA(n_components=3)
-    X_mpca_3d = pca_sobre_mpca_3d.fit_transform(X_mpca_features)
-    
-    plot_scatter(X_mpca_2d, Y, "MPCA + PCA 2D", os.path.join(out_dir, "MPCA_2D.png"), is_3d=False, variance_ratios=pca_sobre_mpca_2d.explained_variance_ratio_)
-    plot_scatter(X_mpca_3d, Y, "MPCA + PCA 3D", os.path.join(out_dir, "MPCA_3D.png"), is_3d=True, variance_ratios=pca_sobre_mpca_3d.explained_variance_ratio_)
-    
-    # --- MPCA 2D Centroides ---
-    cent_mpca_2d, _, vocales_mpca_2d = calcular_centroides_y_distancias(X_mpca_2d, Y)
-    X_cent_2d = np.array([cent_mpca_2d[v] for v in vocales_mpca_2d])
-    Y_cent_2d = np.array(vocales_mpca_2d)
-    plot_scatter(X_cent_2d, Y_cent_2d, "MPCA + PCA 2D - Centroides", os.path.join(out_dir, "MPCA_2D_Centroides.png"), is_3d=False, variance_ratios=pca_sobre_mpca_2d.explained_variance_ratio_)
-    
-    # --- MPCA 3D Centroides ---
-    cent_mpca, _, vocales_mpca = calcular_centroides_y_distancias(X_mpca_3d, Y)
-    X_cent = np.array([cent_mpca[v] for v in vocales_mpca])
-    Y_cent = np.array(vocales_mpca)
-    plot_scatter(X_cent, Y_cent, "MPCA + PCA 3D - Centroides", os.path.join(out_dir, "MPCA_3D_Centroides.png"), is_3d=True, variance_ratios=pca_sobre_mpca_3d.explained_variance_ratio_)
-    
-    # ------------------ UMAP ------------------
-    print("\n5. Aplicando UMAP...")
-    n_neighbors = min(15, len(X) - 1) if len(X) > 1 else 2
-    
-    # Para UMAP usamos las features extraídas por MPCA
-    umap_2d = umap.UMAP(n_neighbors=n_neighbors, min_dist=0.1, n_components=2, random_state=42)
-    X_umap_2d = umap_2d.fit_transform(X_mpca_features)
-    
-    umap_3d = umap.UMAP(n_neighbors=n_neighbors, min_dist=0.1, n_components=3, random_state=42)
-    X_umap_3d = umap_3d.fit_transform(X_mpca_features)
-    
-    plot_scatter(X_umap_2d, Y, "MPCA + UMAP 2D", os.path.join(out_dir, "UMAP_2D.png"), is_3d=False)
-    plot_scatter(X_umap_3d, Y, "MPCA + UMAP 3D", os.path.join(out_dir, "UMAP_3D.png"), is_3d=True)
-    
-    # ------------------ MÉTRICAS ------------------
-    print("\n5. Calculando distancias (Euclidiana) y Silhouette Scores...")
-    
-    # Calculamos el Silhouette Score sobre las características MPCA puras (45 dimensiones), 
-    # NO sobre la proyección 2D/3D para ser justos con la capacidad de separación del tensor.
-    sil_mpca_total = silhouette_score(X_mpca_features, Y, metric='euclidean')
-    sil_pca_2d = silhouette_score(X_mpca_2d, Y, metric='euclidean')
-    sil_pca_3d = silhouette_score(X_mpca_3d, Y, metric='euclidean')
-    
-    sil_umap_2d = silhouette_score(X_umap_2d, Y, metric='euclidean')
-    sil_umap_3d = silhouette_score(X_umap_3d, Y, metric='euclidean')
-    
-    print(f"Silhouette Score (MPCA Total - 45 dims): {sil_mpca_total:.4f}")
-    print(f"Silhouette Score (MPCA+PCA 2D): {sil_pca_2d:.4f}")
-    print(f"Silhouette Score (MPCA+PCA 3D): {sil_pca_3d:.4f}")
-    print(f"Silhouette Score (MPCA+UMAP 2D): {sil_umap_2d:.4f}")
-    print(f"Silhouette Score (MPCA+UMAP 3D): {sil_umap_3d:.4f}")
-    
-    print("\n--- Distancias entre centroides (MPCA+PCA 3D) ---")
-    cent_mpca, dist_mat_mpca, vocales_mpca = calcular_centroides_y_distancias(X_mpca_3d, Y)
-    df_dist_mpca = pd.DataFrame(dist_mat_mpca, index=vocales_mpca, columns=vocales_mpca)
-    print(df_dist_mpca.to_string())
-    
-    print("\n--- Distancias entre centroides (MPCA+UMAP 3D) ---")
-    cent, dist_mat, vocales = calcular_centroides_y_distancias(X_umap_3d, Y)
-    
-    df_dist = pd.DataFrame(dist_mat, index=vocales, columns=vocales)
-    print(df_dist.to_string())
-    
-    # Guardar métricas
-    with open(os.path.join(out_dir, "metricas_tensoriales.txt"), "w") as f:
-        f.write(f"Silhouette Score (MPCA Total - 45 dims): {sil_mpca_total:.4f}\n")
-        f.write(f"Silhouette Score (MPCA+PCA 3D): {sil_pca_3d:.4f}\n")
-        f.write(f"Silhouette Score (MPCA+UMAP 3D): {sil_umap_3d:.4f}\n\n")
-        f.write("Matriz de Distancias (MPCA+PCA 3D):\n")
-        f.write(df_dist_mpca.to_string() + "\n\n")
-        f.write("Matriz de Distancias (MPCA+UMAP 3D):\n")
-        f.write(df_dist.to_string())
-        
-    # Exportar DataFrame de características para visor_features.py
-    # Exportamos las limpias (después de SNR y Outliers) para que el autoencoder no entrene con basura
     X_clean_flat = X.reshape(X.shape[0], -1)
-    
     n_features = X_clean_flat.shape[1]
     cols = []
-    # Asumimos que los features están en orden: Ch0 (100 pts), Ch1 (100 pts), Ch2 (100 pts)
     puntos_por_canal = n_features // 3
     for ch in range(3):
         for t in range(puntos_por_canal):
@@ -507,15 +408,16 @@ def ejecutar_procesamiento(mediciones, alpha_ruido=1.0, snr_threshold=0.5, outli
     df.to_csv(csv_export_path, index=False)
     
     print(f"Dataset LIMPIO exportado exitosamente a: {csv_export_path}")
+    print(f"Dimensiones de entrenamiento: {df.shape[0]} instancias x {n_features} variables ({puntos_por_canal} puntos x 3 canales)")
     
-    # Opcional: exportar el sucio con otro nombre
+    # Exportar dataset sin filtrar como referencia
     csv_sucio_path = os.path.join(out_dir, "caracteristicas_sin_filtrar.csv")
     df_sucio = pd.DataFrame(X_orig.reshape(X_orig.shape[0], -1), columns=cols)
     df_sucio.insert(0, 'Toma', Tomas_orig)
     df_sucio.insert(0, 'Vocal', Y_orig)
     df_sucio.to_csv(csv_sucio_path, index=False)
         
-    print(f"\nProceso completado. Resultados guardados en {out_dir}")
+    print(f"\nExtracción finalizada con éxito. Datos listos para entrenar el Autoencoder.")
 
 class GeneradorPCAGUI:
     def __init__(self, root):

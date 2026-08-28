@@ -502,13 +502,20 @@ class PcaTab(QWidget):
             inp_outliers.setValue(0.10)
             inp_outliers.setFixedWidth(60)
             l.addWidget(inp_outliers, 0, 9)
+            l.addWidget(QLabel("Notch Q:"), 0, 10)
+            inp_notch = QDoubleSpinBox()
+            inp_notch.setRange(0.1, 100.0)
+            inp_notch.setSingleStep(0.5)
+            inp_notch.setValue(2.0)
+            inp_notch.setFixedWidth(50)
+            l.addWidget(inp_notch, 0, 11)
             g.setLayout(l)
-            return g, inp_alpha, inp_smooth, inp_pts, inp_snr, inp_outliers
+            return g, inp_alpha, inp_smooth, inp_pts, inp_snr, inp_outliers, inp_notch
 
-        g_dsp_2d, self.inp_alpha_2d, self.inp_smooth_2d, self.inp_pts_2d, self.inp_snr_2d, self.inp_outliers_2d = create_dsp_row("Parámetros DSP y Limpieza (2D)", 90, 0.5)
+        g_dsp_2d, self.inp_alpha_2d, self.inp_smooth_2d, self.inp_pts_2d, self.inp_snr_2d, self.inp_outliers_2d, self.inp_notch_2d = create_dsp_row("Parámetros DSP y Limpieza (2D)", 90, 0.5)
         lay.addWidget(g_dsp_2d)
         
-        g_dsp_3d, self.inp_alpha_3d, self.inp_smooth_3d, self.inp_pts_3d, self.inp_snr_3d, self.inp_outliers_3d = create_dsp_row("Parámetros DSP y Limpieza (3D)", 125, 0.5)
+        g_dsp_3d, self.inp_alpha_3d, self.inp_smooth_3d, self.inp_pts_3d, self.inp_snr_3d, self.inp_outliers_3d, self.inp_notch_3d = create_dsp_row("Parámetros DSP y Limpieza (3D)", 125, 0.5)
         lay.addWidget(g_dsp_3d)
 
         g_cluster = QGroupBox("Algoritmo de Agrupamiento")
@@ -572,10 +579,10 @@ class PcaTab(QWidget):
         self.layout.addWidget(scroll)
         
         l_grid_btns = QHBoxLayout()
-        self.btn_grid_search_2d = QPushButton(" 🔍 GRID SEARCH (2D)")
+        self.btn_grid_search_2d = QPushButton(" GRID SEARCH (2D)")
         self.btn_grid_search_2d.setStyleSheet("background-color: #66FCF1; color: black; font-weight: bold; padding: 10px; margin-bottom: 5px;")
         
-        self.btn_grid_search_3d = QPushButton(" 🔍 GRID SEARCH (3D)")
+        self.btn_grid_search_3d = QPushButton(" GRID SEARCH (3D)")
         self.btn_grid_search_3d.setStyleSheet("background-color: #45A29E; color: black; font-weight: bold; padding: 10px; margin-bottom: 5px;")
         
         l_grid_btns.addWidget(self.btn_grid_search_2d)
@@ -585,6 +592,10 @@ class PcaTab(QWidget):
         self.btn_run = QPushButton(" 1. LANZAR PCA (COMP. PRINCIPALES)")
         self.btn_run.setStyleSheet("background-color: #00ffcc; color: black; font-weight: bold; padding: 10px;")
         self.layout.addWidget(self.btn_run)
+
+        self.btn_visor_features = QPushButton(" VISUALIZADOR DE FEATURES (PCA / UMAP)")
+        self.btn_visor_features.setStyleSheet("background-color: #2b0938; color: #e879f9; font-weight: bold; border: 1px solid #e879f9; padding: 10px; margin-top: 4px;")
+        self.layout.addWidget(self.btn_visor_features)
 
 class UmapTab(QWidget):
     def __init__(self):
@@ -685,6 +696,14 @@ class UmapTab(QWidget):
         self.inp_outliers_u.setValue(0.10)
         self.inp_outliers_u.setFixedWidth(60)
         l_umap.addWidget(self.inp_outliers_u, 1, 7)
+
+        l_umap.addWidget(QLabel("Notch Q:"), 2, 0)
+        self.inp_notch_u = QDoubleSpinBox()
+        self.inp_notch_u.setRange(0.1, 100.0)
+        self.inp_notch_u.setSingleStep(0.5)
+        self.inp_notch_u.setValue(2.0)
+        self.inp_notch_u.setFixedWidth(60)
+        l_umap.addWidget(self.inp_notch_u, 2, 1)
 
         g_umap.setLayout(l_umap)
         lay.addWidget(g_umap)
@@ -835,6 +854,162 @@ class UmapSupervisadoTab(QWidget):
         self.btn_run.setStyleSheet("background-color: #45A29E; color: white; font-weight: bold; padding: 10px;")
         self.layout.addWidget(self.btn_run)
 
+class AutoencodersTab(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(5, 5, 5, 5)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        content = QWidget()
+        lay = QVBoxLayout(content)
+
+        # 1. Parámetros DSP y Extracción Tensorial
+        g_dsp = QGroupBox("1. Parámetros DSP y Extracción Tensorial")
+        l_dsp = QGridLayout()
+        
+        l_dsp.addWidget(QLabel("Alpha:"), 0, 0)
+        self.inp_alpha = QDoubleSpinBox()
+        self.inp_alpha.setRange(0.0, 5.0)
+        self.inp_alpha.setSingleStep(0.1)
+        self.inp_alpha.setValue(1.0)
+        self.inp_alpha.setFixedWidth(60)
+        l_dsp.addWidget(self.inp_alpha, 0, 1)
+
+        l_dsp.addWidget(QLabel("Smooth:"), 0, 2)
+        self.inp_smooth = QSpinBox()
+        self.inp_smooth.setRange(10, 1000)
+        self.inp_smooth.setSingleStep(10)
+        self.inp_smooth.setValue(150)
+        self.inp_smooth.setFixedWidth(60)
+        l_dsp.addWidget(self.inp_smooth, 0, 3)
+
+        l_dsp.addWidget(QLabel("Pts:"), 0, 4)
+        self.inp_pts = QSpinBox()
+        self.inp_pts.setRange(10, 500)
+        self.inp_pts.setSingleStep(10)
+        self.inp_pts.setValue(100)
+        self.inp_pts.setFixedWidth(60)
+        l_dsp.addWidget(self.inp_pts, 0, 5)
+
+        l_dsp.addWidget(QLabel("SNR:"), 0, 6)
+        self.inp_snr = QDoubleSpinBox()
+        self.inp_snr.setRange(0.0, 50.0)
+        self.inp_snr.setSingleStep(0.1)
+        self.inp_snr.setValue(0.5)
+        self.inp_snr.setFixedWidth(60)
+        l_dsp.addWidget(self.inp_snr, 0, 7)
+
+        l_dsp.addWidget(QLabel("Outliers:"), 0, 8)
+        self.inp_outliers = QDoubleSpinBox()
+        self.inp_outliers.setRange(0.0, 0.99)
+        self.inp_outliers.setSingleStep(0.01)
+        self.inp_outliers.setValue(0.05)
+        self.inp_outliers.setFixedWidth(60)
+        l_dsp.addWidget(self.inp_outliers, 0, 9)
+
+        l_dsp.addWidget(QLabel("Notch Q:"), 0, 10)
+        self.inp_notch = QDoubleSpinBox()
+        self.inp_notch.setRange(0.1, 100.0)
+        self.inp_notch.setSingleStep(0.5)
+        self.inp_notch.setValue(2.0)
+        self.inp_notch.setFixedWidth(50)
+        l_dsp.addWidget(self.inp_notch, 0, 11)
+
+        g_dsp.setLayout(l_dsp)
+        lay.addWidget(g_dsp)
+
+        # 2. Parámetros de Red Neuronal
+        g_nn = QGroupBox("2. Parámetros de Red Neuronal (Autoencoder 1D)")
+        l_nn = QGridLayout()
+
+        l_nn.addWidget(QLabel("Épocas:"), 0, 0)
+        self.inp_epochs = QSpinBox()
+        self.inp_epochs.setRange(1, 1000)
+        self.inp_epochs.setValue(80)
+        self.inp_epochs.setFixedWidth(60)
+        l_nn.addWidget(self.inp_epochs, 0, 1)
+
+        l_nn.addWidget(QLabel("Batch Size:"), 0, 2)
+        self.inp_batch = QSpinBox()
+        self.inp_batch.setRange(1, 512)
+        self.inp_batch.setValue(16)
+        self.inp_batch.setFixedWidth(60)
+        l_nn.addWidget(self.inp_batch, 0, 3)
+
+        l_nn.addWidget(QLabel("Latent Dim:"), 0, 4)
+        self.inp_latent = QSpinBox()
+        self.inp_latent.setRange(1, 256)
+        self.inp_latent.setValue(8)
+        self.inp_latent.setFixedWidth(60)
+        l_nn.addWidget(self.inp_latent, 0, 5)
+
+        l_nn.addWidget(QLabel("Kernel Size:"), 0, 6)
+        self.inp_kernel = QSpinBox()
+        self.inp_kernel.setRange(1, 31)
+        self.inp_kernel.setSingleStep(2)
+        self.inp_kernel.setValue(5)
+        self.inp_kernel.setFixedWidth(60)
+        l_nn.addWidget(self.inp_kernel, 0, 7)
+
+        l_nn.addWidget(QLabel("Alpha Loss:"), 0, 8)
+        self.inp_alpha_loss = QDoubleSpinBox()
+        self.inp_alpha_loss.setRange(0.0, 1.0)
+        self.inp_alpha_loss.setSingleStep(0.05)
+        self.inp_alpha_loss.setValue(0.5)
+        self.inp_alpha_loss.setFixedWidth(60)
+        l_nn.addWidget(self.inp_alpha_loss, 0, 9)
+
+        g_nn.setLayout(l_nn)
+        lay.addWidget(g_nn)
+
+        # 3. Opciones y Exclusiones
+        g_opt = QGroupBox("3. Opciones de Entrenamiento y Exclusiones")
+        l_opt = QHBoxLayout()
+        self.chk_manual_excl = QCheckBox("Aplicar Exclusiones Manuales (metadata.json)")
+        self.chk_manual_excl.setChecked(True)
+        l_opt.addWidget(self.chk_manual_excl)
+
+        self.chk_force_epochs = QCheckBox("Forzar Épocas (Ignorar Checkpoint)")
+        self.chk_force_epochs.setChecked(False)
+        l_opt.addWidget(self.chk_force_epochs)
+        g_opt.setLayout(l_opt)
+        lay.addWidget(g_opt)
+
+        lay.addStretch()
+        scroll.setWidget(content)
+        self.layout.addWidget(scroll)
+
+        # Botones de Acción (Estilo Cyberpunk)
+        self.btn_grid_search = QPushButton(" GRID SEARCH AUTOENCODER (36 COMBINACIONES)")
+        self.btn_grid_search.setStyleSheet("background-color: #ffe600; color: black; font-weight: bold; padding: 10px; margin-bottom: 3px;")
+        self.layout.addWidget(self.btn_grid_search)
+
+        l_main_btns = QHBoxLayout()
+        self.btn_extraer = QPushButton("1. EXTRAER DATASET")
+        self.btn_extraer.setStyleSheet("background-color: #45A29E; color: black; font-weight: bold; padding: 10px;")
+        self.btn_entrenar = QPushButton("2. ENTRENAR AUTOENCODER")
+        self.btn_entrenar.setStyleSheet("background-color: #66FCF1; color: black; font-weight: bold; padding: 10px;")
+        self.btn_plotear = QPushButton("3. PLOTEAR ESPACIO LATENTE")
+        self.btn_plotear.setStyleSheet("background-color: #00FF00; color: black; font-weight: bold; padding: 10px;")
+        l_main_btns.addWidget(self.btn_extraer)
+        l_main_btns.addWidget(self.btn_entrenar)
+        l_main_btns.addWidget(self.btn_plotear)
+        self.layout.addLayout(l_main_btns)
+
+        l_sub_btns = QHBoxLayout()
+        self.btn_decodificador = QPushButton(" DECODIFICAR SECUENCIA CONTINUA")
+        self.btn_decodificador.setStyleSheet("background-color: #003344; color: #00FFFF; border: 1px solid #00FFFF; font-weight: bold; padding: 9px;")
+        self.btn_visor_features = QPushButton(" VISUALIZADOR DE FEATURES")
+        self.btn_visor_features.setStyleSheet("background-color: #2b0938; color: #e879f9; border: 1px solid #e879f9; font-weight: bold; padding: 9px;")
+        self.btn_pipeline_gui = QPushButton(" PIPELINE MAESTRO (GUI)")
+        self.btn_pipeline_gui.setStyleSheet("background-color: #1a1a1a; color: #66FCF1; border: 1px solid #66FCF1; font-weight: bold; padding: 9px;")
+        l_sub_btns.addWidget(self.btn_decodificador)
+        l_sub_btns.addWidget(self.btn_visor_features)
+        l_sub_btns.addWidget(self.btn_pipeline_gui)
+        self.layout.addLayout(l_sub_btns)
+
 class MachineLearningTab(QWidget):
     def __init__(self):
         super().__init__()
@@ -846,10 +1021,12 @@ class MachineLearningTab(QWidget):
         self.tab_pca = PcaTab()
         self.tab_umap = UmapTab()
         self.tab_umap_sup = UmapSupervisadoTab()
+        self.tab_autoencoders = AutoencodersTab()
         
         self.tabs.addTab(self.tab_pca, "PCA")
         self.tabs.addTab(self.tab_umap, "UMAP No-Lineal")
         self.tabs.addTab(self.tab_umap_sup, "UMAP Supervisado")
+        self.tabs.addTab(self.tab_autoencoders, "Autoencoders")
         
         layout.addWidget(self.tabs)
 
@@ -964,29 +1141,21 @@ class MachineLearningPanel(QWidget):
         self.tabs.addTab(self.tab_umap_sup, "UMAP Supervisado")
         
         # 5. Autoencoders
-        self.tab_autoencoders = QWidget()
-        lyt_autoencoders = QVBoxLayout(self.tab_autoencoders)
-        self.btn_autoencoders = QPushButton("Pipeline Maestro: Autoencoder")
-        self.btn_autoencoders.setStyleSheet("padding: 15px; font-size: 14px; background-color: #00331a; color: #00ffaa; border: 1px solid #00ffaa;")
-        lyt_autoencoders.addWidget(self.btn_autoencoders)
-        lyt_autoencoders.addStretch()
+        self.tab_autoencoders = AutoencodersTab()
         self.tabs.addTab(self.tab_autoencoders, "Autoencoders")
         
         # 6. Otros Clasificadores y Herramientas
         self.tab_otros = QWidget()
         lyt_otros = QVBoxLayout(self.tab_otros)
-        self.btn_xgboost = QPushButton("Machine Learning: XGBoost")
-        self.btn_xgboost.setStyleSheet("padding: 15px; font-size: 14px; background-color: #331a00; color: #ffaa00; border: 1px solid #ffaa00;")
         self.btn_trevisan = QPushButton("Análisis de Binarización (Trevisan)")
         self.btn_trevisan.setStyleSheet("padding: 15px; font-size: 14px; background-color: #001a33; color: #00ffff; border: 1px solid #00ffff;")
         self.btn_visor_features = QPushButton("Visualizador de Features (PCA/UMAP)")
         self.btn_visor_features.setStyleSheet("padding: 15px; font-size: 14px; background-color: #330033; color: #ff00ff; border: 1px solid #ff00ff;")
         
-        lyt_otros.addWidget(self.btn_xgboost)
         lyt_otros.addWidget(self.btn_trevisan)
         lyt_otros.addWidget(self.btn_visor_features)
         lyt_otros.addStretch()
-        # self.tabs.addTab(self.tab_otros, "Herramientas Extra (XGBoost, Visor)")
+        # self.tabs.addTab(self.tab_otros, "Herramientas Extra (Trevisan, Visor)")
         
         self.layout.addWidget(self.tabs)
 
@@ -1029,7 +1198,7 @@ class MachineLearningPanel(QWidget):
                 'target_length': t.inp_pts_2d.value(),
                 'snr_threshold': t.inp_snr_2d.value(),
                 'outlier_contamination': t.inp_outliers_2d.value(),
-                'notch_q': 2.0
+                'notch_q': t.inp_notch_2d.value()
             },
             'params_3d': {
                 'alpha_ruido': t.inp_alpha_3d.value(),
@@ -1037,7 +1206,7 @@ class MachineLearningPanel(QWidget):
                 'target_length': t.inp_pts_3d.value(),
                 'snr_threshold': t.inp_snr_3d.value(),
                 'outlier_contamination': t.inp_outliers_3d.value(),
-                'notch_q': 2.0
+                'notch_q': t.inp_notch_3d.value()
             },
             'params_umap': {},
             'umap_n_neighbors': 15,
@@ -1075,7 +1244,7 @@ class MachineLearningPanel(QWidget):
                 'target_length': t.inp_pts_u.value(),
                 'snr_threshold': t.inp_snr_u.value(),
                 'outlier_contamination': t.inp_outliers_u.value(),
-                'notch_q': 2.0
+                'notch_q': t.inp_notch_u.value()
             },
             'umap_n_neighbors': t.inp_n_neighbors.value(),
             'umap_min_dist': t.inp_min_dist.value(),
@@ -1105,7 +1274,7 @@ class MachineLearningPanel(QWidget):
             'target_length': t.inp_target_len.value(),
             'snr_threshold': t.inp_snr.value(),
             'outlier_contamination': t.inp_outliers.value(),
-            'notch_q': 2.0,
+            'notch_q': t.inp_notch.value(),
             'umap_n_neighbors': t.inp_umap_nn.value(),
             'umap_min_dist': t.inp_umap_md.value(),
             'umap_metric': t.cmb_metric.currentText(),
@@ -1117,6 +1286,24 @@ class MachineLearningPanel(QWidget):
             'post_pct': t_umap.inp_post_pct.value(),
             'modo_alineacion': t_umap.cmb_align.currentText(),
             'canales_features': canales
+        }
+
+    def get_autoencoder_kwargs(self):
+        t = self.tab_autoencoders
+        return {
+            'alpha_ruido': t.inp_alpha.value(),
+            'smooth_ms': t.inp_smooth.value(),
+            'target_length': t.inp_pts.value(),
+            'snr_min': t.inp_snr.value(),
+            'outliers_pct': t.inp_outliers.value(),
+            'notch_q': t.inp_notch.value(),
+            'use_manual_exclusions': t.chk_manual_excl.isChecked(),
+            'epochs': t.inp_epochs.value(),
+            'batch_size': t.inp_batch.value(),
+            'latent_dim': t.inp_latent.value(),
+            'kernel_size': t.inp_kernel.value(),
+            'alpha_loss': t.inp_alpha_loss.value(),
+            'force_epochs': t.chk_force_epochs.isChecked()
         }
 
 class TrainTestSplitDialog(QDialog):

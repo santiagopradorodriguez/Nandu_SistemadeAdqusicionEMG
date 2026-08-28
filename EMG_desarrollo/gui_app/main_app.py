@@ -69,6 +69,22 @@ if getattr(sys, 'frozen', False) and len(sys.argv) > 1 and (sys.argv[1].endswith
       import analysis.correlaciondeseñales as module
     elif module_name == 'analysis.electrode_viewer_4':
       import analysis.electrode_viewer_4 as module
+    elif module_name == 'analysis.analisis_estadistico_pulsos':
+      import analysis.analisis_estadistico_pulsos as module
+    elif module_name == 'analysis.discrete_motor':
+      import analysis.discrete_motor as module
+    elif module_name == 'analysis.pca_motor':
+      import analysis.pca_motor as module
+    elif module_name == 'analysis.training_motor':
+      import analysis.training_motor as module
+    elif module_name == 'analysis.umap_motor':
+      import analysis.umap_motor as module
+    elif module_name == 'analysis.generar_graficos_y_ranking':
+      import analysis.generar_graficos_y_ranking as module
+    elif module_name == 'analysis.plot_metricas_tesis':
+      import analysis.plot_metricas_tesis as module
+    elif module_name == 'instrucciones_uso':
+      import instrucciones_uso as module
     elif module_name == 'utils.editor_mediciones':
       import utils.editor_mediciones as module
     elif module_name == 'utils.actualizar_metadata':
@@ -83,8 +99,6 @@ if getattr(sys, 'frozen', False) and len(sys.argv) > 1 and (sys.argv[1].endswith
       import deep_learning.binarizacion.analisis_trevisan_bandas as module
     elif module_name == 'deep_learning.binarizacion.analisis_binario':
       import deep_learning.binarizacion.analisis_binario as module
-    elif module_name == 'deep_learning.machine_learning.analisis_xgboost':
-      import deep_learning.machine_learning.analisis_xgboost as module
     elif module_name == 'deep_learning.pipeline_autoencoder_gui':
       import deep_learning.pipeline_autoencoder_gui as module
     elif module_name == 'deep_learning.dataset_tools.visor_features':
@@ -101,6 +115,8 @@ if getattr(sys, 'frozen', False) and len(sys.argv) > 1 and (sys.argv[1].endswith
       import deep_learning.pca_analysis as module
     elif module_name == 'deep_learning.umap_analysis':
       import deep_learning.umap_analysis as module
+    elif module_name == 'deep_learning.experimento_grid_search_3_autoencoder':
+      import deep_learning.experimento_grid_search_3_autoencoder as module
     else:
       import importlib
       module = importlib.import_module(module_name)
@@ -601,25 +617,45 @@ class ReaperStyleHub(QMainWindow):
     import os
     from pathlib import Path
     
-    # --- NUEVO: Cargar Logo del Programa ---
+    # --- Cargar Logo del Programa ---
     logo_path = None
     try:
-      # Buscar en varias ubicaciones posibles
-      root_dir = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-      gui_dir = Path(os.path.dirname(os.path.abspath(__file__)))
-      assets_dir = gui_dir / "assets"
-      pictures_dir = Path.home() / "Pictures"
-      
-      search_dirs = [assets_dir, gui_dir, root_dir, pictures_dir]
-      
-      for search_dir in search_dirs:
-        if search_dir.exists():
-          for filename in os.listdir(search_dir):
-            if filename.lower().startswith("logo") and filename.lower().endswith((".png", ".jpg", ".jpeg")):
-              logo_path = str(search_dir / filename)
-              break
-        if logo_path:
+      from utils.path_utils import get_resource_path, get_project_root
+      candidate_paths = [
+        get_resource_path("logo_nandu_lsd.png"),
+        get_resource_path("logo.png"),
+        os.path.join(get_project_root(), "logo_nandu_lsd.png"),
+        os.path.join(get_project_root(), "EMG_desarrollo", "logo_nandu_lsd.png"),
+        os.path.join(get_project_root(), "EMG_desarrollo", "gui_app", "assets", "logo_nandu_lsd.png"),
+        os.path.join(get_project_root(), "EMG_desarrollo", "gui_app", "logo_nandu_lsd.png"),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "logo_nandu_lsd.png"),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo_nandu_lsd.png"),
+      ]
+      if hasattr(sys, '_MEIPASS'):
+        candidate_paths.insert(0, os.path.join(sys._MEIPASS, "logo_nandu_lsd.png"))
+        candidate_paths.insert(1, os.path.join(sys._MEIPASS, "logo.png"))
+        
+      for cp in candidate_paths:
+        if cp and os.path.exists(cp):
+          logo_path = cp
           break
+          
+      if not logo_path:
+        root_dir = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        gui_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+        assets_dir = gui_dir / "assets"
+        pictures_dir = Path.home() / "Pictures"
+        search_dirs = [assets_dir, gui_dir, root_dir, Path(get_project_root()), pictures_dir]
+        if hasattr(sys, '_MEIPASS'):
+          search_dirs.insert(0, Path(sys._MEIPASS))
+        for search_dir in search_dirs:
+          if search_dir.exists():
+            for filename in os.listdir(search_dir):
+              if filename.lower().startswith("logo") and filename.lower().endswith((".png", ".jpg", ".jpeg")):
+                logo_path = str(search_dir / filename)
+                break
+          if logo_path:
+            break
     except Exception as e:
       print(f"> Error buscando logo: {e}")
 
@@ -632,11 +668,11 @@ class ReaperStyleHub(QMainWindow):
     if logo_path and os.path.exists(logo_path):
       from PySide6.QtGui import QPixmap
       pix = QPixmap(logo_path)
-      pix = pix.scaled(400, 200, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+      pix = pix.scaled(480, 180, Qt.KeepAspectRatio, Qt.SmoothTransformation)
       lbl_logo.setPixmap(pix)
       lbl_logo.setStyleSheet("padding: 10px; background-color: #050505; border-radius: 8px; border: 1px solid #222;")
     else:
-      lbl_logo.setText("<h2>[ÑANDÚ LSD LOGO]</h2><p style='color:#888;'>Coloca un archivo 'logo.png' en la carpeta Imágenes</p>")
+      lbl_logo.setText("<h2>[ÑANDÚ LSD LOGO]</h2><p style='color:#888;'>Coloca un archivo 'logo_nandu_lsd.png' en la carpeta raíz</p>")
       lbl_logo.setStyleSheet("color: #FF0000; background-color: #111; border: 1px dashed #FF4444; padding: 20px; border-radius: 8px;")
     
     vbox_info.addWidget(lbl_logo)
@@ -646,23 +682,25 @@ class ReaperStyleHub(QMainWindow):
     
     html_intro = f"""
     <div style='padding: 20px;'>
-      <h2 style='color:#00ffff;'>Plataforma de Investigación EMG v6.0</h2>
-      <p>Bienvenido al hub centralizado para adquisición en tiempo real, curación y análisis comparativo de señales electromiográficas.</p>
+      <h2 style='color:#00ffff;'>Plataforma de Investigación EMG v6.1</h2>
+      <p>Bienvenido al hub centralizado para adquisición en tiempo real, curación, procesamiento DSP y análisis de Deep Learning de señales electromiográficas (sEMG).</p>
       
-      <h3 style='color:#00ffaa;'>Novedades Actualización v6.0 (Machine Learning & Deep Learning):</h3>
+      <h3 style='color:#00ffaa;'>Novedades Actualización v6.1 (Deep Learning, Topología & Arquitectura):</h3>
       <ul>
-        <li><b>Integración de Deep Learning:</b> Nueva pestaña con módulos de Análisis XGBoost, Autoencoders, Clustering (PCA y UMAP) y binarización avanzada (Trevisan).</li>
-        <li><b>AutoForge Secuencia Continua:</b> Captura el diccionario entero de forma cíclica en un solo click, autogenerando las etiquetas correctas de Machine Learning (valid_words) para cada pulso en los metadatos.</li>
-        <li><b>Cálculo de Ruido y SNR Dinámico:</b> Análisis automático del ruido de fondo previo a cada estímulo, con offset centrado en base al primer octavo del pulso promedio para lograr gráficos de overlay precisos.</li>
-        <li><b>Sincronización Perfecta:</b> La geometría de búsqueda de pulsos se centra dinámicamente usando como referencia la ventana exacta del beat del metrónomo.</li>
-        <li><b>Framework Moderno PySide6:</b> Estabilidad extrema, estética Cyberpunk, colores persistentes y prevención de caídas de UI frente a errores internos.</li>
+        <li><b>Sistema de Colores y Mapeo Anatómico por Músculo:</b> Convención estandarizada fija por canal: <i>Depresor Anguli Oris</i> (violeta), <i>Mylohyoid</i> (verde), <i>Orbicularis Oris</i> (amarillo) y <i>Micrófono/Canal 3</i> (rojo permanente). Diálogo interactivo al iniciar para confirmar la topografía de electrodos.</li>
+        <li><b>Metadatos y Trazabilidad Enriquecida:</b> Registro unificado de <code>muscles_map</code>, <code>muscles</code> y <code>timestamp</code> en <code>metadata.json</code>, propagado automáticamente en recortes y segmentaciones.</li>
+        <li><b>Motores Analíticos Desacoplados:</b> Nuevos motores independientes para análisis discreto (<code>discrete_motor</code>), barrido paramétrico y entrenamiento (<code>training_motor</code>), reducción dimensional PCA 2D/3D con siluetas y distancias inter-vocálicas (<code>pca_motor</code>), proyecciones UMAP supervisadas y no supervisadas (<code>umap_motor</code>) y generador automático de rankings de experimentos (<code>generar_graficos_y_ranking</code>).</li>
+        <li><b>Autoencoders Convolucionales 1D (PyTorch):</b> Redes neuronales convolucionales profundas para compresión no lineal a espacios latentes 2D/3D y decodificación continua de potenciales mioeléctricos.</li>
+        <li><b>Resolución Centralizada de Rutas (<code>path_utils</code>):</b> Desacople total que garantiza que <code>base_de_datos_electrodos</code> y reportes comparativos residan junto al ejecutable tanto en desarrollo como en distribución compilada.</li>
+        <li><b>Optimización y Depuración:</b> Eliminación de librerías obsoletas (XGBoost) para un sistema más rápido, liviano y enfocado.</li>
       </ul>
 
       <h3 style='color:#ffaa00;'>Instrucciones Rápidas:</h3>
       <ul>
-        <li><b>Adquisición:</b> Haz clic en el botón rojo de la derecha para grabar nuevas mediciones o correr el simulador.</li>
-        <li><b>Curación Individual:</b> Selecciona mediciones en el árbol izquierdo, marca los canales deseados, configura los filtros Notch/Pasabanda y haz clic en Procesar en la pestaña 'Análisis'. Las gráficas aparecerán automáticamente.</li>
-        <li><b>Deep Learning:</b> Selecciona mediciones y lanza los scripts de Machine Learning directamente desde la pestaña 6.</li>
+        <li><b>1. Adquisición:</b> Haz clic en el botón de la derecha para capturar nuevas mediciones con metrónomo y cuenta regresiva, confirmando los músculos en el diálogo inicial.</li>
+        <li><b>2. Visualización:</b> Inspecciona las curvas en el Explorador CSV y visores de electrodos con identificación por color de cada músculo.</li>
+        <li><b>3. Curación y Análisis:</b> Selecciona mediciones en el gestor de sesiones, verifica los canales deseados y haz clic en <i>PROCESAR</i> en la pestaña 3.</li>
+        <li><b>4. Machine Learning & Deep Learning:</b> Accede a la Pestaña 4 para entrenar Autoencoders 1D, calcular proyecciones topológicas PCA/UMAP o binarizar patrones mediante Método Trevisan.</li>
       </ul>
       
       <h3 style='color:#00ff00;'>Fundamento Teórico:</h3>
@@ -865,15 +903,29 @@ class ReaperStyleHub(QMainWindow):
     self.tab_dl_ml.tab_pca.btn_grid_search_2d.clicked.connect(lambda checked=False: self.run_pca_grid_search_nativo(n_components=2))
     self.tab_dl_ml.tab_pca.btn_grid_search_3d.clicked.connect(lambda checked=False: self.run_pca_grid_search_nativo(n_components=3))
     self.tab_dl_ml.tab_pca.btn_run.clicked.connect(self.run_pca_nativo)
+    self.tab_dl_ml.tab_pca.btn_visor_features.clicked.connect(lambda: self._launch_external("deep_learning/dataset_tools/visor_features.py"))
     self.tab_dl_ml.tab_umap.btn_run.clicked.connect(self.run_umap_nativo)
     self.tab_dl_ml.tab_umap_sup.btn_run.clicked.connect(self.run_umap_supervisado_nativo)
     # (Botones btn_run_motor y btn_run_training se conectarán en un futuro cuando sus respectivos scripts nativos estén implementados)
     
-    # Conectar los otros clasificadores (XGBoost, Trevisan, Autoencoders, Visor)
-    self.tab_dl_ml.btn_xgboost.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/machine_learning/analisis_xgboost.py"))
+    # Conectar los clasificadores (Trevisan, Autoencoders, Visor)
     self.tab_dl_ml.btn_trevisan.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/binarizacion/analisis_trevisan.py"))
-    self.tab_dl_ml.btn_autoencoders.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/pipeline_autoencoder_gui.py"))
-    self.tab_dl_ml.btn_visor_features.clicked.connect(lambda: self._launch_external("deep_learning/dataset_tools/visor_features.py"))
+    if hasattr(self.tab_dl_ml, 'btn_autoencoders'):
+      self.tab_dl_ml.btn_autoencoders.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/pipeline_autoencoder_gui.py"))
+    
+    # Conexiones nativas de la pestaña Autoencoders
+    if hasattr(self.tab_dl_ml, 'tab_autoencoders'):
+      ae = self.tab_dl_ml.tab_autoencoders
+      ae.btn_grid_search.clicked.connect(self.run_autoencoder_grid_search_nativo)
+      ae.btn_extraer.clicked.connect(self.run_autoencoder_extraer_nativo)
+      ae.btn_entrenar.clicked.connect(self.run_autoencoder_entrenar_nativo)
+      ae.btn_plotear.clicked.connect(self.run_autoencoder_plotear_nativo)
+      ae.btn_decodificador.clicked.connect(self.run_autoencoder_decodificador_nativo)
+      ae.btn_visor_features.clicked.connect(lambda: self._launch_external("deep_learning/dataset_tools/visor_features.py"))
+      ae.btn_pipeline_gui.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/pipeline_autoencoder_gui.py"))
+    
+    if hasattr(self.tab_dl_ml, 'btn_visor_features'):
+      self.tab_dl_ml.btn_visor_features.clicked.connect(lambda: self._launch_external("deep_learning/dataset_tools/visor_features.py"))
     
     self.tabs.addTab(self.tab_dl_ml, "4. MACHINE LEARNING")
 
@@ -1005,7 +1057,9 @@ class ReaperStyleHub(QMainWindow):
         for canal in sorted_canales_totales:
           from PySide6.QtWidgets import QCheckBox
           musc_name = None
-          for p in selected_paths:
+          ch_idx_str = canal.replace('canal_', '')
+          for p in rutas:
+            # 1. Chequear metadata específico de canal
             p_meta = os.path.join(p, canal, "metadata.json")
             if os.path.exists(p_meta):
               try:
@@ -1015,8 +1069,24 @@ class ReaperStyleHub(QMainWindow):
                     musc_name = md_chk['musculo']
                     break
               except Exception: pass
+            # 2. Chequear canal_0/metadata.json centralizado
+            p_meta0 = os.path.join(p, "canal_0", "metadata.json")
+            if os.path.exists(p_meta0) and not musc_name:
+              try:
+                with open(p_meta0, 'r', encoding='utf-8') as fm:
+                  md0 = json.load(fm)
+                  m_map = md0.get('muscles_map', {})
+                  if ch_idx_str in m_map:
+                    musc_name = m_map[ch_idx_str]
+                    break
+                  elif canal in m_map:
+                    musc_name = m_map[canal]
+                    break
+                  elif 'muscles' in md0 and ch_idx_str.isdigit() and int(ch_idx_str) < len(md0['muscles']):
+                    musc_name = md0['muscles'][int(ch_idx_str)]
+                    break
+              except Exception: pass
           if not musc_name:
-            ch_idx_str = canal.replace('canal_', '')
             try:
               from utils.config_manager import ConfigManager
               cm = ConfigManager()
@@ -1283,6 +1353,7 @@ finally:
   input("\\nPresione ENTER para cerrar esta ventana...")
 """
     script_path = os.path.join(emg_root, "gui_app", "temp_comparativo.py")
+    os.makedirs(os.path.dirname(script_path), exist_ok=True)
     with open(script_path, "w", encoding="utf-8") as f:
       f.write(bridge_script)
       
@@ -1522,6 +1593,7 @@ finally:
     input("\\nPresione ENTER para cerrar esta ventana...")
 """
     script_path = os.path.join(emg_root, "gui_app", "temp_sesion.py")
+    os.makedirs(os.path.dirname(script_path), exist_ok=True)
     with open(script_path, "w", encoding="utf-8") as f:
       f.write(bridge_script)
       
@@ -1793,13 +1865,18 @@ if isinstance(res, tuple) and len(res) >= 3:
     best_sil = res[2]
 
 if best_config:
-    best_smooth, best_pts, best_alpha = best_config
+    if len(best_config) == 4:
+        best_smooth, best_pts, best_alpha, best_notch = best_config
+    else:
+        best_smooth, best_pts, best_alpha = best_config[:3]
+        best_notch = 2.0
     out_file = os.path.join(project_root, "deep_learning", "parametros_optimos_pca.json")
     with open(out_file, "w") as f:
         json.dump({
             "smooth_ms": best_smooth,
             "target_length": best_pts,
             "alpha_ruido": best_alpha,
+            "notch_q": best_notch,
             "accuracy_clasificacion": best_acc,
             "silhouette_score": best_sil
         }, f, indent=4)
@@ -1809,6 +1886,7 @@ if best_config:
     print("  - Smooth (Envolvente): " + str(best_smooth) + " ms")
     print("  - Remuestreo (Pts):    " + str(best_pts))
     print("  - Alfa Ruido:          " + str(best_alpha))
+    print("  - Notch Q:             " + str(best_notch))
     print("  - Clasificación (%):   " + str(best_acc) + " %")
     print("  - Silhouette Score:    " + str(best_sil))
     print("---------------------------------------------------------")
@@ -1829,6 +1907,7 @@ if best_config:
                 best_smooth = data.get("smooth_ms", 90)
                 best_pts = data.get("target_length", 20)
                 best_alpha = data.get("alpha_ruido", 0.5)
+                best_notch = data.get("notch_q", 2.0)
                 best_acc = data.get("accuracy_clasificacion", 0.0)
                 best_sil = data.get("silhouette_score", 0.0)
 
@@ -1837,10 +1916,12 @@ if best_config:
                     pca_tab.inp_alpha_2d.setValue(best_alpha)
                     pca_tab.inp_smooth_2d.setValue(best_smooth)
                     pca_tab.inp_pts_2d.setValue(best_pts)
+                    pca_tab.inp_notch_2d.setValue(best_notch)
                 elif n_components == 3:
                     pca_tab.inp_alpha_3d.setValue(best_alpha)
                     pca_tab.inp_smooth_3d.setValue(best_smooth)
                     pca_tab.inp_pts_3d.setValue(best_pts)
+                    pca_tab.inp_notch_3d.setValue(best_notch)
 
                 from PySide6.QtWidgets import QMessageBox
                 QMessageBox.information(
@@ -1849,7 +1930,8 @@ if best_config:
                     f"¡Configuración Óptima Encontrada!\n\n"
                     f"- Envolvente (Smooth): {best_smooth} ms\n"
                     f"- Puntos Remuestreo: {best_pts}\n"
-                    f"- Alfa Ruido: {best_alpha}\n\n"
+                    f"- Alfa Ruido: {best_alpha}\n"
+                    f"- Notch Q: {best_notch}\n\n"
                     f"Precisión Clasificación (%): {best_acc:.2f}%\n"
                     f"Silhouette Score (PCA): {best_sil:.4f}\n\n"
                     f"Se han cargado automáticamente los parámetros en la interfaz."
@@ -2005,6 +2087,213 @@ gen_sup.ejecutar_procesamiento(
 """
     self._launch_bridge_script("run_umap_sup", "UMAP SUPERVISADO", kwargs, template)
 
+  def run_autoencoder_extraer_nativo(self):
+    rutas = self.explorer_widget.get_selected_paths()
+    if not rutas:
+      self.log_console.append("> ERROR: Selecciona al menos una medición en el Gestor de Sesiones para extraer el dataset del Autoencoder.\n")
+      return
+
+    kwargs = self.tab_dl_ml.get_autoencoder_kwargs()
+    template = """
+import json
+import sys
+import os
+
+project_root = r'{ROOT_PROJECT_DIR}'
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+with open(r'{TEMP_JSON}', 'r') as f:
+    kwargs = json.load(f)
+
+mediciones = {MEDICIONES}
+base_dir = r'{BASE_DIR}'
+
+import deep_learning.dataset_tools.generador_pca_tensorial as gpt
+
+print("==================================================")
+print("EXTRAYENDO DATASET TENSORIAL PARA AUTOENCODER...")
+print(f"Mediciones seleccionadas: {len(mediciones)}")
+print("==================================================")
+
+X, Y, Tomas = gpt.extraer_features_concatenadas(
+    base_dir=base_dir,
+    mediciones=mediciones,
+    alpha_ruido=kwargs.get('alpha_ruido', 1.0),
+    smooth_ms=kwargs.get('smooth_ms', 150),
+    notch_q=kwargs.get('notch_q', 2.0),
+    target_length=kwargs.get('target_length', 100),
+    use_manual_exclusions=kwargs.get('use_manual_exclusions', True),
+    verbose=True
+)
+
+out_dir = os.path.join(project_root, "resultados", "resultados_pca_tensorial")
+os.makedirs(out_dir, exist_ok=True)
+csv_out = os.path.join(out_dir, "caracteristicas_exportadas.csv")
+
+import pandas as pd
+df = pd.DataFrame(X)
+df.insert(0, 'Toma', Tomas)
+df.insert(0, 'Vocal', Y)
+df.to_csv(csv_out, index=False)
+print(f"\\n>>> DATASET EXPORTADO EXITOSAMENTE ({len(df)} muestras) EN: {csv_out} <<<")
+"""
+    self._launch_bridge_script("extraer_autoencoder", "EXTRACCION DATASET AUTOENCODER", kwargs, template)
+
+  def run_autoencoder_entrenar_nativo(self):
+    kwargs = self.tab_dl_ml.get_autoencoder_kwargs()
+    template = """
+import json
+import sys
+import os
+
+project_root = r'{ROOT_PROJECT_DIR}'
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+with open(r'{TEMP_JSON}', 'r') as f:
+    kwargs = json.load(f)
+
+csv_candidates = [
+    os.path.join(project_root, "resultados", "resultados_pca_tensorial", "caracteristicas_exportadas.csv"),
+    os.path.join(project_root, "resultados", "resultados_pca_umap", "caracteristicas_exportadas.csv"),
+    os.path.join(project_root, "deep_learning", "caracteristicas_exportadas.csv"),
+]
+csv_file = None
+for c in csv_candidates:
+    if os.path.exists(c):
+        csv_file = c
+        break
+
+if not csv_file:
+    print("> ERROR: No se encontró 'caracteristicas_exportadas.csv'. Ejecuta primero '1. EXTRAER DATASET'.")
+    sys.exit(1)
+
+import deep_learning.train_autoencoder as ta
+ta.train_autoencoder(
+    csv_path=csv_file,
+    epochs=kwargs.get('epochs', 80),
+    batch_size=kwargs.get('batch_size', 16),
+    latent_dim=kwargs.get('latent_dim', 8),
+    kernel_size=kwargs.get('kernel_size', 5),
+    force_epochs=kwargs.get('force_epochs', False),
+    alpha=kwargs.get('alpha_loss', 0.5),
+    verbose=True
+)
+"""
+    self._launch_bridge_script("entrenar_autoencoder", "ENTRENAMIENTO AUTOENCODER", kwargs, template)
+
+  def run_autoencoder_plotear_nativo(self):
+    kwargs = self.tab_dl_ml.get_autoencoder_kwargs()
+    template = """
+import json
+import sys
+import os
+
+project_root = r'{ROOT_PROJECT_DIR}'
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+with open(r'{TEMP_JSON}', 'r') as f:
+    kwargs = json.load(f)
+
+csv_candidates = [
+    os.path.join(project_root, "resultados", "resultados_pca_tensorial", "caracteristicas_exportadas.csv"),
+    os.path.join(project_root, "resultados", "resultados_pca_umap", "caracteristicas_exportadas.csv"),
+]
+csv_file = next((c for c in csv_candidates if os.path.exists(c)), None)
+if not csv_file:
+    print("> ERROR: No se encontró 'caracteristicas_exportadas.csv'.")
+    sys.exit(1)
+
+out_dir = os.path.join(project_root, "resultados", "resultados_autoencoder")
+l_dim = kwargs.get('latent_dim', 8)
+model_candidates = [
+    os.path.join(out_dir, f"autoencoder_emg_{l_dim}d.pth"),
+    os.path.join(out_dir, "autoencoder_campeon.pth"),
+    os.path.join(out_dir, "autoencoder_emg.pth"),
+]
+model_path = next((m for m in model_candidates if os.path.exists(m)), None)
+if not model_path:
+    print("> ERROR: No se encontró ningún modelo (.pth) entrenado.")
+    sys.exit(1)
+
+import deep_learning.plot_latent_space as pls
+pls.plot_latent_space(csv_file, model_path, latent_dim=l_dim)
+"""
+    self._launch_bridge_script("plotear_latente", "PLOTEO ESPACIO LATENTE", kwargs, template)
+
+  def run_autoencoder_grid_search_nativo(self):
+    kwargs = self.tab_dl_ml.get_autoencoder_kwargs()
+    template = """
+import json
+import sys
+import os
+
+project_root = r'{ROOT_PROJECT_DIR}'
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+with open(r'{TEMP_JSON}', 'r') as f:
+    kwargs = json.load(f)
+
+import deep_learning.grid_search_autoencoder as gsa
+df_res, campeon = gsa.run_grid_search(epochs=min(kwargs.get('epochs', 80), 80))
+"""
+    self._launch_bridge_script("grid_search_ae", "GRID SEARCH AUTOENCODER (36 COMB.)", kwargs, template)
+
+  def run_autoencoder_decodificador_nativo(self):
+    rutas = self.explorer_widget.get_selected_paths()
+    carpeta = rutas[0] if rutas else None
+    if not carpeta or not os.path.isdir(carpeta):
+        from PySide6.QtWidgets import QFileDialog
+        root_dir = get_project_root()
+        base_dir = os.path.join(root_dir, "base_de_datos_electrodos")
+        carpeta = QFileDialog.getExistingDirectory(self, "Seleccione la carpeta de Secuencia Continua", base_dir)
+        if not carpeta:
+            return
+
+    kwargs = self.tab_dl_ml.get_autoencoder_kwargs()
+    carpeta_clean = carpeta.replace("\\\\", "/")
+    template = f'''
+import json
+import sys
+import os
+
+project_root = r'{{ROOT_PROJECT_DIR}}'
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+with open(r'{{TEMP_JSON}}', 'r') as f:
+    kwargs = json.load(f)
+
+carpeta_secuencia = r"{carpeta_clean}"
+
+out_dir = os.path.join(project_root, "resultados", "resultados_autoencoder")
+l_dim = kwargs.get('latent_dim', 8)
+model_candidates = [
+    os.path.join(out_dir, f"autoencoder_emg_{{l_dim}}d.pth"),
+    os.path.join(out_dir, "autoencoder_campeon.pth"),
+    os.path.join(out_dir, "autoencoder_emg.pth"),
+]
+model_path = next((m for m in model_candidates if os.path.exists(m)), None)
+if not model_path:
+    print("> ERROR: No se encontró ningún modelo (.pth) entrenado.")
+    sys.exit(1)
+
+import deep_learning.decodificador_continuo as dc
+dc.decodificar_secuencia(
+    carpeta_secuencia=carpeta_secuencia,
+    modelo_path=model_path,
+    alpha_ruido=kwargs.get('alpha_ruido', 1.0),
+    smooth_ms=kwargs.get('smooth_ms', 150),
+    notch_q=kwargs.get('notch_q', 2.0),
+    use_manual_exclusions=kwargs.get('use_manual_exclusions', True),
+    target_length=kwargs.get('target_length', 100)
+)
+'''
+    self._launch_bridge_script("decodificador_continuo", f"DECODIFICADOR CONTINUO ({os.path.basename(carpeta)})", kwargs, template)
+
   def _sync_electrode_viewer(self):
     """Sincroniza el visor de electrodos con las mediciones seleccionadas en el gestor."""
     paths = self.explorer_widget.get_selected_paths()
@@ -2054,9 +2343,20 @@ gen_sup.ejecutar_procesamiento(
     # Extraer canales seleccionados en la UI
     tab_proc = self.analysis_panel.tab_procesamiento
     canales_elegidos = []
-    if hasattr(tab_proc, 'checkboxes_canales'):
+    if hasattr(tab_proc, 'checkboxes_canales') and tab_proc.checkboxes_canales:
       canales_elegidos = [c for c, chk in tab_proc.checkboxes_canales.items() if chk.isChecked()]
       
+    if not canales_elegidos:
+      # Si los checkboxes no estaban inicializados o quedaron vacíos, auto-detectar canales de las mediciones
+      canales_detectados = set()
+      for r in rutas:
+        if os.path.isdir(r):
+          for item in os.listdir(r):
+            if item.startswith("canal_") and os.path.isdir(os.path.join(r, item)):
+              canales_detectados.add(item)
+      if canales_detectados:
+        canales_elegidos = sorted(list(canales_detectados), key=lambda x: int(x.split('_')[-1]) if x.split('_')[-1].isdigit() else 0)
+        
     if not canales_elegidos:
       self.log_console.append("> ERROR: Selecciona al menos un canal a procesar (Configuración 1).\n")
       return
@@ -2068,11 +2368,11 @@ gen_sup.ejecutar_procesamiento(
     import subprocess
     import sys
     import os
+    from utils.path_utils import get_project_root, get_database_path
     
-    # Rutas relativas para compatibilidad exacta con su Tkinter (Ej: 2026-05-22/Medicion)
-    base_dir = os.path.dirname(os.path.dirname(rutas[0]))
-    nombres_medicion = [f"{os.path.basename(os.path.dirname(r))}/{os.path.basename(r)}" for r in rutas]
-    emg_root = os.path.dirname(base_dir)
+    base_dir = get_database_path()
+    nombres_medicion = [os.path.relpath(r, base_dir).replace('\\', '/') for r in rutas]
+    emg_root = get_project_root()
     
     bridge_script = f"""
 import sys
@@ -2132,6 +2432,7 @@ finally:
   input("\\nPresione ENTER para cerrar esta ventana...")
 """
     script_path = os.path.join(emg_root, "gui_app", "temp_procesar.py")
+    os.makedirs(os.path.dirname(script_path), exist_ok=True)
     with open(script_path, "w", encoding="utf-8") as f:
       f.write(bridge_script)
       
@@ -2413,7 +2714,9 @@ def main():
     assets_dir = gui_dir / "assets"
     pictures_dir = Path.home() / "Pictures"
     
-    search_dirs = [assets_dir, gui_dir, root_dir, pictures_dir]
+    search_dirs = [assets_dir, gui_dir, root_dir, Path(get_project_root()), pictures_dir]
+    if hasattr(sys, '_MEIPASS'):
+      search_dirs.insert(0, Path(sys._MEIPASS))
     for search_dir in search_dirs:
       if search_dir.exists():
         for filename in os.listdir(search_dir):

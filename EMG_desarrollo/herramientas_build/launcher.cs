@@ -3,6 +3,8 @@ using System.Drawing;
 using System.Windows.Forms;
 using System.Diagnostics;
 using System.Threading;
+using System.IO;
+using System.Text;
 
 namespace NanduLsdLauncher
 {
@@ -50,15 +52,12 @@ namespace NanduLsdLauncher
             try
             {
                 ProcessStartInfo psi = new ProcessStartInfo();
-                psi.FileName = "NanduLsd_Core\\NanduLsd_Core.exe"; // <-- Espera, el path será NanduLsd_Core/NanduLsd_Core.exe en onedir
-                // Si la carpeta se llamaba NanduLsd_Core, adentro está el exe.
-                // Lo corregiremos dinámicamente si falla
-                
-                // Pero wait, Pyinstaller 'onedir' default creates a folder named the same as the app.
-                // Our app name is NanduLsd_Core, so dist folder is dist/NanduLsd_Core
-                // The launcher will be put directly inside dist/
-                // No, we should put the Launcher right next to NanduLsd_Core.exe.
-                psi.FileName = "NanduLsd_Core.exe"; 
+                string exePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "NanduLsd_Core.exe");
+                if (!File.Exists(exePath))
+                {
+                    exePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "NanduLsd_Core", "NanduLsd_Core.exe");
+                }
+                psi.FileName = exePath;
                 psi.UseShellExecute = false;
                 
                 coreProcess = Process.Start(psi);
@@ -93,11 +92,49 @@ namespace NanduLsdLauncher
         }
 
         [STAThread]
-        public static void Main()
+        public static int Main(string[] args)
         {
+            if (args != null && args.Length > 0)
+            {
+                try
+                {
+                    ProcessStartInfo psi = new ProcessStartInfo();
+                    string exePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "NanduLsd_Core.exe");
+                    if (!File.Exists(exePath))
+                    {
+                        exePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "NanduLsd_Core", "NanduLsd_Core.exe");
+                    }
+                    psi.FileName = exePath;
+                    psi.UseShellExecute = false;
+
+                    StringBuilder sb = new StringBuilder();
+                    for (int i = 0; i < args.Length; i++)
+                    {
+                        if (i > 0) sb.Append(" ");
+                        if (args[i].Contains(" ") || args[i].Contains("\t"))
+                            sb.Append("\"").Append(args[i]).Append("\"");
+                        else
+                            sb.Append(args[i]);
+                    }
+                    psi.Arguments = sb.ToString();
+
+                    using (Process p = Process.Start(psi))
+                    {
+                        p.WaitForExit();
+                        return p.ExitCode;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Error ejecutando script: " + ex.Message, "Error Critico", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return 1;
+                }
+            }
+
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new SplashScreen());
+            return 0;
         }
     }
 }

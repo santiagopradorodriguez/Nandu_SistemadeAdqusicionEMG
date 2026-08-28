@@ -88,9 +88,9 @@ import json
 import subprocess # <-- NUEVO: para guardar el metadata
 
 try:
-    import winsound
+    from utils.sound_utils import play_beep
 except ImportError:
-    winsound = None
+    def play_beep(freq=1000, duration_ms=100, async_play=True): pass
 
 if global_progress: global_progress.setValue(30); global_splash.showMessage("Cargando PyQtGraph...", Qt.AlignBottom | Qt.AlignCenter, QColor("white")); app.processEvents()
 import pyqtgraph as pg
@@ -2073,9 +2073,7 @@ class RealTimePlotter(QtWidgets.QWidget):
                         if not hasattr(self, 'last_countdown') or self.last_countdown != current_countdown:
                             self.last_countdown = current_countdown
                             self.countdown_text.setPos(-self.PLOT_DURATION_S/2.0, 0)
-                            if winsound:
-                                import threading
-                                threading.Thread(target=winsound.Beep, args=(800, 200), daemon=True).start()
+                            play_beep(800, 200)
                         
                         self.countdown_text.setText(f"PREPÁRATE...\n{current_countdown}")
                         self.countdown_text.show()
@@ -2086,9 +2084,8 @@ class RealTimePlotter(QtWidgets.QWidget):
                     if not getattr(self, 'noise_calculated', False):
                         if not getattr(self, 'noise_initialized', False):
                             # --- GO! ---
-                            if winsound and getattr(self, 'countdown_active', False):
-                                import threading
-                                threading.Thread(target=winsound.Beep, args=(1200, 500), daemon=True).start()
+                            if getattr(self, 'countdown_active', False):
+                                play_beep(1200, 500)
                             self.countdown_text.setText("¡GO!")
                             QtCore.QTimer.singleShot(1000, self.countdown_text.hide)
                             self.countdown_active = False

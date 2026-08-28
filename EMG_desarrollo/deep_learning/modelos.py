@@ -2,19 +2,21 @@ import torch
 import torch.nn as nn
 
 class ConvAutoencoder1D(nn.Module):
-    def __init__(self, latent_dim=32, target_length=100):
+    def __init__(self, latent_dim=8, target_length=100, kernel_size=5):
         super(ConvAutoencoder1D, self).__init__()
         self.target_length = target_length
+        self.kernel_size = kernel_size
+        padding = kernel_size // 2
         
-        # Entrada: (Batch, 3, 100)
-        # Usamos stride=1 para NO destruir la resolución temporal de 20ms
+        # Entrada: (Batch, 3, target_length)
+        # Usamos stride=1 y padding=(k//2) para preservar exactamente la resolución temporal
         self.encoder_cnn = nn.Sequential(
-            nn.Conv1d(3, 16, kernel_size=5, stride=1, padding=2), # -> (B, 16, 100)
+            nn.Conv1d(3, 16, kernel_size=kernel_size, stride=1, padding=padding), # -> (B, 16, target_length)
             nn.BatchNorm1d(16),
             nn.LeakyReLU(0.2),
             nn.Dropout(0.1),
             
-            nn.Conv1d(16, 32, kernel_size=5, stride=1, padding=2), # -> (B, 32, 100)
+            nn.Conv1d(16, 32, kernel_size=kernel_size, stride=1, padding=padding), # -> (B, 32, target_length)
             nn.BatchNorm1d(32),
             nn.LeakyReLU(0.2),
             nn.Dropout(0.1)
@@ -38,11 +40,11 @@ class ConvAutoencoder1D(nn.Module):
         )
         
         self.decoder_cnn = nn.Sequential(
-            nn.ConvTranspose1d(32, 16, kernel_size=5, stride=1, padding=2), # -> (B, 16, 100)
+            nn.ConvTranspose1d(32, 16, kernel_size=kernel_size, stride=1, padding=padding), # -> (B, 16, target_length)
             nn.BatchNorm1d(16),
             nn.LeakyReLU(0.2),
             
-            nn.ConvTranspose1d(16, 3, kernel_size=5, stride=1, padding=2), # -> (B, 3, 100)
+            nn.ConvTranspose1d(16, 3, kernel_size=kernel_size, stride=1, padding=padding), # -> (B, 3, target_length)
             nn.ReLU()
         )
         

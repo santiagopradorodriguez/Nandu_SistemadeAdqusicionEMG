@@ -3,6 +3,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, random_split
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import random
@@ -20,22 +22,23 @@ if torch.cuda.is_available():
 from dataset_emg import EMGDataset
 from modelos import ConvAutoencoder1D
 
-def train_autoencoder(csv_path, epochs=150, batch_size=32, lr=1e-3, latent_dim=16, force_epochs=False, alpha=0.5, verbose=True, save_model=True):
-    # Forzar reproducibilidad absoluta EN CADA LLAMADA a la función
-    SEED = 42
-    random.seed(SEED)
-    np.random.seed(SEED)
-    torch.manual_seed(SEED)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(SEED)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
+def train_autoencoder(csv_path, epochs=80, batch_size=16, lr=1e-3, latent_dim=8, kernel_size=5, force_epochs=False, alpha=0.5, verbose=True, save_model=True):
+    def _set_seed(seed=42):
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
+            
+    _set_seed(42)
         
     if verbose:
         print(f"==================================================")
         print(f"Iniciando entrenamiento del Autoencoder Convolucional...")
         print(f"Usando archivo de entrenamiento: {os.path.abspath(csv_path)}")
-        print(f"Parametros: Epochs={epochs}, BatchSize={batch_size}, LR={lr}, LatentDim={latent_dim}, Alpha={alpha}")
+        print(f"Parametros: Epochs={epochs}, BatchSize={batch_size}, LR={lr}, LatentDim={latent_dim}, KernelSize={kernel_size}, Alpha={alpha}")
         print(f"==================================================")
     
     dataset_train = EMGDataset(csv_path, apply_augmentation=True)
@@ -46,8 +49,6 @@ def train_autoencoder(csv_path, epochs=150, batch_size=32, lr=1e-3, latent_dim=1
     # ---------------------------------------------------------
     
     todas_las_tomas = dataset_train.tomas
-    # Extraer el identificador físico de la sesión (ej. 'T1_Lucas' de 'A_T1_Lucas_Win0')
-    # El formato es {Vocal}_{Toma}_{Paciente}_Win{X}
     def get_session_id(toma_str):
         parts = toma_str.split('_')
         if len(parts) >= 3:
@@ -55,16 +56,17 @@ def train_autoencoder(csv_path, epochs=150, batch_size=32, lr=1e-3, latent_dim=1
         return toma_str.split('_Win')[0]
         
     sesiones_base = [get_session_id(toma) for toma in todas_las_tomas]
-    sesiones_unicas = list(set(sesiones_base))
+    sesiones_unicas = sorted(list(set(sesiones_base)))
     
-    # Ordenar y mezclar de forma determinista (la semilla ya está fijada arriba)
-    sesiones_unicas.sort()
+    _set_seed(42)
     np.random.shuffle(sesiones_unicas)
     
     # 80% Sesiones para Train, 20% Sesiones para Validación
-    train_sesiones_size = int(0.8 * len(sesiones_unicas))
+    train_sesiones_size = max(1, int(0.8 * len(sesiones_unicas)))
     train_sesiones = set(sesiones_unicas[:train_sesiones_size])
     val_sesiones = set(sesiones_unicas[train_sesiones_size:])
+    if not val_sesiones:
+        val_sesiones = train_sesiones
     
     train_indices = [i for i, sesion in enumerate(sesiones_base) if sesion in train_sesiones]
     val_indices = [i for i, sesion in enumerate(sesiones_base) if sesion in val_sesiones]
@@ -82,6 +84,7 @@ def train_autoencoder(csv_path, epochs=150, batch_size=32, lr=1e-3, latent_dim=1
     train_dataset = torch.utils.data.Subset(dataset_train, train_indices)
     val_dataset = torch.utils.data.Subset(dataset_val, val_indices)
     
+    _set_seed(42)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
     
@@ -90,13 +93,13 @@ def train_autoencoder(csv_path, epochs=150, batch_size=32, lr=1e-3, latent_dim=1
     print(f"Dispositivo de entrenamiento: {device}")
     
     inferred_target_length = dataset_train.tensors.shape[2]
-    model = ConvAutoencoder1D(latent_dim=latent_dim, target_length=inferred_target_length).to(device)
+    model = ConvAutoencoder1D(latent_dim=latent_dim, target_length=inferred_target_length, kernel_size=kernel_size).to(device)
     
     # Criterio y Optimizador
     criterion_mse = nn.MSELoss() # Reconstrucción
     criterion_ce = nn.CrossEntropyLoss() # Clasificación
     optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=8)
     
     # Historial para graficar
     train_losses = []
@@ -198,9 +201,13 @@ def train_autoencoder(csv_path, epochs=150, batch_size=32, lr=1e-3, latent_dim=1
     if save_model:
         out_dir = os.path.join(base_repo_dir, "resultados", "resultados_autoencoder")
         os.makedirs(out_dir, exist_ok=True)
-        model_path = os.path.join(out_dir, "autoencoder_emg_16d.pth")
-        torch.save(best_model_wts if best_model_wts and not force_epochs else model.state_dict(), model_path)
-        if verbose: print(f"Modelo guardado en: {model_path}")
+        model_path = os.path.join(out_dir, f"autoencoder_emg_{latent_dim}d.pth")
+        weights_to_save = best_model_wts if best_model_wts and not force_epochs else model.state_dict()
+        torch.save(weights_to_save, model_path)
+        # Guardar también un alias global autoencoder_emg.pth
+        alias_path = os.path.join(out_dir, "autoencoder_emg.pth")
+        torch.save(weights_to_save, alias_path)
+        if verbose: print(f"Modelo guardado exitosamente en:\n  - {model_path}\n  - {alias_path}")
     
     # Graficar curva de Loss y Accuracy
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))

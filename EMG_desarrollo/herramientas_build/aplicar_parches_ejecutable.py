@@ -117,7 +117,7 @@ def lanzar_script(script_name, args=[]):
         (r"\[\s*python_executable,\s*script_path,\s*(.*?)\]", r"lanzar_script('acquisition/metronomo_visual.py', [\1])"),
         (r"\[\s*python_executable,\s*word_script_path,\s*(.*?)\]", r"lanzar_script('acquisition/ventana_palabras.py', [\1])")
     ]
-    for archivo in ["acquisition/manual_daq.py", "acquisition/autoforge_daq.py"]:
+    for archivo in ["acquisition/manual_daq.py", "acquisition/autoforge_daq.py", "acquisition/autoforge_daq_experimental.py"]:
         ruta = os.path.join(build_dir, archivo)
         if os.path.exists(ruta):
             parchear_archivo(ruta, reemplazos_daq, reemplazos_regex_daq)
@@ -191,15 +191,26 @@ def lanzar_script(script_name, args=[]):
         "analysis/correlaciondeseñales.py", 
         "analysis/segmentador_secuencias.py", 
         "analysis/reproductor_canal3.py",
+        "analysis/analisis_estadistico_pulsos.py",
+        "analysis/discrete_motor.py",
+        "analysis/pca_motor.py",
+        "analysis/training_motor.py",
+        "analysis/umap_motor.py",
+        "analysis/generar_graficos_y_ranking.py",
+        "analysis/plot_metricas_tesis.py",
         "utils/actualizar_metadata.py", 
         "utils/migrar_mediciones_por_fecha.py",
         "deep_learning/binarizacion/analisis_trevisan.py",
         "deep_learning/binarizacion/analisis_trevisan_bandas.py",
+        "deep_learning/binarizacion/analisis_binario.py",
         "deep_learning/pca_umap_clustering/generador_pca_umap.py",
         "deep_learning/generador_umap_supervisado.py",
         "deep_learning/pca_analysis.py",
         "deep_learning/umap_analysis.py",
         "deep_learning/pipeline_autoencoder_gui.py",
+        "deep_learning/experimento_grid_search_3_autoencoder.py",
+        "deep_learning/dataset_tools/visor_features.py",
+        "deep_learning/dataset_tools/generador_pca_tensorial.py",
     ]
     for archivo in archivos_auxiliares:
         ruta = os.path.join(build_dir, archivo)

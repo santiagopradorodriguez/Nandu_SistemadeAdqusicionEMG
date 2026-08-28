@@ -440,6 +440,7 @@ class CsvViewerWidget(QWidget):
             
             chk.setProperty("ch_num", ch_num)
             chk.setProperty("nombre_plot", nombre_musc)
+            chk.setProperty("color_plot", color_canal)
             self.channel_checkboxes[canal] = chk
             
             row_layout.addWidget(chk)
@@ -525,7 +526,17 @@ class CsvViewerWidget(QWidget):
                 
                 ch_num = chk.property("ch_num")
                 nombre_plot = chk.property("nombre_plot")
-                color = self.channel_colors[ch_num % len(self.channel_colors)]
+                color = chk.property("color_plot")
+                if not color:
+                    try:
+                        from utils.config_manager import get_muscle_color
+                        if ch_num == 3 or "mic" in str(nombre_plot).lower():
+                            color = "#ff0000"
+                        else:
+                            default_c = self.channel_colors[ch_num] if ch_num < len(self.channel_colors) else '#ffffff'
+                            color = get_muscle_color(nombre_plot, default_c)
+                    except Exception:
+                        color = "#ff0000" if ch_num == 3 else (self.channel_colors[ch_num] if ch_num < len(self.channel_colors) else '#ffffff')
                 self.plot_widget.plot(x_plot, y_plot, name=nombre_plot, pen=pg.mkPen(color, width=1.5))
 
     def _on_offset_changed(self, canal, offset_val):

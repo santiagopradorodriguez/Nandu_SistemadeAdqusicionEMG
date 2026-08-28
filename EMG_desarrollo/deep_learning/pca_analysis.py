@@ -67,8 +67,6 @@ def procesar_mediciones(base_dir):
     for date_folder in sorted(os.listdir(base_dir), reverse=True):
         date_path = os.path.join(base_dir, date_folder)
         if os.path.isdir(date_path) and date_pattern.match(date_folder):
-            if date_folder != "2026-07-10":
-                continue
             for med_folder in sorted(os.listdir(date_path)):
                 med_path = os.path.join(date_path, med_folder)
                 if os.path.isdir(med_path):
@@ -130,7 +128,7 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_
                 data_excl = json.load(f)
                 excluded_windows = data_excl.get("excluded_windows", [])
                 
-        cache_key = f"{med_name}_{smooth_ms}"
+        cache_key = f"{med_name}_{smooth_ms}_{notch_q}"
         if cache_canales_data is not None and cache_key in cache_canales_data:
             canales_data = cache_canales_data[cache_key]
         else:
@@ -431,8 +429,8 @@ def evaluar_clustering_no_supervisado(X, Y, nombre, algoritmo="K-Means", verbose
     
     if verbose:
         print(f"\n>> Desglose Accuracy Final para {nombre}:")
-    for i, vocal in enumerate(vocales_unicas):
-        print(f"   Vocal {vocal}: {acc_por_vocal[i]:.1f}%")
+        for i, vocal in enumerate(vocales_unicas):
+            print(f"   Vocal {vocal}: {acc_por_vocal[i]:.1f}%")
         
     return accuracy, acc_por_vocal, vocales_unicas, df_cm_optima, mapeo_str
 
@@ -1439,6 +1437,8 @@ def ejecutar_procesamiento(
             
             cent_pca_2d, dist_mat_pca_2d, vocales_pca_2d = calcular_centroides_y_distancias(X_pca_2d, Y_2d)
             df_dist_pca_2d = pd.DataFrame(dist_mat_pca_2d, index=vocales_pca_2d, columns=vocales_pca_2d)
+            df_dist_pca_2d.to_csv(os.path.join(out_dir, "matriz_distancias_pca_2d.csv"))
+            df_cm_pca_2d.to_csv(os.path.join(out_dir, "matriz_confusion_pca_2d.csv"))
             # Add distance matrix latex export
             latex_dist_2d = df_dist_pca_2d.to_latex(index=True, column_format='l' + 'c'*len(vocales_pca_2d), float_format="%.2f")
             latex_dist_2d = latex_dist_2d.replace('\\toprule', '\\toprule\n\\rowcolor{col01}')
@@ -1456,6 +1456,25 @@ def ejecutar_procesamiento(
             df_proy_2d.insert(1, 'Toma', Tomas_2d)
             df_proy_2d.to_csv(os.path.join(out_dir, "proyecciones_pca_2d.csv"), index=False)
 
+            # Exportar características crudas/filtradas para Visor de Features
+            n_features_2d = X_2d.shape[1]
+            num_canales_2d = len(canales_features) if len(canales_features) > 0 else 3
+            puntos_por_canal_2d = n_features_2d // num_canales_2d
+            cols_feat_2d = []
+            for ch_name in canales_features:
+                ch_idx = ch_name.replace('canal_', '')
+                for t in range(puntos_por_canal_2d):
+                    cols_feat_2d.append(f"Ch{ch_idx}_T{t}")
+            if len(cols_feat_2d) == n_features_2d:
+                df_feat_2d = pd.DataFrame(X_2d, columns=cols_feat_2d)
+            else:
+                df_feat_2d = pd.DataFrame(X_2d, columns=[f"Feature_{i}" for i in range(n_features_2d)])
+            df_feat_2d.insert(0, 'Toma', Tomas_2d)
+            df_feat_2d.insert(0, 'Vocal', Y_2d)
+            csv_feat_path = os.path.join(out_dir, "caracteristicas_exportadas.csv")
+            df_feat_2d.to_csv(csv_feat_path, index=False)
+            print(f"=> Features exportadas a CSV: {csv_feat_path}")
+
     if proc_umap_2d:
         print("\n=== PROCESANDO UMAP 2D ===")
         X_2d_u, Y_2d_u, Tomas_2d_u, desc_2d_u = extraer_y_filtrar(mediciones, base_dir, params_umap, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=ignorar_ventana_cero)
@@ -1468,6 +1487,11 @@ def ejecutar_procesamiento(
             print(f"=> TOTAL Accuracy Clustering No Supervisado (UMAP 2D): {acc_umap_2d:.2f}%")
             plot_confusion_matrix_heatmap(df_cm_umap_2d, "Matriz de Confusión - UMAP 2D", os.path.join(out_dir, "heatmap_confusion_umap_2d.png"))
             guardar_matriz_latex(df_cm_umap_2d, "Matriz de Confusión - UMAP 2D", os.path.join(out_dir, "matriz_confusion_umap_2d.tex"))
+            df_cm_umap_2d.to_csv(os.path.join(out_dir, "matriz_confusion_umap_2d.csv"))
+            df_proy_u2d = pd.DataFrame(X_umap_2d, columns=['UMAP1', 'UMAP2'])
+            df_proy_u2d.insert(0, 'Vocal', Y_2d_u)
+            df_proy_u2d.insert(1, 'Toma', Tomas_2d_u)
+            df_proy_u2d.to_csv(os.path.join(out_dir, "proyecciones_umap_2d.csv"), index=False)
             if desc_2d_u:
                 pd.DataFrame(desc_2d_u).to_csv(os.path.join(out_dir, "reporte_mediciones_descartadas_UMAP_2D.csv"), index=False)
 
@@ -1486,9 +1510,11 @@ def ejecutar_procesamiento(
             print(f"=> TOTAL Accuracy Clustering No Supervisado (PCA 3D) : {acc_pca_3d:.2f}%")
             plot_confusion_matrix_heatmap(df_cm_pca_3d, "Matriz de Confusión - PCA 3D", os.path.join(out_dir, "heatmap_confusion_pca_3d.png"))
             guardar_matriz_latex(df_cm_pca_3d, "Matriz de Confusión - PCA 3D", os.path.join(out_dir, "matriz_confusion_pca_3d.tex"))
+            df_cm_pca_3d.to_csv(os.path.join(out_dir, "matriz_confusion_pca_3d.csv"))
             
             cent_pca_3d, dist_mat_pca_3d, vocales_pca_3d = calcular_centroides_y_distancias(X_pca_3d, Y_3d)
             df_dist_pca_3d = pd.DataFrame(dist_mat_pca_3d, index=vocales_pca_3d, columns=vocales_pca_3d)
+            df_dist_pca_3d.to_csv(os.path.join(out_dir, "matriz_distancias_pca_3d.csv"))
             guardar_tabla_imagen(df_dist_pca_3d, "Matriz de Distancias - PCA 3D", os.path.join(out_dir, "tabla_distancias_pca_3d.png"))
             
             # Add distance matrix latex export
@@ -1508,6 +1534,25 @@ def ejecutar_procesamiento(
             df_proy_3d.insert(1, 'Toma', Tomas_3d)
             df_proy_3d.to_csv(os.path.join(out_dir, "proyecciones_pca_3d.csv"), index=False)
 
+            # Exportar características crudas/filtradas (3D)
+            n_features_3d = X_3d.shape[1]
+            num_canales_3d = len(canales_features) if len(canales_features) > 0 else 3
+            puntos_por_canal_3d = n_features_3d // num_canales_3d
+            cols_feat_3d = []
+            for ch_name in canales_features:
+                ch_idx = ch_name.replace('canal_', '')
+                for t in range(puntos_por_canal_3d):
+                    cols_feat_3d.append(f"Ch{ch_idx}_T{t}")
+            if len(cols_feat_3d) == n_features_3d:
+                df_feat_3d = pd.DataFrame(X_3d, columns=cols_feat_3d)
+            else:
+                df_feat_3d = pd.DataFrame(X_3d, columns=[f"Feature_{i}" for i in range(n_features_3d)])
+            df_feat_3d.insert(0, 'Toma', Tomas_3d)
+            df_feat_3d.insert(0, 'Vocal', Y_3d)
+            df_feat_3d.to_csv(os.path.join(out_dir, "caracteristicas_exportadas_3d.csv"), index=False)
+            if not proc_pca_2d:
+                df_feat_3d.to_csv(os.path.join(out_dir, "caracteristicas_exportadas.csv"), index=False)
+
     if proc_umap_3d:
         print("\n=== PROCESANDO UMAP 3D ===")
         X_3d_u, Y_3d_u, Tomas_3d_u, desc_3d_u = extraer_y_filtrar(mediciones, base_dir, params_umap, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=ignorar_ventana_cero)
@@ -1520,10 +1565,16 @@ def ejecutar_procesamiento(
             print(f"=> TOTAL Accuracy Clustering No Supervisado (UMAP 3D): {acc_umap_3d:.2f}%")
             plot_confusion_matrix_heatmap(df_cm_umap_3d, "Matriz de Confusión - UMAP 3D", os.path.join(out_dir, "heatmap_confusion_umap_3d.png"))
             guardar_matriz_latex(df_cm_umap_3d, "Matriz de Confusión - UMAP 3D", os.path.join(out_dir, "matriz_confusion_umap_3d.tex"))
+            df_cm_umap_3d.to_csv(os.path.join(out_dir, "matriz_confusion_umap_3d.csv"))
             
             cent_umap_3d, dist_mat_umap_3d, vocales_umap_3d = calcular_centroides_y_distancias(X_umap_3d, Y_3d_u)
             df_dist_umap_3d = pd.DataFrame(dist_mat_umap_3d, index=vocales_umap_3d, columns=vocales_umap_3d)
+            df_dist_umap_3d.to_csv(os.path.join(out_dir, "matriz_distancias_umap_3d.csv"))
             guardar_tabla_imagen(df_dist_umap_3d, "Matriz de Distancias - UMAP 3D", os.path.join(out_dir, "tabla_distancias_umap_3d.png"))
+            df_proy_u3d = pd.DataFrame(X_umap_3d, columns=['UMAP1', 'UMAP2', 'UMAP3'])
+            df_proy_u3d.insert(0, 'Vocal', Y_3d_u)
+            df_proy_u3d.insert(1, 'Toma', Tomas_3d_u)
+            df_proy_u3d.to_csv(os.path.join(out_dir, "proyecciones_umap_3d.csv"), index=False)
             if desc_3d_u:
                 pd.DataFrame(desc_3d_u).to_csv(os.path.join(out_dir, "reporte_mediciones_descartadas_UMAP_3D.csv"), index=False)
 
@@ -1546,16 +1597,18 @@ def ejecutar_procesamiento(
 
     return resultados_ejecucion
 
-def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=False, algoritmo_clustering="GMM", smooth_grid=None, target_len_grid=None, alpha_grid=None, logger=print, n_jobs=-1, n_components=2):
+def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=False, algoritmo_clustering="GMM", smooth_grid=None, target_len_grid=None, alpha_grid=None, notch_q_grid=None, logger=print, n_jobs=-1, n_components=2):
     if smooth_grid is None:
         smooth_grid = [50, 80, 125, 150, 180, 220, 250]
     if target_len_grid is None:
         target_len_grid = [10, 20, 40, 60, 80, 100]
     if alpha_grid is None:
         alpha_grid = [0.1, 0.3, 0.5, 0.7, 0.9, 1.0]
+    if notch_q_grid is None:
+        notch_q_grid = [2.0, 30.0]
 
     num_workers = os.cpu_count() or 4 if n_jobs in [-1, None] else n_jobs
-    combis = [(s, t, a) for s in smooth_grid for t in target_len_grid for a in alpha_grid]
+    combis = [(s, t, a, q) for s in smooth_grid for t in target_len_grid for a in alpha_grid for q in notch_q_grid]
     total_comb = len(combis)
 
     logger(f"\n[GRID SEARCH PCA] Iniciando proceso (Barrido Fino de {total_comb} combinaciones con {num_workers} hilos de CPU)...")
@@ -1565,18 +1618,20 @@ def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_tr
     old_stdout_init = sys.stdout
     sys.stdout = io.StringIO()
     try:
-        total_s = len(smooth_grid)
-        for i, s_ms in enumerate(smooth_grid):
+        unique_sq = list(set((s, q) for s, t, a, q in combis))
+        total_sq = len(unique_sq)
+        for i, (s_ms, q_val) in enumerate(unique_sq):
             p_temp = params_base.copy()
             p_temp['smooth_ms'] = s_ms
+            p_temp['notch_q'] = q_val
             extraer_y_filtrar(
                 mediciones, base_dir, p_temp, aplicar_trevisan, modo_alineacion,
                 pre_pct, post_pct, canales_features, ignorar_ventana_cero=ignorar_ventana_cero,
                 cache_canales_data=cache_canales, verbose=False
             )
-            pct = ((i + 1) / total_s) * 100
+            pct = ((i + 1) / total_sq) * 100
             sys.stdout = old_stdout_init
-            print(f"    -> Progreso Paso 1: {pct:.1f}% ({i+1}/{total_s} envolventes)", end='\r', flush=True)
+            print(f"    -> Progreso Paso 1: {pct:.1f}% ({i+1}/{total_sq} pares Envolvente/Notch)", end='\r', flush=True)
             sys.stdout = io.StringIO()
         sys.stdout = old_stdout_init
         print()
@@ -1586,12 +1641,15 @@ def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_tr
     logger(f"  - [Paso 2/2] Carga en RAM finalizada ({len(cache_canales)} combinaciones). Evaluando combinaciones en paralelo:\n")
 
     def _eval_comb(c):
-        s_ms, t_len, a_ruido = c
+        s_ms, t_len, a_ruido, q_val = c
         p = params_base.copy()
         p['smooth_ms'] = s_ms
         p['target_length'] = t_len
         p['alpha_ruido'] = a_ruido
+        p['notch_q'] = q_val
 
+        raw_acc = -1.0
+        motivo_descarte = ""
         try:
             X, Y, _, _ = extraer_y_filtrar(
                 mediciones, base_dir, p, aplicar_trevisan, modo_alineacion,
@@ -1604,22 +1662,29 @@ def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_tr
                 X_pca = pca.fit_transform(X)
                 sil_score = silhouette_score(X_pca, Y)
                 acc_score, acc_por_vocal, _, _, _ = evaluar_clustering_no_supervisado(X_pca, Y, f"Grid PCA {n_components}D", algoritmo=algoritmo_clustering, verbose=False)
+                raw_acc = acc_score
                 
                 # Penalizar configuraciones que maten completamente una vocal (desbalanceadas)
                 if min(acc_por_vocal) < 1.0:
                     acc_score = -1.0
+                    motivo_descarte = "Vocal al 0%"
             else:
                 sil_score = -1.0
                 acc_score = -1.0
+                motivo_descarte = "Muestras insuficientes"
         except Exception:
             sil_score = -1.0
             acc_score = -1.0
+            motivo_descarte = "Error numérico"
 
         return {
             "smooth_ms": s_ms,
             "target_length": t_len,
             "alpha_ruido": a_ruido,
+            "notch_q": q_val,
             "accuracy_clasificacion": acc_score,
+            "raw_accuracy": raw_acc,
+            "motivo_descarte": motivo_descarte,
             "silhouette_score": sil_score
         }
 
@@ -1640,31 +1705,36 @@ def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_tr
             s_ms = res["smooth_ms"]
             t_len = res["target_length"]
             a_ruido = res["alpha_ruido"]
+            q_val = res["notch_q"]
             acc_score = res["accuracy_clasificacion"]
+            raw_acc = res.get("raw_accuracy", -1.0)
+            motivo = res.get("motivo_descarte", "")
             sil_score = res["silhouette_score"]
 
             pct = (curr / total_comb) * 100
             bar_len = 20
             filled = int(bar_len * curr // total_comb)
-            bar = '█' * filled + '░' * (bar_len - filled)
+            bar = '#' * filled + '-' * (bar_len - filled)
 
             is_best = False
             if (acc_score > best_acc) or (abs(acc_score - best_acc) < 1e-4 and sil_score > best_sil):
                 best_acc = acc_score
                 best_sil = sil_score
-                best_config = (s_ms, t_len, a_ruido)
+                best_config = (s_ms, t_len, a_ruido, q_val)
                 is_best = True
 
             tag = " ¡NUEVO ÓPTIMO!" if is_best else ""
             if acc_score >= 0:
                 score_str = f"Clasificación: {acc_score:.2f}%, Silhouette: {sil_score:.4f}"
+            elif raw_acc >= 0:
+                score_str = f"Clasificación: {raw_acc:.2f}% (Descartado: {motivo}), Silhouette: {sil_score:.4f}"
             else:
-                score_str = "Clasificación: N/A (Sobre-suavizado/SNR)"
+                score_str = f"Clasificación: N/A ({motivo or 'Sobre-suavizado/SNR'})"
 
-            logger(f"[{bar}] {pct:5.1f}% ({curr:4d}/{total_comb}) Smooth: {s_ms:3d}ms | Pts: {t_len:3d} | Alpha: {a_ruido:.2f} -> {score_str}{tag}")
+            logger(f"[{bar}] {pct:5.1f}% ({curr:4d}/{total_comb}) Smooth: {s_ms:3d}ms | Pts: {t_len:3d} | Alpha: {a_ruido:.2f} | Notch Q: {q_val:.1f} -> {score_str}{tag}")
 
     if best_config is not None:
-        logger(f"\n[GRID SEARCH PCA] Búsqueda finalizada al 100%. Configuración óptima: Smooth={best_config[0]}ms, Pts={best_config[1]}, Alpha={best_config[2]} con Clasificación: {best_acc:.2f}% (Silhouette: {best_sil:.4f})")
+        logger(f"\n[GRID SEARCH PCA] Búsqueda finalizada al 100%. Configuración óptima: Smooth={best_config[0]}ms, Pts={best_config[1]}, Alpha={best_config[2]}, Notch Q={best_config[3]} con Clasificación: {best_acc:.2f}% (Silhouette: {best_sil:.4f})")
 
     if historial:
         try:
@@ -1978,7 +2048,11 @@ class GeneradorPCAGUI:
             messagebox.showerror("Error Grid Search", "No se pudo encontrar una configuración válida.")
             return
 
-        best_smooth, best_pts, best_alpha = best_config
+        if len(best_config) == 4:
+            best_smooth, best_pts, best_alpha, best_notch = best_config
+        else:
+            best_smooth, best_pts, best_alpha = best_config[:3]
+            best_notch = 2.0
 
         if n_components == 2:
             self.ent_alpha_2d.delete(0, tk.END)
@@ -2002,13 +2076,17 @@ class GeneradorPCAGUI:
         self.ent_smooth_umap.insert(0, str(best_smooth))
         self.ent_target_len_umap.delete(0, tk.END)
         self.ent_target_len_umap.insert(0, str(best_pts))
+        if hasattr(self, 'ent_notch') and isinstance(self.ent_notch, tk.Entry):
+            self.ent_notch.delete(0, tk.END)
+            self.ent_notch.insert(0, str(best_notch))
 
         messagebox.showinfo(
             "Grid Search Finalizado",
             f"¡Configuración Óptima Encontrada!\n\n"
             f"- Envolvente (Smooth): {best_smooth} ms\n"
             f"- Puntos Remuestreo: {best_pts}\n"
-            f"- Alfa Ruido: {best_alpha}\n\n"
+            f"- Alfa Ruido: {best_alpha}\n"
+            f"- Notch Q: {best_notch}\n\n"
             f"Silhouette Score PCA (2D): {best_score:.4f}\n\n"
             f"Se han actualizado los campos en la interfaz."
         )

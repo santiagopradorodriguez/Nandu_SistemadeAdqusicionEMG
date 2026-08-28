@@ -28,6 +28,8 @@ def generar_spec():
         ('archivos_md', 'archivos_md'),
         ('papers', 'papers'),
         ('logo_nandu_lsd.png', '.'),
+        ('logo_nandu_lsd.png', 'gui_app/assets'),
+        ('logo_nandu_lsd.png', 'gui_app'),
         ('usb-621x-manual.pdf', '.'),
     ]
     
@@ -82,11 +84,13 @@ additional_modules = [
     'analysis.training_motor',
     'analysis.umap_motor',
     'analysis.generar_graficos_y_ranking',
+    'analysis.plot_metricas_tesis',
     'utils.editor_mediciones',
     'utils.actualizar_metadata',
     'utils.migrar_mediciones_por_fecha',
     'utils.config_manager',
     'utils.path_utils',
+    'utils.sound_utils',
     'utils.logger',
     'instrucciones_uso',
     'views.config_dialog',
@@ -98,7 +102,11 @@ additional_modules = [
     'gui_app.views.electrode_viewer_widget',
     'gui_app.views.session_explorer',
     'gui_app.views.ui_analysis',
+    'gui_app.temp_comparativo',
+    'gui_app.temp_procesar',
+    'gui_app.temp_sesion',
     'deep_learning.pipeline_autoencoder_gui',
+    'deep_learning.grid_search_autoencoder',
     'deep_learning.pca_umap_clustering.generador_pca_umap',
     'deep_learning.binarizacion.analisis_trevisan',
     'deep_learning.binarizacion.analisis_binario',
@@ -115,17 +123,19 @@ additional_modules = [
     'deep_learning.generador_umap_supervisado',
     'deep_learning.pca_analysis',
     'deep_learning.umap_analysis',
+    'deep_learning.experimento_grid_search_3_autoencoder',
 ]
 
 # Librerías y módulos que PyInstaller requiere explícitamente
 hidden_imports = [
     'scipy.signal', 'scipy.special', 'scipy.io.wavfile', 'scipy.ndimage',
     'matplotlib.backends.backend_tkagg', 'matplotlib.backends.backend_qt5agg',
+    'matplotlib.backends.backend_qtagg',
     'nidaqmx', 'sounddevice', 'soundfile', 'pyqtgraph', 'pandas', 'PIL',
     'PySide6', 'qdarkstyle', 'utils', 'acquisition', 'analysis', 'core', 'views',
-    'deep_learning', 'tkinter', 'numba', 'tqdm', 'decouple', 'python-decouple', 'requests',
+    'deep_learning', 'tkinter', 'numba', 'tqdm', 'decouple', 'requests',
     'tzlocal', 'hightime', 'sklearn', 'sklearn.utils._typedefs',
-    'sklearn.neighbors._typedefs', 'sklearn.neighbors._quad_tree',
+    'sklearn.neighbors._quad_tree',
     'sklearn.tree._utils', 'pynndescent',
 ] + additional_modules + nidaqmx_hiddenimports + sd_hiddenimports + sf_hiddenimports + umap_hiddenimports + sns_hiddenimports + tly_hiddenimports + numba_hiddenimports + pynndescent_hiddenimports + tqdm_hiddenimports
 
@@ -144,7 +154,6 @@ a = Analysis(
         'deep_learning/binarizacion',
         'deep_learning/dataset_tools',
         'deep_learning/pca_umap_clustering',
-        'deep_learning/machine_learning',
         'acquisition',
         'analysis',
         'utils',
