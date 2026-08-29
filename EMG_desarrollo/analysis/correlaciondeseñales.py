@@ -699,13 +699,70 @@ def _plot_muscle_overlay(measure_name, channels_dict, out_dir, master_name=None,
         all_files.update(c_data.keys())
         
     canales_config = config_mgr.get("canales") if config_mgr else {}
-    fallback_colors = {'canal_0': 'blue', 'canal_1': 'orange', 'canal_2': 'green', 'canal_3': 'red'}
+    
+    # 1. Leer canal_0/metadata.json centralizado si existe
+    global_meta = {}
+    meta0_p = os.path.join(out_dir, "canal_0", "metadata.json")
+    if not os.path.exists(meta0_p):
+        meta0_p = os.path.join(out_dir, "metadata.json")
+    if os.path.exists(meta0_p):
+        try:
+            with open(meta0_p, 'r', encoding='utf-8') as fm:
+                global_meta = json.load(fm)
+        except Exception:
+            pass
+
+    sorted_chans = sorted(channels_dict.keys())
+
+    # 2. Construir lista de metadatos de canales para resolver colores canónicos únicos
+    ch_info_list = []
+    for ch in sorted_chans:
+        ch_idx_str = ch.replace('canal_', '')
+        ch_idx_int = int(ch_idx_str) if ch_idx_str.isdigit() else 0
+        conf_key = f"Canal {ch_idx_str}"
+        ch_conf = canales_config.get(conf_key, {})
+        
+        lbl = ch_conf.get("musculo", f"Canal {ch_idx_str}")
+        meta_ch_path = os.path.join(out_dir, ch, "metadata.json")
+        if os.path.exists(meta_ch_path):
+            try:
+                with open(meta_ch_path, 'r', encoding='utf-8') as f_mch:
+                    mch_data = json.load(f_mch)
+                    if 'musculo' in mch_data and mch_data['musculo']:
+                        lbl = mch_data['musculo']
+            except Exception:
+                pass
+        elif global_meta:
+            m_map = global_meta.get("muscles_map", {})
+            if ch_idx_str in m_map:
+                lbl = m_map[ch_idx_str]
+            elif ch in m_map:
+                lbl = m_map[ch]
+            elif "muscles" in global_meta and ch_idx_int < len(global_meta["muscles"]):
+                lbl = global_meta["muscles"][ch_idx_int]
+
+        is_mic = (ch_idx_int == 3 or "mic" in lbl.lower() or ch == "canal_3")
+        ch_info_list.append({
+            "idx": ch_idx_int,
+            "col_name": ch,
+            "musculo": lbl,
+            "color_hex": ch_conf.get("color_hex"),
+            "is_mic": is_mic
+        })
+
+    try:
+        from utils.config_manager import get_unique_channel_colors
+        colores_resueltos = get_unique_channel_colors(ch_info_list)
+    except Exception:
+        colores_resueltos = ['#ffaa00', '#39ff14', '#ffff00', '#ff0000']
+
+    canal_to_color = {ch_info_list[k]["col_name"]: colores_resueltos[k] for k in range(len(ch_info_list))}
+    canal_to_label = {ch_info_list[k]["col_name"]: ch_info_list[k]["musculo"] for k in range(len(ch_info_list))}
 
     for fname in all_files:
         plt.figure(figsize=(10, 6))
         
         found_any = False
-        sorted_chans = sorted(channels_dict.keys())
         
         # 1. Encontrar el desplazamiento de tiempo (time_shift) del Master
         time_shift = 0.0
@@ -751,7 +808,6 @@ def _plot_muscle_overlay(measure_name, channels_dict, out_dir, master_name=None,
                 err = np.array(data.get('pulse_err', np.zeros_like(y)))
                 
                 # Offset: para asegurar que inicie desde el 0 en el eje Y
-                # aplicando el equivalente a un pasa altos ideal sobre la línea base
                 y_min = np.min(y)
                 y = y - y_min
                 
@@ -769,39 +825,16 @@ def _plot_muscle_overlay(measure_name, channels_dict, out_dir, master_name=None,
                 if np.max(y + err) > max_y_overlay:
                     max_y_overlay = np.max(y + err)
                 
-                ch_idx_str = ch.replace('canal_', '')
-                conf_key = f"Canal {ch_idx_str}"
-                ch_conf = canales_config.get(conf_key, {})
+                lbl = canal_to_label.get(ch, ch)
+                col = canal_to_color.get(ch, '#00ffcc')
                 
-                lbl = ch_conf.get("musculo", f"Canal {ch_idx_str}")
-                meta_ch_path = os.path.join(out_dir, ch, "metadata.json")
-                if os.path.exists(meta_ch_path):
-                    try:
-                        with open(meta_ch_path, 'r', encoding='utf-8') as f_mch:
-                            mch_data = json.load(f_mch)
-                            if 'musculo' in mch_data and mch_data['musculo']:
-                                lbl = mch_data['musculo']
-                    except Exception:
-                        pass
-                if ch == master_name:
+                if ch == 'canal_3' and (lbl.startswith("Canal") or "Master" not in lbl):
+                    lbl = "Micrófono"
+                elif ch == master_name:
                     lbl += " (Master Normalizado)"
                 
-                try:
-                    from utils.config_manager import get_muscle_color
-                except ImportError:
-                    def get_muscle_color(name, default='gray'):
-                        return '#ff0000' if ("mic" in str(name).lower() or "canal_3" in str(name).lower()) else default
-
-                if ch == 'canal_3' or "mic" in lbl.lower():
-                    col = '#ff0000'
-                else:
-                    col = get_muscle_color(lbl, ch_conf.get("color_hex", fallback_colors.get(ch, 'gray')))
-                
-                if ch == 'canal_3' and (lbl == f"Canal {ch_idx_str}" or "Master" not in lbl):
-                    lbl = "Micrófono"
-                
-                plt.plot(t, y, label=lbl, color=col, linewidth=2, alpha=0.8)
-                plt.fill_between(t, y - err, y + err, color=col, alpha=0.2)
+                plt.plot(t, y, label=lbl, color=col, linewidth=2, alpha=0.85)
+                plt.fill_between(t, y - err, y + err, color=col, alpha=0.18)
                 found_any = True
                 
         if found_any:
@@ -837,13 +870,11 @@ def _plot_muscle_overlay(measure_name, channels_dict, out_dir, master_name=None,
                     t_p = t_arr[p_idx]
                     y_p = y_arr[p_idx]
                     
-                    ch_idx_str = ch.replace('canal_', '')
-                    conf_key = f"Canal {ch_idx_str}"
-                    ch_conf = canales_config.get(conf_key, {})
-                    lbl = ch_conf.get("musculo", f"Canal {ch_idx_str}")
+                    lbl = canal_to_label.get(ch, ch)
+                    col = canal_to_color.get(ch, '#00ffcc')
                     
-                    # Añadir un punto en el pico
-                    plt.plot(t_p, y_p, marker='o', markersize=6, alpha=0.8)
+                    # Añadir un punto en el pico con el color canónico del canal
+                    plt.plot(t_p, y_p, marker='o', markersize=6, color=col, alpha=0.9)
                     peak_texts.append(f"{lbl}: Pico a {t_p*1000:.1f} ms, Amp: {y_p:.2f}")
 
             # Agregar caja de texto con distancias temporales y de amplitud

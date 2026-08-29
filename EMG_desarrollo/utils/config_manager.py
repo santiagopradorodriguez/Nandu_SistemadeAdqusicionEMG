@@ -36,6 +36,7 @@ MUSCLE_COLORS = {
     
     # Digástrico / Vientre anterior
     "digastrico": "#ffaa00",               # Naranja brillante
+    "digástrico": "#ffaa00",
     "digastric": "#ffaa00",
     "digastrio": "#ffaa00",
     "digastrioo": "#ffaa00",
@@ -44,10 +45,14 @@ MUSCLE_COLORS = {
     
     # Cigomático mayor y menor
     "zygomaticus major": "#ff00ff",        # Magenta
+    "zygomaticus mayor": "#ff00ff",
     "zygomaticus": "#ff00ff",
     "cigomatico": "#ff00ff",
+    "cigomático": "#ff00ff",
     "cigomatico mayor": "#ff00ff",
+    "cigomático mayor": "#ff00ff",
     "cigomatico menor": "#ff00ff",
+    "cigomático menor": "#ff00ff",
     
     # Masetero
     "masseter": "#00ffcc",                 # Cyan brillante
@@ -55,11 +60,21 @@ MUSCLE_COLORS = {
     "masetero superficial": "#00ffcc",
     "masetero profundo": "#00ffcc",
     
-    # Elevador del labio superior
+    # Elevador del labio superior / ángulo oral
     "levatori oris": "#00bfff",            # Azul eléctrico / DeepSkyBlue
+    "levator anguli oris": "#00bfff",
     "levator labii superioris": "#00bfff",
     "elevador": "#00bfff",
     "elevador del labio": "#00bfff",
+    
+    # Platisma
+    "platysma": "#00e676",                 # Verde esmeralda
+    "platisma": "#00e676",
+    
+    # Nudo sonrisa / Modiolo
+    "nudo sonrisa": "#e040fb",             # Púrpura neón
+    "nudo de la sonrisa": "#e040fb",
+    "modiolo": "#e040fb",
     
     # Temporal
     "temporal": "#ff69b4",                 # Rosa Neón (HotPink)
