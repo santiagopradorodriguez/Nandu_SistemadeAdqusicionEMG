@@ -239,14 +239,12 @@ def _detect_maxima_and_extract(env_recortada,
         if max_value < peak_search_threshold:
             continue
 
-        # chequeo de encaje del segmento alrededor del máximo
-        seg_start = max_sample - pre_samples
-        seg_end = max_sample + post_samples
-        if seg_start < 0:
-            # segmento no cabe completamente al inicio -> omitir
+        # chequeo de encaje del segmento alrededor del máximo (sin invadir la ventana de ruido)
+        seg_start = max(start_sample_noise, max_sample - pre_samples)
+        seg_end = min(len(env_recortada), max_sample + post_samples)
+        
+        if seg_end <= seg_start:
             continue
-        if seg_end > len(env_recortada):
-            seg_end = len(env_recortada) # Ajustar el final si excede la señal (para evitar omitir la penúltima/última ventana)
 
         # si el máximo está demasiado cerca del último aceptado, decidir:
         if len(maxima_per_cut) > 0:

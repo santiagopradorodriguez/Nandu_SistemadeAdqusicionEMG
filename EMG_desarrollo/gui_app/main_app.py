@@ -1576,6 +1576,7 @@ try:
                 segmentos_rs = []
                 
             umbral = res.get('umbral', None)
+            picos_ventana = res.get('picos_ventana', [])
             
             amp_per_pulse = []
             if isinstance(segmentos_rs, list) and len(segmentos_rs) > 0:
@@ -1594,6 +1595,17 @@ try:
                         amp_per_pulse.append(amp_val)
                         if umbral and umbral > 0:
                             snr_per_pulse.append(mav_val / umbral)
+                        else:
+                            snr_per_pulse.append(np.nan)
+                    else:
+                        amp_per_pulse.append(np.nan)
+                        snr_per_pulse.append(np.nan)
+            elif isinstance(picos_ventana, list) and len(picos_ventana) > 0:
+                for pv in picos_ventana:
+                    if pv is not None and not np.isnan(pv):
+                        amp_per_pulse.append(float(pv))
+                        if umbral and umbral > 0:
+                            snr_per_pulse.append(float(pv) / umbral)
                         else:
                             snr_per_pulse.append(np.nan)
                     else:
