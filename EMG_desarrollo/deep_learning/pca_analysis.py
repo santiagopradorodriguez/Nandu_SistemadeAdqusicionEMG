@@ -1605,13 +1605,13 @@ def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_tr
     if alpha_grid is None:
         alpha_grid = [0.1, 0.3, 0.5, 0.7, 0.9, 1.0]
     if notch_q_grid is None:
-        notch_q_grid = [2.0, 30.0]
+        notch_q_grid = [2.0]
 
     num_workers = os.cpu_count() or 4 if n_jobs in [-1, None] else n_jobs
     combis = [(s, t, a, q) for s in smooth_grid for t in target_len_grid for a in alpha_grid for q in notch_q_grid]
     total_comb = len(combis)
 
-    logger(f"\n[GRID SEARCH PCA] Iniciando proceso (Barrido Fino de {total_comb} combinaciones con {num_workers} hilos de CPU)...")
+    logger(f"\n[GRID SEARCH PCA] Iniciando proceso (Barrido de {total_comb} combinaciones con {num_workers} hilos de CPU | Notch Q fijo = 2.0)...")
     logger("  - [Paso 1/2] Cargando audios y aplicando pre-filtros en memoria RAM...")
 
     cache_canales = {}
@@ -1650,6 +1650,7 @@ def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_tr
 
         raw_acc = -1.0
         motivo_descarte = ""
+        vocal_acc_dict = {}
         try:
             X, Y, _, _ = extraer_y_filtrar(
                 mediciones, base_dir, p, aplicar_trevisan, modo_alineacion,
@@ -1661,8 +1662,9 @@ def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_tr
                 pca = PCA(n_components=n_components)
                 X_pca = pca.fit_transform(X)
                 sil_score = silhouette_score(X_pca, Y)
-                acc_score, acc_por_vocal, _, _, _ = evaluar_clustering_no_supervisado(X_pca, Y, f"Grid PCA {n_components}D", algoritmo=algoritmo_clustering, verbose=False)
+                acc_score, acc_por_vocal, vocales_unicas, _, _ = evaluar_clustering_no_supervisado(X_pca, Y, f"Grid PCA {n_components}D", algoritmo=algoritmo_clustering, verbose=False)
                 raw_acc = acc_score
+                vocal_acc_dict = {str(v): round(float(a), 2) for v, a in zip(vocales_unicas, acc_por_vocal)}
                 
                 # Penalizar configuraciones que maten completamente una vocal (desbalanceadas)
                 if min(acc_por_vocal) < 1.0:
@@ -1677,7 +1679,7 @@ def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_tr
             acc_score = -1.0
             motivo_descarte = "Error numérico"
 
-        return {
+        res_dict = {
             "smooth_ms": s_ms,
             "target_length": t_len,
             "alpha_ruido": a_ruido,
@@ -1685,12 +1687,17 @@ def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_tr
             "accuracy_clasificacion": acc_score,
             "raw_accuracy": raw_acc,
             "motivo_descarte": motivo_descarte,
-            "silhouette_score": sil_score
+            "silhouette_score": sil_score,
+            "porcentaje_por_vocal": vocal_acc_dict
         }
+        for v_name, v_acc in vocal_acc_dict.items():
+            res_dict[f"acc_{v_name}_pct"] = v_acc
+        return res_dict
 
     best_acc = -1.0
     best_sil = -1.0
     best_config = None
+    best_vocal_acc = {}
     historial = []
     curr = 0
 
@@ -1710,6 +1717,7 @@ def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_tr
             raw_acc = res.get("raw_accuracy", -1.0)
             motivo = res.get("motivo_descarte", "")
             sil_score = res["silhouette_score"]
+            vocal_acc = res.get("porcentaje_por_vocal", {})
 
             pct = (curr / total_comb) * 100
             bar_len = 20
@@ -1720,12 +1728,16 @@ def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_tr
             if (acc_score > best_acc) or (abs(acc_score - best_acc) < 1e-4 and sil_score > best_sil):
                 best_acc = acc_score
                 best_sil = sil_score
+                best_vocal_acc = vocal_acc
                 best_config = (s_ms, t_len, a_ruido, q_val)
                 is_best = True
 
             tag = " ¡NUEVO ÓPTIMO!" if is_best else ""
+            vocal_str = ", ".join([f"{v}:{acc:.0f}%" for v, acc in vocal_acc.items()]) if vocal_acc else ""
+            vocal_info = f" [{vocal_str}]" if vocal_str else ""
+
             if acc_score >= 0:
-                score_str = f"Clasificación: {acc_score:.2f}%, Silhouette: {sil_score:.4f}"
+                score_str = f"Clasificación: {acc_score:.2f}%{vocal_info}, Silhouette: {sil_score:.4f}"
             elif raw_acc >= 0:
                 score_str = f"Clasificación: {raw_acc:.2f}% (Descartado: {motivo}), Silhouette: {sil_score:.4f}"
             else:
@@ -1734,7 +1746,12 @@ def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_tr
             logger(f"[{bar}] {pct:5.1f}% ({curr:4d}/{total_comb}) Smooth: {s_ms:3d}ms | Pts: {t_len:3d} | Alpha: {a_ruido:.2f} | Notch Q: {q_val:.1f} -> {score_str}{tag}")
 
     if best_config is not None:
-        logger(f"\n[GRID SEARCH PCA] Búsqueda finalizada al 100%. Configuración óptima: Smooth={best_config[0]}ms, Pts={best_config[1]}, Alpha={best_config[2]}, Notch Q={best_config[3]} con Clasificación: {best_acc:.2f}% (Silhouette: {best_sil:.4f})")
+        vocal_summary = " | ".join([f"Vocal {v}: {acc:.1f}%" for v, acc in best_vocal_acc.items()])
+        logger(f"\n[GRID SEARCH PCA] Búsqueda finalizada al 100%.")
+        logger(f"  -> Configuración óptima: Smooth={best_config[0]}ms, Pts={best_config[1]}, Alpha={best_config[2]}, Notch Q={best_config[3]}")
+        logger(f"  -> Clasificación Global: {best_acc:.2f}% (Silhouette: {best_sil:.4f})")
+        if vocal_summary:
+            logger(f"  -> Desglose por Vocal: {vocal_summary}")
 
     if historial:
         try:
@@ -1746,7 +1763,7 @@ def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_tr
         except Exception:
             pass
 
-    return best_config, best_acc, best_sil, historial
+    return best_config, best_acc, best_sil, best_vocal_acc, historial
 
 class GeneradorPCAGUI:
     def __init__(self, root):

@@ -1887,6 +1887,7 @@ if isinstance(res, tuple) and len(res) >= 3:
     best_config = res[0]
     best_acc = res[1]
     best_sil = res[2]
+    best_vocal_acc = res[3] if len(res) >= 4 and isinstance(res[3], dict) else {}
 
 if best_config:
     if len(best_config) == 4:
@@ -1902,6 +1903,7 @@ if best_config:
             "alpha_ruido": best_alpha,
             "notch_q": best_notch,
             "accuracy_clasificacion": best_acc,
+            "porcentaje_por_vocal": best_vocal_acc,
             "silhouette_score": best_sil
         }, f, indent=4)
     print("")
@@ -1912,6 +1914,10 @@ if best_config:
     print("  - Alfa Ruido:          " + str(best_alpha))
     print("  - Notch Q:             " + str(best_notch))
     print("  - Clasificación (%):   " + str(best_acc) + " %")
+    if best_vocal_acc:
+        print("  - Desglose por Vocal:")
+        for v_name, v_pct in best_vocal_acc.items():
+            print(f"      * Vocal {v_name}: {v_pct:.1f}%")
     print("  - Silhouette Score:    " + str(best_sil))
     print("---------------------------------------------------------")
     print("Se cargaron los resultados automáticamente.")
@@ -1933,6 +1939,7 @@ if best_config:
                 best_alpha = data.get("alpha_ruido", 0.5)
                 best_notch = data.get("notch_q", 2.0)
                 best_acc = data.get("accuracy_clasificacion", 0.0)
+                best_vocal_acc = data.get("porcentaje_por_vocal", {})
                 best_sil = data.get("silhouette_score", 0.0)
 
                 pca_tab = self.tab_dl_ml.tab_pca
@@ -1947,6 +1954,9 @@ if best_config:
                     pca_tab.inp_pts_3d.setValue(best_pts)
                     pca_tab.inp_notch_3d.setValue(best_notch)
 
+                vocal_str = "\n".join([f"  • Vocal {v}: {acc:.1f}%" for v, acc in best_vocal_acc.items()])
+                vocal_msg = f"\nDesglose por Vocal:\n{vocal_str}\n" if vocal_str else ""
+
                 from PySide6.QtWidgets import QMessageBox
                 QMessageBox.information(
                     self,
@@ -1957,6 +1967,7 @@ if best_config:
                     f"- Alfa Ruido: {best_alpha}\n"
                     f"- Notch Q: {best_notch}\n\n"
                     f"Precisión Clasificación (%): {best_acc:.2f}%\n"
+                    f"{vocal_msg}"
                     f"Silhouette Score (PCA): {best_sil:.4f}\n\n"
                     f"Se han cargado automáticamente los parámetros en la interfaz."
                 )
