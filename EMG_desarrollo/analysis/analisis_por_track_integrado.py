@@ -2658,8 +2658,56 @@ def _comparative_session_plots(mediciones_data, nombre_salida_base):
             filtered_amp = amp_vals[amp_vals <= 400]
             hist_data_amp[ch_idx][letra].extend(filtered_amp.tolist())
 
-    colors = {0: '#ffaa00', 1: '#39ff14', 2: '#ffff00'}
-    labels = {0: 'Canal 0 (Masetero)', 1: 'Canal 1 (Cigomático)', 2: 'Canal 2 (Orbicular)'}
+    # Obtener etiquetas de músculos y colores canónicos desde metadata / config_manager
+    try:
+        from utils.config_manager import get_unique_channel_colors, config_mgr
+    except ImportError:
+        get_unique_channel_colors, config_mgr = None, None
+
+    canales_config = config_mgr.get("canales") if config_mgr else {}
+    
+    # Extraer nombres de músculos de las mediciones
+    nombres_musculos = {}
+    for med in mediciones_data:
+        m_map = med.get('muscles_map', {})
+        if m_map:
+            for k, v in m_map.items():
+                k_str = str(k).replace('canal_', '')
+                if k_str.isdigit() and v:
+                    nombres_musculos[int(k_str)] = str(v)
+        if 'muscles' in med and isinstance(med['muscles'], list):
+            for idx_m, m_name in enumerate(med['muscles']):
+                if m_name and idx_m not in nombres_musculos:
+                    nombres_musculos[idx_m] = str(m_name)
+        if 'canales' in med:
+            for ch_idx in [0, 1, 2]:
+                ch_k = f'canal_{ch_idx}'
+                if ch_k in med['canales'] and 'musculo' in med['canales'][ch_k] and med['canales'][ch_k]['musculo']:
+                    nombres_musculos[ch_idx] = str(med['canales'][ch_k]['musculo'])
+
+    labels = {}
+    ch_info_list = []
+    for ch_idx in [0, 1, 2]:
+        conf_key = f"Canal {ch_idx}"
+        ch_conf = canales_config.get(conf_key, {})
+        musculo_nombre = nombres_musculos.get(ch_idx) or ch_conf.get("musculo") or f"Canal {ch_idx}"
+        labels[ch_idx] = f"Canal {ch_idx} ({musculo_nombre})" if not musculo_nombre.startswith("Canal") else musculo_nombre
+        ch_info_list.append({
+            "idx": ch_idx,
+            "col_name": f"canal_{ch_idx}",
+            "musculo": musculo_nombre,
+            "color_hex": ch_conf.get("color_hex"),
+            "is_mic": False
+        })
+
+    try:
+        if get_unique_channel_colors:
+            colores_resueltos = get_unique_channel_colors(ch_info_list)
+            colors = {ch_idx: colores_resueltos[ch_idx] for ch_idx in range(len(ch_info_list))}
+        else:
+            colors = {0: '#ffaa00', 1: '#39ff14', 2: '#ffff00'}
+    except Exception:
+        colors = {0: '#ffaa00', 1: '#39ff14', 2: '#ffff00'}
     
     # --- PLOT 1: Evolución SNR ---
     fig_snr, ax_snr = plt.subplots(figsize=(15, 6))
@@ -2921,6 +2969,21 @@ class SessionComparativeDialog(tk.Toplevel):
             dt_obj = None
             hora_str = ""
             canales_data = {}
+            muscles_map = {}
+            
+            meta0_path = os.path.join(path_medicion, 'canal_0', 'metadata.json')
+            if not os.path.exists(meta0_path):
+                meta0_path = os.path.join(path_medicion, 'metadata.json')
+            if os.path.exists(meta0_path):
+                try:
+                    with open(meta0_path, 'r', encoding='utf-8') as f0:
+                        m0 = json.load(f0)
+                        if 'muscles_map' in m0:
+                            muscles_map = m0['muscles_map']
+                        elif 'muscles' in m0 and isinstance(m0['muscles'], list):
+                            muscles_map = {i: m for i, m in enumerate(m0['muscles'])}
+                except Exception:
+                    pass
             
             for ch_idx in [0, 1, 2]:
                 ch_key = f'canal_{ch_idx}'
@@ -2936,16 +2999,21 @@ class SessionComparativeDialog(tk.Toplevel):
                 with open(res_path, 'r') as f:
                     res = json.load(f)
                     
-                if dt_obj is None and os.path.exists(meta_path):
+                ch_musculo = ""
+                if os.path.exists(meta_path):
                     with open(meta_path, 'r') as f:
                         meta = json.load(f)
-                        mdate = meta.get('measurement_date', '')
-                        if mdate:
-                            try:
-                                dt_obj = datetime.fromisoformat(mdate)
-                                hora_str = dt_obj.strftime("%H:%M:%S")
-                            except:
-                                pass
+                        ch_musculo = meta.get('musculo', '')
+                        if dt_obj is None:
+                            mdate = meta.get('measurement_date', '')
+                            if mdate:
+                                try:
+                                    dt_obj = datetime.fromisoformat(mdate)
+                                    hora_str = dt_obj.strftime("%H:%M:%S")
+                                except Exception:
+                                    pass
+                if not ch_musculo and muscles_map:
+                    ch_musculo = muscles_map.get(str(ch_idx), muscles_map.get(ch_idx, ''))
                 
                 snr_per_pulse = res.get('snr_per_pulse', [])
                 segmentos_rs = res.get('segmentos_rs', [])
@@ -2969,7 +3037,8 @@ class SessionComparativeDialog(tk.Toplevel):
                     
                 canales_data[ch_key] = {
                     'snr': snr_per_pulse,
-                    'amp': amp_per_pulse
+                    'amp': amp_per_pulse,
+                    'musculo': ch_musculo
                 }
                 
             if dt_obj is None:
@@ -2981,6 +3050,7 @@ class SessionComparativeDialog(tk.Toplevel):
                 'letra': letra,
                 'dt_obj': dt_obj,
                 'hora_str': hora_str,
+                'muscles_map': muscles_map,
                 'canales': canales_data
             })
             

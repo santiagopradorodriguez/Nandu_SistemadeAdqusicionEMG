@@ -1523,6 +1523,20 @@ try:
         hora_str = ""
         pulse_count = 0
         canales_data = {{}}
+        muscles_map = {{}}
+        meta0_path = os.path.join(path_medicion, 'canal_0', 'metadata.json')
+        if not os.path.exists(meta0_path):
+            meta0_path = os.path.join(path_medicion, 'metadata.json')
+        if os.path.exists(meta0_path):
+            try:
+                with open(meta0_path, 'r', encoding='utf-8') as f0:
+                    m0 = json.load(f0)
+                    if 'muscles_map' in m0:
+                        muscles_map = m0['muscles_map']
+                    elif 'muscles' in m0 and isinstance(m0['muscles'], list):
+                        muscles_map = {{i: m for i, m in enumerate(m0['muscles'])}}
+            except Exception:
+                pass
         
         for ch_idx in [0, 1, 2]:
             ch_key = f'canal_{{ch_idx}}'
@@ -1537,10 +1551,11 @@ try:
             with open(res_path, 'r') as f:
                 res = json.load(f)
                 
+            ch_musculo = ""
             if os.path.exists(meta_path):
                 with open(meta_path, 'r') as f:
                     meta = json.load(f)
-                    
+                    ch_musculo = meta.get('musculo', '')
                     if dt_obj is None:
                         mdate = meta.get('measurement_date', '')
                         if mdate:
@@ -1552,6 +1567,8 @@ try:
                                 
                     if pulse_count == 0:
                         pulse_count = meta.get('pulse_count', 0)
+            if not ch_musculo and muscles_map:
+                ch_musculo = muscles_map.get(str(ch_idx), muscles_map.get(ch_idx, ''))
             
             snr_per_pulse = []
             segmentos_rs = res.get('segmentos_rs', [])
@@ -1587,7 +1604,8 @@ try:
                 
             canales_data[ch_key] = {{
                 'snr': snr_per_pulse,
-                'amp': amp_per_pulse
+                'amp': amp_per_pulse,
+                'musculo': ch_musculo
             }}
             
         if dt_obj is None:
@@ -1600,6 +1618,7 @@ try:
             'dt_obj': dt_obj,
             'hora_str': hora_str,
             'pulse_count': pulse_count,
+            'muscles_map': muscles_map,
             'canales': canales_data
         }})
         
