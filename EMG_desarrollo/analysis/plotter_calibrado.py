@@ -673,10 +673,12 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
             picos_t = []
             picos_y = []
             t_arr = df[col_tiempo].values
+            t_limite_ruido = float(noise_seconds) if (noise_seconds is not None and noise_seconds > 0) else 0.0
             
             if bpm and noise_seconds is not None:
                 tau = 60.0 / bpm
-                k_p = 0
+                # El metrónomo y las contracciones comienzan a partir de noise_seconds (k_p = 1, 2, ...)
+                k_p = 1
                 while True:
                     t_beat_k = noise_seconds + k_p * tau
                     t_w_start = t_beat_k - tau / 2.0
@@ -685,27 +687,34 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
                     if t_w_start > t_max:
                         break
                     
-                    # Extraer el pico máximo dentro de cada ventana periódica
-                    mask_win = (t_arr >= max(t_min, t_w_start)) & (t_arr < min(t_max, t_w_end))
-                    if np.any(mask_win):
-                        sub_t = t_arr[mask_win]
-                        sub_y = y_plot[mask_win]
-                        if len(sub_y) > 0:
-                            idx_max = np.argmax(sub_y)
-                            p_val = sub_y[idx_max]
-                            p_t = sub_t[idx_max]
-                            if p_val > 0:
-                                picos_t.append(p_t)
-                                picos_y.append(p_val)
+                    # Extraer el pico máximo dentro de cada ventana periódica (excluyendo estrictamente el ruido basal)
+                    t_start_val = max(t_min, max(t_limite_ruido, t_w_start))
+                    t_end_val = min(t_max, t_w_end)
+                    if t_start_val < t_end_val:
+                        mask_win = (t_arr >= t_start_val) & (t_arr < t_end_val)
+                        if np.any(mask_win):
+                            sub_t = t_arr[mask_win]
+                            sub_y = y_plot[mask_win]
+                            if len(sub_y) > 0:
+                                idx_max = np.argmax(sub_y)
+                                p_val = sub_y[idx_max]
+                                p_t = sub_t[idx_max]
+                                if p_val > 0 and p_t >= t_limite_ruido:
+                                    picos_t.append(p_t)
+                                    picos_y.append(p_val)
                     k_p += 1
             else:
                 try:
-                    min_dist = max(1, int(fs * 0.3))
-                    h_thresh = max(0.0, float(np.mean(y_plot)))
-                    p_indices, _ = signal.find_peaks(y_plot, distance=min_dist, height=h_thresh)
-                    if len(p_indices) > 0:
-                        picos_t = t_arr[p_indices].tolist()
-                        picos_y = y_plot[p_indices].tolist()
+                    mask_post_ruido = (t_arr >= t_limite_ruido)
+                    if np.any(mask_post_ruido):
+                        y_sub = y_plot[mask_post_ruido]
+                        t_sub = t_arr[mask_post_ruido]
+                        min_dist = max(1, int(fs * 0.3))
+                        h_thresh = max(0.0, float(np.mean(y_sub)))
+                        p_indices, _ = signal.find_peaks(y_sub, distance=min_dist, height=h_thresh)
+                        if len(p_indices) > 0:
+                            picos_t = t_sub[p_indices].tolist()
+                            picos_y = y_sub[p_indices].tolist()
                 except Exception:
                     pass
 
