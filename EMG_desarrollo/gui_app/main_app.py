@@ -1564,8 +1564,17 @@ try:
             if isinstance(segmentos_rs, list) and len(segmentos_rs) > 0:
                 for p in segmentos_rs:
                     if isinstance(p, list) and len(p) > 0:
-                        mav_val = float(np.mean(np.abs(p)))
-                        amp_per_pulse.append(mav_val)
+                        p_arr = np.array(p)
+                        # Resta de offset basal robusto como en plotter_calibrado
+                        q25, q75 = np.percentile(p_arr, [25, 75])
+                        iqr = q75 - q25
+                        clean_base = p_arr[p_arr <= q75 + 1.5 * iqr]
+                        p_base = np.percentile(clean_base, 10) if len(clean_base) >= 5 else np.min(p_arr)
+                        p_clean = np.maximum(0.0, p_arr - p_base)
+                        
+                        amp_val = float(np.max(p_clean))
+                        mav_val = float(np.mean(p_clean))
+                        amp_per_pulse.append(amp_val)
                         if umbral and umbral > 0:
                             snr_per_pulse.append(mav_val / umbral)
                         else:

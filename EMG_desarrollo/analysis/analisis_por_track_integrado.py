@@ -2603,9 +2603,9 @@ def _comparative_session_plots(mediciones_data, nombre_salida_base):
     
     # Preparamos arreglos de datos por canal
     ch_data = {
-        0: {'x_time': [], 'snr_mean': [], 'snr_err': [], 'amp_mean': [], 'amp_err': [], 'letra': []},
-        1: {'x_time': [], 'snr_mean': [], 'snr_err': [], 'amp_mean': [], 'amp_err': [], 'letra': []},
-        2: {'x_time': [], 'snr_mean': [], 'snr_err': [], 'amp_mean': [], 'amp_err': [], 'letra': []}
+        0: {'x_time': [], 'snr_mean': [], 'snr_std': [], 'snr_err': [], 'amp_mean': [], 'amp_std': [], 'amp_err': [], 'letra': []},
+        1: {'x_time': [], 'snr_mean': [], 'snr_std': [], 'snr_err': [], 'amp_mean': [], 'amp_std': [], 'amp_err': [], 'letra': []},
+        2: {'x_time': [], 'snr_mean': [], 'snr_std': [], 'snr_err': [], 'amp_mean': [], 'amp_std': [], 'amp_err': [], 'letra': []}
     }
     
     # Para los histogramas, mantenemos todos los valores crudos
@@ -2626,21 +2626,25 @@ def _comparative_session_plots(mediciones_data, nombre_salida_base):
                 amp_vals = np.array([])
                 
             if len(snr_vals) > 0:
-                snr_m = np.mean(snr_vals)
-                snr_e = np.std(snr_vals) / np.sqrt(len(snr_vals)) # Error estándar
+                snr_m = float(np.mean(snr_vals))
+                snr_s = float(np.std(snr_vals))
+                snr_e = snr_s / np.sqrt(len(snr_vals)) # Error estándar
             else:
-                snr_m, snr_e = np.nan, np.nan
+                snr_m, snr_s, snr_e = np.nan, np.nan, np.nan
                 
             if len(amp_vals) > 0:
-                amp_m = np.mean(amp_vals)
-                amp_e = np.std(amp_vals) / np.sqrt(len(amp_vals))
+                amp_m = float(np.mean(amp_vals))
+                amp_s = float(np.std(amp_vals))
+                amp_e = amp_s / np.sqrt(len(amp_vals))
             else:
-                amp_m, amp_e = np.nan, np.nan
+                amp_m, amp_s, amp_e = np.nan, np.nan, np.nan
                 
             ch_data[ch_idx]['x_time'].append(t_minutes)
             ch_data[ch_idx]['snr_mean'].append(snr_m)
+            ch_data[ch_idx]['snr_std'].append(snr_s)
             ch_data[ch_idx]['snr_err'].append(snr_e)
             ch_data[ch_idx]['amp_mean'].append(amp_m)
+            ch_data[ch_idx]['amp_std'].append(amp_s)
             ch_data[ch_idx]['amp_err'].append(amp_e)
             ch_data[ch_idx]['letra'].append(letra)
             
@@ -2654,7 +2658,7 @@ def _comparative_session_plots(mediciones_data, nombre_salida_base):
             filtered_amp = amp_vals[amp_vals <= 400]
             hist_data_amp[ch_idx][letra].extend(filtered_amp.tolist())
 
-    colors = {0: '#66FCF1', 1: '#FF00FF', 2: '#FFFF00'}
+    colors = {0: '#ffaa00', 1: '#39ff14', 2: '#ffff00'}
     labels = {0: 'Canal 0 (Masetero)', 1: 'Canal 1 (Cigomático)', 2: 'Canal 2 (Orbicular)'}
     
     # --- PLOT 1: Evolución SNR ---
@@ -2665,25 +2669,36 @@ def _comparative_session_plots(mediciones_data, nombre_salida_base):
     for ch_idx in [0, 1, 2]:
         x = np.array(ch_data[ch_idx]['x_time'])
         y = np.array(ch_data[ch_idx]['snr_mean'])
+        ystd = np.array(ch_data[ch_idx]['snr_std'])
         yerr = np.array(ch_data[ch_idx]['snr_err'])
         
         valid = ~np.isnan(y)
         if np.any(valid):
-            ax_snr.errorbar(x[valid], y[valid], yerr=yerr[valid], fmt='-o', color=colors[ch_idx], 
-                            label=labels[ch_idx], linewidth=2, capsize=4, markersize=6)
+            xv, yv, ysv = x[valid], y[valid], ystd[valid]
+            mean_global = float(np.nanmean(yv))
+            std_global = float(np.nanmean(ysv)) if len(ysv) > 0 else 0.0
+            lbl = f"{labels[ch_idx]} (μ = {mean_global:.1f} ± {std_global:.1f})"
+            
+            # Franja semitransparente de desviación estándar promedio
+            ax_snr.fill_between(xv, np.maximum(0, yv - ysv), yv + ysv, color=colors[ch_idx], alpha=0.15)
+            
+            ax_snr.errorbar(xv, yv, yerr=yerr[valid], fmt='-o', color=colors[ch_idx], 
+                            label=lbl, linewidth=2, capsize=4, markersize=6)
             
             # Añadir etiqueta de la letra en los puntos (solo para el canal 0)
             if ch_idx == 0:
                 letras = np.array(ch_data[ch_idx]['letra'])[valid]
-                for xv, yv, let in zip(x[valid], y[valid], letras):
-                    ax_snr.annotate(let, (xv, yv), textcoords="offset points", xytext=(0,10), ha='center', color='white', fontweight='bold', fontsize=12)
+                for px, py, let in zip(xv, yv, letras):
+                    ax_snr.annotate(let, (px, py), textcoords="offset points", xytext=(0,10), ha='center', color='white', fontweight='bold', fontsize=12)
 
-    ax_snr.set_title("Evolución de SNR (MAV) en la Sesión (Promedio ± SE)", color='white', fontsize=16, pad=20)
+    ax_snr.set_title("Evolución de SNR (MAV) en la Sesión (Media ± Desvío Estándar)", color='white', fontsize=16, pad=20)
     ax_snr.set_xlabel("Tiempo desde inicio de sesión [Minutos]", color='white')
     ax_snr.set_ylabel("SNR Promedio", color='white')
     ax_snr.tick_params(colors='white')
     ax_snr.grid(True, color='white', alpha=0.1)
-    ax_snr.legend(facecolor='#0B0C10', labelcolor='white')
+    handles_snr, labels_snr_list = ax_snr.get_legend_handles_labels()
+    if handles_snr:
+        ax_snr.legend(handles_snr, labels_snr_list, facecolor='#0B0C10', labelcolor='white')
     
     out_snr = f"{nombre_salida_base}_SNR_Timeline.png"
     plt.tight_layout()
@@ -2698,24 +2713,35 @@ def _comparative_session_plots(mediciones_data, nombre_salida_base):
     for ch_idx in [0, 1, 2]:
         x = np.array(ch_data[ch_idx]['x_time'])
         y = np.array(ch_data[ch_idx]['amp_mean'])
+        ystd = np.array(ch_data[ch_idx]['amp_std'])
         yerr = np.array(ch_data[ch_idx]['amp_err'])
         
         valid = ~np.isnan(y)
         if np.any(valid):
-            ax_amp.errorbar(x[valid], y[valid], yerr=yerr[valid], fmt='-o', color=colors[ch_idx], 
-                            label=labels[ch_idx], linewidth=2, capsize=4, markersize=6)
+            xv, yv, ysv = x[valid], y[valid], ystd[valid]
+            mean_global = float(np.nanmean(yv))
+            std_global = float(np.nanmean(ysv)) if len(ysv) > 0 else 0.0
+            lbl = f"{labels[ch_idx]} (μ = {mean_global:.1f} ± {std_global:.1f} µV)"
+            
+            # Franja semitransparente de desviación estándar promedio
+            ax_amp.fill_between(xv, np.maximum(0, yv - ysv), yv + ysv, color=colors[ch_idx], alpha=0.15)
+            
+            ax_amp.errorbar(xv, yv, yerr=yerr[valid], fmt='-o', color=colors[ch_idx], 
+                            label=lbl, linewidth=2, capsize=4, markersize=6)
             
             if ch_idx == 0:
                 letras = np.array(ch_data[ch_idx]['letra'])[valid]
-                for xv, yv, let in zip(x[valid], y[valid], letras):
-                    ax_amp.annotate(let, (xv, yv), textcoords="offset points", xytext=(0,10), ha='center', color='white', fontweight='bold', fontsize=12)
+                for px, py, let in zip(xv, yv, letras):
+                    ax_amp.annotate(let, (px, py), textcoords="offset points", xytext=(0,10), ha='center', color='white', fontweight='bold', fontsize=12)
 
-    ax_amp.set_title("Evolución de Amplitud Máxima Promedio en la Sesión (± SE)", color='white', fontsize=16, pad=20)
+    ax_amp.set_title("Evolución de Amplitud Máxima (Offset Restado) en la Sesión (Media ± Desvío Estándar)", color='white', fontsize=16, pad=20)
     ax_amp.set_xlabel("Tiempo desde inicio de sesión [Minutos]", color='white')
     ax_amp.set_ylabel("Amplitud Máxima Promedio [µV]", color='white')
     ax_amp.tick_params(colors='white')
     ax_amp.grid(True, color='white', alpha=0.1)
-    ax_amp.legend(facecolor='#0B0C10', labelcolor='white')
+    handles_amp, labels_amp_list = ax_amp.get_legend_handles_labels()
+    if handles_amp:
+        ax_amp.legend(handles_amp, labels_amp_list, facecolor='#0B0C10', labelcolor='white')
     
     out_amp = f"{nombre_salida_base}_AMP_Timeline.png"
     plt.tight_layout()
@@ -2929,7 +2955,13 @@ class SessionComparativeDialog(tk.Toplevel):
                 if isinstance(segmentos_rs, list) and len(segmentos_rs) > 0:
                     for p in segmentos_rs:
                         if isinstance(p, list) and len(p) > 0:
-                            amp_per_pulse.append(float(np.max(p)))
+                            p_arr = np.array(p)
+                            q25, q75 = np.percentile(p_arr, [25, 75])
+                            iqr = q75 - q25
+                            clean_base = p_arr[p_arr <= q75 + 1.5 * iqr]
+                            p_base = np.percentile(clean_base, 10) if len(clean_base) >= 5 else np.min(p_arr)
+                            p_clean = np.maximum(0.0, p_arr - p_base)
+                            amp_per_pulse.append(float(np.max(p_clean)))
                         else:
                             amp_per_pulse.append(np.nan)
                 else:
