@@ -2994,8 +2994,17 @@ class SessionComparativeDialog(tk.Toplevel):
                 if not os.path.exists(res_path): continue
                 
                 import json
-                with open(res_path, 'r') as f:
-                    res = json.load(f)
+                try:
+                    with open(res_path, 'r') as f:
+                        raw_text = f.read()
+                    try:
+                        res = json.loads(raw_text)
+                    except json.JSONDecodeError:
+                        decoder = json.JSONDecoder()
+                        res, _ = decoder.raw_decode(raw_text)
+                except Exception as e:
+                    print(f"ADVERTENCIA: No se pudo leer {res_path}: {e}. Omitiendo canal.")
+                    continue
                     
                 ch_musculo = ""
                 if os.path.exists(meta_path):
