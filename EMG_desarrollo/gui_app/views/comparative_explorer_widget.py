@@ -92,10 +92,20 @@ class ComparativeViewerWidget(QWidget):
             QPushButton:hover { background-color: #aa0000; }
         """)
         btn_refresh.clicked.connect(self.cargar_arbol)
+
+        btn_export_pdf = QPushButton(" Exportar Reporte PDF")
+        btn_export_pdf.setStyleSheet("""
+            QPushButton {
+                background-color: #005533; color: #00ff88; padding: 5px 15px; font-weight: bold; border-radius: 4px; border: 1px solid #00ff88;
+            }
+            QPushButton:hover { background-color: #007744; }
+        """)
+        btn_export_pdf.clicked.connect(self._on_export_pdf)
         
         self.toolbar.addWidget(lbl_title)
         self.toolbar.addStretch()
         self.toolbar.addWidget(btn_refresh)
+        self.toolbar.addWidget(btn_export_pdf)
         self.layout.addLayout(self.toolbar)
         
         # Splitter principal
@@ -267,3 +277,42 @@ class ComparativeViewerWidget(QWidget):
             lyt_txt.addWidget(scroll_txt)
             
             self.tabs_graficos.addTab(tab_txt, " Datos (CSV/Tex)")
+
+    def _on_export_pdf(self):
+        item = self.tree.currentItem()
+        if not item:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "Sin Selección", "Selecciona una fecha o experimento en el árbol para exportar el reporte.")
+            return
+            
+        ruta = item.data(0, Qt.UserRole)
+        date_match = re.search(r'\d{4}-\d{2}-\d{2}', str(ruta))
+        if not date_match:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "Fecha no detectada", "No se pudo identificar la fecha de la sesión seleccionada.")
+            return
+            
+        fecha_str = date_match.group(0)
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        base_datos_fecha = os.path.join(repo_root, "base_de_datos_electrodos", fecha_str)
+        
+        session_paths = []
+        if os.path.isdir(base_datos_fecha):
+            session_paths = [
+                os.path.join(base_datos_fecha, d) 
+                for d in sorted(os.listdir(base_datos_fecha)) 
+                if os.path.isdir(os.path.join(base_datos_fecha, d))
+            ]
+            
+        if not session_paths:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(
+                self, 
+                "Sin Mediciones", 
+                f"No se encontraron carpetas de mediciones en base_de_datos_electrodos/{fecha_str}."
+            )
+            return
+            
+        from views.report_dialog import ReportDialog
+        dialog = ReportDialog(session_paths, parent=self)
+        dialog.exec()

@@ -1,0 +1,1533 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{geometry}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{float}
+\geometry{top=2cm, bottom=2cm, left=2.2cm, right=2.2cm}
+
+\title{\textbf{Reporte Técnico Integral de Adquisición, Señales y Análisis PCA}}
+\author{Laboratorio de Sistemas Dinámicos (LSD) - Sistema Ñandú}
+\date{2026-09-02}
+
+\begin{document}
+\maketitle
+
+\section{Datos de la Sesión y Músculos Medidos}
+\begin{itemize}
+    \item \textbf{Fecha de Sesión:} 2026-09-02
+    \item \textbf{Sujeto de Prueba:} No especificado
+    \item \textbf{Tensión de Baterías:} 8.30 V y 8.20 V
+    \item \textbf{Electrodo de Referencia (Tierra):} Frente
+    \item \textbf{Total de Pruebas Registradas:} 22
+    \item \textbf{Series / Pruebas Identificadas:} 5
+\end{itemize}
+
+\subsection{Músculos Medidos y Configuración de Canales}
+\begin{table}[H]
+\centering
+\begin{tabular}{clp{9cm}}
+\toprule
+\textbf{Canal} & \textbf{Músculo Asignado} & \textbf{Detalle / Ubicación} \\
+\midrule
+Canal 0 & Canal 0 & Electrodo bipolar de superficie \\
+Canal 1 & Canal 1 & Electrodo bipolar de superficie \\
+Canal 2 & Canal 2 & Electrodo bipolar de superficie \\
+Canal 3 & Canal 3 & Electrodo bipolar de superficie \\
+\bottomrule
+\end{tabular}
+\caption{Distribución anatómica y asignación de canales musculares extraídos de los metadatos.}
+\end{table}
+
+\subsection{Registro Fotográfico del Montaje de Electrodos}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.45\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/Descargas/WhatsApp Image 2026-09-01 at 17.22.31 (1).jpeg}
+    \caption{Fotografía del Montaje 1}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.45\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/Descargas/WhatsApp Image 2026-09-01 at 17.22.31.jpeg}
+    \caption{Fotografía del Montaje 2}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.45\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/Descargas/WhatsApp Image 2026-09-01 at 17.22.31 (3).jpeg}
+    \caption{Fotografía del Montaje 3}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.45\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/Descargas/WhatsApp Image 2026-09-01 at 17.22.31 (2).jpeg}
+    \caption{Fotografía del Montaje 4}
+\end{subfigure}
+\caption{Ubicación y fijación mecánica de los electrodos en la sesión experimental.}
+\end{figure}
+
+\newpage
+\tableofcontents
+\newpage
+\section{Resultados y Análisis de Señales}
+A continuación se desglosan los registros estructurados por cada una de las series o pruebas experimentales de la sesión, organizadas de forma cronológica.
+
+\subsection{Prueba1: Secuencia de Vocales}
+Análisis detallado de las mediciones pertenecientes al bloque experimental \textbf{Prueba1}.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{cclcc}
+\toprule
+\textbf{Orden} & \textbf{Vocal} & \textbf{Identificador de Medición} & \textbf{Hora Exacta} & $\mathbf{\Delta t}$ \textbf{(min)} \\
+\midrule
+1 & A & A\_Prueba1\_Candela & 16:15:31 & 3.1 \\
+2 & E & E\_Prueba1\_Candela & 16:12:27 & 0.0 \\
+3 & I & I\_Prueba1\_Candela & 16:13:13 & 0.8 \\
+4 & O & O\_Prueba1\_Candela & 16:13:59 & 1.5 \\
+5 & U & U\_Prueba1\_Candela & 16:14:45 & 2.3 \\
+\bottomrule
+\end{tabular}
+\caption{Cronograma y secuencia de vocales registradas en Prueba1.}
+\end{table}
+
+\subsubsection{Vocal A: A\_Prueba1\_Candela (16:15:31)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba1_Candela/plot_calibrado_2026-09-01_A_Prueba1_Candela.png}
+\caption{Registro calibrado multicanal en microvoltios para vocal A.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba1_Candela/canal_0/pulses.png}
+    \caption{Pulsos Recortados - Canal 0 (Canal 0)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba1_Candela/canal_0/avg.png}
+    \caption{Pulso Promedio - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba1_Candela/canal_1/pulses.png}
+    \caption{Pulsos Recortados - Canal 1 (Canal 1)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba1_Candela/canal_1/avg.png}
+    \caption{Pulso Promedio - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba1_Candela/canal_2/pulses.png}
+    \caption{Pulsos Recortados - Canal 2 (Canal 2)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba1_Candela/canal_2/avg.png}
+    \caption{Pulso Promedio - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Recortes de pulsos y perfiles promedio para vocal A.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba1_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba1_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba1_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Espectrogramas y evolución de ruido interpulso para vocal A.}
+\end{figure}
+
+\subsubsection{Vocal E: E\_Prueba1\_Candela (16:12:27)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba1_Candela/plot_calibrado_2026-09-01_E_Prueba1_Candela.png}
+\caption{Registro calibrado multicanal en microvoltios para vocal E.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba1_Candela/canal_0/pulses.png}
+    \caption{Pulsos Recortados - Canal 0 (Canal 0)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba1_Candela/canal_0/avg.png}
+    \caption{Pulso Promedio - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba1_Candela/canal_1/pulses.png}
+    \caption{Pulsos Recortados - Canal 1 (Canal 1)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba1_Candela/canal_1/avg.png}
+    \caption{Pulso Promedio - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba1_Candela/canal_2/pulses.png}
+    \caption{Pulsos Recortados - Canal 2 (Canal 2)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba1_Candela/canal_2/avg.png}
+    \caption{Pulso Promedio - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Recortes de pulsos y perfiles promedio para vocal E.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba1_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba1_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba1_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Espectrogramas y evolución de ruido interpulso para vocal E.}
+\end{figure}
+
+\subsubsection{Vocal I: I\_Prueba1\_Candela (16:13:13)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba1_Candela/plot_calibrado_2026-09-01_I_Prueba1_Candela.png}
+\caption{Registro calibrado multicanal en microvoltios para vocal I.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba1_Candela/canal_0/pulses.png}
+    \caption{Pulsos Recortados - Canal 0 (Canal 0)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba1_Candela/canal_0/avg.png}
+    \caption{Pulso Promedio - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba1_Candela/canal_1/pulses.png}
+    \caption{Pulsos Recortados - Canal 1 (Canal 1)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba1_Candela/canal_1/avg.png}
+    \caption{Pulso Promedio - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba1_Candela/canal_2/pulses.png}
+    \caption{Pulsos Recortados - Canal 2 (Canal 2)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba1_Candela/canal_2/avg.png}
+    \caption{Pulso Promedio - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Recortes de pulsos y perfiles promedio para vocal I.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba1_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba1_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba1_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Espectrogramas y evolución de ruido interpulso para vocal I.}
+\end{figure}
+
+\subsubsection{Vocal O: O\_Prueba1\_Candela (16:13:59)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba1_Candela/plot_calibrado_2026-09-01_O_Prueba1_Candela.png}
+\caption{Registro calibrado multicanal en microvoltios para vocal O.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba1_Candela/canal_0/pulses.png}
+    \caption{Pulsos Recortados - Canal 0 (Canal 0)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba1_Candela/canal_0/avg.png}
+    \caption{Pulso Promedio - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba1_Candela/canal_1/pulses.png}
+    \caption{Pulsos Recortados - Canal 1 (Canal 1)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba1_Candela/canal_1/avg.png}
+    \caption{Pulso Promedio - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba1_Candela/canal_2/pulses.png}
+    \caption{Pulsos Recortados - Canal 2 (Canal 2)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba1_Candela/canal_2/avg.png}
+    \caption{Pulso Promedio - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Recortes de pulsos y perfiles promedio para vocal O.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba1_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba1_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba1_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Espectrogramas y evolución de ruido interpulso para vocal O.}
+\end{figure}
+
+\subsubsection{Vocal U: U\_Prueba1\_Candela (16:14:45)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba1_Candela/plot_calibrado_2026-09-01_U_Prueba1_Candela.png}
+\caption{Registro calibrado multicanal en microvoltios para vocal U.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba1_Candela/canal_0/pulses.png}
+    \caption{Pulsos Recortados - Canal 0 (Canal 0)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba1_Candela/canal_0/avg.png}
+    \caption{Pulso Promedio - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba1_Candela/canal_1/pulses.png}
+    \caption{Pulsos Recortados - Canal 1 (Canal 1)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba1_Candela/canal_1/avg.png}
+    \caption{Pulso Promedio - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba1_Candela/canal_2/pulses.png}
+    \caption{Pulsos Recortados - Canal 2 (Canal 2)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba1_Candela/canal_2/avg.png}
+    \caption{Pulso Promedio - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Recortes de pulsos y perfiles promedio para vocal U.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba1_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba1_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba1_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Espectrogramas y evolución de ruido interpulso para vocal U.}
+\end{figure}
+
+\subsection{Prueba2: Secuencia de Vocales}
+Análisis detallado de las mediciones pertenecientes al bloque experimental \textbf{Prueba2}.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{cclcc}
+\toprule
+\textbf{Orden} & \textbf{Vocal} & \textbf{Identificador de Medición} & \textbf{Hora Exacta} & $\mathbf{\Delta t}$ \textbf{(min)} \\
+\midrule
+1 & A & A\_Prueba2\_Candela & 16:25:42 & 13.3 \\
+2 & E & E\_Prueba2\_Candela & 16:28:01 & 15.6 \\
+3 & I & I\_Prueba2\_Candela & 16:26:28 & 14.0 \\
+4 & O & O\_Prueba2\_Candela & 16:28:47 & 16.3 \\
+5 & U & U\_Prueba2\_Candela & 16:27:15 & 14.8 \\
+\bottomrule
+\end{tabular}
+\caption{Cronograma y secuencia de vocales registradas en Prueba2.}
+\end{table}
+
+\subsubsection{Vocal A: A\_Prueba2\_Candela (16:25:42)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba2_Candela/plot_calibrado_2026-09-01_A_Prueba2_Candela.png}
+\caption{Registro calibrado multicanal en microvoltios para vocal A.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba2_Candela/canal_0/pulses.png}
+    \caption{Pulsos Recortados - Canal 0 (Canal 0)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba2_Candela/canal_0/avg.png}
+    \caption{Pulso Promedio - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba2_Candela/canal_1/pulses.png}
+    \caption{Pulsos Recortados - Canal 1 (Canal 1)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba2_Candela/canal_1/avg.png}
+    \caption{Pulso Promedio - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba2_Candela/canal_2/pulses.png}
+    \caption{Pulsos Recortados - Canal 2 (Canal 2)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba2_Candela/canal_2/avg.png}
+    \caption{Pulso Promedio - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Recortes de pulsos y perfiles promedio para vocal A.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba2_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba2_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba2_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Espectrogramas y evolución de ruido interpulso para vocal A.}
+\end{figure}
+
+\subsubsection{Vocal E: E\_Prueba2\_Candela (16:28:01)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba2_Candela/plot_calibrado_2026-09-01_E_Prueba2_Candela.png}
+\caption{Registro calibrado multicanal en microvoltios para vocal E.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba2_Candela/canal_0/pulses.png}
+    \caption{Pulsos Recortados - Canal 0 (Canal 0)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba2_Candela/canal_0/avg.png}
+    \caption{Pulso Promedio - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba2_Candela/canal_1/pulses.png}
+    \caption{Pulsos Recortados - Canal 1 (Canal 1)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba2_Candela/canal_1/avg.png}
+    \caption{Pulso Promedio - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba2_Candela/canal_2/pulses.png}
+    \caption{Pulsos Recortados - Canal 2 (Canal 2)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba2_Candela/canal_2/avg.png}
+    \caption{Pulso Promedio - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Recortes de pulsos y perfiles promedio para vocal E.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba2_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba2_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba2_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Espectrogramas y evolución de ruido interpulso para vocal E.}
+\end{figure}
+
+\subsubsection{Vocal I: I\_Prueba2\_Candela (16:26:28)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba2_Candela/plot_calibrado_2026-09-01_I_Prueba2_Candela.png}
+\caption{Registro calibrado multicanal en microvoltios para vocal I.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba2_Candela/canal_0/pulses.png}
+    \caption{Pulsos Recortados - Canal 0 (Canal 0)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba2_Candela/canal_0/avg.png}
+    \caption{Pulso Promedio - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba2_Candela/canal_1/pulses.png}
+    \caption{Pulsos Recortados - Canal 1 (Canal 1)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba2_Candela/canal_1/avg.png}
+    \caption{Pulso Promedio - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba2_Candela/canal_2/pulses.png}
+    \caption{Pulsos Recortados - Canal 2 (Canal 2)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba2_Candela/canal_2/avg.png}
+    \caption{Pulso Promedio - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Recortes de pulsos y perfiles promedio para vocal I.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba2_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba2_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba2_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Espectrogramas y evolución de ruido interpulso para vocal I.}
+\end{figure}
+
+\subsubsection{Vocal O: O\_Prueba2\_Candela (16:28:47)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba2_Candela/plot_calibrado_2026-09-01_O_Prueba2_Candela.png}
+\caption{Registro calibrado multicanal en microvoltios para vocal O.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba2_Candela/canal_0/pulses.png}
+    \caption{Pulsos Recortados - Canal 0 (Canal 0)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba2_Candela/canal_0/avg.png}
+    \caption{Pulso Promedio - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba2_Candela/canal_1/pulses.png}
+    \caption{Pulsos Recortados - Canal 1 (Canal 1)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba2_Candela/canal_1/avg.png}
+    \caption{Pulso Promedio - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba2_Candela/canal_2/pulses.png}
+    \caption{Pulsos Recortados - Canal 2 (Canal 2)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba2_Candela/canal_2/avg.png}
+    \caption{Pulso Promedio - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Recortes de pulsos y perfiles promedio para vocal O.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba2_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba2_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba2_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Espectrogramas y evolución de ruido interpulso para vocal O.}
+\end{figure}
+
+\subsubsection{Vocal U: U\_Prueba2\_Candela (16:27:15)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba2_Candela/plot_calibrado_2026-09-01_U_Prueba2_Candela.png}
+\caption{Registro calibrado multicanal en microvoltios para vocal U.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba2_Candela/canal_0/pulses.png}
+    \caption{Pulsos Recortados - Canal 0 (Canal 0)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba2_Candela/canal_0/avg.png}
+    \caption{Pulso Promedio - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba2_Candela/canal_1/pulses.png}
+    \caption{Pulsos Recortados - Canal 1 (Canal 1)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba2_Candela/canal_1/avg.png}
+    \caption{Pulso Promedio - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba2_Candela/canal_2/pulses.png}
+    \caption{Pulsos Recortados - Canal 2 (Canal 2)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba2_Candela/canal_2/avg.png}
+    \caption{Pulso Promedio - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Recortes de pulsos y perfiles promedio para vocal U.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba2_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba2_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba2_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Espectrogramas y evolución de ruido interpulso para vocal U.}
+\end{figure}
+
+\subsection{Prueba3: Secuencia de Vocales}
+Análisis detallado de las mediciones pertenecientes al bloque experimental \textbf{Prueba3}.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{cclcc}
+\toprule
+\textbf{Orden} & \textbf{Vocal} & \textbf{Identificador de Medición} & \textbf{Hora Exacta} & $\mathbf{\Delta t}$ \textbf{(min)} \\
+\midrule
+1 & A & A\_Prueba3\_Candela & 16:31:51 & 19.4 \\
+2 & E & E\_Prueba3\_Candela & 16:31:05 & 18.6 \\
+3 & I & I\_Prueba3\_Candela & 16:30:19 & 17.9 \\
+4 & O & O\_Prueba3\_Candela & 16:32:37 & 20.2 \\
+5 & U & U\_Prueba3\_Candela & 16:29:33 & 17.1 \\
+\bottomrule
+\end{tabular}
+\caption{Cronograma y secuencia de vocales registradas en Prueba3.}
+\end{table}
+
+\subsubsection{Vocal A: A\_Prueba3\_Candela (16:31:51)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba3_Candela/plot_calibrado_2026-09-01_A_Prueba3_Candela.png}
+\caption{Registro calibrado multicanal en microvoltios para vocal A.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba3_Candela/canal_0/pulses.png}
+    \caption{Pulsos Recortados - Canal 0 (Canal 0)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba3_Candela/canal_0/avg.png}
+    \caption{Pulso Promedio - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba3_Candela/canal_1/pulses.png}
+    \caption{Pulsos Recortados - Canal 1 (Canal 1)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba3_Candela/canal_1/avg.png}
+    \caption{Pulso Promedio - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba3_Candela/canal_2/pulses.png}
+    \caption{Pulsos Recortados - Canal 2 (Canal 2)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba3_Candela/canal_2/avg.png}
+    \caption{Pulso Promedio - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Recortes de pulsos y perfiles promedio para vocal A.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba3_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba3_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba3_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Espectrogramas y evolución de ruido interpulso para vocal A.}
+\end{figure}
+
+\subsubsection{Vocal E: E\_Prueba3\_Candela (16:31:05)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba3_Candela/plot_calibrado_2026-09-01_E_Prueba3_Candela.png}
+\caption{Registro calibrado multicanal en microvoltios para vocal E.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba3_Candela/canal_0/pulses.png}
+    \caption{Pulsos Recortados - Canal 0 (Canal 0)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba3_Candela/canal_0/avg.png}
+    \caption{Pulso Promedio - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba3_Candela/canal_1/pulses.png}
+    \caption{Pulsos Recortados - Canal 1 (Canal 1)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba3_Candela/canal_1/avg.png}
+    \caption{Pulso Promedio - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba3_Candela/canal_2/pulses.png}
+    \caption{Pulsos Recortados - Canal 2 (Canal 2)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba3_Candela/canal_2/avg.png}
+    \caption{Pulso Promedio - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Recortes de pulsos y perfiles promedio para vocal E.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba3_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba3_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba3_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Espectrogramas y evolución de ruido interpulso para vocal E.}
+\end{figure}
+
+\subsubsection{Vocal I: I\_Prueba3\_Candela (16:30:19)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba3_Candela/plot_calibrado_2026-09-01_I_Prueba3_Candela.png}
+\caption{Registro calibrado multicanal en microvoltios para vocal I.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba3_Candela/canal_0/pulses.png}
+    \caption{Pulsos Recortados - Canal 0 (Canal 0)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba3_Candela/canal_0/avg.png}
+    \caption{Pulso Promedio - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba3_Candela/canal_1/pulses.png}
+    \caption{Pulsos Recortados - Canal 1 (Canal 1)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba3_Candela/canal_1/avg.png}
+    \caption{Pulso Promedio - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba3_Candela/canal_2/pulses.png}
+    \caption{Pulsos Recortados - Canal 2 (Canal 2)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba3_Candela/canal_2/avg.png}
+    \caption{Pulso Promedio - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Recortes de pulsos y perfiles promedio para vocal I.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba3_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba3_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba3_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Espectrogramas y evolución de ruido interpulso para vocal I.}
+\end{figure}
+
+\subsubsection{Vocal O: O\_Prueba3\_Candela (16:32:37)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba3_Candela/plot_calibrado_2026-09-01_O_Prueba3_Candela.png}
+\caption{Registro calibrado multicanal en microvoltios para vocal O.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba3_Candela/canal_1/pulses.png}
+    \caption{Pulsos Recortados - Canal 1 (Canal 1)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba3_Candela/canal_1/avg.png}
+    \caption{Pulso Promedio - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba3_Candela/canal_2/pulses.png}
+    \caption{Pulsos Recortados - Canal 2 (Canal 2)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba3_Candela/canal_2/avg.png}
+    \caption{Pulso Promedio - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Recortes de pulsos y perfiles promedio para vocal O.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba3_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba3_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Espectrogramas y evolución de ruido interpulso para vocal O.}
+\end{figure}
+
+\subsubsection{Vocal U: U\_Prueba3\_Candela (16:29:33)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba3_Candela/plot_calibrado_2026-09-01_U_Prueba3_Candela.png}
+\caption{Registro calibrado multicanal en microvoltios para vocal U.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba3_Candela/canal_0/pulses.png}
+    \caption{Pulsos Recortados - Canal 0 (Canal 0)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba3_Candela/canal_0/avg.png}
+    \caption{Pulso Promedio - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba3_Candela/canal_1/pulses.png}
+    \caption{Pulsos Recortados - Canal 1 (Canal 1)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba3_Candela/canal_1/avg.png}
+    \caption{Pulso Promedio - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba3_Candela/canal_2/pulses.png}
+    \caption{Pulsos Recortados - Canal 2 (Canal 2)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba3_Candela/canal_2/avg.png}
+    \caption{Pulso Promedio - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Recortes de pulsos y perfiles promedio para vocal U.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba3_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba3_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba3_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Espectrogramas y evolución de ruido interpulso para vocal U.}
+\end{figure}
+
+\subsection{Prueba4: Secuencia de Vocales}
+Análisis detallado de las mediciones pertenecientes al bloque experimental \textbf{Prueba4}.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{cclcc}
+\toprule
+\textbf{Orden} & \textbf{Vocal} & \textbf{Identificador de Medición} & \textbf{Hora Exacta} & $\mathbf{\Delta t}$ \textbf{(min)} \\
+\midrule
+1 & A & A\_Prueba4\_Candela & 16:47:55 & 35.5 \\
+2 & E & E\_Prueba4\_Candela & 16:44:05 & 31.6 \\
+3 & I & I\_Prueba4\_Candela & 16:46:23 & 33.9 \\
+4 & O & O\_Prueba4\_Candela & 16:44:51 & 32.4 \\
+5 & U & U\_Prueba4\_Candela & 16:45:37 & 33.2 \\
+\bottomrule
+\end{tabular}
+\caption{Cronograma y secuencia de vocales registradas en Prueba4.}
+\end{table}
+
+\subsubsection{Vocal A: A\_Prueba4\_Candela (16:47:55)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba4_Candela/plot_calibrado_2026-09-01_A_Prueba4_Candela.png}
+\caption{Registro calibrado multicanal en microvoltios para vocal A.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba4_Candela/canal_0/pulses.png}
+    \caption{Pulsos Recortados - Canal 0 (Canal 0)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba4_Candela/canal_0/avg.png}
+    \caption{Pulso Promedio - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba4_Candela/canal_1/pulses.png}
+    \caption{Pulsos Recortados - Canal 1 (Canal 1)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba4_Candela/canal_1/avg.png}
+    \caption{Pulso Promedio - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba4_Candela/canal_2/pulses.png}
+    \caption{Pulsos Recortados - Canal 2 (Canal 2)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba4_Candela/canal_2/avg.png}
+    \caption{Pulso Promedio - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Recortes de pulsos y perfiles promedio para vocal A.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba4_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba4_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba4_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Espectrogramas y evolución de ruido interpulso para vocal A.}
+\end{figure}
+
+\subsubsection{Vocal E: E\_Prueba4\_Candela (16:44:05)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba4_Candela/plot_calibrado_2026-09-01_E_Prueba4_Candela.png}
+\caption{Registro calibrado multicanal en microvoltios para vocal E.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba4_Candela/canal_0/pulses.png}
+    \caption{Pulsos Recortados - Canal 0 (Canal 0)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba4_Candela/canal_0/avg.png}
+    \caption{Pulso Promedio - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba4_Candela/canal_1/pulses.png}
+    \caption{Pulsos Recortados - Canal 1 (Canal 1)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba4_Candela/canal_1/avg.png}
+    \caption{Pulso Promedio - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba4_Candela/canal_2/pulses.png}
+    \caption{Pulsos Recortados - Canal 2 (Canal 2)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba4_Candela/canal_2/avg.png}
+    \caption{Pulso Promedio - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Recortes de pulsos y perfiles promedio para vocal E.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba4_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba4_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba4_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Espectrogramas y evolución de ruido interpulso para vocal E.}
+\end{figure}
+
+\subsubsection{Vocal I: I\_Prueba4\_Candela (16:46:23)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba4_Candela/plot_calibrado_2026-09-01_I_Prueba4_Candela.png}
+\caption{Registro calibrado multicanal en microvoltios para vocal I.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba4_Candela/canal_0/pulses.png}
+    \caption{Pulsos Recortados - Canal 0 (Canal 0)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba4_Candela/canal_0/avg.png}
+    \caption{Pulso Promedio - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba4_Candela/canal_1/pulses.png}
+    \caption{Pulsos Recortados - Canal 1 (Canal 1)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba4_Candela/canal_1/avg.png}
+    \caption{Pulso Promedio - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba4_Candela/canal_2/pulses.png}
+    \caption{Pulsos Recortados - Canal 2 (Canal 2)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba4_Candela/canal_2/avg.png}
+    \caption{Pulso Promedio - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Recortes de pulsos y perfiles promedio para vocal I.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba4_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba4_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba4_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Espectrogramas y evolución de ruido interpulso para vocal I.}
+\end{figure}
+
+\subsubsection{Vocal O: O\_Prueba4\_Candela (16:44:51)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba4_Candela/plot_calibrado_2026-09-01_O_Prueba4_Candela.png}
+\caption{Registro calibrado multicanal en microvoltios para vocal O.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba4_Candela/canal_0/pulses.png}
+    \caption{Pulsos Recortados - Canal 0 (Canal 0)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba4_Candela/canal_0/avg.png}
+    \caption{Pulso Promedio - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba4_Candela/canal_1/pulses.png}
+    \caption{Pulsos Recortados - Canal 1 (Canal 1)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba4_Candela/canal_1/avg.png}
+    \caption{Pulso Promedio - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba4_Candela/canal_2/pulses.png}
+    \caption{Pulsos Recortados - Canal 2 (Canal 2)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba4_Candela/canal_2/avg.png}
+    \caption{Pulso Promedio - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Recortes de pulsos y perfiles promedio para vocal O.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba4_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba4_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba4_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Espectrogramas y evolución de ruido interpulso para vocal O.}
+\end{figure}
+
+\subsubsection{Vocal U: U\_Prueba4\_Candela (16:45:37)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba4_Candela/plot_calibrado_2026-09-01_U_Prueba4_Candela.png}
+\caption{Registro calibrado multicanal en microvoltios para vocal U.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba4_Candela/canal_0/pulses.png}
+    \caption{Pulsos Recortados - Canal 0 (Canal 0)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba4_Candela/canal_0/avg.png}
+    \caption{Pulso Promedio - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba4_Candela/canal_1/pulses.png}
+    \caption{Pulsos Recortados - Canal 1 (Canal 1)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba4_Candela/canal_1/avg.png}
+    \caption{Pulso Promedio - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba4_Candela/canal_2/pulses.png}
+    \caption{Pulsos Recortados - Canal 2 (Canal 2)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba4_Candela/canal_2/avg.png}
+    \caption{Pulso Promedio - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Recortes de pulsos y perfiles promedio para vocal U.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba4_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba4_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba4_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Espectrogramas y evolución de ruido interpulso para vocal U.}
+\end{figure}
+
+\subsection{Prueba5: Secuencia de Vocales}
+Análisis detallado de las mediciones pertenecientes al bloque experimental \textbf{Prueba5}.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{cclcc}
+\toprule
+\textbf{Orden} & \textbf{Vocal} & \textbf{Identificador de Medición} & \textbf{Hora Exacta} & $\mathbf{\Delta t}$ \textbf{(min)} \\
+\midrule
+1 & E & E\_Prueba5\_Candela & 16:47:09 & 34.7 \\
+2 & O & O\_Prueba5\_Candela & 16:48:41 & 36.2 \\
+\bottomrule
+\end{tabular}
+\caption{Cronograma y secuencia de vocales registradas en Prueba5.}
+\end{table}
+
+\subsubsection{Vocal E: E\_Prueba5\_Candela (16:47:09)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba5_Candela/plot_calibrado_2026-09-01_E_Prueba5_Candela.png}
+\caption{Registro calibrado multicanal en microvoltios para vocal E.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba5_Candela/canal_0/pulses.png}
+    \caption{Pulsos Recortados - Canal 0 (Canal 0)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba5_Candela/canal_0/avg.png}
+    \caption{Pulso Promedio - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba5_Candela/canal_1/pulses.png}
+    \caption{Pulsos Recortados - Canal 1 (Canal 1)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba5_Candela/canal_1/avg.png}
+    \caption{Pulso Promedio - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba5_Candela/canal_2/pulses.png}
+    \caption{Pulsos Recortados - Canal 2 (Canal 2)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba5_Candela/canal_2/avg.png}
+    \caption{Pulso Promedio - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Recortes de pulsos y perfiles promedio para vocal E.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba5_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba5_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba5_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Espectrogramas y evolución de ruido interpulso para vocal E.}
+\end{figure}
+
+\subsubsection{Vocal O: O\_Prueba5\_Candela (16:48:41)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba5_Candela/plot_calibrado_2026-09-01_O_Prueba5_Candela.png}
+\caption{Registro calibrado multicanal en microvoltios para vocal O.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba5_Candela/canal_0/pulses.png}
+    \caption{Pulsos Recortados - Canal 0 (Canal 0)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba5_Candela/canal_0/avg.png}
+    \caption{Pulso Promedio - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba5_Candela/canal_1/pulses.png}
+    \caption{Pulsos Recortados - Canal 1 (Canal 1)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba5_Candela/canal_1/avg.png}
+    \caption{Pulso Promedio - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba5_Candela/canal_2/pulses.png}
+    \caption{Pulsos Recortados - Canal 2 (Canal 2)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba5_Candela/canal_2/avg.png}
+    \caption{Pulso Promedio - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Recortes de pulsos y perfiles promedio para vocal O.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba5_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Canal 0)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba5_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Canal 1)}
+\end{subfigure}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba5_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Canal 2)}
+\end{subfigure}
+\caption{Espectrogramas y evolución de ruido interpulso para vocal O.}
+\end{figure}
+
+\newpage
+\section{Evolución del Experimento}
+Evaluación de la estabilidad temporal, niveles de ruido interpulso y relación señal-ruido a lo largo de toda la sesión experimental.
+
+\newpage
+\section{Patrones Musculares}
+Comparación conjunta de los perfiles de activación muscular envolvente promedio normalizados entre las diferentes series registradas en la sesión.
+
+\subsection{Patrón Muscular: Vocal A}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.31\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba1_Candela/patron_muscular_grabacion.png}
+    \caption{Prueba1: A\_Prueba1\_Candela}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.31\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba2_Candela/patron_muscular_grabacion.png}
+    \caption{Prueba2: A\_Prueba2\_Candela}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.31\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba3_Candela/patron_muscular_grabacion.png}
+    \caption{Prueba3: A\_Prueba3\_Candela}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.31\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba4_Candela/patron_muscular_grabacion.png}
+    \caption{Prueba4: A\_Prueba4\_Candela}
+\end{subfigure}
+\caption{Activación muscular envolvente promedio para la vocal A comparada entre series.}
+\end{figure}
+
+\subsection{Patrón Muscular: Vocal E}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.31\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba1_Candela/patron_muscular_grabacion.png}
+    \caption{Prueba1: E\_Prueba1\_Candela}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.31\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba2_Candela/patron_muscular_grabacion.png}
+    \caption{Prueba2: E\_Prueba2\_Candela}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.31\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba3_Candela/patron_muscular_grabacion.png}
+    \caption{Prueba3: E\_Prueba3\_Candela}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.31\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba4_Candela/patron_muscular_grabacion.png}
+    \caption{Prueba4: E\_Prueba4\_Candela}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.31\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba5_Candela/patron_muscular_grabacion.png}
+    \caption{Prueba5: E\_Prueba5\_Candela}
+\end{subfigure}
+\caption{Activación muscular envolvente promedio para la vocal E comparada entre series.}
+\end{figure}
+
+\subsection{Patrón Muscular: Vocal I}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.31\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba1_Candela/patron_muscular_grabacion.png}
+    \caption{Prueba1: I\_Prueba1\_Candela}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.31\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba2_Candela/patron_muscular_grabacion.png}
+    \caption{Prueba2: I\_Prueba2\_Candela}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.31\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba3_Candela/patron_muscular_grabacion.png}
+    \caption{Prueba3: I\_Prueba3\_Candela}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.31\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba4_Candela/patron_muscular_grabacion.png}
+    \caption{Prueba4: I\_Prueba4\_Candela}
+\end{subfigure}
+\caption{Activación muscular envolvente promedio para la vocal I comparada entre series.}
+\end{figure}
+
+\subsection{Patrón Muscular: Vocal O}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.31\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba1_Candela/patron_muscular_grabacion.png}
+    \caption{Prueba1: O\_Prueba1\_Candela}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.31\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba2_Candela/patron_muscular_grabacion.png}
+    \caption{Prueba2: O\_Prueba2\_Candela}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.31\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba3_Candela/patron_muscular_grabacion.png}
+    \caption{Prueba3: O\_Prueba3\_Candela}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.31\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba4_Candela/patron_muscular_grabacion.png}
+    \caption{Prueba4: O\_Prueba4\_Candela}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.31\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba5_Candela/patron_muscular_grabacion.png}
+    \caption{Prueba5: O\_Prueba5\_Candela}
+\end{subfigure}
+\caption{Activación muscular envolvente promedio para la vocal O comparada entre series.}
+\end{figure}
+
+\subsection{Patrón Muscular: Vocal U}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.31\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba1_Candela/patron_muscular_grabacion.png}
+    \caption{Prueba1: U\_Prueba1\_Candela}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.31\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba2_Candela/patron_muscular_grabacion.png}
+    \caption{Prueba2: U\_Prueba2\_Candela}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.31\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba3_Candela/patron_muscular_grabacion.png}
+    \caption{Prueba3: U\_Prueba3\_Candela}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.31\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba4_Candela/patron_muscular_grabacion.png}
+    \caption{Prueba4: U\_Prueba4\_Candela}
+\end{subfigure}
+\caption{Activación muscular envolvente promedio para la vocal U comparada entre series.}
+\end{figure}
+
+\end{document}

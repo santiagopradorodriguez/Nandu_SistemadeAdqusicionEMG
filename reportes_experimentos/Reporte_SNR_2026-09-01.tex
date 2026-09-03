@@ -1,0 +1,624 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{geometry}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{hyperref}
+\usepackage{float}
+\addto\captionsspanish{\renewcommand{\tablename}{Tabla}}
+\addto\captionsspanish{\renewcommand{\figurename}{Figura}}
+\geometry{top=2cm, bottom=2cm, left=2.2cm, right=2.2cm}
+
+\title{\textbf{Reporte Técnico: Análisis de SNR y Calidad de Señal (2026-09-01)}}
+\author{Laboratorio de Sistemas Dinámicos (LSD) - Sistema Ñandú}
+\date{2026-09-01}
+
+\begin{document}
+\maketitle
+
+\section{Condiciones Experimentales}
+\begin{itemize}
+    \item \textbf{Fecha:} 2026-09-01
+    \item \textbf{Sujeto:} Candela
+    \item \textbf{Frecuencia de Muestreo:} 2000 Hz
+\end{itemize}
+
+\section{Resumen Estadístico de Relación Señal-Ruido (SNR)}
+\begin{table}[H]
+\centering
+\begin{tabular}{lccc}
+\toprule
+\textbf{Vocal} & \textbf{Canal 0: Anterior Belly} & \textbf{Canal 1: Orbicularis Oris} & \textbf{Canal 2: zona media entre el músculo risorio, el cigomático y el masetero.} \\
+\midrule
+Vocal A & -- & -- & -- \\
+Vocal E & -- & -- & -- \\
+Vocal I & -- & -- & -- \\
+Vocal O & -- & -- & -- \\
+Vocal U & -- & -- & -- \\
+\bottomrule
+\end{tabular}
+\caption{Relación Señal-Ruido promedio ($\text{SNR} \pm \sigma$) registrada por vocal y canal.}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/evolucion_sesion/Sesion_SNR_Timeline.png}
+\caption{Evolución temporal del SNR a lo largo de la sesión.}
+\end{figure}
+
+\newpage
+\section{Desglose de Evolución de Ruido Interpulso}
+\subsection{Prueba1}
+\subsubsection{Vocal E: E\_Prueba1\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba1_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Anterior Belly)}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba1_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Orbicularis Oris)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para E\_Prueba1\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba1_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Risorio)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para E\_Prueba1\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal I: I\_Prueba1\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba1_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Anterior Belly)}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba1_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Orbicularis Oris)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para I\_Prueba1\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba1_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Risorio)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para I\_Prueba1\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal O: O\_Prueba1\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba1_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Anterior Belly)}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba1_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Orbicularis Oris)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para O\_Prueba1\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba1_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Risorio)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para O\_Prueba1\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal U: U\_Prueba1\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba1_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Anterior Belly)}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba1_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Orbicularis Oris)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para U\_Prueba1\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba1_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Risorio)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para U\_Prueba1\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal A: A\_Prueba1\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba1_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Anterior Belly)}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba1_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Orbicularis Oris)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para A\_Prueba1\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba1_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Risorio)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para A\_Prueba1\_Candela.}
+\end{figure}
+
+\subsection{Prueba2}
+\subsubsection{Vocal A: A\_Prueba2\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba2_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Anterior Belly)}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba2_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Orbicularis Oris)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para A\_Prueba2\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba2_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Risorio)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para A\_Prueba2\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal I: I\_Prueba2\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba2_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Anterior Belly)}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba2_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Orbicularis Oris)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para I\_Prueba2\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba2_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Risorio)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para I\_Prueba2\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal U: U\_Prueba2\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba2_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Anterior Belly)}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba2_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Orbicularis Oris)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para U\_Prueba2\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba2_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Risorio)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para U\_Prueba2\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal E: E\_Prueba2\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba2_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Anterior Belly)}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba2_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Orbicularis Oris)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para E\_Prueba2\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba2_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Risorio)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para E\_Prueba2\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal O: O\_Prueba2\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba2_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Anterior Belly)}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba2_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Orbicularis Oris)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para O\_Prueba2\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba2_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Risorio)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para O\_Prueba2\_Candela.}
+\end{figure}
+
+\subsection{Prueba3}
+\subsubsection{Vocal U: U\_Prueba3\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba3_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Anterior Belly)}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba3_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Orbicularis Oris)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para U\_Prueba3\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba3_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Risorio)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para U\_Prueba3\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal I: I\_Prueba3\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba3_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Anterior Belly)}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba3_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Orbicularis Oris)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para I\_Prueba3\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba3_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Risorio)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para I\_Prueba3\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal E: E\_Prueba3\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba3_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Anterior Belly)}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba3_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Orbicularis Oris)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para E\_Prueba3\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba3_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Risorio)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para E\_Prueba3\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal A: A\_Prueba3\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba3_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Anterior Belly)}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba3_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Orbicularis Oris)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para A\_Prueba3\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba3_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Risorio)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para A\_Prueba3\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal O: O\_Prueba3\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba3_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Orbicularis Oris)}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba3_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Risorio)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para O\_Prueba3\_Candela.}
+\end{figure}
+
+\subsection{Prueba4}
+\subsubsection{Vocal E: E\_Prueba4\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba4_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Anterior Belly)}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba4_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Orbicularis Oris)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para E\_Prueba4\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba4_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Risorio)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para E\_Prueba4\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal O: O\_Prueba4\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba4_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Anterior Belly)}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba4_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Orbicularis Oris)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para O\_Prueba4\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba4_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Risorio)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para O\_Prueba4\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal U: U\_Prueba4\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba4_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Anterior Belly)}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba4_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Orbicularis Oris)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para U\_Prueba4\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/U_Prueba4_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Risorio)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para U\_Prueba4\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal I: I\_Prueba4\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba4_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Anterior Belly)}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba4_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Orbicularis Oris)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para I\_Prueba4\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/I_Prueba4_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Risorio)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para I\_Prueba4\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal A: A\_Prueba4\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba4_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Anterior Belly)}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba4_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Orbicularis Oris)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para A\_Prueba4\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba4_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Risorio)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para A\_Prueba4\_Candela.}
+\end{figure}
+
+\subsection{Prueba5}
+\subsubsection{Vocal E: E\_Prueba5\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba5_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Anterior Belly)}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba5_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Orbicularis Oris)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para E\_Prueba5\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba5_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Risorio)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para E\_Prueba5\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal O: O\_Prueba5\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba5_Candela/canal_0/evolucion.png}
+    \caption{Evolución de Ruido - Canal 0 (Anterior Belly)}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba5_Candela/canal_1/evolucion.png}
+    \caption{Evolución de Ruido - Canal 1 (Orbicularis Oris)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para O\_Prueba5\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.88\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/O_Prueba5_Candela/canal_2/evolucion.png}
+    \caption{Evolución de Ruido - Canal 2 (Risorio)}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Evolución del ruido interpulso para O\_Prueba5\_Candela.}
+\end{figure}
+
+\end{document}

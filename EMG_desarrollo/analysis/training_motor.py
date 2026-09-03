@@ -57,12 +57,8 @@ def plot_results_table(resultados_tabla, umbral_optimo, out_dir, filtro_snr_tipo
     else:
         tipo_corto = "Ventana"
         
-    # Si umbral_optimo es un dict, significa que son intervalos por canal
+    # Si umbral_optimo es un dict, significa que son valores por canal
     is_intervalo = isinstance(umbral_optimo, dict)
-    
-    fig, ax = plt.subplots(figsize=(14, min(8, max(4, len(resultados_tabla)))))
-    ax.axis('tight')
-    ax.axis('off')
     
     col_labels = ["Vocal", "Total\n(Pulsos)", "Moda Global", "Vectores que aparecieron", "Frecuencia\nRelativa (%)"]
     table_data = []
@@ -82,7 +78,7 @@ def plot_results_table(resultados_tabla, umbral_optimo, out_dir, filtro_snr_tipo
         
     # --- CREAR LA IMAGEN DE LA TABLA ---
     # Hacer el figsize dinámico para evitar solapamientos (altura depende del max de lineas)
-    max_lineas = max([len(r['vectores']) for r in resultados_tabla])
+    max_lineas = max([len(r['vectores']) for r in resultados_tabla]) if resultados_tabla else 1
     alto_celda = 0.5 * max_lineas
     alto_total = max(4, len(resultados_tabla) * alto_celda + 2)
     fig, ax = plt.subplots(figsize=(14, alto_total))
@@ -105,9 +101,9 @@ def plot_results_table(resultados_tabla, umbral_optimo, out_dir, filtro_snr_tipo
     # Titulo descriptivo
     str_umbral = ""
     if is_intervalo:
-        str_umbral = "\n".join([f"{ch}: [{vmin:.2f} - {vmax:.2f}]" for ch, (vmin, vmax) in umbral_optimo.items()])
+        str_umbral = "\n".join([f"{ch}: {val:.2f}" if not isinstance(val, (tuple, list)) else f"{ch}: [{val[0]:.2f} - {val[1]:.2f}]" for ch, val in umbral_optimo.items()])
     else:
-        str_umbral = f"{umbral_optimo:.2f}"
+        str_umbral = f"{float(umbral_optimo):.2f}"
         
     vocales_usadas = sorted(list(set([r['vocal'] for r in resultados_tabla])))
     vocales_str = ", ".join(vocales_usadas)
@@ -168,7 +164,7 @@ def plot_results_table(resultados_tabla, umbral_optimo, out_dir, filtro_snr_tipo
     print(f"\n[+] Tabla exportada como Imagen: {out_file}")
     print(f"[+] Tabla exportada en LaTeX: {tex_file}")
 
-def ejecutar_entrenamiento(asignaciones_vocales, canales_seleccionados, mapped_names, filtro_snr_activo, filtro_snr_limite, filtro_snr_tipo, tipo_barrido, paso_barrido, logger=print):
+def ejecutar_entrenamiento(asignaciones_vocales, canales_seleccionados, mapped_names, filtro_snr_activo, filtro_snr_limite, filtro_snr_tipo, tipo_barrido, paso_barrido, nombre_set=None, estetica_config=None, logger=print):
     import os
     import json
     import numpy as np
@@ -190,7 +186,11 @@ def ejecutar_entrenamiento(asignaciones_vocales, canales_seleccionados, mapped_n
     
     # Carpeta unica
     snr_lim_str = f"{filtro_snr_limite:.1f}".replace('.', '-')
-    base_folder_name = f"UMBRALES_SNR{snr_lim_str}"
+    if nombre_set and str(nombre_set).strip():
+        clean_set = str(nombre_set).strip().replace(' ', '_')
+        base_folder_name = f"UMBRALES_{clean_set}_SNR{snr_lim_str}"
+    else:
+        base_folder_name = f"UMBRALES_SNR{snr_lim_str}"
     
     sufijo_folder = ""
     contador = 1
@@ -274,6 +274,15 @@ def ejecutar_entrenamiento(asignaciones_vocales, canales_seleccionados, mapped_n
         max_pico_ventana = np.max(picos_detrended, axis=1) + 1e-9
         picos_norm = picos_detrended / max_pico_ventana[:, np.newaxis]
         
+        # Sincronizar recortes de señal para que los gráficos de verificación coincidan al 100%
+        for idx_p in range(len(picos_norm)):
+            for c_idx, ch in enumerate(data['canales']):
+                orig_peak = picos_matrix[idx_p, c_idx] + 1e-9
+                detrended_peak = picos_detrended[idx_p, c_idx]
+                scale_factor = detrended_peak / orig_peak
+                seg_scaled = data['recortes'][ch][idx_p] * scale_factor
+                data['recortes'][ch][idx_p] = seg_scaled / max_pico_ventana[idx_p]
+        
         # Guardar en datos_por_vocal y continuar
         for idx_p, p_norm in enumerate(picos_norm):
             v = data['vocal_list'][idx_p]
@@ -308,10 +317,52 @@ def ejecutar_entrenamiento(asignaciones_vocales, canales_seleccionados, mapped_n
     logger("-" * 50)
     
     import itertools
-    umbrales_base = np.arange(0.0, 1.01, paso_barrido)
+    from collections import Counter
+    
+    def calcular_score_separabilidad(resultados):
+        total_vocales = len(resultados)
+        if total_vocales == 0:
+            return -999999.0, 0, 0.0
+
+        modas = []
+        frecs = []
+        for r in resultados:
+            if r['moda_global'] is not None and len(r['frecuencias']) > 0:
+                modas.append(r['moda_global'])
+                frecs.append(r['frecuencias'][0])
+            else:
+                modas.append(None)
+                frecs.append(0.0)
+
+        degen_zeros = tuple([0] * num_canales)
+        degen_ones = tuple([1] * num_canales)
+
+        valid_modas = [m for m in modas if m is not None]
+        conteo_modas = Counter(valid_modas)
+
+        vocales_aisladas = 0
+        colisiones = 0
+        for m in valid_modas:
+            if m in (degen_zeros, degen_ones):
+                colisiones += 3
+            elif conteo_modas[m] == 1:
+                vocales_aisladas += 1
+            else:
+                colisiones += 1
+
+        vectores_unicos = len(set(valid_modas) - {degen_zeros, degen_ones})
+        frec_media = float(np.mean(frecs)) if len(frecs) > 0 else 0.0
+
+        score = (vocales_aisladas * 1000.0) + (vectores_unicos * 100.0) + frec_media - (colisiones * 50.0)
+        return score, vocales_aisladas, frec_media
+
+    # Evitar umbrales triviales extremos (buscar en 0.05 a 0.95)
+    paso_seguro = max(0.01, float(paso_barrido))
+    umbrales_base = np.arange(0.05, 0.96, paso_seguro)
+    mejor_score = -999999.0
+    mejor_aisladas = 0
+    mejor_frec_media = 0.0
     mejores_resultados = None
-    max_distincion = -1
-    mejor_frec_media = -1
     
     if "Canal" in tipo_barrido:
         logger("  [i] Estrategia: Búsqueda del umbral óptimo independiente por canal")
@@ -321,52 +372,42 @@ def ejecutar_entrenamiento(asignaciones_vocales, canales_seleccionados, mapped_n
         umbral_optimo_general = {ch: 0.5 for ch in canales_seleccionados}
         
         for comb in combinaciones:
-            res = evaluar_umbral(datos_por_vocal, num_canales, comb)
-            modas = [r['moda_global'] for r in res if len(r['vectores']) >= 1 and r['frecuencias'][0] > 70]
-            # Validar que no se superpongan vectores modales
-            modas_unicas = set(modas)
-            # Solo contamos si cada vocal dominante tiene un vector distinto
-            distincion = len(modas_unicas)
-            if distincion < len(modas):
-                distincion = 0 # Castigamos si dos vocales caen en el mismo vector modal
-                
-            frec_media = np.mean([r['frecuencias'][0] for r in res if len(r['frecuencias']) > 0]) if distincion > 0 else 0
+            comb_vals = [round(float(x), 3) for x in comb]
+            res = evaluar_umbral(datos_por_vocal, num_canales, comb_vals)
+            score, aisladas, frec_media = calcular_score_separabilidad(res)
             
-            if distincion > max_distincion or (distincion == max_distincion and frec_media > mejor_frec_media):
-                max_distincion = distincion
+            if score > mejor_score:
+                mejor_score = score
+                mejor_aisladas = aisladas
                 mejor_frec_media = frec_media
                 mejores_resultados = res
-                umbral_optimo_general = {ch: (comb[i]-0.01, comb[i]+0.01) for i, ch in enumerate(canales_seleccionados)}
+                umbral_optimo_general = {ch: comb_vals[i] for i, ch in enumerate(canales_seleccionados)}
                 
         umbral_final = umbral_optimo_general
-        logger(f"  [+] Mejor distinción lograda: {max_distincion} vocales aisladas.")
+        logger(f"  [+] Mejor distinción lograda: {mejor_aisladas} vocales aisladas con vector exclusivo (Consistencia media: {mejor_frec_media:.1f}%).")
         
     else:
         logger("  [i] Estrategia: Búsqueda de umbral común para todos los canales")
         umbral_optimo_general = 0.5
         
         for umbral in umbrales_base:
-            res = evaluar_umbral(datos_por_vocal, num_canales, umbral)
-            modas = [r['moda_global'] for r in res if len(r['vectores']) >= 1 and r['frecuencias'][0] > 70]
-            modas_unicas = set(modas)
-            distincion = len(modas_unicas)
-            if distincion < len(modas):
-                distincion = 0
-                
-            frec_media = np.mean([r['frecuencias'][0] for r in res if len(r['frecuencias']) > 0]) if distincion > 0 else 0
+            th_val = round(float(umbral), 3)
+            res = evaluar_umbral(datos_por_vocal, num_canales, th_val)
+            score, aisladas, frec_media = calcular_score_separabilidad(res)
             
-            if distincion > max_distincion or (distincion == max_distincion and frec_media > mejor_frec_media):
-                max_distincion = distincion
+            if score > mejor_score:
+                mejor_score = score
+                mejor_aisladas = aisladas
                 mejor_frec_media = frec_media
                 mejores_resultados = res
-                umbral_optimo_general = umbral
+                umbral_optimo_general = th_val
                 
         if mejores_resultados is None:
             mejores_resultados = evaluar_umbral(datos_por_vocal, num_canales, 0.5)
             umbral_optimo_general = 0.5
             
         umbral_final = umbral_optimo_general
-        logger(f"  [+] Mejor distinción lograda: {max_distincion} vocales aisladas (Umbral: {umbral_final:.2f}).")
+        logger(f"  [+] Mejor distinción lograda: {mejor_aisladas} vocales aisladas con vector exclusivo (Umbral: {umbral_final:.2f}, Consistencia media: {mejor_frec_media:.1f}%).")
         
     plot_results_table(mejores_resultados, umbral_final, out_dir_final, filtro_snr_tipo, filtro_snr_limite, asignaciones_vocales, folder_name)
     _plot_training_verification(mediciones_para_verificacion, umbral_final, out_dir_final, folder_name)
@@ -380,8 +421,30 @@ def ejecutar_entrenamiento(asignaciones_vocales, canales_seleccionados, mapped_n
     }
     with open(out_json, 'w') as f:
         json.dump(res_dict, f, indent=4)
+
+    # Replicar resultados en galeria central para el visor de la interfaz
+    import shutil
+    try:
+        cur = out_dir_final
+        found_root = None
+        while cur and cur != os.path.dirname(cur):
+            if os.path.exists(os.path.join(cur, "resultados")) or os.path.exists(os.path.join(cur, "base_de_datos_electrodos")):
+                found_root = cur
+                break
+            cur = os.path.dirname(cur)
+        if found_root:
+            central_dir = os.path.join(found_root, "resultados", "resultados_umbrales", folder_name)
+            os.makedirs(central_dir, exist_ok=True)
+            for item in os.listdir(out_dir_final):
+                s_item = os.path.join(out_dir_final, item)
+                d_item = os.path.join(central_dir, item)
+                if os.path.isfile(s_item):
+                    shutil.copy2(s_item, d_item)
+            logger(f"[+] Resultados replicados en galeria central: {central_dir}")
+    except Exception as e:
+        logger(f"[!] Aviso al replicar en galeria central: {e}")
         
-    logger(f"\n[+] Entrenamiento Finalizado. Gráficos y JSON guardados en: {out_dir_final}")
+    logger(f"\n[+] Entrenamiento Finalizado. Graficos y JSON guardados en: {out_dir_final}")
 
 def evaluar_umbral(datos_por_vocal, num_canales, umbral):
     from collections import Counter
@@ -446,10 +509,10 @@ def _plot_training_verification(mediciones_para_verificacion, umbral_optimo, out
             
             # Obtener umbral específico para este canal
             if isinstance(umbral_optimo, dict):
-                vmin, vmax = umbral_optimo.get(ch, (0.5, 0.5))
-                th = (vmin + vmax) / 2.0
+                val = umbral_optimo.get(ch, 0.5)
+                th = (val[0] + val[1]) / 2.0 if isinstance(val, (tuple, list)) else float(val)
             else:
-                th = umbral_optimo
+                th = float(umbral_optimo)
                 
             # Graficar señal
             ax.plot(time_axis, sig, color='black', alpha=0.8, linewidth=1.0)

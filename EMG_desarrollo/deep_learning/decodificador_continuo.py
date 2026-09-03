@@ -7,20 +7,33 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from scipy.signal import resample, find_peaks
 
-# Añadir el root al sys.path para importar analisis_trevisan
+# Añadir directorios al sys.path para importar analisis_trevisan y modelos
 current_dir = os.path.dirname(os.path.abspath(__file__))
 base_repo_dir = os.path.abspath(os.path.join(current_dir, ".."))
-if base_repo_dir not in sys.path:
-    sys.path.append(base_repo_dir)
+binarizacion_dir = os.path.join(current_dir, "binarizacion")
 
-import analisis_trevisan as at
-from deep_learning.modelos import ConvAutoencoder1D
+for p in [current_dir, base_repo_dir, binarizacion_dir]:
+    if p not in sys.path:
+        sys.path.insert(0, p)
+
+try:
+    import analisis_trevisan as at
+except ImportError:
+    try:
+        from deep_learning.binarizacion import analisis_trevisan as at
+    except ImportError:
+        from binarizacion import analisis_trevisan as at
+
+try:
+    from modelos import ConvAutoencoder1D
+except ImportError:
+    from deep_learning.modelos import ConvAutoencoder1D
 
 def get_interpulse_noise(env_segment, fallback_noise):
     if len(env_segment) < 3: return fallback_noise
     return np.median(env_segment)
 
-def decodificar_secuencia(carpeta_secuencia, modelo_path, alpha_ruido=1.0, smooth_ms=150, notch_q=2.0, use_manual_exclusions=True, target_length=100):
+def decodificar_secuencia(carpeta_secuencia, modelo_path, alpha_ruido=1.0, smooth_ms=150, notch_q=2.0, use_manual_exclusions=True, target_length=100, out_dir=None):
     print(f"\n==================================================")
     print(f"DECODIFICANDO SECUENCIA CONTINUA")
     print(f"Carpeta: {carpeta_secuencia}")
@@ -244,12 +257,42 @@ def decodificar_secuencia(carpeta_secuencia, modelo_path, alpha_ruido=1.0, smoot
             
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     
-    out_dir = os.path.join(base_repo_dir, "resultados", "resultados_autoencoder")
+    base_repo_dir = os.path.abspath(os.path.join(current_dir, ".."))
+    central_dir = os.path.join(base_repo_dir, "resultados", "resultados_autoencoder")
+    
+    if out_dir is None:
+        parts = os.path.abspath(carpeta_secuencia).replace('\\', '/').split('/')
+        fecha = parts[-2] if len(parts) >= 2 and len(parts[-2].split('-')) == 3 else "2026-09-01"
+        toma_parts = os.path.basename(carpeta_secuencia).split('_')
+        sujeto = toma_parts[-1] if len(toma_parts) >= 3 else "General"
+        out_dir = os.path.join(central_dir, f"{fecha}_{sujeto}")
+        
     os.makedirs(out_dir, exist_ok=True)
+    os.makedirs(central_dir, exist_ok=True)
+    
     plot_path = os.path.join(out_dir, f"decodificacion_{os.path.basename(carpeta_secuencia)}.png")
     plt.savefig(plot_path)
-    print(f"Gráfico de decodificación guardado en: {plot_path}")
+    if out_dir != central_dir:
+        plt.savefig(os.path.join(central_dir, f"decodificacion_{os.path.basename(carpeta_secuencia)}.png"))
+    print(f"Gráfico de decodificación guardado en:\n  -> {plot_path}")
     plt.close(fig)
+    
+    # Guardar predicciones en JSON
+    import json
+    info_salida = {
+        "carpeta_secuencia": os.path.basename(carpeta_secuencia),
+        "modelo": os.path.basename(modelo_path),
+        "total_ventanas": len(predicciones),
+        "secuencia_vocales": predicciones,
+        "string_secuencia": " -> ".join(predicciones)
+    }
+    json_path = os.path.join(out_dir, f"decodificacion_{os.path.basename(carpeta_secuencia)}.json")
+    with open(json_path, "w", encoding='utf-8') as f:
+        json.dump(info_salida, f, indent=4)
+    if out_dir != central_dir:
+        with open(os.path.join(central_dir, f"decodificacion_{os.path.basename(carpeta_secuencia)}.json"), "w", encoding='utf-8') as f:
+            json.dump(info_salida, f, indent=4)
+    print(f"Resultados estructurados guardados en:\n  -> {json_path}")
     
     # Abrir gráfico con visor del sistema
     import subprocess

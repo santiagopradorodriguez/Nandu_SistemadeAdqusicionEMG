@@ -37,3 +37,44 @@ La edición debe ser puramente aditiva y conservadora, a menos que el usuario in
 
 3. **Intercalación Didáctica de Código por Pasos:**
    Al documentar algoritmos, secuencias de procesamiento o etapas de cálculo (ej. segmentación periódica, cascada de filtros DSP, extracción de envolventes), cada fragmento de código Python debe ubicarse inmediatamente debajo de la viñeta o paso explicativo correspondiente, evitando agrupar todo el código en bloques monolíticos al final de la sección.
+
+## Corrección Literal de Textos del Usuario
+Cuando el usuario proporcione un texto corregido (ej. "correccion: ..."), está **terminantemente prohibido inventar o agregar nuevas palabras o frases**. Únicamente se debe aplicar el texto exacto provisto por el usuario, corrigiendo exclusivamente la ortografía (tildes, caracteres tipográficos) y los espacios/formato LaTeX sin alterar la semántica ni la estructura elegida por el usuario.
+
+## Redacción Limpia y Directa de Títulos y Encabezados
+Al redactar títulos de secciones, subsecciones o párrafos (`\section`, `\subsection`, `\subsubsection`, `\paragraph`, etc.):
+1. **Prohibición de Paréntesis en Títulos:** Está terminantemente prohibido colocar paréntesis en los títulos o al final de ellos (ej. NO escribir `Título (Aclaración)`, `Paso 2: Remodelado (reshape)`, `Paso 3: Extracción (__getitem__)`). El título debe contener únicamente el nombre conciso del tema.
+2. **Prohibición de Palabras de Relleno:** No utilizar adjetivos o términos de relleno artificiales (ej. NO agregar "Fisiológico", "Avanzado", "Estratégico", etc., salvo que el usuario lo solicite explícitamente). Los títulos deben ser sobrios, profesionales y directos.
+
+## Prohibición del Término "Pipeline" y Anglicismos Redundantes
+Está terminantemente prohibido utilizar el término **"pipeline"** o **"pipelines"** tanto en el cuerpo del texto como en pies de figuras, tablas o títulos.
+- En su lugar, utilizar términos precisos y directos en español acordes al contexto:
+  - *Procesamiento* / *Cadena de procesamiento*
+  - *Acondicionamiento de señales*
+  - *Flujo de datos* / *Flujo de trabajo*
+  - *Secuencia de etapas* / *Esquema metodológico*
+
+## Lenguaje Sobrio y Prohibición de Adjetivos Redundantes
+Está prohibido utilizar adjetivos sobrecargados o términos técnicos redundantes para referirse a elementos estándar del sistema:
+- **Evitar:** "amplificador bioeléctrico diferencial", "sistema bioeléctrico", "plataforma biopotencial", "instrumentación de precisión", etc.
+- **Utilizar:** Términos directos, sobrios y naturales en español: *"amplificador"*, *"baterías"*, *"cables"*, *"electrodos"*, *"adquisición"*, *"medición"*.
+
+## Obligatoriedad de Normalización por el Supremo Global (Prohibición de Normalización Independiente)
+Está **terminantemente prohibido** normalizar cada canal muscular de forma independiente dividiendo por su propio máximo ($x_c / \max(x_c)$) o mediante escalados independientes (ej. StandardScaling/MinMax por canal separado).
+
+- **Regla Obligatoria:** Todas las ventanas y tensores musculares deben normalizarse exclusivamente por el **Supremo Global Tricanal ($M_{\text{supremo}}$)** del pulso o de la sesión:
+  $$M_{\text{supremo}} = \max_{c \in \{0, 1, 2\}} \left( \max_t |x_c(t)| \right)$$
+  $$\tilde{x}_c(t) = \frac{x_c(t)}{M_{\text{supremo}}}$$
+- **Justificación Fisiológica:** La información fonética del habla depende de la energía relativa intermuscular (cuál músculo es el dominante y cuáles son secundarios). Normalizar independientemente eleva el ruido o contracciones accesorias de $8\,\mu\text{V}$ a $1.0$, falseando la biomecánica de la articulación.
+
+## Prohibición de Ejecutar Código sin Autorización Explícita
+Está **terminantemente prohibido** ejecutar scripts, comandos en consola (`run_command`), tareas en segundo plano o pruebas automatizadas sin el consentimiento y autorización explícita previa del usuario.
+- Ante cualquier necesidad de prueba, verificación o benchmarking, el asistente debe:
+  1. Proponer la prueba explicando qué medirá y qué comando o script se utilizaría.
+  2. Esperar la confirmación y permiso explícito del usuario antes de invocar cualquier herramienta de ejecución de código.
+
+
+
+
+
+

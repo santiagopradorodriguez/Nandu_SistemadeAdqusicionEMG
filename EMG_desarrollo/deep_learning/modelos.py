@@ -57,19 +57,43 @@ class ConvAutoencoder1D(nn.Module):
         )
 
     def encode(self, x):
-        x = self.encoder_cnn(x)
-        x = x.view(x.size(0), -1) # Flatten
-        latent = self.encoder_fc(x)
+        is_single = (x.size(0) == 1)
+        was_training = self.training
+        if is_single and was_training:
+            self.eval()
+        try:
+            x = self.encoder_cnn(x)
+            x = x.view(x.size(0), -1) # Flatten
+            latent = self.encoder_fc(x)
+        finally:
+            if is_single and was_training:
+                self.train()
         return latent
 
     def decode(self, latent):
-        x = self.decoder_fc(latent)
-        x = x.view(x.size(0), 32, self.target_length) # Reshape
-        x = self.decoder_cnn(x)
+        is_single = (latent.size(0) == 1)
+        was_training = self.training
+        if is_single and was_training:
+            self.eval()
+        try:
+            x = self.decoder_fc(latent)
+            x = x.view(x.size(0), 32, self.target_length) # Reshape
+            x = self.decoder_cnn(x)
+        finally:
+            if is_single and was_training:
+                self.train()
         return x
 
     def forward(self, x):
-        latent = self.encode(x)
-        reconstruction = self.decode(latent)
-        logits = self.classifier(latent)
+        is_single = (x.size(0) == 1)
+        was_training = self.training
+        if is_single and was_training:
+            self.eval()
+        try:
+            latent = self.encode(x)
+            reconstruction = self.decode(latent)
+            logits = self.classifier(latent)
+        finally:
+            if is_single and was_training:
+                self.train()
         return reconstruction, latent, logits

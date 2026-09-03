@@ -7,7 +7,7 @@ matplotlib.use('TkAgg')
 sys.path.append(r"/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo")
 import analysis.analisis_por_track_integrado as api
 
-mediciones = ['2026-07-10/A_T1_Lucas', '2026-07-10/A_T2_Lucas', '2026-07-10/A_T3_Lucas']
+mediciones = ['2026-09-01/A_Prueba1_Candela', '2026-09-01/A_Prueba2_Candela', '2026-09-01/A_Prueba3_Candela', '2026-09-01/A_Prueba4_Candela', '2026-09-01/E_Prueba1_Candela', '2026-09-01/E_Prueba2_Candela', '2026-09-01/E_Prueba3_Candela', '2026-09-01/E_Prueba4_Candela', '2026-09-01/E_Prueba5_Candela', '2026-09-01/I_Prueba1_Candela', '2026-09-01/I_Prueba2_Candela', '2026-09-01/I_Prueba3_Candela', '2026-09-01/I_Prueba4_Candela', '2026-09-01/O_Prueba1_Candela', '2026-09-01/O_Prueba2_Candela', '2026-09-01/O_Prueba3_Candela', '2026-09-01/O_Prueba4_Candela', '2026-09-01/O_Prueba5_Candela', '2026-09-01/U_Prueba1_Candela', '2026-09-01/U_Prueba2_Candela', '2026-09-01/U_Prueba3_Candela', '2026-09-01/U_Prueba4_Candela']
 base_dir = r"/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos"
 
 try:
@@ -24,19 +24,19 @@ try:
   # Inyectar los parámetros de nuestra GUI PySide6 a su GUI Tkinter
   dialog.var_mostrar_recortes.set(True)
   dialog.var_mostrar_senal_cruda.set(False)
-  dialog.var_mostrar_espectrograma.set(True)
+  dialog.var_mostrar_espectrograma.set(False)
   dialog.var_frecuenciamaxima.set("5000")
   dialog.var_notch_filter.set(True)
   dialog.var_notch_q_factor.set("2.0")
   dialog.var_mostrar_evolucion.set(True)
   dialog.var_evol_t_start.set("10")
   dialog.var_evol_t_end.set("1000")
-  dialog.var_smooth_ms.set("50")
+  dialog.var_smooth_ms.set("75")
   dialog.var_tipo_env.set("rms")
   dialog.var_highpass_cutoff.set("20")
   dialog.var_lowpass_cutoff.set("500")
   if hasattr(dialog, 'var_cyberpunk'):
-    dialog.var_cyberpunk.set(False)
+    dialog.var_cyberpunk.set(True)
 
   excl_list = []
   excl_str = ",".join(map(str, excl_list)) if excl_list else ""

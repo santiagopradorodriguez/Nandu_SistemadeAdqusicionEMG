@@ -43,7 +43,9 @@ def run_grid_search(
     epochs=80, 
     lr=1e-3, 
     verbose=True, 
-    progress_callback=None
+    progress_callback=None,
+    train_sessions=None,
+    test_sessions=None
 ):
     """
     Ejecuta una búsqueda sistemática por grilla (Grid Search) sobre el espacio
@@ -100,26 +102,73 @@ def run_grid_search(
     dataset_val = EMGDataset(csv_path, apply_augmentation=False)
     inferred_target_length = dataset_train.tensors.shape[2]
     
-    def get_session_id(toma_str):
-        parts = toma_str.split('_')
-        if len(parts) >= 3:
-            return f"{parts[1]}_{parts[2]}"
-        return toma_str.split('_Win')[0]
-        
-    sesiones_base = [get_session_id(toma) for toma in dataset_train.tomas]
-    sesiones_unicas = sorted(list(set(sesiones_base)))
+    todas_las_tomas = dataset_train.tomas
+    train_sessions_names = [os.path.basename(s).strip() for s in (train_sessions or []) if s and str(s).strip()]
+    test_sessions_names = [os.path.basename(s).strip() for s in (test_sessions or []) if s and str(s).strip()]
     
-    _set_seed(42)
-    np.random.shuffle(sesiones_unicas)
+    # Si no vinieron por argumento, buscar split_config.json
+    if not train_sessions_names and not test_sessions_names:
+        cfg_file = os.path.join(base_repo_dir, "resultados", "resultados_autoencoder", "split_config.json")
+        if os.path.exists(cfg_file):
+            try:
+                import json
+                with open(cfg_file, "r") as f:
+                    cfg = json.load(f)
+                train_sessions_names = [os.path.basename(s).strip() for s in cfg.get("train_sessions", []) if s and str(s).strip()]
+                test_sessions_names = [os.path.basename(s).strip() for s in cfg.get("test_sessions", []) if s and str(s).strip()]
+            except Exception: pass
+            
+    train_indices = []
+    val_indices = []
     
-    train_sesiones_size = max(1, int(0.8 * len(sesiones_unicas)))
-    train_sesiones = set(sesiones_unicas[:train_sesiones_size])
-    val_sesiones = set(sesiones_unicas[train_sesiones_size:])
-    if not val_sesiones:
-        val_sesiones = train_sesiones
+    if train_sessions_names or test_sessions_names:
+        if verbose:
+            print(f"Partición de Sesiones Físicas:")
+            print(f"  -> Train: {train_sessions_names}")
+            print(f"  -> Test:  {test_sessions_names}")
+        for i, toma in enumerate(todas_las_tomas):
+            asignado = False
+            toma_clean = toma.replace(" ", "").lower()
+            for s_name in train_sessions_names:
+                if s_name.replace(" ", "").lower() in toma_clean:
+                    train_indices.append(i)
+                    asignado = True
+                    break
+            if not asignado:
+                for s_name in test_sessions_names:
+                    if s_name.replace(" ", "").lower() in toma_clean:
+                        val_indices.append(i)
+                        asignado = True
+                        break
+        if not train_indices:
+            train_indices = list(range(len(todas_las_tomas)))
+        if not val_indices:
+            val_indices = train_indices
+    else:
+        def get_session_id(toma_str):
+            base = toma_str.rsplit('_Win', 1)[0]
+            parts = base.split('_')
+            if len(parts) > 1 and parts[0].upper() in ['A', 'E', 'I', 'O', 'U']:
+                return '_'.join(parts[1:])
+            return base
+            
+        sesiones_base = [get_session_id(toma) for toma in todas_las_tomas]
+        sesiones_unicas = sorted(list(set(sesiones_base)))
         
-    train_indices = [i for i, s in enumerate(sesiones_base) if s in train_sesiones]
-    val_indices = [i for i, s in enumerate(sesiones_base) if s in val_sesiones]
+        _set_seed(42)
+        np.random.shuffle(sesiones_unicas)
+        
+        train_sesiones_size = max(1, int(0.8 * len(sesiones_unicas)))
+        train_sesiones = set(sesiones_unicas[:train_sesiones_size])
+        val_sesiones = set(sesiones_unicas[train_sesiones_size:])
+        if not val_sesiones:
+            val_sesiones = train_sesiones
+            
+        train_indices = [i for i, s in enumerate(sesiones_base) if s in train_sesiones]
+        val_indices = [i for i, s in enumerate(sesiones_base) if s in val_sesiones]
+    
+    if verbose:
+        print(f"Ventanas Train: {len(train_indices)} | Ventanas Val: {len(val_indices)}")
     
     train_subset = torch.utils.data.Subset(dataset_train, train_indices)
     val_subset = torch.utils.data.Subset(dataset_val, val_indices)
@@ -142,7 +191,7 @@ def run_grid_search(
                     combo_idx += 1
                     _set_seed(42) # Semilla idéntica para equidad absoluta
                     
-                    train_loader = DataLoader(train_subset, batch_size=b_size, shuffle=True)
+                    train_loader = DataLoader(train_subset, batch_size=b_size, shuffle=True, drop_last=(len(train_subset) > b_size))
                     val_loader = DataLoader(val_subset, batch_size=b_size, shuffle=False)
                     
                     if verbose:
@@ -166,6 +215,8 @@ def run_grid_search(
                         total_train = 0
                         
                         for batch_x, batch_y_idx, _ in train_loader:
+                            if batch_x.size(0) <= 1:
+                                continue
                             batch_x = batch_x.to(device)
                             batch_y_idx = batch_y_idx.to(device)
                             

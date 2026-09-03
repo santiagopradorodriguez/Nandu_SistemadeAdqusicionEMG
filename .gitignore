@@ -2,10 +2,6 @@ Emg/base_de_datos_electrodos/
 Emg/base_de_datos_letras/
 Emg/analisis_comparativos/
 *.wav
-Emg/base_de_datos_electrodos/
-Emg/base_de_datos_letras/
-Emg/analisis_comparativos/
-*.wav
 *.csv
 *.png
 *.json
@@ -19,10 +15,39 @@ EMG_desarrollo/analisis_comparativos/
 EMG_desarrollo/__pycache__/
 EMG_desarrollo/EMG_Ejecutable_Build/
 venv/
-.vscode/__pycache__/
+.vscode/
 __pycache__/
+*.py[cod]
+*$py.class
 *.patch
 build_linux/*
 !build_linux/.gitkeep
 build_windows/*
 !build_windows/.gitkeep
+
+# Modelos y checkpoints de Deep Learning
+*.pth
+*.pt
+*.onnx
+*.pkl
+*.joblib
+*.h5
+
+# Resultados y salidas generadas de analisis
+**/resultados_pca_umap/
+**/resultados_grid_search/
+**/resultados_autoencoder/
+**/resultados_umbrales/
+EMG_desarrollo/resultados/
+
+# Logs y depuracion temporal
+*.log
+*argv_log.txt
+*.aux
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+reportes_experimentos/*.pdf
+reportes_experimentos/analisis_pca_generado/

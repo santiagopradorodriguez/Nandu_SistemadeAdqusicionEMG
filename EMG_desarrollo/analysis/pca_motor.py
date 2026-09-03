@@ -26,25 +26,46 @@ import sys
 script_dir_abs = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(script_dir_abs))
 
-def get_interpulse_noise(processed_segment, initial_noise):
-    if len(processed_segment) < 10:
-        return initial_noise
-        
-    abs_noise = np.abs(processed_segment)
-    q1 = np.percentile(abs_noise, 25)
-    q3 = np.percentile(abs_noise, 75)
-    iqr = q3 - q1
-    upper_bound = q3 + 1.5 * iqr
+def calcular_ruido_interpulso_trevisan(env_recortada, picos_pulsos, muestras_pulso, samplerate=2000, umbral_base=None):
+    """
+    Calcula el nivel de ruido interpulso para todas las ventanas siguiendo la metodología
+    exacta de Análisis Trevisan (líneas 576-612 de analisis_trevisan.py).
+    """
+    n_pulsos = len(picos_pulsos)
+    if n_pulsos == 0:
+        return []
+
+    periodo = muestras_pulso / float(samplerate)
+    noise_win_samples = max(3, int(round((periodo / 4.0) * samplerate)))
     
-    valid_noise = abs_noise[abs_noise <= upper_bound]
-    if len(valid_noise) < 3:
-        valid_noise = abs_noise
+    if umbral_base is None or umbral_base <= 0:
+        n_base = min(len(env_recortada), int(samplerate * 2.0))
+        umbral_base = float(np.mean(env_recortada[:n_base])) if n_base > 0 else 1.0
+
+    noise_levels = []
+    for i in range(n_pulsos):
+        pico_actual = picos_pulsos[i]
+        if i == 0:
+            midpoint = pico_actual - (muestras_pulso // 2)
+        else:
+            midpoint = (picos_pulsos[i - 1] + pico_actual) // 2
+
+        n_start = max(0, int(midpoint - noise_win_samples // 2))
+        n_end = min(len(env_recortada) - 1, n_start + noise_win_samples)
         
-    curr_mean = np.mean(valid_noise)
-    if initial_noise > 0 and (curr_mean / initial_noise) > 5.0:
-        return initial_noise
-        
-    return curr_mean
+        if n_start < n_end:
+            noise_segment = env_recortada[n_start:n_end]
+            noise_level = float(np.mean(noise_segment)) if len(noise_segment) > 0 else 0.0
+        else:
+            noise_level = 0.0
+
+        # Condición de seguridad Trevisan para ruido excesivo (pico camuflado)
+        if umbral_base > 0 and noise_level > (umbral_base * 10.0):
+            noise_level = umbral_base
+
+        noise_levels.append(noise_level)
+
+    return noise_levels
 
 def build_pca_features(asignaciones_vocales, canales_seleccionados, mapped_names, logger, filtro_snr_activo, filtro_snr_limite, filtro_snr_tipo):
     X = []
@@ -82,39 +103,64 @@ def build_pca_features(asignaciones_vocales, canales_seleccionados, mapped_names
                 if os.path.exists(res_path):
                     try:
                         with open(res_path, 'r') as f: res_data = json.load(f)
+                        if isinstance(res_data, list):
+                            res_data = res_data[0] if len(res_data) > 0 and isinstance(res_data[0], dict) else {}
                         c_path = os.path.join(path, ch, "metadata.json")
                         meta = json.load(open(c_path)) if os.path.exists(c_path) else {}
                         bpm = meta.get('bpm', 40)
+                        nl = res_data.get('noise_levels', [])
+                        init_n = nl[0] if len(nl) > 0 else 1.0
                         canales_data[ch] = {
                             'picos_segundos': res_data.get('picos_ventana', []),
                             'meta': meta,
                             'muestras_pulso': int((60.0 / bpm) * 1000),
-                            'noise': meta.get('noise_seconds', 2.0)
+                            'noise_levels': nl,
+                            'initial_noise': init_n
                         }
                     except Exception as e:
                         logger(f"    [!] Error al cargar results.json para {ch}: {e}")
                 continue
-                
-            json_path = os.path.join(path, ch, json_files[0]) # Toma el primero que encuentre (ej: analisis_results.json)
+            
+            # Priorizar analisis_results.json (canónico) sobre variantes con sufijo
+            if 'analisis_results.json' in json_files:
+                json_pick = 'analisis_results.json'
+            else:
+                json_files.sort()
+                json_pick = json_files[0]
+            json_path = os.path.join(path, ch, json_pick)
             
             try:
                 with open(json_path, 'r') as f:
                     data = json.load(f)
+                
+                # Validar formato: si es lista (legacy), intentar extraer el primer dict
+                if isinstance(data, list):
+                    data = data[0] if len(data) > 0 and isinstance(data[0], dict) else None
+                if not isinstance(data, dict) or 'env_recortada' not in data:
+                    logger(f"    [!] {ch}/{json_pick}: formato no compatible (sin env_recortada). Saltando.")
+                    continue
                     
                 env = np.array(data['env_recortada'])
                 
                 c_path = os.path.join(path, ch, "metadata.json")
-                if os.path.exists(c_path):
-                    with open(c_path, 'r') as f:
-                        meta = json.load(f)
+                meta = json.load(open(c_path)) if os.path.exists(c_path) else {}
+                
+                # Ruido basal inicial real (amplitud física en microvoltios)
+                start_sample_noise = int(data.get('start_sample_noise', 0))
+                noise_levels_stored = data.get('noise_levels', [])
+                if start_sample_noise > 0 and len(env) >= start_sample_noise:
+                    initial_noise_val = float(np.mean(env[:start_sample_noise]))
+                elif len(noise_levels_stored) > 0:
+                    initial_noise_val = float(noise_levels_stored[0])
                 else:
-                    meta = {}
-                    
+                    initial_noise_val = float(np.mean(env[:min(len(env), 4000)]))
+
                 canales_data[ch] = {
                     'env': env,
                     'meta': meta,
                     'muestras_pulso': data.get('muestras_pulso', meta.get('samples_per_pulse', 1500)),
-                    'noise': meta.get('noise_seconds', 2.0)
+                    'noise_levels': noise_levels_stored,
+                    'initial_noise': initial_noise_val
                 }
             except Exception as e:
                 logger(f"    [!] Error al cargar datos para {ch}: {e}")
@@ -140,6 +186,16 @@ def build_pca_features(asignaciones_vocales, canales_seleccionados, mapped_names
             logger(f"  [!] Advertencia: Canal micrófono sin datos útiles en {os.path.basename(path)}. Saltando...")
             continue
         
+        # Asegurar cálculo de ruido interpulso de Trevisan en todos los canales musculares
+        for ch in canales_seleccionados:
+            if ch in canales_data:
+                nl = canales_data[ch].get('noise_levels', [])
+                if len(nl) < len(picos_mic):
+                    canales_data[ch]['noise_levels'] = calcular_ruido_interpulso_trevisan(
+                        canales_data[ch]['env'], picos_mic, muestras_pulso, samplerate=2000,
+                        umbral_base=canales_data[ch]['initial_noise']
+                    )
+
         pre_samples = int(muestras_pulso * 0.4)
         post_samples = int(muestras_pulso * 0.6)
         
@@ -156,6 +212,7 @@ def build_pca_features(asignaciones_vocales, canales_seleccionados, mapped_names
             valido = True
             segs_brutos = []
             max_supremo = 1e-9
+            max_bruto_ventana = 1e-9
             ruido_acumulado_window = 0.0
             
             for ch in canales_seleccionados:
@@ -168,28 +225,21 @@ def build_pca_features(asignaciones_vocales, canales_seleccionados, mapped_names
                     
                 segmento_ch = env_ch_raw[real_cut_start:real_cut_end].copy()
                 
-                initial_noise = canales_data[ch]['noise']
-                noise_win_samples = max(3, int(muestras_pulso / 4.0))
-                
-                # Ruido PRE
-                noise_start_pre = max(0, int(pico - 0.5 * muestras_pulso - noise_win_samples))
-                noise_end_pre = min(len(env_ch_raw), noise_start_pre + noise_win_samples)
-                ruido_pre = initial_noise
-                if noise_end_pre > noise_start_pre:
-                    ruido_pre = get_interpulse_noise(env_ch_raw[noise_start_pre:noise_end_pre], initial_noise)
+                # Nivel de ruido interpulso Trevisan para esta ventana
+                nl_list = canales_data[ch]['noise_levels']
+                if win_idx < len(nl_list):
+                    ruido_ch = nl_list[win_idx]
+                else:
+                    ruido_ch = canales_data[ch]['initial_noise']
                     
-                # Ruido POST
-                noise_start_post = min(len(env_ch_raw), int(pico + 0.5 * muestras_pulso))
-                noise_end_post = min(len(env_ch_raw), noise_start_post + noise_win_samples)
-                ruido_post = ruido_pre
-                if noise_end_post > noise_start_post:
-                    ruido_post = get_interpulse_noise(env_ch_raw[noise_start_post:noise_end_post], initial_noise)
-                    
-                ruido_promedio = (ruido_pre + ruido_post) / 2.0
-                ruido_acumulado_window += ruido_promedio
+                ruido_acumulado_window += ruido_ch
                 
-                # Resta agresiva (alpha=1.0)
-                segmento_ch = np.maximum(segmento_ch - ruido_promedio, 0)
+                pico_bruto = np.max(segmento_ch)
+                if pico_bruto > max_bruto_ventana:
+                    max_bruto_ventana = pico_bruto
+
+                # Corrección por ventana de Trevisan (sustracción y rectificación)
+                segmento_ch = np.maximum(segmento_ch - ruido_ch, 0.0)
                 
                 m_val = np.max(segmento_ch)
                 if m_val > max_supremo:
@@ -201,7 +251,7 @@ def build_pca_features(asignaciones_vocales, canales_seleccionados, mapped_names
                 continue
                 
             ruido_promedio_total = ruido_acumulado_window / len(canales_seleccionados)
-            snr_win = max_supremo / (ruido_promedio_total + 1e-9)
+            snr_win = max_bruto_ventana / (ruido_promedio_total + 1e-9)
             
             # Filtro SNR
             if filtro_snr_activo:

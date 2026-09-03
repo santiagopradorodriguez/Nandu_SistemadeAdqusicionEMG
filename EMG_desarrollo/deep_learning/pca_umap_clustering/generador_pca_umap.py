@@ -119,7 +119,7 @@ def get_interpulse_noise(processed_segment, initial_noise):
         
     return curr_mean
 
-def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_ms=250, notch_q=2.0, target_len=100, return_raw_cache=False, aplicar_trevisan=False, modo_alineacion="Pico Volumen Micrófono", pre_pct=0.4, post_pct=0.6, canales_features=["canal_0", "canal_1", "canal_2"], ignorar_ventana_cero=False, cache_canales_data=None):
+def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, gate_ratio_ruido=8.0, smooth_ms=250, notch_q=2.0, target_len=100, return_raw_cache=False, aplicar_trevisan=False, modo_alineacion="Pico Volumen Micrófono", pre_pct=0.4, post_pct=0.6, canales_features=["canal_0", "canal_1", "canal_2"], ignorar_ventana_cero=False, cache_canales_data=None, aplicar_correccion_intersesion=False):
     """
     Extrae y alinea las ventanas de los canales solicitados.
     Devuelve X (matriz de features), Y (labels/vocales) y Tomas (nombres de las mediciones).
@@ -128,6 +128,7 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_
     Y = []
     Tomas = []
     SNRs = []
+    mediciones_procesadas = []
     
     canales_procesar = list(set(canales_features + ["canal_3"]))
     
@@ -292,7 +293,40 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_
                 agresividad = alpha_ruido
                 ruido_a_restar = ruido_promedio * agresividad
                 
-                segmento_ch = np.maximum(segmento_ch - ruido_a_restar, 0)
+                # 1. Detector de Ruido Puro Multivariable (Rel_IQR * Ratio_Centro * Tau_Norm)
+                p75_ch, p25_ch = np.percentile(segmento_ch, 75), np.percentile(segmento_ch, 25)
+                iqr_ch = p75_ch - p25_ch
+                rel_iqr_ch = (np.max(segmento_ch) - np.median(segmento_ch)) / (iqr_ch + 1e-9)
+                
+                centro_samples = int(0.250 * 2000)
+                idx_max_ch = np.argmax(segmento_ch)
+                c_i = max(0, idx_max_ch - centro_samples // 2)
+                c_f = min(len(segmento_ch), idx_max_ch + centro_samples // 2)
+                energia_centro = np.mean(segmento_ch[c_i:c_f]**2)
+                mascara_bordes = np.ones(len(segmento_ch), dtype=bool)
+                mascara_bordes[c_i:c_f] = False
+                energia_bordes = np.mean(segmento_ch[mascara_bordes]**2) if np.sum(mascara_bordes) > 0 else 1.0
+                ratio_energia_centro = energia_centro / (energia_bordes + 1e-9)
+                
+                seg_zero_mean = segmento_ch - np.mean(segmento_ch)
+                if np.std(seg_zero_mean) > 0:
+                    from scipy.signal import correlate
+                    acorr = correlate(seg_zero_mean, seg_zero_mean, mode="full")
+                    acorr = acorr[len(acorr)//2:]
+                    acorr = acorr / (acorr[0] + 1e-9)
+                    lags_50 = np.where(acorr < 0.5)[0]
+                    tau_50_ms = (lags_50[0] / 2000.0) * 1000.0 if len(lags_50) > 0 else 0.0
+                else:
+                    tau_50_ms = 0.0
+                    
+                score_activacion = rel_iqr_ch * ratio_energia_centro * (tau_50_ms / 50.0)
+                
+                # 2. Resta del piso de ruido interpulso
+                segmento_ch = np.maximum(segmento_ch - ruido_a_restar, 0.0)
+                
+                # 3. Compuerta de Ruido Puro: si el score no supera el umbral, mandar a 0.0
+                if gate_ratio_ruido > 0 and (score_activacion < gate_ratio_ruido):
+                    segmento_ch = np.zeros_like(segmento_ch)
                 
                 m_val = np.max(segmento_ch)
                 if m_val > max_supremo:
@@ -333,26 +367,91 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_
         else:
             picos_norm = None
             
-        # Empaquetar y resamplear
-        for i, v_data in enumerate(ventanas_medicion):
+        mediciones_procesadas.append({
+            'rel_path': rel_path,
+            'med_name': med_name,
+            'vocal': vocal,
+            'ventanas_medicion': ventanas_medicion,
+            'picos_norm': picos_norm
+        })
+
+    # -------------------------------------------------------------
+    # CALIBRACIÓN INTERSESIÓN POR LOTE (SI ESTÁ ACTIVA)
+    # -------------------------------------------------------------
+    session_factors = {}
+    if aplicar_correccion_intersesion:
+        sessions_dict = {}
+        for m_data in mediciones_procesadas:
+            r_path = m_data['rel_path']
+            date_folder = os.path.dirname(r_path)
+            m_base = os.path.basename(r_path)
+            partes_s = m_base.split('_')
+            session_tag = '_'.join(partes_s[1:]) if len(partes_s) > 1 else m_base
+            s_key = (date_folder, session_tag)
+            sessions_dict.setdefault(s_key, []).append(m_data)
+
+        for s_key, meds_sesion in sessions_dict.items():
+            all_ventanas = [w for m in meds_sesion for w in m['ventanas_medicion']]
+            if not all_ventanas:
+                continue
+            V = []
+            for c_idx in range(len(canales_features)):
+                picos_canal = [w['segs_brutos'][c_idx].max() for w in all_ventanas if len(w['segs_brutos']) > c_idx]
+                p95 = float(np.percentile(picos_canal, 95)) if picos_canal else 1.0
+                V.append(p95)
+            V = np.array(V)
+            V_ref = float(np.max(V))
+            if V_ref > 1e-9:
+                alpha = V / V_ref
+                # alpha_piso = 0.20 garantiza no amplificar más de 5.0x
+                C = 1.0 / np.maximum(alpha, 0.20)
+            else:
+                C = np.ones(len(canales_features))
+            session_factors[s_key] = C
+            s_date, s_tag = s_key
+            ch_str = ", ".join([f"{canales_features[c]}: C={C[c]:.2f} (p95={V[c]:.2f})" for c in range(len(canales_features))])
+            print(f"[Intersesión] Sesión '{s_tag}' ({s_date}) -> {ch_str}")
+
+    # -------------------------------------------------------------
+    # EMPAQUETADO, ESCALADO Y NORMALIZACIÓN TRICANAL
+    # -------------------------------------------------------------
+    for m_data in mediciones_procesadas:
+        r_path = m_data['rel_path']
+        med_name = m_data['med_name']
+        vocal = m_data['vocal']
+        picos_norm = m_data['picos_norm']
+        
+        date_folder = os.path.dirname(r_path)
+        partes_s = med_name.split('_')
+        session_tag = '_'.join(partes_s[1:]) if len(partes_s) > 1 else med_name
+        s_key = (date_folder, session_tag)
+        
+        C = session_factors.get(s_key, np.ones(len(canales_features))) if aplicar_correccion_intersesion else np.ones(len(canales_features))
+        
+        for i, v_data in enumerate(m_data['ventanas_medicion']):
             win_idx = v_data['win_idx']
             segs_brutos = v_data['segs_brutos']
-            max_supremo = v_data['max_supremo']
             ruido_acumulado_window = v_data['ruido_acumulado']
             
+            if aplicar_correccion_intersesion:
+                segs_proc = [segs_brutos[c_idx] * C[c_idx] for c_idx in range(len(segs_brutos))]
+                max_supremo = max([np.max(s) for s in segs_proc]) if segs_proc else 1e-9
+            else:
+                segs_proc = segs_brutos
+                max_supremo = v_data['max_supremo']
+                
             if return_raw_cache:
-                X.append(segs_brutos)
+                X.append(segs_proc)
                 Y.append(vocal)
                 Tomas.append(f"{med_name}_Win{win_idx}")
-                ruido_promedio_total = ruido_acumulado_window / 3.0
+                ruido_promedio_total = ruido_acumulado_window / float(len(canales_features))
                 snr = max_supremo / (ruido_promedio_total + 1e-9)
                 SNRs.append(snr)
                 continue
                 
             vector_concatenado = []
-            for c_idx, seg in enumerate(segs_brutos):
+            for c_idx, seg in enumerate(segs_proc):
                 if picos_norm is not None:
-                    # Corrección Trevisan: el pico del segmento debe igualar a picos_norm[i, c_idx]
                     pico_actual = np.max(seg)
                     if pico_actual > 1e-9:
                         factor = picos_norm[i, c_idx] / pico_actual
@@ -360,10 +459,8 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_
                     else:
                         seg_norm = seg * 0.0
                 else:
-                    # Normalización clásica (max_supremo)
                     seg_norm = seg / (max_supremo + 1e-9)
-                
-                # Remuestreo por FFT
+                    
                 seg_rs = resample(seg_norm, TARGET_LEN)
                 seg_rs[seg_rs < 0] = 0.0
                 vector_concatenado.append(seg_rs)
@@ -372,7 +469,7 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_
             X.append(vector_concatenado)
             Y.append(vocal)
             Tomas.append(f"{med_name}_Win{win_idx}")
-            ruido_promedio_total = ruido_acumulado_window / 3.0
+            ruido_promedio_total = ruido_acumulado_window / float(len(canales_features))
             snr = max_supremo / (ruido_promedio_total + 1e-9)
             SNRs.append(snr)
                 
@@ -445,6 +542,7 @@ def evaluar_clustering_no_supervisado(X, Y, nombre, algoritmo="K-Means", verbose
     # Reordenar las columnas de la matriz de confusión usando el mapeo del Húngaro
     cm_optima = cm[:, col_ind]
     acc_por_vocal = cm_optima.diagonal() / cm_optima.sum(axis=1) * 100
+    macro_accuracy = float(np.mean(acc_por_vocal))
     
     # --- MATRIZ ÓPTIMA EN PORCENTAJES ---
     # Convertimos cada fila en porcentajes del total de esa clase
@@ -455,8 +553,9 @@ def evaluar_clustering_no_supervisado(X, Y, nombre, algoritmo="K-Means", verbose
         print(f"\n>> Desglose Accuracy Final para {nombre}:")
         for i, vocal in enumerate(vocales_unicas):
             print(f"   Vocal {vocal}: {acc_por_vocal[i]:.1f}%")
+        print(f"   Exactitud Macro Promedio: {macro_accuracy:.2f}% (Micro: {accuracy:.2f}%)")
         
-    return accuracy, acc_por_vocal, vocales_unicas, df_cm_optima, mapeo_str
+    return macro_accuracy, acc_por_vocal, vocales_unicas, df_cm_optima, mapeo_str
 
 def plot_scatter(X_proj, Y, title, output_path, is_3d=False, variance_ratios=None, connect_points=False, **kwargs):
     # Estilo académico (Paper)
@@ -554,16 +653,17 @@ def plot_scatter(X_proj, Y, title, output_path, is_3d=False, variance_ratios=Non
     ax.set_title(title, color='black', fontsize=28, fontweight='bold', pad=15)
     ax.tick_params(labelsize=22)
     
+    comp_labels = kwargs.get('axis_labels', ['Componente 1', 'Componente 2', 'Componente 3'] if is_3d else ['Componente 1', 'Componente 2'])
     if is_3d:
-        x_label = f'Componente 1 ({variance_ratios[0]*100:.1f}%)' if variance_ratios is not None else 'Componente 1'
-        y_label = f'Componente 2 ({variance_ratios[1]*100:.1f}%)' if variance_ratios is not None else 'Componente 2'
-        z_label = f'Componente 3 ({variance_ratios[2]*100:.1f}%)' if variance_ratios is not None else 'Componente 3'
+        x_label = f'{comp_labels[0]} ({variance_ratios[0]*100:.1f}%)' if variance_ratios is not None else comp_labels[0]
+        y_label = f'{comp_labels[1]} ({variance_ratios[1]*100:.1f}%)' if variance_ratios is not None else comp_labels[1]
+        z_label = f'{comp_labels[2]} ({variance_ratios[2]*100:.1f}%)' if variance_ratios is not None else comp_labels[2]
         ax.set_xlabel(x_label, color='black', fontsize=16, labelpad=10)
         ax.set_ylabel(y_label, color='black', fontsize=16, labelpad=10)
         ax.set_zlabel(z_label, color='black', fontsize=16, labelpad=10)
     else:
-        x_label = f'Componente 1 ({variance_ratios[0]*100:.1f}%)' if variance_ratios is not None else 'Componente 1'
-        y_label = f'Componente 2 ({variance_ratios[1]*100:.1f}%)' if variance_ratios is not None else 'Componente 2'
+        x_label = f'{comp_labels[0]} ({variance_ratios[0]*100:.1f}%)' if variance_ratios is not None else comp_labels[0]
+        y_label = f'{comp_labels[1]} ({variance_ratios[1]*100:.1f}%)' if variance_ratios is not None else comp_labels[1]
         ax.set_xlabel(x_label, color='black', fontsize=24)
         ax.set_ylabel(y_label, color='black', fontsize=24)
         
@@ -595,14 +695,15 @@ def plot_analisis_errores_3d_proyecciones_2d(X_proj, Y, title, output_path, vari
         ax.grid(color='#d3d3d3', linestyle='-', linewidth=0.5)
         axes.append(ax)
         
+    comp_labels = kwargs.get('axis_labels', ['Componente 1', 'Componente 2', 'Componente 3'])
     projections = [(0, 1), (0, 2), (1, 2)]
     labels = [
-        (f'Componente 1 ({variance_ratios[0]*100:.1f}%)' if variance_ratios is not None else 'Componente 1',
-         f'Componente 2 ({variance_ratios[1]*100:.1f}%)' if variance_ratios is not None else 'Componente 2'),
-        (f'Componente 1 ({variance_ratios[0]*100:.1f}%)' if variance_ratios is not None else 'Componente 1',
-         f'Componente 3 ({variance_ratios[2]*100:.1f}%)' if variance_ratios is not None else 'Componente 3'),
-        (f'Componente 2 ({variance_ratios[1]*100:.1f}%)' if variance_ratios is not None else 'Componente 2',
-         f'Componente 3 ({variance_ratios[2]*100:.1f}%)' if variance_ratios is not None else 'Componente 3')
+        (f'{comp_labels[0]} ({variance_ratios[0]*100:.1f}%)' if variance_ratios is not None else comp_labels[0],
+         f'{comp_labels[1]} ({variance_ratios[1]*100:.1f}%)' if variance_ratios is not None else comp_labels[1]),
+        (f'{comp_labels[0]} ({variance_ratios[0]*100:.1f}%)' if variance_ratios is not None else comp_labels[0],
+         f'{comp_labels[2]} ({variance_ratios[2]*100:.1f}%)' if variance_ratios is not None else comp_labels[2]),
+        (f'{comp_labels[1]} ({variance_ratios[1]*100:.1f}%)' if variance_ratios is not None else comp_labels[1],
+         f'{comp_labels[2]} ({variance_ratios[2]*100:.1f}%)' if variance_ratios is not None else comp_labels[2])
     ]
     
     for ax, proj, (xl, yl) in zip(axes, projections, labels):
@@ -707,10 +808,11 @@ def plot_scatter_3d_multi_angle(X_proj, Y, title, output_path, variance_ratios=N
 
     fig.suptitle(title, color='black', fontsize=28, fontweight='bold', y=0.98)
     
+    comp_labels = kwargs.get('axis_labels', ['PC1', 'PC2', 'PC3'])
     for ax in axes:
-        x_label = f'PC1 ({variance_ratios[0]*100:.1f}%)' if variance_ratios is not None else 'PC1'
-        y_label = f'PC2 ({variance_ratios[1]*100:.1f}%)' if variance_ratios is not None else 'PC2'
-        z_label = f'PC3 ({variance_ratios[2]*100:.1f}%)' if variance_ratios is not None else 'PC3'
+        x_label = f'{comp_labels[0]} ({variance_ratios[0]*100:.1f}%)' if variance_ratios is not None else comp_labels[0]
+        y_label = f'{comp_labels[1]} ({variance_ratios[1]*100:.1f}%)' if variance_ratios is not None else comp_labels[1]
+        z_label = f'{comp_labels[2]} ({variance_ratios[2]*100:.1f}%)' if variance_ratios is not None else comp_labels[2]
         ax.set_xlabel(x_label, color='black', fontsize=16, labelpad=12)
         ax.set_ylabel(y_label, color='black', fontsize=16, labelpad=12)
         ax.set_zlabel(z_label, color='black', fontsize=16, labelpad=12)
@@ -884,8 +986,9 @@ def plot_analisis_errores_2d(X, Y, Tomas, title, output_path, variance_ratios=No
             
     # ax.set_title(title, color='black', fontsize=24, fontweight='bold', pad=15)
     ax.tick_params(labelsize=18)
-    x_label = 'UMAP1' if is_umap else 'PC1'
-    y_label = 'UMAP2' if is_umap else 'PC2'
+    comp_labels = kwargs.get('axis_labels', ['UMAP1', 'UMAP2'] if is_umap else ['PC1', 'PC2'])
+    x_label = comp_labels[0]
+    y_label = comp_labels[1]
     ax.set_xlabel(x_label, color='black', fontsize=22, fontweight='bold', labelpad=10)
     ax.set_ylabel(y_label, color='black', fontsize=22, fontweight='bold', labelpad=10)
     
@@ -1330,10 +1433,11 @@ def plot_confusion_matrix_heatmap(df_cm, title, filepath):
     plt.savefig(filepath, dpi=300, bbox_inches='tight', facecolor='white')
     plt.close()
 
-def extraer_y_filtrar(mediciones, base_dir, params, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=False, cache_canales_data=None, verbose=True):
+def extraer_y_filtrar(mediciones, base_dir, params, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=False, cache_canales_data=None, verbose=True, aplicar_correccion_intersesion=False):
     X, Y, Tomas, SNRs = extraer_features_concatenadas(
         base_dir, mediciones, 
         alpha_ruido=params['alpha_ruido'], 
+        gate_ratio_ruido=params.get('gate_ratio_ruido', 0.0),
         smooth_ms=params['smooth_ms'], 
         notch_q=params['notch_q'], 
         target_len=params['target_length'], 
@@ -1343,7 +1447,8 @@ def extraer_y_filtrar(mediciones, base_dir, params, aplicar_trevisan, modo_aline
         post_pct=post_pct, 
         canales_features=canales_features,
         ignorar_ventana_cero=ignorar_ventana_cero,
-        cache_canales_data=cache_canales_data
+        cache_canales_data=cache_canales_data,
+        aplicar_correccion_intersesion=aplicar_correccion_intersesion
     )
     
     if len(X) == 0:
@@ -1421,7 +1526,8 @@ def ejecutar_procesamiento(
     ocultar_leyenda=False,
     estilo_visual="Elipses",
     ignorar_ventana_cero=False,
-    out_dir=None
+    out_dir=None,
+    aplicar_correccion_intersesion=True
 ):
     if out_dir is None:
         script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -1438,18 +1544,44 @@ def ejecutar_procesamiento(
     
     print(f"\nIniciando Procesamiento. Canales: {', '.join(canales_features)}")
     
+    def aplicar_pesos_canales(X, canales_list, pesos):
+        if pesos is None or not isinstance(pesos, (list, tuple)) or len(pesos) == 0:
+            return X
+        if all(float(w) == 1.0 for w in pesos):
+            return X
+        X_out = np.array(X, copy=True)
+        n_feat = X_out.shape[1]
+        n_ch = len(canales_list) if len(canales_list) > 0 else 3
+        pts_per_ch = n_feat // n_ch
+        for c_idx in range(min(n_ch, len(pesos))):
+            w = float(pesos[c_idx])
+            if w != 1.0:
+                X_out[:, c_idx*pts_per_ch : (c_idx+1)*pts_per_ch] *= w
+        return X_out
+
     resultados_ejecucion = {}
     if proc_pca_2d:
         print("\n=== PROCESANDO PCA 2D ===")
-        X_2d, Y_2d, Tomas_2d, desc_2d = extraer_y_filtrar(mediciones, base_dir, params_2d, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=ignorar_ventana_cero)
+        X_2d, Y_2d, Tomas_2d, desc_2d = extraer_y_filtrar(mediciones, base_dir, params_2d, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=ignorar_ventana_cero, aplicar_correccion_intersesion=aplicar_correccion_intersesion)
         resultados_ejecucion['X_2d'] = X_2d
         resultados_ejecucion['Y_2d'] = Y_2d
         if len(X_2d) > 0:
-            pca_2d = PCA(n_components=2)
-            X_pca_2d = pca_2d.fit_transform(X_2d)
-            var_ratios_2d = pca_2d.explained_variance_ratio_
-            plot_scatter(X_pca_2d, Y_2d, "PCA 2D - Vocales EMG", os.path.join(out_dir, "PCA_2D.png"), is_3d=False, variance_ratios=var_ratios_2d, ocultar_leyenda=ocultar_leyenda, xlim=(-0.85, 1.4), ylim=(-0.7, 1.4))
-            plot_analisis_errores_2d(X_pca_2d, Y_2d, Tomas_2d, f"Análisis de Aciertos y Errores (PCA 2D) - {algoritmo_clustering_pca}", os.path.join(out_dir, "PCA_2D_Analisis_Errores.png"), variance_ratios=var_ratios_2d, algoritmo=algoritmo_clustering_pca, is_umap=False, ocultar_leyenda=ocultar_leyenda, estilo_visual=estilo_visual)
+            pesos_2d = params_2d.get('pesos_canales', [1.0, 1.0, 1.0])
+            X_2d_proc = aplicar_pesos_canales(X_2d, canales_features, pesos_2d)
+            
+            comp_x_2d_str = str(params_2d.get('comp_x', 'PC1'))
+            comp_y_2d_str = str(params_2d.get('comp_y', 'PC2'))
+            idx_x_2d = int(comp_x_2d_str.replace('PC', '')) - 1
+            idx_y_2d = int(comp_y_2d_str.replace('PC', '')) - 1
+            n_comps_2d = max(idx_x_2d, idx_y_2d, 1) + 1
+            
+            pca_2d = PCA(n_components=n_comps_2d)
+            X_pca_full_2d = pca_2d.fit_transform(X_2d_proc)
+            X_pca_2d = X_pca_full_2d[:, [idx_x_2d, idx_y_2d]]
+            var_ratios_2d = [pca_2d.explained_variance_ratio_[idx_x_2d], pca_2d.explained_variance_ratio_[idx_y_2d]]
+            
+            plot_scatter(X_pca_2d, Y_2d, f"PCA 2D ({comp_x_2d_str} vs {comp_y_2d_str}) - Vocales EMG", os.path.join(out_dir, "PCA_2D.png"), is_3d=False, variance_ratios=var_ratios_2d, ocultar_leyenda=ocultar_leyenda, axis_labels=[comp_x_2d_str, comp_y_2d_str])
+            plot_analisis_errores_2d(X_pca_2d, Y_2d, Tomas_2d, f"Análisis de Aciertos y Errores (PCA 2D: {comp_x_2d_str}-{comp_y_2d_str}) - {algoritmo_clustering_pca}", os.path.join(out_dir, "PCA_2D_Analisis_Errores.png"), variance_ratios=var_ratios_2d, algoritmo=algoritmo_clustering_pca, is_umap=False, ocultar_leyenda=ocultar_leyenda, estilo_visual=estilo_visual, axis_labels=[comp_x_2d_str, comp_y_2d_str])
             acc_pca_2d, acc_vocales_pca_2d, voc_pca_2d, df_cm_pca_2d, mapeo_pca_2d = evaluar_clustering_no_supervisado(X_pca_2d, Y_2d, "PCA 2D", algoritmo_clustering_pca)
             print(f"=> TOTAL Accuracy Clustering No Supervisado (PCA 2D) : {acc_pca_2d:.2f}%")
             plot_confusion_matrix_heatmap(df_cm_pca_2d, "Matriz de Confusión - PCA 2D", os.path.join(out_dir, "heatmap_confusion_pca_2d.png"))
@@ -1474,7 +1606,7 @@ def ejecutar_procesamiento(
                 pd.DataFrame(desc_2d).to_csv(os.path.join(out_dir, "reporte_mediciones_descartadas_PCA_2D.csv"), index=False)
                 
             # Exportar datos proyectados
-            df_proy_2d = pd.DataFrame(X_pca_2d, columns=['PC1', 'PC2'])
+            df_proy_2d = pd.DataFrame(X_pca_2d, columns=[comp_x_2d_str, comp_y_2d_str])
             df_proy_2d.insert(0, 'Vocal', Y_2d)
             df_proy_2d.insert(1, 'Toma', Tomas_2d)
             df_proy_2d.to_csv(os.path.join(out_dir, "proyecciones_pca_2d.csv"), index=False)
@@ -1500,7 +1632,7 @@ def ejecutar_procesamiento(
 
     if proc_umap_2d:
         print("\n=== PROCESANDO UMAP 2D ===")
-        X_2d_u, Y_2d_u, Tomas_2d_u, desc_2d_u = extraer_y_filtrar(mediciones, base_dir, params_umap, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=ignorar_ventana_cero)
+        X_2d_u, Y_2d_u, Tomas_2d_u, desc_2d_u = extraer_y_filtrar(mediciones, base_dir, params_umap, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=ignorar_ventana_cero, aplicar_correccion_intersesion=aplicar_correccion_intersesion)
         if len(X_2d_u) > 0:
             umap_2d = umap.UMAP(n_neighbors=min(umap_n_neighbors, len(X_2d_u)-1), min_dist=umap_min_dist, metric=umap_metric, n_components=2, random_state=42)
             X_umap_2d = umap_2d.fit_transform(X_2d_u)
@@ -1520,15 +1652,28 @@ def ejecutar_procesamiento(
 
     if proc_pca_3d:
         print("\n=== PROCESANDO PCA 3D ===")
-        X_3d, Y_3d, Tomas_3d, desc_3d = extraer_y_filtrar(mediciones, base_dir, params_3d, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=ignorar_ventana_cero)
+        X_3d, Y_3d, Tomas_3d, desc_3d = extraer_y_filtrar(mediciones, base_dir, params_3d, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=ignorar_ventana_cero, aplicar_correccion_intersesion=aplicar_correccion_intersesion)
         resultados_ejecucion['X_3d'] = X_3d
         resultados_ejecucion['Y_3d'] = Y_3d
         if len(X_3d) > 0:
-            pca_3d = PCA(n_components=3)
-            X_pca_3d = pca_3d.fit_transform(X_3d)
-            var_ratios_3d = pca_3d.explained_variance_ratio_
-            plot_scatter_3d_multi_angle(X_pca_3d, Y_3d, "PCA 3D - Vocales EMG", os.path.join(out_dir, "PCA_3D.png"), variance_ratios=var_ratios_3d)
-            plot_analisis_errores_3d_proyecciones_2d(X_pca_3d, Y_3d, f"Análisis de Aciertos y Errores (PCA 3D) - {algoritmo_clustering_pca}", os.path.join(out_dir, "PCA_3D_Analisis_Errores.png"), variance_ratios=var_ratios_3d, algoritmo=algoritmo_clustering_pca)
+            pesos_3d = params_3d.get('pesos_canales', [1.0, 1.0, 1.0])
+            X_3d_proc = aplicar_pesos_canales(X_3d, canales_features, pesos_3d)
+            
+            comp_x_3d_str = str(params_3d.get('comp_x', 'PC1'))
+            comp_y_3d_str = str(params_3d.get('comp_y', 'PC2'))
+            comp_z_3d_str = str(params_3d.get('comp_z', 'PC3'))
+            idx_x_3d = int(comp_x_3d_str.replace('PC', '')) - 1
+            idx_y_3d = int(comp_y_3d_str.replace('PC', '')) - 1
+            idx_z_3d = int(comp_z_3d_str.replace('PC', '')) - 1
+            n_comps_3d = max(idx_x_3d, idx_y_3d, idx_z_3d, 2) + 1
+            
+            pca_3d = PCA(n_components=n_comps_3d)
+            X_pca_full_3d = pca_3d.fit_transform(X_3d_proc)
+            X_pca_3d = X_pca_full_3d[:, [idx_x_3d, idx_y_3d, idx_z_3d]]
+            var_ratios_3d = [pca_3d.explained_variance_ratio_[idx_x_3d], pca_3d.explained_variance_ratio_[idx_y_3d], pca_3d.explained_variance_ratio_[idx_z_3d]]
+            
+            plot_scatter_3d_multi_angle(X_pca_3d, Y_3d, f"PCA 3D ({comp_x_3d_str}, {comp_y_3d_str}, {comp_z_3d_str}) - Vocales EMG", os.path.join(out_dir, "PCA_3D.png"), variance_ratios=var_ratios_3d, axis_labels=[comp_x_3d_str, comp_y_3d_str, comp_z_3d_str])
+            plot_analisis_errores_3d_proyecciones_2d(X_pca_3d, Y_3d, f"Análisis de Aciertos y Errores (PCA 3D: {comp_x_3d_str}-{comp_y_3d_str}-{comp_z_3d_str}) - {algoritmo_clustering_pca}", os.path.join(out_dir, "PCA_3D_Analisis_Errores.png"), variance_ratios=var_ratios_3d, algoritmo=algoritmo_clustering_pca, axis_labels=[comp_x_3d_str, comp_y_3d_str, comp_z_3d_str])
             acc_pca_3d, acc_vocales_pca_3d, voc_pca_3d, df_cm_pca_3d, mapeo_pca_3d = evaluar_clustering_no_supervisado(X_pca_3d, Y_3d, "PCA 3D", algoritmo_clustering_pca)
             print(f"=> TOTAL Accuracy Clustering No Supervisado (PCA 3D) : {acc_pca_3d:.2f}%")
             plot_confusion_matrix_heatmap(df_cm_pca_3d, "Matriz de Confusión - PCA 3D", os.path.join(out_dir, "heatmap_confusion_pca_3d.png"))
@@ -1555,7 +1700,7 @@ def ejecutar_procesamiento(
                 pd.DataFrame(desc_3d).to_csv(os.path.join(out_dir, "reporte_mediciones_descartadas_PCA_3D.csv"), index=False)
 
             # Exportar datos proyectados
-            df_proy_3d = pd.DataFrame(X_pca_3d, columns=['PC1', 'PC2', 'PC3'])
+            df_proy_3d = pd.DataFrame(X_pca_3d, columns=[comp_x_3d_str, comp_y_3d_str, comp_z_3d_str])
             df_proy_3d.insert(0, 'Vocal', Y_3d)
             df_proy_3d.insert(1, 'Toma', Tomas_3d)
             df_proy_3d.to_csv(os.path.join(out_dir, "proyecciones_pca_3d.csv"), index=False)
@@ -1581,7 +1726,7 @@ def ejecutar_procesamiento(
 
     if proc_umap_3d:
         print("\n=== PROCESANDO UMAP 3D ===")
-        X_3d_u, Y_3d_u, Tomas_3d_u, desc_3d_u = extraer_y_filtrar(mediciones, base_dir, params_umap, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=ignorar_ventana_cero)
+        X_3d_u, Y_3d_u, Tomas_3d_u, desc_3d_u = extraer_y_filtrar(mediciones, base_dir, params_umap, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=ignorar_ventana_cero, aplicar_correccion_intersesion=aplicar_correccion_intersesion)
         if len(X_3d_u) > 0:
             umap_3d = umap.UMAP(n_neighbors=min(umap_n_neighbors, len(X_3d_u)-1), min_dist=umap_min_dist, metric=umap_metric, n_components=3, random_state=42)
             X_umap_3d = umap_3d.fit_transform(X_3d_u)
@@ -1622,7 +1767,84 @@ def ejecutar_procesamiento(
 
     return resultados_ejecucion
 
-def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=False, algoritmo_clustering="GMM", smooth_grid=None, target_len_grid=None, alpha_grid=None, notch_q_grid=None, logger=print, n_jobs=-1, n_components=2):
+def generar_grafico_distribucion_accuracy(df_hist, output_img_path, n_components=2, algoritmo="GMM"):
+    """Genera un gráfico de distribución de densidad y probabilidad del Accuracy durante el barrido de hiperparámetros."""
+    if df_hist is None or df_hist.empty:
+        return None
+
+    col_acc = 'raw_accuracy' if 'raw_accuracy' in df_hist.columns else 'accuracy_clasificacion'
+    acc_vals = df_hist[col_acc].dropna()
+    acc_vals = acc_vals[acc_vals >= 0].values
+
+    if len(acc_vals) < 3:
+        return None
+
+    fig, ax = plt.subplots(figsize=(9, 5), dpi=300)
+    fig.patch.set_facecolor('#0B0C10')
+    ax.set_facecolor('#1F2833')
+
+    # Histograma de densidad con estimación KDE
+    sns.histplot(
+        acc_vals,
+        kde=True,
+        stat="density",
+        color="#66FCF1",
+        bins=20,
+        edgecolor="#1F2833",
+        alpha=0.6,
+        ax=ax,
+        line_kws={'linewidth': 2.0, 'color': '#45A29E'}
+    )
+
+    media = np.mean(acc_vals)
+    mediana = np.median(acc_vals)
+    maximo = np.max(acc_vals)
+    desv = np.std(acc_vals)
+
+    ax.axvline(media, color="#FF5722", linestyle="--", linewidth=1.8, label=f"Media: {media:.1f}%")
+    ax.axvline(mediana, color="#FFEB3B", linestyle=":", linewidth=1.8, label=f"Mediana: {mediana:.1f}%")
+    ax.axvline(maximo, color="#4CAF50", linestyle="-.", linewidth=2.0, label=f"Máximo: {maximo:.1f}%")
+
+    # Probabilidades acumuladas de clasificacion
+    prob_gt_60 = (np.sum(acc_vals >= 60.0) / len(acc_vals)) * 100.0
+    prob_gt_70 = (np.sum(acc_vals >= 70.0) / len(acc_vals)) * 100.0
+    prob_gt_80 = (np.sum(acc_vals >= 80.0) / len(acc_vals)) * 100.0
+
+    info_text = (
+        f"Combinaciones: {len(acc_vals)}\n"
+        f"Desv. Estándar: ±{desv:.1f}%\n"
+        f"P(Exactitud ≥ 60%): {prob_gt_60:.1f}%\n"
+        f"P(Exactitud ≥ 70%): {prob_gt_70:.1f}%\n"
+        f"P(Exactitud ≥ 80%): {prob_gt_80:.1f}%"
+    )
+    ax.text(
+        0.03, 0.95, info_text,
+        transform=ax.transAxes,
+        fontsize=9,
+        color="white",
+        verticalalignment='top',
+        bbox=dict(boxstyle='round,pad=0.5', facecolor='#0B0C10', edgecolor='#45A29E', alpha=0.9)
+    )
+
+    ax.set_title(f"Distribución de Probabilidad de Exactitud - Grid Search PCA {n_components}D ({algoritmo})", fontsize=12, fontweight="bold", color="white", pad=12)
+    ax.set_xlabel("Porcentaje de Exactitud (%)", fontsize=10, color="white")
+    ax.set_ylabel("Densidad de Probabilidad", fontsize=10, color="white")
+
+    ax.tick_params(colors="white")
+    for spine in ax.spines.values():
+        spine.set_color("#45A29E")
+
+    ax.grid(True, linestyle="--", alpha=0.3, color="#C5C6C7")
+    legend = ax.legend(loc="upper right", frameon=True, facecolor="#0B0C10", edgecolor="#45A29E")
+    for text in legend.get_texts():
+        text.set_color("white")
+
+    plt.tight_layout()
+    plt.savefig(output_img_path, dpi=300, facecolor=fig.get_facecolor(), edgecolor='none')
+    plt.close(fig)
+    return output_img_path
+
+def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=False, algoritmo_clustering="GMM", smooth_grid=None, target_len_grid=None, alpha_grid=None, notch_q_grid=None, logger=print, n_jobs=-1, n_components=2, aplicar_correccion_intersesion=True, tag_nombre=None, output_dir=None, ejecutar_ganador_con_graficos=True, estilo_visual="Fronteras"):
     if smooth_grid is None:
         smooth_grid = [50, 80, 125, 150, 180, 220, 250]
     if target_len_grid is None:
@@ -1636,7 +1858,8 @@ def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_tr
     combis = [(s, t, a, q) for s in smooth_grid for t in target_len_grid for a in alpha_grid for q in notch_q_grid]
     total_comb = len(combis)
 
-    logger(f"\n[GRID SEARCH PCA] Iniciando proceso (Barrido de {total_comb} combinaciones con {num_workers} hilos de CPU | Notch Q fijo = 2.0)...")
+    gate_ruido_val = params_base.get('gate_ratio_ruido', 0.0)
+    logger(f"\n[GRID SEARCH PCA] Iniciando proceso (Barrido de {total_comb} combinaciones con {num_workers} hilos de CPU | Notch Q = 2.0 | Gate Ruido = {gate_ruido_val})...")
     logger("  - [Paso 1/2] Cargando audios y aplicando pre-filtros en memoria RAM...")
 
     cache_canales = {}
@@ -1649,10 +1872,12 @@ def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_tr
             p_temp = params_base.copy()
             p_temp['smooth_ms'] = s_ms
             p_temp['notch_q'] = q_val
+            p_temp['gate_ratio_ruido'] = gate_ruido_val
             extraer_y_filtrar(
                 mediciones, base_dir, p_temp, aplicar_trevisan, modo_alineacion,
                 pre_pct, post_pct, canales_features, ignorar_ventana_cero=ignorar_ventana_cero,
-                cache_canales_data=cache_canales, verbose=False
+                cache_canales_data=cache_canales, verbose=False,
+                aplicar_correccion_intersesion=aplicar_correccion_intersesion
             )
             pct = ((i + 1) / total_sq) * 100
             sys.stdout = old_stdout_init
@@ -1672,6 +1897,7 @@ def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_tr
         p['target_length'] = t_len
         p['alpha_ruido'] = a_ruido
         p['notch_q'] = q_val
+        p['gate_ratio_ruido'] = gate_ruido_val
 
         raw_acc = -1.0
         motivo_descarte = ""
@@ -1680,7 +1906,8 @@ def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_tr
             X, Y, _, _ = extraer_y_filtrar(
                 mediciones, base_dir, p, aplicar_trevisan, modo_alineacion,
                 pre_pct, post_pct, canales_features, ignorar_ventana_cero=ignorar_ventana_cero,
-                cache_canales_data=cache_canales, verbose=False
+                cache_canales_data=cache_canales, verbose=False,
+                aplicar_correccion_intersesion=aplicar_correccion_intersesion
             )
 
             if len(X) > 5 and len(np.unique(Y)) > 1:
@@ -1709,6 +1936,7 @@ def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_tr
             "target_length": t_len,
             "alpha_ruido": a_ruido,
             "notch_q": q_val,
+            "gate_ratio_ruido": gate_ruido_val,
             "accuracy_clasificacion": acc_score,
             "raw_accuracy": raw_acc,
             "motivo_descarte": motivo_descarte,
@@ -1778,17 +2006,109 @@ def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_tr
         if vocal_summary:
             logger(f"  -> Desglose por Vocal: {vocal_summary}")
 
+    from datetime import datetime
+    timestamp_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    root_dl = os.path.dirname(os.path.abspath(__file__))
+
+    if output_dir is None:
+        tag_clean = f"_{tag_nombre}" if tag_nombre else ""
+        carpeta_salida = os.path.join(root_dl, "resultados_grid_search", f"grid_{n_components}D{tag_clean}_{timestamp_str}")
+    else:
+        carpeta_salida = output_dir
+    os.makedirs(carpeta_salida, exist_ok=True)
+
     if historial:
         try:
             df_hist = pd.DataFrame(historial)
             df_hist.sort_values(by=["accuracy_clasificacion", "silhouette_score"], ascending=False, inplace=True)
-            csv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resultados_grid_search_pca.csv")
-            df_hist.to_csv(csv_path, index=False)
-            logger(f"  [+] Tabla completa con las {len(df_hist)} combinaciones guardada en: {csv_path}")
+            
+            # Guardado versionado
+            csv_versionado = os.path.join(carpeta_salida, "resultados_grid_search.csv")
+            df_hist.to_csv(csv_versionado, index=False)
+            logger(f"  [+] Tabla de combinaciones guardada en: {csv_versionado}")
+
+            # Guardado legacy en raíz
+            csv_legacy = os.path.join(root_dl, "resultados_grid_search_pca.csv")
+            df_hist.to_csv(csv_legacy, index=False)
+
+            # Generación de la curva de densidad y probabilidades
+            grafico_dist_path = os.path.join(carpeta_salida, "distribucion_accuracy_grid_search.png")
+            generar_grafico_distribucion_accuracy(df_hist, grafico_dist_path, n_components=n_components, algoritmo=algoritmo_clustering)
+            logger(f"  [+] Gráfico de distribución de probabilidad guardado en: {grafico_dist_path}")
+        except Exception as e_hist:
+            logger(f"  [!] Error al exportar métricas de Grid Search: {e_hist}")
+
+    if best_config is not None:
+        resumen_optimo = {
+            "smooth_ms": int(best_config[0]),
+            "target_length": int(best_config[1]),
+            "alpha_ruido": float(best_config[2]),
+            "notch_q": float(best_config[3]) if len(best_config) > 3 else 2.0,
+            "gate_ratio_ruido": float(params_base.get("gate_ratio_ruido", 0.0)),
+            "snr_threshold": float(params_base.get("snr_threshold", 0.5)),
+            "outlier_contamination": float(params_base.get("outlier_contamination", 0.10)),
+            "accuracy_clasificacion": float(best_acc),
+            "porcentaje_por_vocal": best_vocal_acc,
+            "silhouette_score": float(best_sil),
+            "n_components": n_components,
+            "aplicar_correccion_intersesion": aplicar_correccion_intersesion,
+            "fecha_ejecucion": timestamp_str
+        }
+        try:
+            json_versionado = os.path.join(carpeta_salida, "parametros_optimos.json")
+            with open(json_versionado, "w", encoding="utf-8") as f:
+                json.dump(resumen_optimo, f, indent=4)
+            json_legacy = os.path.join(root_dl, "parametros_optimos_pca.json")
+            with open(json_legacy, "w", encoding="utf-8") as f:
+                json.dump(resumen_optimo, f, indent=4)
         except Exception:
             pass
 
-    return best_config, best_acc, best_sil, best_vocal_acc, historial
+        # Ejecución automática de la configuración ganadora con generación completa de gráficos
+        if ejecutar_ganador_con_graficos:
+            try:
+                logger(f"\n[+] Ejecutando proyección PCA {n_components}D con la configuración ganadora...")
+                params_ganador = params_base.copy()
+                params_ganador["smooth_ms"] = int(best_config[0])
+                params_ganador["target_length"] = int(best_config[1])
+                params_ganador["alpha_ruido"] = float(best_config[2])
+                params_ganador["notch_q"] = float(best_config[3]) if len(best_config) > 3 else 2.0
+                params_ganador["gate_ratio_ruido"] = float(params_base.get("gate_ratio_ruido", 0.0))
+                params_ganador["snr_threshold"] = float(params_base.get("snr_threshold", 0.5))
+                params_ganador["outlier_contamination"] = float(params_base.get("outlier_contamination", 0.10))
+                if n_components == 2:
+                    params_ganador["comp_x"] = "PC1"
+                    params_ganador["comp_y"] = "PC2"
+                    p2d, p3d = params_ganador, None
+                else:
+                    params_ganador["comp_x"] = "PC1"
+                    params_ganador["comp_y"] = "PC2"
+                    params_ganador["comp_z"] = "PC3"
+                    p2d, p3d = None, params_ganador
+
+                ejecutar_procesamiento(
+                    mediciones=mediciones,
+                    base_dir=base_dir,
+                    params_2d=p2d,
+                    params_3d=p3d,
+                    proc_pca_2d=(n_components == 2),
+                    proc_pca_3d=(n_components == 3),
+                    algoritmo_clustering_pca=algoritmo_clustering,
+                    aplicar_trevisan=aplicar_trevisan,
+                    modo_alineacion=modo_alineacion,
+                    pre_pct=pre_pct,
+                    post_pct=post_pct,
+                    canales_features=canales_features,
+                    ignorar_ventana_cero=ignorar_ventana_cero,
+                    out_dir=carpeta_salida,
+                    aplicar_correccion_intersesion=aplicar_correccion_intersesion,
+                    estilo_visual=estilo_visual
+                )
+                logger(f"  [✓] Proyección PCA {n_components}D y gráficos generados exitosamente en:\n      {carpeta_salida}")
+            except Exception as e_proc:
+                logger(f"  [!] No se pudo completar la ejecución del ganador: {e_proc}")
+
+    return best_config, best_acc, best_sil, best_vocal_acc, historial, carpeta_salida
 
 class GeneradorPCAGUI:
     def __init__(self, root):
@@ -1954,6 +2274,7 @@ class GeneradorPCAGUI:
         self.ent_outliers_umap = tk.Entry(umap_frame, width=5, bg="#0B0C10", fg="white", insertbackground="white")
         self.ent_outliers_umap.grid(row=1, column=7, padx=2, pady=2)
         self.ent_outliers_umap.insert(0, "0.10")
+
         self.combo_metric.set("cosine")
         
         # --- Clustering ---
@@ -1980,15 +2301,27 @@ class GeneradorPCAGUI:
         self.var_ignorar_win0 = tk.BooleanVar(value=False)
         tk.Checkbutton(trev_frame, text="Ignorar Ventana 0 (Artefactos)", variable=self.var_ignorar_win0, bg="#1F2833", fg="white", selectcolor="#0B0C10").grid(row=0, column=2, columnspan=2, sticky="w")
         
-        tk.Label(trev_frame, text="Pre-Ventana (%):", width=15, anchor="w", bg="#1F2833", fg="white").grid(row=1, column=0, padx=2, pady=2)
+        self.var_correccion_intersesion = tk.BooleanVar(value=True)
+        tk.Checkbutton(trev_frame, text="Corrección Intersesión por Lote (Calibración de Ganancia)", variable=self.var_correccion_intersesion, bg="#1F2833", fg="#66FCF1", selectcolor="#0B0C10").grid(row=1, column=0, columnspan=4, sticky="w")
+        
+        tk.Label(trev_frame, text="Pre-Ventana (%):", width=15, anchor="w", bg="#1F2833", fg="white").grid(row=2, column=0, padx=2, pady=2)
         self.ent_pre_pct = tk.Entry(trev_frame, width=8, bg="#0B0C10", fg="white", insertbackground="white")
-        self.ent_pre_pct.grid(row=1, column=1, padx=2, pady=2)
+        self.ent_pre_pct.grid(row=2, column=1, padx=2, pady=2)
         self.ent_pre_pct.insert(0, "0.4")
         
-        tk.Label(trev_frame, text="Post-Ventana (%):", width=15, anchor="w", bg="#1F2833", fg="white").grid(row=1, column=2, padx=2, pady=2)
+        tk.Label(trev_frame, text="Post-Ventana (%):", width=15, anchor="w", bg="#1F2833", fg="white").grid(row=2, column=2, padx=2, pady=2)
         self.ent_post_pct = tk.Entry(trev_frame, width=8, bg="#0B0C10", fg="white", insertbackground="white")
-        self.ent_post_pct.grid(row=1, column=3, padx=2, pady=2)
+        self.ent_post_pct.grid(row=2, column=3, padx=2, pady=2)
         self.ent_post_pct.insert(0, "0.6")
+
+        tk.Label(trev_frame, text="Gate Ratio Ruido:", width=15, anchor="w", bg="#1F2833", fg="white").grid(row=3, column=0, padx=2, pady=2)
+        self.ent_gate = tk.Entry(trev_frame, width=8, bg="#0B0C10", fg="white", insertbackground="white")
+        self.ent_gate.grid(row=3, column=1, padx=2, pady=2)
+        self.ent_gate.insert(0, "0.0")
+
+        self.ent_gate_2d = self.ent_gate
+        self.ent_gate_3d = self.ent_gate
+        self.ent_gate_umap = self.ent_gate
         
         # --- Alineación Temporal ---
         align_frame = tk.LabelFrame(main_frame, text="Alineación Temporal", padx=5, pady=5, bg="#1F2833", fg="#66FCF1")
@@ -2011,6 +2344,12 @@ class GeneradorPCAGUI:
         # --- Botones Procesar y Grid Search ---
         btn_frame = tk.Frame(main_frame, bg="#0B0C10")
         btn_frame.pack(fill="x", pady=5)
+
+        tag_frame = tk.Frame(btn_frame, bg="#0B0C10")
+        tag_frame.pack(fill="x", pady=(0, 4))
+        tk.Label(tag_frame, text="Etiqueta / Nombre Set:", width=20, anchor="w", bg="#0B0C10", fg="white").pack(side="left")
+        self.ent_tag_grid = tk.Entry(tag_frame, bg="#1F2833", fg="white", insertbackground="white")
+        self.ent_tag_grid.pack(side="left", fill="x", expand=True)
 
         grid_frame = tk.Frame(btn_frame, bg="#0B0C10")
         grid_frame.pack(fill="x", pady=(0, 5))
@@ -2056,11 +2395,13 @@ class GeneradorPCAGUI:
         try:
             snr_val = float(self.ent_snr_2d.get()) if n_components == 2 else float(self.ent_snr_3d.get())
             outlier_val = float(self.ent_outliers_2d.get()) if n_components == 2 else float(self.ent_outliers_3d.get())
+            gate_val = float(self.ent_gate.get()) if hasattr(self, 'ent_gate') else 0.0
             
             params_base = {
                 "alpha_ruido": 0.5,
                 "snr_threshold": snr_val,
                 "outlier_contamination": outlier_val,
+                "gate_ratio_ruido": gate_val,
                 "smooth_ms": 90,
                 "target_length": 20,
                 "notch_q": float(self.ent_notch.get()) if hasattr(self, 'ent_notch') and isinstance(self.ent_notch, tk.Entry) else 2.0
@@ -2074,6 +2415,8 @@ class GeneradorPCAGUI:
             messagebox.showerror("Error", "Parámetros numéricos inválidos en la interfaz.")
             return
 
+        tag_val = self.ent_tag_grid.get().strip() if hasattr(self, 'ent_tag_grid') else None
+
         messagebox.showinfo(
             "Iniciando Grid Search",
             "Comenzando la búsqueda de hiperparámetros óptimos para PCA.\n"
@@ -2081,13 +2424,22 @@ class GeneradorPCAGUI:
             "Por favor aguarde unos instantes..."
         )
 
-        best_config, best_score, _ = buscar_mejor_configuracion_pca(
+        res = buscar_mejor_configuracion_pca(
             seleccionadas, self.base_dir, params_base,
             aplicar_trevisan=val_trevisan, modo_alineacion=val_align,
             pre_pct=val_pre_pct, post_pct=val_post_pct,
             canales_features=canales_sel, ignorar_ventana_cero=ignorar_win0,
-            n_components=n_components
+            algoritmo_clustering=self.combo_cluster_pca.get() if hasattr(self, 'combo_cluster_pca') else "GMM",
+            n_components=n_components,
+            aplicar_correccion_intersesion=self.var_correccion_intersesion.get(),
+            tag_nombre=tag_val,
+            ejecutar_ganador_con_graficos=True,
+            estilo_visual=self.var_estilo_visual.get() if hasattr(self, 'var_estilo_visual') else "Fronteras"
         )
+
+        best_config = res[0]
+        best_score = res[1]
+        carpeta_salida = res[5] if len(res) > 5 else "resultados_grid_search"
 
         if best_config is None or best_score <= -1.0:
             messagebox.showerror("Error Grid Search", "No se pudo encontrar una configuración válida.")
@@ -2132,8 +2484,9 @@ class GeneradorPCAGUI:
             f"- Puntos Remuestreo: {best_pts}\n"
             f"- Alfa Ruido: {best_alpha}\n"
             f"- Notch Q: {best_notch}\n\n"
-            f"Silhouette Score PCA (2D): {best_score:.4f}\n\n"
-            f"Se han actualizado los campos en la interfaz."
+            f"Clasificación PCA ({n_components}D): {best_score:.2f}%\n\n"
+            f"Se ejecutó el PCA con la configuración ganadora.\n"
+            f"Resultados, gráficos y distribución archivados en:\n{carpeta_salida}"
         )
 
     def cargar_mediciones(self):
@@ -2160,6 +2513,7 @@ class GeneradorPCAGUI:
                 
             params_2d = {
                 "alpha_ruido": float(self.ent_alpha_2d.get()),
+                "gate_ratio_ruido": float(self.ent_gate_2d.get()) if hasattr(self, 'ent_gate_2d') else 0.0,
                 "snr_threshold": float(self.ent_snr_2d.get()),
                 "outlier_contamination": float(self.ent_outliers_2d.get()),
                 "smooth_ms": int(self.ent_smooth_2d.get()),
@@ -2169,6 +2523,7 @@ class GeneradorPCAGUI:
             
             params_3d = {
                 "alpha_ruido": float(self.ent_alpha_3d.get()),
+                "gate_ratio_ruido": float(self.ent_gate_3d.get()) if hasattr(self, 'ent_gate_3d') else 0.0,
                 "snr_threshold": float(self.ent_snr_3d.get()),
                 "outlier_contamination": float(self.ent_outliers_3d.get()),
                 "smooth_ms": int(self.ent_smooth_3d.get()),
@@ -2178,6 +2533,7 @@ class GeneradorPCAGUI:
             
             params_umap = {
                 "alpha_ruido": float(self.ent_alpha_umap.get()),
+                "gate_ratio_ruido": float(self.ent_gate_umap.get()) if hasattr(self, 'ent_gate_umap') else 0.0,
                 "snr_threshold": float(self.ent_snr_umap.get()),
                 "outlier_contamination": float(self.ent_outliers_umap.get()),
                 "smooth_ms": int(self.ent_smooth_umap.get()),
@@ -2233,7 +2589,8 @@ class GeneradorPCAGUI:
             canales_features=canales_sel,
             ocultar_leyenda=self.var_ocultar_leyenda.get(),
             estilo_visual=val_estilo_visual,
-            ignorar_ventana_cero=self.var_ignorar_win0.get()
+            ignorar_ventana_cero=self.var_ignorar_win0.get(),
+            aplicar_correccion_intersesion=self.var_correccion_intersesion.get()
         )
 
 def main():

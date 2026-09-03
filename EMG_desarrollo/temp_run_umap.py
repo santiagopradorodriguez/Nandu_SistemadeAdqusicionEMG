@@ -11,15 +11,15 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 if script_dir not in sys.path:
     sys.path.append(script_dir)
 
-with open(r'/tmp/tmp18usst13.json', 'r') as f:
+with open(r'/tmp/tmp_50cjw0r.json', 'r') as f:
     kwargs = json.load(f)
 
-mediciones = ['2026-08-25/a_Prueba1_Candela', '2026-08-25/e_Prueba1_Candela', '2026-08-25/i_Prueba1_Candela', '2026-08-25/o_Prueba1_Candela', '2026-08-25/u_Prueba1_Candela']
+mediciones = ['2026-09-01/A_Prueba1_Candela', '2026-09-01/A_Prueba2_Candela', '2026-09-01/A_Prueba3_Candela', '2026-09-01/A_Prueba4_Candela', '2026-09-01/E_Prueba1_Candela', '2026-09-01/E_Prueba2_Candela', '2026-09-01/E_Prueba3_Candela', '2026-09-01/E_Prueba4_Candela', '2026-09-01/E_Prueba5_Candela', '2026-09-01/I_Prueba1_Candela', '2026-09-01/I_Prueba2_Candela', '2026-09-01/I_Prueba3_Candela', '2026-09-01/I_Prueba4_Candela', '2026-09-01/O_Prueba1_Candela', '2026-09-01/O_Prueba2_Candela', '2026-09-01/O_Prueba3_Candela', '2026-09-01/O_Prueba4_Candela', '2026-09-01/O_Prueba5_Candela', '2026-09-01/U_Prueba1_Candela', '2026-09-01/U_Prueba2_Candela', '2026-09-01/U_Prueba3_Candela', '2026-09-01/U_Prueba4_Candela']
 base_dir = r'/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos'
 
 import deep_learning.pca_umap_clustering.generador_pca_umap as generador
 
-pca_umap_dir = os.path.join(project_root, "deep_learning", "pca_umap_clustering", "resultados_pca_umap", "candela_umap")
+pca_umap_dir = os.path.join(project_root, "deep_learning", "pca_umap_clustering", "resultados_pca_umap", "ññ")
 os.makedirs(pca_umap_dir, exist_ok=True)
 
 with open(os.path.join(pca_umap_dir, "parametros.json"), 'w') as f:

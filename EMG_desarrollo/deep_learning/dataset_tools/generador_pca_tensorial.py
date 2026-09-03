@@ -67,7 +67,7 @@ def get_interpulse_noise(processed_segment, initial_noise):
         
     return curr_mean
 
-def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_ms=120, notch_q=2.0, target_length=100, use_manual_exclusions=True, verbose=True):
+def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, gate_ratio_ruido=8.0, smooth_ms=120, notch_q=2.0, target_length=100, use_manual_exclusions=True, verbose=True):
     """
     Extrae y alinea las ventanas de los canales 0, 1 y 2.
     Devuelve X (matriz de features), Y (labels/vocales) y Tomas (nombres de las mediciones).
@@ -81,6 +81,16 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_
     canales_procesar = ["canal_0", "canal_1", "canal_2", "canal_3"]
     for rel_path in mediciones:
         med_path = os.path.join(base_dir, rel_path)
+        if not os.path.exists(med_path):
+            for item in os.listdir(base_dir):
+                sub_p = os.path.join(base_dir, item, rel_path)
+                if os.path.isdir(sub_p):
+                    med_path = sub_p
+                    break
+        if not os.path.exists(med_path):
+            if verbose:
+                print(f"[Aviso] No se encontró la carpeta de medición: {rel_path}")
+            continue
         med_name = os.path.basename(rel_path)
         partes = med_name.split('_')
         if len(partes) < 1:
@@ -209,10 +219,42 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_
                 # Promedio y atenuación
                 ruido_promedio = (ruido_pre + ruido_post) / 2.0
                 ruido_acumulado_window += ruido_promedio
+                # 1. Detector de Ruido Puro Multivariable (Rel_IQR * Ratio_Centro * Tau_Norm)
+                p75_ch, p25_ch = np.percentile(segmento_ch, 75), np.percentile(segmento_ch, 25)
+                iqr_ch = p75_ch - p25_ch
+                rel_iqr_ch = (np.max(segmento_ch) - np.median(segmento_ch)) / (iqr_ch + 1e-9)
+                
+                centro_samples = int(0.250 * 2000)
+                idx_max_ch = np.argmax(segmento_ch)
+                c_i = max(0, idx_max_ch - centro_samples // 2)
+                c_f = min(len(segmento_ch), idx_max_ch + centro_samples // 2)
+                energia_centro = np.mean(segmento_ch[c_i:c_f]**2)
+                mascara_bordes = np.ones(len(segmento_ch), dtype=bool)
+                mascara_bordes[c_i:c_f] = False
+                energia_bordes = np.mean(segmento_ch[mascara_bordes]**2) if np.sum(mascara_bordes) > 0 else 1.0
+                ratio_energia_centro = energia_centro / (energia_bordes + 1e-9)
+                
+                seg_zero_mean = segmento_ch - np.mean(segmento_ch)
+                if np.std(seg_zero_mean) > 0:
+                    from scipy.signal import correlate
+                    acorr = correlate(seg_zero_mean, seg_zero_mean, mode="full")
+                    acorr = acorr[len(acorr)//2:]
+                    acorr = acorr / (acorr[0] + 1e-9)
+                    lags_50 = np.where(acorr < 0.5)[0]
+                    tau_50_ms = (lags_50[0] / 2000.0) * 1000.0 if len(lags_50) > 0 else 0.0
+                else:
+                    tau_50_ms = 0.0
+                    
+                score_activacion = rel_iqr_ch * ratio_energia_centro * (tau_50_ms / 50.0)
+                
+                # 2. Resta del piso de ruido interpulso
                 agresividad = alpha_ruido
                 ruido_a_restar = ruido_promedio * agresividad
+                segmento_ch = np.maximum(segmento_ch - ruido_a_restar, 0.0)
                 
-                segmento_ch = np.maximum(segmento_ch - ruido_a_restar, 0)
+                # 3. Compuerta de Ruido Puro: si el score no supera el umbral, mandar a 0.0
+                if gate_ratio_ruido > 0 and (score_activacion < gate_ratio_ruido):
+                    segmento_ch = np.zeros_like(segmento_ch)
                 
                 m_val = np.max(segmento_ch)
                 if m_val > max_supremo:
@@ -306,7 +348,7 @@ def calcular_centroides_y_distancias(X_proj, Y):
             
     return centroides, dist_matrix, vocales
 
-def ejecutar_procesamiento(mediciones, alpha_ruido=1.0, snr_threshold=0.5, outlier_contamination=0.05, smooth_ms=120, notch_q=2.0, target_length=100, use_manual_exclusions=True, verbose=True):
+def ejecutar_procesamiento(mediciones, alpha_ruido=1.0, gate_ratio_ruido=8.0, snr_threshold=0.1, outlier_contamination=0.05, smooth_ms=120, notch_q=2.0, target_length=100, use_manual_exclusions=True, verbose=True):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     base_dir = os.path.join(os.path.dirname(os.path.dirname(script_dir)), "base_de_datos_electrodos")
     out_dir = os.path.join(script_dir, "resultados_pca_umap")
@@ -315,7 +357,7 @@ def ejecutar_procesamiento(mediciones, alpha_ruido=1.0, snr_threshold=0.5, outli
     if verbose:
         print(f"\n2. Extracción y concatenación de características de {len(mediciones)} mediciones...")
         X, Y, Tomas, SNRs = extraer_features_concatenadas(
-            base_dir, mediciones, alpha_ruido=alpha_ruido, smooth_ms=smooth_ms, notch_q=notch_q, target_length=target_length, use_manual_exclusions=use_manual_exclusions, verbose=verbose)
+            base_dir, mediciones, alpha_ruido=alpha_ruido, gate_ratio_ruido=gate_ratio_ruido, smooth_ms=smooth_ms, notch_q=notch_q, target_length=target_length, use_manual_exclusions=use_manual_exclusions, verbose=verbose)
     
     if len(X) == 0:
         print("Error: No se obtuvieron datos válidos para procesar.")
@@ -459,12 +501,20 @@ class GeneradorPCAGUI:
         # 2. SNR Threshold
         f2 = tk.Frame(params_frame, bg="#1F2833")
         f2.pack(fill="x", pady=2)
-        tk.Label(f2, text="Filtro Duro SNR Mínimo (ej: 0.5):", width=35, anchor="w", bg="#1F2833", fg="white").pack(side="left")
+        tk.Label(f2, text="Filtro Duro SNR Mínimo (ej: 0.1):", width=35, anchor="w", bg="#1F2833", fg="white").pack(side="left")
         self.ent_snr = tk.Entry(f2, width=10, bg="#0B0C10", fg="white", insertbackground="white")
         self.ent_snr.pack(side="left")
-        self.ent_snr.insert(0, "0.5")
+        self.ent_snr.insert(0, "0.1")
         
-        # 3. Contaminacion IsolationForest
+        # 3. Compuerta de Ruido (Gate)
+        f_gate = tk.Frame(params_frame, bg="#1F2833")
+        f_gate.pack(fill="x", pady=2)
+        tk.Label(f_gate, text="Compuerta Ruido Puro (Gate, ej: 8.0):", width=35, anchor="w", bg="#1F2833", fg="white").pack(side="left")
+        self.ent_gate = tk.Entry(f_gate, width=10, bg="#0B0C10", fg="white", insertbackground="white")
+        self.ent_gate.pack(side="left")
+        self.ent_gate.insert(0, "8.0")
+        
+        # 4. Contaminacion IsolationForest
         f3 = tk.Frame(params_frame, bg="#1F2833")
         f3.pack(fill="x", pady=2)
         tk.Label(f3, text="Tasa de Outliers Estadísticos (0.05=5%):", width=35, anchor="w", bg="#1F2833", fg="white").pack(side="left")
@@ -472,7 +522,7 @@ class GeneradorPCAGUI:
         self.ent_outliers.pack(side="left")
         self.ent_outliers.insert(0, "0.05")
         
-        # 4. Envolvente (smooth_ms)
+        # 5. Envolvente (smooth_ms)
         f4 = tk.Frame(params_frame, bg="#1F2833")
         f4.pack(fill="x", pady=2)
         tk.Label(f4, text="Suavizado Envolvente RMS (ms):", width=35, anchor="w", bg="#1F2833", fg="white").pack(side="left")
@@ -480,7 +530,7 @@ class GeneradorPCAGUI:
         self.ent_smooth.pack(side="left")
         self.ent_smooth.insert(0, "120")
         
-        # 5. Notch Q Factor
+        # 6. Notch Q Factor
         f5 = tk.Frame(params_frame, bg="#1F2833")
         f5.pack(fill="x", pady=2)
         tk.Label(f5, text="Filtro Notch Q Factor:", width=35, anchor="w", bg="#1F2833", fg="white").pack(side="left")
@@ -519,6 +569,7 @@ class GeneradorPCAGUI:
         try:
             val_alpha = float(self.ent_alpha.get())
             val_snr = float(self.ent_snr.get())
+            val_gate = float(self.ent_gate.get())
             val_out = float(self.ent_outliers.get())
             val_smooth = int(self.ent_smooth.get())
             val_notch_q = float(self.ent_notch_q.get())
@@ -530,6 +581,7 @@ class GeneradorPCAGUI:
         ejecutar_procesamiento(
             seleccionadas, 
             alpha_ruido=val_alpha, 
+            gate_ratio_ruido=val_gate,
             snr_threshold=val_snr, 
             outlier_contamination=val_out, 
             smooth_ms=val_smooth,

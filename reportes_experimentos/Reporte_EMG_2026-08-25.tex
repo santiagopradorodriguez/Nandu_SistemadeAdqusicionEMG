@@ -1,0 +1,411 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{geometry}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{float}
+\geometry{top=2cm, bottom=2cm, left=2.2cm, right=2.2cm}
+
+\title{\textbf{Reporte Integral de Adquisición, Calidad de Señal y Análisis PCA}}
+\author{Laboratorio de Sistemas Dinámicos (LSD) - Sistema Ñandú}
+\date{2026-08-25}
+
+\begin{document}
+\maketitle
+
+\section{Metadatos y Condiciones Experimentales}
+\begin{itemize}
+    \item \textbf{Fecha de Sesión:} 2026-08-25
+    \item \textbf{Sujeto de Prueba:} No especificado
+    \item \textbf{Tensión de Baterías:} 8.30 V y 8.20 V
+    \item \textbf{Electrodo de Referencia (Tierra):} Frente
+    \item \textbf{Total de Pruebas Registradas:} 5
+\end{itemize}
+
+\subsection{Configuración de Canales y Zonas Anatómicas}
+\begin{table}[H]
+\centering
+\begin{tabular}{clp{9cm}}
+\toprule
+\textbf{Canal} & \textbf{Músculo Asignado} & \textbf{Detalle / Ubicación} \\
+\midrule
+Canal 0 & Canal 0 & Electrodo bipolar de superficie \\
+Canal 1 & Canal 1 & Electrodo bipolar de superficie \\
+Canal 2 & Canal 2 & Electrodo bipolar de superficie \\
+Canal 3 & Canal 3 & Electrodo bipolar de superficie \\
+\bottomrule
+\end{tabular}
+\caption{Distribución de canales y asignación muscular.}
+\end{table}
+
+\subsection{Registro Fotográfico del Montaje de Electrodos}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.45\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/O_Prueba1_Candela/photo.png}
+    \caption{Montaje / Electrodo 1}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.45\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/U_Prueba1_Candela/photo.png}
+    \caption{Montaje / Electrodo 2}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.45\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/I_Prueba1_Candela/photo.png}
+    \caption{Montaje / Electrodo 3}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.45\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/E_Prueba1_Candela/photo.png}
+    \caption{Montaje / Electrodo 4}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Ubicación y fijación mecánica de los electrodos en la sesión.}
+\end{figure}
+
+\subsection{Armado y Fijación Mecánica}
+Electrodos recortados con plancha de gel y doble cinta de refuerzo.
+
+\subsection{Secuencia y Protocolo de Adquisición}
+Protocolo de 10 repeticiones por vocal (A, E, I, O, U) y secuencias compuestas.
+
+\subsection{Observaciones y Registro de Artefactos}
+Picos involuntarios por deglución.
+
+\newpage
+\section{Análisis de Calidad de Señal y Relación Señal-Ruido}
+Evaluación de los niveles de ruido interpulso, amplitudes pico y estabilidad temporal a lo largo de las pruebas registradas.
+
+\newpage
+\section{Análisis de Componentes Principales}
+Proyecciones ortogonales y clustering para la discriminación de tareas vocálicas, evaluando el espacio completo de 3 canales y cada par muscular en 2D y 3D.
+
+\subsection{Optimización de Hiperparámetros}
+\begin{table}[H]
+\centering
+\begin{tabular}{lc}
+\toprule
+\textbf{Parámetro de Procesamiento} & \textbf{Valor Óptimo Hallado} \\
+\midrule
+Ventana de Suavizado ($\tau_{\text{suavizado}}$) & 125 ms \\
+Puntos de Remuestreo ($W_{\text{ciclo}}$) & 20 muestras \\
+Factor de Supresión de Ruido ($\alpha_{\text{ruido}}$) & 0.1 \\
+Factor $Q$ del Filtro Notch & 2.0 \\
+Exactitud Máxima de Clasificación & \textbf{83.66\%} \\
+Coeficiente Silhouette & 0.1477 \\
+\bottomrule
+\end{tabular}
+\caption{Hiperparámetros óptimos seleccionados mediante búsqueda en grilla.}
+\end{table}
+
+\newpage
+\subsection{Tríada Completa (Canales 0, 1 y 2)}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/triada/heatmap_confusion_pca_2d.png}
+    \caption{Matriz de Confusión 2D}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/triada/heatmap_confusion_pca_3d.png}
+    \caption{Matriz de Confusión 3D}
+\end{subfigure}
+\caption{Matrices de confusión y tasas de clasificación para Tríada Completa (Canales 0, 1 y 2).}
+\end{figure}
+
+\newpage
+\subsection{Par de Canales 0 y 1}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/par_0_1/heatmap_confusion_pca_2d.png}
+    \caption{Matriz de Confusión 2D}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/par_0_1/heatmap_confusion_pca_3d.png}
+    \caption{Matriz de Confusión 3D}
+\end{subfigure}
+\caption{Matrices de confusión y tasas de clasificación para Par de Canales 0 y 1.}
+\end{figure}
+
+\newpage
+\subsection{Par de Canales 1 y 2}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/par_1_2/heatmap_confusion_pca_2d.png}
+    \caption{Matriz de Confusión 2D}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/par_1_2/heatmap_confusion_pca_3d.png}
+    \caption{Matriz de Confusión 3D}
+\end{subfigure}
+\caption{Matrices de confusión y tasas de clasificación para Par de Canales 1 y 2.}
+\end{figure}
+
+\newpage
+\subsection{Par de Canales 0 y 2}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/par_0_2/heatmap_confusion_pca_2d.png}
+    \caption{Matriz de Confusión 2D}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/par_0_2/heatmap_confusion_pca_3d.png}
+    \caption{Matriz de Confusión 3D}
+\end{subfigure}
+\caption{Matrices de confusión y tasas de clasificación para Par de Canales 0 y 2.}
+\end{figure}
+
+\newpage
+\section{Registros Detallados por Prueba}
+A continuación se detallan individualmente todas las pruebas registradas en orden cronológico, indicando su hora exacta y tiempo relativo de sesión.
+
+\newpage
+\subsection{Prueba 1: O\_Prueba1\_Candela (14:19:55, $\Delta t = 0.0$ min)}
+\begin{itemize}
+    \item \textbf{Tarea / Fonema:} O
+    \item \textbf{Hora de Registro:} 14:19:55
+    \item \textbf{Tiempo Relativo de Sesión:} 0.0 minutos
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/O_Prueba1_Candela/patron_muscular_grabacion.png}
+\caption{Patrón de activación muscular promedio para la Prueba 1.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/O_Prueba1_Candela/plot_paper_combined.png}
+\caption{Registro temporal y espectral combinado con ruido restado (Prueba 1).}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/O_Prueba1_Candela/plot_calibrado_2026-08-25_o_Prueba1_Candela.png}
+\caption{Señales calibradas en microvoltios (filtro notch 50 Hz, pasabanda 20--500 Hz y RMS 75 ms).}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/O_Prueba1_Candela/canal_0/avg_lider.png}
+\vspace{0.3cm}
+\caption{Canal 0: Canal 0 (Prueba 1).}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/O_Prueba1_Candela/canal_1/avg_lider.png}
+\vspace{0.3cm}
+\caption{Canal 1: Canal 1 (Prueba 1).}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/O_Prueba1_Candela/canal_2/avg_lider.png}
+\vspace{0.3cm}
+\caption{Canal 2: Canal 2 (Prueba 1).}
+\end{figure}
+
+\newpage
+\subsection{Prueba 2: U\_Prueba1\_Candela (14:20:39, $\Delta t = 0.7$ min)}
+\begin{itemize}
+    \item \textbf{Tarea / Fonema:} U
+    \item \textbf{Hora de Registro:} 14:20:39
+    \item \textbf{Tiempo Relativo de Sesión:} 0.7 minutos
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/U_Prueba1_Candela/patron_muscular_grabacion.png}
+\caption{Patrón de activación muscular promedio para la Prueba 2.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/U_Prueba1_Candela/plot_paper_combined.png}
+\caption{Registro temporal y espectral combinado con ruido restado (Prueba 2).}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/U_Prueba1_Candela/plot_calibrado_2026-08-25_u_Prueba1_Candela.png}
+\caption{Señales calibradas en microvoltios (filtro notch 50 Hz, pasabanda 20--500 Hz y RMS 75 ms).}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/U_Prueba1_Candela/canal_0/avg_lider.png}
+\vspace{0.3cm}
+\caption{Canal 0: Canal 0 (Prueba 2).}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/U_Prueba1_Candela/canal_1/avg_lider.png}
+\vspace{0.3cm}
+\caption{Canal 1: Canal 1 (Prueba 2).}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/U_Prueba1_Candela/canal_2/avg_lider.png}
+\vspace{0.3cm}
+\caption{Canal 2: Canal 2 (Prueba 2).}
+\end{figure}
+
+\newpage
+\subsection{Prueba 3: I\_Prueba1\_Candela (14:23:36, $\Delta t = 3.7$ min)}
+\begin{itemize}
+    \item \textbf{Tarea / Fonema:} I
+    \item \textbf{Hora de Registro:} 14:23:36
+    \item \textbf{Tiempo Relativo de Sesión:} 3.7 minutos
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/I_Prueba1_Candela/patron_muscular_grabacion.png}
+\caption{Patrón de activación muscular promedio para la Prueba 3.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/I_Prueba1_Candela/plot_paper_combined.png}
+\caption{Registro temporal y espectral combinado con ruido restado (Prueba 3).}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/I_Prueba1_Candela/plot_calibrado_2026-08-25_i_Prueba1_Candela.png}
+\caption{Señales calibradas en microvoltios (filtro notch 50 Hz, pasabanda 20--500 Hz y RMS 75 ms).}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/I_Prueba1_Candela/canal_0/avg_lider.png}
+\vspace{0.3cm}
+\caption{Canal 0: Canal 0 (Prueba 3).}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/I_Prueba1_Candela/canal_1/avg_lider.png}
+\vspace{0.3cm}
+\caption{Canal 1: Canal 1 (Prueba 3).}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/I_Prueba1_Candela/canal_2/avg_lider.png}
+\vspace{0.3cm}
+\caption{Canal 2: Canal 2 (Prueba 3).}
+\end{figure}
+
+\newpage
+\subsection{Prueba 4: E\_Prueba1\_Candela (14:24:20, $\Delta t = 4.4$ min)}
+\begin{itemize}
+    \item \textbf{Tarea / Fonema:} E
+    \item \textbf{Hora de Registro:} 14:24:20
+    \item \textbf{Tiempo Relativo de Sesión:} 4.4 minutos
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/E_Prueba1_Candela/patron_muscular_grabacion.png}
+\caption{Patrón de activación muscular promedio para la Prueba 4.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/E_Prueba1_Candela/plot_paper_combined.png}
+\caption{Registro temporal y espectral combinado con ruido restado (Prueba 4).}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/E_Prueba1_Candela/plot_calibrado_2026-08-25_e_Prueba1_Candela.png}
+\caption{Señales calibradas en microvoltios (filtro notch 50 Hz, pasabanda 20--500 Hz y RMS 75 ms).}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/E_Prueba1_Candela/canal_0/avg_lider.png}
+\vspace{0.3cm}
+\caption{Canal 0: Canal 0 (Prueba 4).}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/E_Prueba1_Candela/canal_1/avg_lider.png}
+\vspace{0.3cm}
+\caption{Canal 1: Canal 1 (Prueba 4).}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/E_Prueba1_Candela/canal_2/avg_lider.png}
+\vspace{0.3cm}
+\caption{Canal 2: Canal 2 (Prueba 4).}
+\end{figure}
+
+\newpage
+\subsection{Prueba 5: A\_Prueba1\_Candela (14:25:04, $\Delta t = 5.2$ min)}
+\begin{itemize}
+    \item \textbf{Tarea / Fonema:} A
+    \item \textbf{Hora de Registro:} 14:25:04
+    \item \textbf{Tiempo Relativo de Sesión:} 5.2 minutos
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/A_Prueba1_Candela/patron_muscular_grabacion.png}
+\caption{Patrón de activación muscular promedio para la Prueba 5.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/A_Prueba1_Candela/plot_paper_combined.png}
+\caption{Registro temporal y espectral combinado con ruido restado (Prueba 5).}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/A_Prueba1_Candela/plot_calibrado_2026-08-25_a_Prueba1_Candela.png}
+\caption{Señales calibradas en microvoltios (filtro notch 50 Hz, pasabanda 20--500 Hz y RMS 75 ms).}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/A_Prueba1_Candela/canal_0/avg_lider.png}
+\vspace{0.3cm}
+\caption{Canal 0: Canal 0 (Prueba 5).}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/A_Prueba1_Candela/canal_1/avg_lider.png}
+\vspace{0.3cm}
+\caption{Canal 1: Canal 1 (Prueba 5).}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-08-25/A_Prueba1_Candela/canal_2/avg_lider.png}
+\vspace{0.3cm}
+\caption{Canal 2: Canal 2 (Prueba 5).}
+\end{figure}
+
+\end{document}

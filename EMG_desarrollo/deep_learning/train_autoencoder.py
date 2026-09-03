@@ -1,4 +1,5 @@
 import os
+import sys
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -8,6 +9,10 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import random
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
 
 # Forzar reproducibilidad absoluta
 SEED = 42
@@ -19,10 +24,14 @@ if torch.cuda.is_available():
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-from dataset_emg import EMGDataset
-from modelos import ConvAutoencoder1D
+try:
+    from dataset_emg import EMGDataset
+    from modelos import ConvAutoencoder1D
+except ImportError:
+    from deep_learning.dataset_emg import EMGDataset
+    from deep_learning.modelos import ConvAutoencoder1D
 
-def train_autoencoder(csv_path, epochs=80, batch_size=16, lr=1e-3, latent_dim=8, kernel_size=5, force_epochs=False, alpha=0.5, verbose=True, save_model=True):
+def train_autoencoder(csv_path, epochs=80, batch_size=16, lr=1e-3, latent_dim=8, kernel_size=5, force_epochs=False, alpha=0.5, verbose=True, save_model=True, train_sessions=None, test_sessions=None, out_dir=None):
     def _set_seed(seed=42):
         random.seed(seed)
         np.random.seed(seed)
@@ -45,33 +54,71 @@ def train_autoencoder(csv_path, epochs=80, batch_size=16, lr=1e-3, latent_dim=8,
     dataset_val = EMGDataset(csv_path, apply_augmentation=False)
     
     # ---------------------------------------------------------
-    # FIX DATA LEAKAGE: Split por 'Toma' en lugar de ventanas
+    # PARTICIÓN DE SESIONES FÍSICAS (TRAIN / TEST)
     # ---------------------------------------------------------
-    
     todas_las_tomas = dataset_train.tomas
-    def get_session_id(toma_str):
-        parts = toma_str.split('_')
-        if len(parts) >= 3:
-            return f"{parts[1]}_{parts[2]}" # Ej: T1_Lucas
-        return toma_str.split('_Win')[0]
+    train_sessions_names = [os.path.basename(s).strip() for s in (train_sessions or []) if s and str(s).strip()]
+    test_sessions_names = [os.path.basename(s).strip() for s in (test_sessions or []) if s and str(s).strip()]
+    
+    train_indices = []
+    val_indices = []
+    
+    if train_sessions_names or test_sessions_names:
+        if verbose:
+            print(f"Aplicando partición manual definida por el usuario...")
+            print(f"  -> Sesiones asignadas a TRAIN: {train_sessions_names}")
+            print(f"  -> Sesiones asignadas a TEST:  {test_sessions_names}")
+            
+        for i, toma in enumerate(todas_las_tomas):
+            asignado = False
+            toma_clean = toma.replace(" ", "").lower()
+            for s_name in train_sessions_names:
+                if s_name.replace(" ", "").lower() in toma_clean:
+                    train_indices.append(i)
+                    asignado = True
+                    break
+            if not asignado:
+                for s_name in test_sessions_names:
+                    if s_name.replace(" ", "").lower() in toma_clean:
+                        val_indices.append(i)
+                        asignado = True
+                        break
+                        
+        if not train_indices:
+            print("[Advertencia] No hubo coincidencia para Train con los nombres dados. Se usarán todas las muestras para Train.")
+            train_indices = list(range(len(todas_las_tomas)))
+            
+        if not val_indices:
+            print("[Aviso] No se asignaron sesiones a Test. Se usará el conjunto de Train para validación.")
+            val_indices = train_indices
+            
+        train_sesiones = sorted(list(set(train_sessions_names))) if train_sessions_names else ["Todas"]
+        val_sesiones = sorted(list(set(test_sessions_names))) if test_sessions_names else train_sesiones
+    else:
+        # Fallback: Split determinista por Sesión Física Real (Prueba1_Candela, Prueba2_Candela, etc.)
+        def get_session_id(toma_str):
+            base = toma_str.rsplit('_Win', 1)[0]
+            parts = base.split('_')
+            if len(parts) > 1 and parts[0].upper() in ['A', 'E', 'I', 'O', 'U']:
+                return '_'.join(parts[1:])
+            return base
+            
+        sesiones_base = [get_session_id(toma) for toma in todas_las_tomas]
+        sesiones_unicas = sorted(list(set(sesiones_base)))
         
-    sesiones_base = [get_session_id(toma) for toma in todas_las_tomas]
-    sesiones_unicas = sorted(list(set(sesiones_base)))
+        _set_seed(42)
+        np.random.shuffle(sesiones_unicas)
+        
+        train_sesiones_size = max(1, int(0.8 * len(sesiones_unicas)))
+        train_sesiones = set(sesiones_unicas[:train_sesiones_size])
+        val_sesiones = set(sesiones_unicas[train_sesiones_size:])
+        if not val_sesiones:
+            val_sesiones = train_sesiones
+        
+        train_indices = [i for i, sesion in enumerate(sesiones_base) if sesion in train_sesiones]
+        val_indices = [i for i, sesion in enumerate(sesiones_base) if sesion in val_sesiones]
     
-    _set_seed(42)
-    np.random.shuffle(sesiones_unicas)
-    
-    # 80% Sesiones para Train, 20% Sesiones para Validación
-    train_sesiones_size = max(1, int(0.8 * len(sesiones_unicas)))
-    train_sesiones = set(sesiones_unicas[:train_sesiones_size])
-    val_sesiones = set(sesiones_unicas[train_sesiones_size:])
-    if not val_sesiones:
-        val_sesiones = train_sesiones
-    
-    train_indices = [i for i, sesion in enumerate(sesiones_base) if sesion in train_sesiones]
-    val_indices = [i for i, sesion in enumerate(sesiones_base) if sesion in val_sesiones]
-    
-    print(f"Total de Sesiones Físicas: {len(sesiones_unicas)} | Sesiones Train: {len(train_sesiones)} | Sesiones Val: {len(val_sesiones)}")
+    print(f"Total de Sesiones Físicas: {len(train_sesiones) + len(val_sesiones)} | Sesiones Train: {len(train_sesiones)} | Sesiones Val: {len(val_sesiones)}")
     print(f"--- SESIONES FÍSICAS EN ENTRENAMIENTO ---")
     for t in sorted(list(train_sesiones)):
         print(f"  - {t}")
@@ -85,7 +132,8 @@ def train_autoencoder(csv_path, epochs=80, batch_size=16, lr=1e-3, latent_dim=8,
     val_dataset = torch.utils.data.Subset(dataset_val, val_indices)
     
     _set_seed(42)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    drop_last_train = (len(train_dataset) > batch_size)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=drop_last_train)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
     
     # 2. Inicializar Modelo
@@ -122,6 +170,8 @@ def train_autoencoder(csv_path, epochs=80, batch_size=16, lr=1e-3, latent_dim=8,
         total_train = 0
         
         for inputs, labels_idx, labels_str in train_loader:
+            if inputs.size(0) <= 1:
+                continue
             inputs = inputs.to(device)
             labels_idx = labels_idx.to(device)
             
@@ -198,16 +248,49 @@ def train_autoencoder(csv_path, epochs=80, batch_size=16, lr=1e-3, latent_dim=8,
     # 4. Guardar resultados
     current_dir = os.path.dirname(os.path.abspath(__file__))
     base_repo_dir = os.path.abspath(os.path.join(current_dir, ".."))
+    central_dir = os.path.join(base_repo_dir, "resultados", "resultados_autoencoder")
+    
+    if out_dir is None:
+        sujeto_detectado = "General"
+        for t in dataset_train.tomas:
+            parts = t.rsplit('_Win', 1)[0].split('_')
+            if len(parts) >= 3:
+                sujeto_detectado = parts[-1]
+                break
+        import datetime
+        fecha_detectada = datetime.datetime.now().strftime("%Y-%m-%d")
+        out_dir = os.path.join(central_dir, f"{fecha_detectada}_{sujeto_detectado}")
+        
     if save_model:
-        out_dir = os.path.join(base_repo_dir, "resultados", "resultados_autoencoder")
         os.makedirs(out_dir, exist_ok=True)
+        os.makedirs(central_dir, exist_ok=True)
+        
         model_path = os.path.join(out_dir, f"autoencoder_emg_{latent_dim}d.pth")
         weights_to_save = best_model_wts if best_model_wts and not force_epochs else model.state_dict()
         torch.save(weights_to_save, model_path)
-        # Guardar también un alias global autoencoder_emg.pth
+        
+        # Guardar alias global en out_dir y en central_dir
         alias_path = os.path.join(out_dir, "autoencoder_emg.pth")
         torch.save(weights_to_save, alias_path)
-        if verbose: print(f"Modelo guardado exitosamente en:\n  - {model_path}\n  - {alias_path}")
+        torch.save(weights_to_save, os.path.join(central_dir, f"autoencoder_emg_{latent_dim}d.pth"))
+        torch.save(weights_to_save, os.path.join(central_dir, "autoencoder_emg.pth"))
+        
+        # Guardar configuración de partición para ploteo y evaluación
+        import json
+        split_cfg = {
+            "train_sessions": sorted(list(set(train_sesiones))),
+            "test_sessions": sorted(list(set(val_sesiones))),
+            "latent_dim": latent_dim
+        }
+        with open(os.path.join(out_dir, "split_config.json"), "w") as f:
+            json.dump(split_cfg, f, indent=4)
+        with open(os.path.join(central_dir, "split_config.json"), "w") as f:
+            json.dump(split_cfg, f, indent=4)
+            
+        if verbose: 
+            print(f"Resultados y modelo guardados en carpeta:")
+            print(f"  -> Carpeta Sujeto/Fecha: {out_dir}")
+            print(f"  -> Galería Central:      {central_dir}")
     
     # Graficar curva de Loss y Accuracy
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
@@ -230,6 +313,8 @@ def train_autoencoder(csv_path, epochs=80, batch_size=16, lr=1e-3, latent_dim=8,
     if save_model:
         plot_path = os.path.join(out_dir, "loss_curve.png")
         plt.savefig(plot_path)
+        if out_dir != central_dir:
+            plt.savefig(os.path.join(central_dir, "loss_curve.png"))
     plt.close(fig)
     
     return best_val_loss, best_val_acc

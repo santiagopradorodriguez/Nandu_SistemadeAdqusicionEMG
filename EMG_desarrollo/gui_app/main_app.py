@@ -586,6 +586,8 @@ class ReaperStyleHub(QMainWindow):
             action = QAction(name, self)
             if script == "_internal_config":
                 action.triggered.connect(self._open_config_dialog)
+            elif script == "_internal_report":
+                action.triggered.connect(self._open_report_dialog)
             elif script == "analysis/plotter_calibrado.py":
                 action.triggered.connect(self._run_plotter_calibrado)
             elif script == "analysis/correlaciondeseñales.py":
@@ -604,6 +606,7 @@ class ReaperStyleHub(QMainWindow):
     ])
 
     create_menu_button(" Utilidades", [
+        ("Generador de Reportes PDF", "_internal_report"),
         ("Entrenamiento AutoForge", "acquisition/modulo_de_entrenamiento.py"),
         ("Metrónomo", "acquisition/metronomo_visual.py"),
         ("Segmentador de Secuencias Continuas", "analysis/segmentador_secuencias.py"),
@@ -624,6 +627,23 @@ class ReaperStyleHub(QMainWindow):
     """
     from views.config_dialog import ConfiguracionDialog
     dialog = ConfiguracionDialog(self)
+    dialog.exec()
+
+  def _open_report_dialog(self):
+    """
+    Abre el diálogo para configurar y generar el reporte integral en PDF.
+    """
+    from views.report_dialog import ReportDialog
+    rutas = self.explorer_widget.get_selected_paths()
+    if not rutas:
+      from PySide6.QtWidgets import QMessageBox
+      QMessageBox.warning(
+          self,
+          "Sin Mediciones Seleccionadas",
+          "Por favor, tilde al menos una medición en el Gestor de Sesiones para generar el reporte."
+      )
+      return
+    dialog = ReportDialog(rutas, parent=self)
     dialog.exec()
 
 
@@ -843,6 +863,7 @@ class ReaperStyleHub(QMainWindow):
     self.analysis_panel.tab_procesamiento.btn_run_rapido.clicked.connect(lambda: self._run_analysis(interactivo=False))
     self.analysis_panel.tab_comparativo.btn_run_comparativo.clicked.connect(self.run_analisis_comparativo_nativo)
     self.analysis_panel.tab_comparativo.btn_run_sesion.clicked.connect(self.run_analisis_sesion_nativo)
+    self.analysis_panel.tab_comparativo.btn_generar_reporte.clicked.connect(self._open_report_dialog)
     lyt_analysis.addWidget(self.analysis_panel, stretch=1)
 
     self.panel_visor = QWidget()
@@ -930,7 +951,10 @@ class ReaperStyleHub(QMainWindow):
     self.tab_dl_ml.tab_pca.btn_visor_features.clicked.connect(lambda: self._launch_external("deep_learning/dataset_tools/visor_features.py"))
     self.tab_dl_ml.tab_umap.btn_run.clicked.connect(self.run_umap_nativo)
     self.tab_dl_ml.tab_umap_sup.btn_run.clicked.connect(self.run_umap_supervisado_nativo)
-    # (Botones btn_run_motor y btn_run_training se conectarán en un futuro cuando sus respectivos scripts nativos estén implementados)
+    if hasattr(self.tab_dl_ml, 'tab_training') and hasattr(self.tab_dl_ml.tab_training, 'btn_run_training'):
+      self.tab_dl_ml.tab_training.btn_run_training.clicked.connect(self.run_training_umbrales_nativo)
+    if hasattr(self.tab_dl_ml, 'tab_motor') and hasattr(self.tab_dl_ml.tab_motor, 'btn_run_motor'):
+      self.tab_dl_ml.tab_motor.btn_run_motor.clicked.connect(self.run_discrete_motor_nativo)
     
     # Conectar los clasificadores (Trevisan, Autoencoders, Visor)
     self.tab_dl_ml.btn_trevisan.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/binarizacion/analisis_trevisan.py"))
@@ -945,8 +969,12 @@ class ReaperStyleHub(QMainWindow):
       ae.btn_entrenar.clicked.connect(self.run_autoencoder_entrenar_nativo)
       ae.btn_plotear.clicked.connect(self.run_autoencoder_plotear_nativo)
       ae.btn_decodificador.clicked.connect(self.run_autoencoder_decodificador_nativo)
+      if hasattr(ae, 'btn_abrir_carpeta'):
+        ae.btn_abrir_carpeta.clicked.connect(self.abrir_carpeta_autoencoder)
       ae.btn_visor_features.clicked.connect(lambda: self._launch_external("deep_learning/dataset_tools/visor_features.py"))
       ae.btn_pipeline_gui.clicked.connect(lambda: self._launch_dl_ml_script("deep_learning/pipeline_autoencoder_gui.py"))
+      if hasattr(ae, 'btn_sync_sesiones'):
+        ae.btn_sync_sesiones.clicked.connect(self._sync_autoencoder_sessions)
     
     if hasattr(self.tab_dl_ml, 'btn_visor_features'):
       self.tab_dl_ml.btn_visor_features.clicked.connect(lambda: self._launch_external("deep_learning/dataset_tools/visor_features.py"))
@@ -1022,6 +1050,7 @@ class ReaperStyleHub(QMainWindow):
     self.analysis_panel.tab_procesamiento.btn_run_procesar.setEnabled(n > 0)
     self.analysis_panel.tab_comparativo.btn_run_comparativo.setEnabled(n > 1)
     self.analysis_panel.tab_comparativo.btn_run_sesion.setEnabled(n > 1)
+    self.analysis_panel.tab_comparativo.btn_generar_reporte.setEnabled(n > 0)
     
     # 2. Calcular Canales Totales (Procesamiento) y Comunes (Comparativo)
     cmb = self.analysis_panel.tab_comparativo.cmb_canal_comun
@@ -1717,10 +1746,23 @@ finally:
     
     paths_to_check = [
         os.path.join(root_dir, "resultados"),
+        os.path.join(root_dir, "resultados", "resultados_umbrales"),
         os.path.join(root_dir, "deep_learning", "pca_umap_clustering", "resultados_pca_umap"),
         os.path.join(root_dir, "deep_learning", "resultados_umap_supervisado"),
         os.path.join(root_dir, "analisis_comparativos")
     ]
+    
+    # Buscar carpetas UMBRALES en la base de datos de electrodos
+    base_db = os.path.join(root_dir, "base_de_datos_electrodos")
+    if os.path.exists(base_db):
+        try:
+            for entry in os.scandir(base_db):
+                if entry.is_dir():
+                    u_dir = os.path.join(entry.path, "UMBRALES")
+                    if os.path.exists(u_dir) and u_dir not in paths_to_check:
+                        paths_to_check.append(u_dir)
+        except Exception:
+            pass
     
     found_files = []
     valid_exts = ('.png', '.jpg', '.jpeg', '.csv', '.tex', '.json', '.txt')
@@ -1820,6 +1862,11 @@ finally:
                 med_str = os.path.join(parts[idx+1], parts[idx+2])
                 if med_str not in mediciones_lista:
                     mediciones_lista.append(med_str)
+        else:
+            base_dir_global = os.path.dirname(os.path.dirname(ruta))
+            med_str = f"{os.path.basename(os.path.dirname(ruta))}/{os.path.basename(ruta)}"
+            if med_str not in mediciones_lista:
+                mediciones_lista.append(med_str)
     return base_dir_global, mediciones_lista
 
   def _launch_bridge_script(self, name, title, kwargs, bridge_template, suffix=".py"):
@@ -1893,6 +1940,10 @@ finally:
     kwargs = self.tab_dl_ml.get_pca_kwargs()
     params_key = "params_2d" if n_components == 2 else "params_3d"
 
+    from PySide6.QtWidgets import QInputDialog
+    tag_nombre, ok = QInputDialog.getText(self, f"Identificador Grid Search ({n_components}D)", "Etiqueta o nombre para identificar este Grid Search (opcional):")
+    kwargs['tag_nombre'] = tag_nombre.strip() if ok and tag_nombre else ""
+
     template = """
 import json
 import sys
@@ -1930,14 +1981,25 @@ res = pca_ana.buscar_mejor_configuracion_pca(
     ignorar_ventana_cero=kwargs.get("ignorar_ventana_cero", False),
     algoritmo_clustering=kwargs.get("algoritmo_clustering_pca", "GMM"),
     logger=print,
-    n_components={N_COMPONENTS}
+    n_components={N_COMPONENTS},
+    aplicar_correccion_intersesion=kwargs.get("aplicar_correccion_intersesion", True),
+    tag_nombre=kwargs.get("tag_nombre", None),
+    ejecutar_ganador_con_graficos=True,
+    estilo_visual=kwargs.get("estilo_visual", "Fronteras")
 )
+
+best_config = None
+best_acc = 0.0
+best_sil = 0.0
+best_vocal_acc = {}
+carpeta_salida = ""
 
 if isinstance(res, tuple) and len(res) >= 3:
     best_config = res[0]
     best_acc = res[1]
     best_sil = res[2]
     best_vocal_acc = res[3] if len(res) >= 4 and isinstance(res[3], dict) else {}
+    carpeta_salida = res[5] if len(res) >= 6 else ""
 
 if best_config:
     if len(best_config) == 4:
@@ -1969,6 +2031,9 @@ if best_config:
         for v_name, v_pct in best_vocal_acc.items():
             print(f"      * Vocal {v_name}: {v_pct:.1f}%")
     print("  - Silhouette Score:    " + str(best_sil))
+    if carpeta_salida:
+        print("  - Carpeta Versionada:  " + str(carpeta_salida))
+        print("  - Gráficos y Distribución generados exitosamente.")
     print("---------------------------------------------------------")
     print("Se cargaron los resultados automáticamente.")
 """
@@ -2172,13 +2237,239 @@ gen_sup.ejecutar_procesamiento(
 """
     self._launch_bridge_script("run_umap_sup", "UMAP SUPERVISADO", kwargs, template)
 
-  def run_autoencoder_extraer_nativo(self):
-    rutas = self.explorer_widget.get_selected_paths()
-    if not rutas:
-      self.log_console.append("> ERROR: Selecciona al menos una medición en el Gestor de Sesiones para extraer el dataset del Autoencoder.\n")
+  def run_training_umbrales_nativo(self):
+    selected_paths = self.explorer_widget.get_selected_paths()
+    if not selected_paths:
+      from PySide6.QtWidgets import QMessageBox
+      QMessageBox.warning(self, "Atencion", "Debe seleccionar al menos una medicion en el Gestor de Sesiones.")
       return
 
+    try:
+      from utils.config_manager import ConfigManager
+      cm = ConfigManager()
+      c_config = cm.get("canales") or {}
+    except Exception:
+      c_config = {}
+    mapped_names = {f"canal_{i}": c_config.get(f"Canal {i}", {}).get("musculo", f"Canal {i}") for i in range(8)}
+
+    common_channels = None
+    for p in selected_paths:
+      if os.path.exists(p):
+        chans = set(d for d in os.listdir(p) if d.startswith("canal_") and os.path.isdir(os.path.join(p, d)))
+        if common_channels is None:
+          common_channels = chans
+        else:
+          common_channels &= chans
+    if not common_channels:
+      common_channels = {"canal_0", "canal_1", "canal_2"}
+
+    from views.ui_analysis import ThresholdTrainingDialog
+    dialog = ThresholdTrainingDialog(
+      mediciones=selected_paths,
+      mapped_names=mapped_names,
+      available_channels=sorted(list(common_channels)),
+      parent=self
+    )
+    if dialog.exec() != ThresholdTrainingDialog.Accepted:
+      self.log_console.append("> [Aviso] Entrenamiento de umbrales cancelado.")
+      return
+
+    nombre_set, selected_channels, asignaciones_vocales = dialog.get_results()
+    training_kwargs = self.tab_dl_ml.get_training_kwargs()
+
+    payload = {
+      'asignaciones_vocales': asignaciones_vocales,
+      'canales_seleccionados': selected_channels,
+      'mapped_names': mapped_names,
+      'filtro_snr_activo': training_kwargs.get('chk_snr', True),
+      'filtro_snr_limite': training_kwargs.get('snr_limit', 4.0),
+      'filtro_snr_tipo': training_kwargs.get('snr_tipo', 'Por Ventana (Individual)'),
+      'tipo_barrido': training_kwargs.get('tipo_barrido', 'Umbral Común (Único para todos los canales)'),
+      'paso_barrido': training_kwargs.get('paso_barrido', 0.05),
+      'nombre_set': nombre_set
+    }
+
+    template = """
+import json
+import sys
+import os
+
+project_root = r'{ROOT_PROJECT_DIR}'
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+script_dir = os.path.dirname(os.path.abspath(__file__))
+if script_dir not in sys.path:
+    sys.path.append(script_dir)
+
+with open(r'{TEMP_JSON}', 'r') as f:
+    cfg = json.load(f)
+
+asignaciones_vocales = cfg['asignaciones_vocales']
+canales_seleccionados = cfg['canales_seleccionados']
+mapped_names = cfg['mapped_names']
+filtro_snr_activo = cfg['filtro_snr_activo']
+filtro_snr_limite = cfg['filtro_snr_limite']
+filtro_snr_tipo = cfg['filtro_snr_tipo']
+tipo_barrido = cfg['tipo_barrido']
+paso_barrido = cfg['paso_barrido']
+nombre_set = cfg.get('nombre_set', '')
+
+import analysis.training_motor as tm
+
+print("=========================================================")
+print("      INICIANDO ENTRENAMIENTO DE UMBRALES (TRAIN)       ")
+print("=========================================================")
+print(f"Mediciones seleccionadas: {len(asignaciones_vocales)}")
+print(f"Canales seleccionados: {canales_seleccionados}")
+print(f"Tipo de barrido: {tipo_barrido} (Paso: {paso_barrido})")
+print(f"Filtro SNR: {filtro_snr_tipo} > {filtro_snr_limite} (Activo: {filtro_snr_activo})")
+if nombre_set:
+    print(f"Identificador del set: {nombre_set}")
+print("=========================================================\\n")
+
+tm.ejecutar_entrenamiento(
+    asignaciones_vocales=asignaciones_vocales,
+    canales_seleccionados=canales_seleccionados,
+    mapped_names=mapped_names,
+    filtro_snr_activo=filtro_snr_activo,
+    filtro_snr_limite=filtro_snr_limite,
+    filtro_snr_tipo=filtro_snr_tipo,
+    tipo_barrido=tipo_barrido,
+    paso_barrido=paso_barrido,
+    nombre_set=nombre_set,
+    logger=print
+)
+"""
+    self._launch_bridge_script("run_training", "ENTRENAMIENTO DE UMBRALES", payload, template)
+
+  def run_discrete_motor_nativo(self):
+    selected_paths = self.explorer_widget.get_selected_paths()
+    if not selected_paths:
+      from PySide6.QtWidgets import QMessageBox
+      QMessageBox.warning(self, "Atencion", "Debe seleccionar al menos una medicion en el Gestor de Sesiones.")
+      return
+
+    try:
+      from utils.config_manager import ConfigManager
+      cm = ConfigManager()
+      c_config = cm.get("canales") or {}
+    except Exception:
+      c_config = {}
+    mapped_names = {f"canal_{i}": c_config.get(f"Canal {i}", {}).get("musculo", f"Canal {i}") for i in range(8)}
+
+    common_channels = None
+    for p in selected_paths:
+      if os.path.exists(p):
+        chans = set(d for d in os.listdir(p) if d.startswith("canal_") and os.path.isdir(os.path.join(p, d)))
+        if common_channels is None:
+          common_channels = chans
+        else:
+          common_channels &= chans
+    if not common_channels:
+      common_channels = {"canal_0", "canal_1", "canal_2"}
+    canales_seleccionados = [c for c in sorted(list(common_channels)) if c.lower() != "canal_3"]
+    if not canales_seleccionados:
+      canales_seleccionados = ["canal_0", "canal_1", "canal_2"]
+
+    discrete_kwargs = self.tab_dl_ml.get_discrete_kwargs()
+    idx_modo = self.tab_dl_ml.tab_motor.method_tabs.currentIndex()
+    modo = 'estadistico' if idx_modo == 0 else 'manual'
+    thresh_stats = discrete_kwargs.get('n_std', 3.0)
+
+    thresh_manual = {}
+    if hasattr(self.tab_dl_ml.tab_motor, 'manual_thresholds'):
+      for k, sp in self.tab_dl_ml.tab_motor.manual_thresholds.items():
+        thresh_manual[k] = sp.value()
+
+    vocales_cfg = {
+      'enabled': self.tab_dl_ml.tab_motor.g_voc.isChecked() if hasattr(self.tab_dl_ml.tab_motor, 'g_voc') else False,
+      'secuencia': 'inverso' if 'inverso' in discrete_kwargs.get('vocal_orden', '').lower() else 'normal',
+      'primera': discrete_kwargs.get('vocal_inicio', 'a')
+    }
+
+    payload = {
+      'paths_mediciones': selected_paths,
+      'canales_seleccionados': canales_seleccionados,
+      'mapped_names': mapped_names,
+      'mode': modo,
+      'thresh_stats': thresh_stats,
+      'thresh_manual': thresh_manual,
+      'vocales_config': vocales_cfg
+    }
+
+    template = """
+import json
+import sys
+import os
+
+project_root = r'{ROOT_PROJECT_DIR}'
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+script_dir = os.path.dirname(os.path.abspath(__file__))
+if script_dir not in sys.path:
+    sys.path.append(script_dir)
+
+with open(r'{TEMP_JSON}', 'r') as f:
+    cfg = json.load(f)
+
+import analysis.discrete_motor as dm
+
+print("=========================================================")
+print("      INICIANDO COORDENADAS DISCRETAS (ASSANEO)         ")
+print("=========================================================")
+print(f"Modo: {cfg.get('mode')}")
+print(f"Mediciones: {len(cfg.get('paths_mediciones', []))}")
+print(f"Canales: {cfg.get('canales_seleccionados')}")
+print("=========================================================\\n")
+
+dm.calcular_coordenadas_discretas(
+    paths_mediciones=cfg.get('paths_mediciones', []),
+    canales_seleccionados=cfg.get('canales_seleccionados', []),
+    mapped_names=cfg.get('mapped_names', {}),
+    mode=cfg.get('mode', 'estadistico'),
+    thresh_stats=cfg.get('thresh_stats', 3.0),
+    thresh_manual=cfg.get('thresh_manual', None),
+    vocales_config=cfg.get('vocales_config', None)
+)
+"""
+    self._launch_bridge_script("run_discrete", "COORDENADAS DISCRETAS", payload, template)
+
+  def _sync_autoencoder_sessions(self):
+    base_dir, mediciones = self._generar_base_dir_y_mediciones()
+    if not mediciones:
+        self.log_console.append("> [Aviso] Selecciona sesiones en el Gestor de Sesiones para cargarlas en Autoencoder.\n")
+        return
+
+    # Extraer la sesión física real (Prueba1_Candela, Prueba2_Candela, T1_Lucas, etc.) agrupando todas sus vocales
+    sesiones_unicas = set()
+    for m in mediciones:
+        base = os.path.basename(m)
+        parts = base.split('_')
+        # Si tiene prefijo de vocal (A, E, I, O, U), la sesión de grabación es el resto: Prueba1_Candela
+        if len(parts) > 1 and parts[0].upper() in ['A', 'E', 'I', 'O', 'U']:
+            s_name = '_'.join(parts[1:])
+        else:
+            s_name = base
+        sesiones_unicas.add(s_name)
+
+    sesiones_lista = sorted(list(sesiones_unicas))
+    if hasattr(self.tab_dl_ml, 'tab_autoencoders'):
+        self.tab_dl_ml.tab_autoencoders.set_sessions(sesiones_lista)
+        self.log_console.append(f"> [Autoencoder] Se cargaron {len(sesiones_lista)} sesiones de prueba: {sesiones_lista}\n")
+
+  def run_autoencoder_extraer_nativo(self):
+    rutas = self.explorer_widget.get_selected_paths()
     kwargs = self.tab_dl_ml.get_autoencoder_kwargs()
+    train_s = kwargs.get('train_sessions', [])
+    test_s = kwargs.get('test_sessions', [])
+    manual_all = list(set(train_s + test_s))
+    
+    if not rutas and not manual_all:
+      self.log_console.append("> ERROR: Selecciona al menos una medición en el Gestor de Sesiones o cárgalas en la partición Train/Test.\n")
+      return
+
     template = """
 import json
 import sys
@@ -2194,6 +2485,23 @@ with open(r'{TEMP_JSON}', 'r') as f:
 mediciones = {MEDICIONES}
 base_dir = r'{BASE_DIR}'
 
+train_s = kwargs.get('train_sessions', [])
+test_s = kwargs.get('test_sessions', [])
+if train_s or test_s:
+    all_session_names = set(train_s + test_s)
+    matched_mediciones = []
+    for root, dirs, files in os.walk(base_dir):
+        for d in dirs:
+            parts = d.split('_')
+            if len(parts) > 1 and parts[0].upper() in ['A', 'E', 'I', 'O', 'U']:
+                s_id = '_'.join(parts[1:])
+                if s_id in all_session_names or d in all_session_names:
+                    rel = os.path.relpath(os.path.join(root, d), base_dir)
+                    if rel not in matched_mediciones:
+                        matched_mediciones.append(rel)
+    if matched_mediciones:
+        mediciones = matched_mediciones
+
 import deep_learning.dataset_tools.generador_pca_tensorial as gpt
 
 print("==================================================")
@@ -2201,27 +2509,17 @@ print("EXTRAYENDO DATASET TENSORIAL PARA AUTOENCODER...")
 print(f"Mediciones seleccionadas: {len(mediciones)}")
 print("==================================================")
 
-X, Y, Tomas = gpt.extraer_features_concatenadas(
-    base_dir=base_dir,
+gpt.ejecutar_procesamiento(
     mediciones=mediciones,
     alpha_ruido=kwargs.get('alpha_ruido', 1.0),
+    snr_threshold=kwargs.get('snr_min', 0.5),
+    outlier_contamination=kwargs.get('outliers_pct', 0.05),
     smooth_ms=kwargs.get('smooth_ms', 150),
-    notch_q=kwargs.get('notch_q', 2.0),
     target_length=kwargs.get('target_length', 100),
+    notch_q=kwargs.get('notch_q', 2.0),
     use_manual_exclusions=kwargs.get('use_manual_exclusions', True),
     verbose=True
 )
-
-out_dir = os.path.join(project_root, "resultados", "resultados_pca_tensorial")
-os.makedirs(out_dir, exist_ok=True)
-csv_out = os.path.join(out_dir, "caracteristicas_exportadas.csv")
-
-import pandas as pd
-df = pd.DataFrame(X)
-df.insert(0, 'Toma', Tomas)
-df.insert(0, 'Vocal', Y)
-df.to_csv(csv_out, index=False)
-print(f"\\n>>> DATASET EXPORTADO EXITOSAMENTE ({len(df)} muestras) EN: {csv_out} <<<")
 """
     self._launch_bridge_script("extraer_autoencoder", "EXTRACCION DATASET AUTOENCODER", kwargs, template)
 
@@ -2235,6 +2533,9 @@ import os
 project_root = r'{ROOT_PROJECT_DIR}'
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
+dl_dir = os.path.join(project_root, "deep_learning")
+if dl_dir not in sys.path:
+    sys.path.insert(0, dl_dir)
 
 with open(r'{TEMP_JSON}', 'r') as f:
     kwargs = json.load(f)
@@ -2263,7 +2564,9 @@ ta.train_autoencoder(
     kernel_size=kwargs.get('kernel_size', 5),
     force_epochs=kwargs.get('force_epochs', False),
     alpha=kwargs.get('alpha_loss', 0.5),
-    verbose=True
+    verbose=True,
+    train_sessions=kwargs.get('train_sessions', []),
+    test_sessions=kwargs.get('test_sessions', [])
 )
 """
     self._launch_bridge_script("entrenar_autoencoder", "ENTRENAMIENTO AUTOENCODER", kwargs, template)
@@ -2278,6 +2581,9 @@ import os
 project_root = r'{ROOT_PROJECT_DIR}'
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
+dl_dir = os.path.join(project_root, "deep_learning")
+if dl_dir not in sys.path:
+    sys.path.insert(0, dl_dir)
 
 with open(r'{TEMP_JSON}', 'r') as f:
     kwargs = json.load(f)
@@ -2304,7 +2610,13 @@ if not model_path:
     sys.exit(1)
 
 import deep_learning.plot_latent_space as pls
-pls.plot_latent_space(csv_file, model_path, latent_dim=l_dim)
+pls.plot_latent_space(
+    csv_file, 
+    model_path, 
+    latent_dim=l_dim,
+    train_sessions=kwargs.get('train_sessions', []),
+    test_sessions=kwargs.get('test_sessions', [])
+)
 """
     self._launch_bridge_script("plotear_latente", "PLOTEO ESPACIO LATENTE", kwargs, template)
 
@@ -2318,25 +2630,65 @@ import os
 project_root = r'{ROOT_PROJECT_DIR}'
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
+dl_dir = os.path.join(project_root, "deep_learning")
+if dl_dir not in sys.path:
+    sys.path.insert(0, dl_dir)
 
 with open(r'{TEMP_JSON}', 'r') as f:
     kwargs = json.load(f)
 
+user_dim = kwargs.get('latent_dim', 2)
+dims_to_test = sorted(list(set([2, 4, 8, 16, user_dim])))
+
 import deep_learning.grid_search_autoencoder as gsa
-df_res, campeon = gsa.run_grid_search(epochs=min(kwargs.get('epochs', 80), 80))
+df_res, campeon = gsa.run_grid_search(
+    epochs=min(kwargs.get('epochs', 80), 80),
+    latent_dims=dims_to_test,
+    train_sessions=kwargs.get('train_sessions', []),
+    test_sessions=kwargs.get('test_sessions', [])
+)
 """
     self._launch_bridge_script("grid_search_ae", "GRID SEARCH AUTOENCODER (36 COMB.)", kwargs, template)
 
+  def abrir_carpeta_autoencoder(self):
+    root_dir = get_project_root()
+    out_dir = os.path.join(root_dir, "resultados", "resultados_autoencoder")
+    os.makedirs(out_dir, exist_ok=True)
+    import subprocess
+    try:
+      if os.name == 'nt':
+        os.startfile(out_dir)
+      else:
+        subprocess.Popen(["xdg-open", out_dir], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+      self.log_console.append(f"> Carpeta de resultados abierta: {out_dir}\n")
+    except Exception as e:
+      self.log_console.append(f"> Error abriendo carpeta de resultados: {e}\n")
+
   def run_autoencoder_decodificador_nativo(self):
+    from PySide6.QtWidgets import QFileDialog
+    root_dir = get_project_root()
+    base_dir = os.path.join(root_dir, "base_de_datos_electrodos")
+    
+    # Directorio inicial sugerido (si hay grabaciones tildadas, apuntar a su carpeta de fecha)
+    initial_dir = base_dir
     rutas = self.explorer_widget.get_selected_paths()
-    carpeta = rutas[0] if rutas else None
-    if not carpeta or not os.path.isdir(carpeta):
-        from PySide6.QtWidgets import QFileDialog
-        root_dir = get_project_root()
-        base_dir = os.path.join(root_dir, "base_de_datos_electrodos")
-        carpeta = QFileDialog.getExistingDirectory(self, "Seleccione la carpeta de Secuencia Continua", base_dir)
-        if not carpeta:
-            return
+    if rutas:
+      posible_fecha_dir = os.path.dirname(rutas[0])
+      if os.path.isdir(posible_fecha_dir):
+        initial_dir = posible_fecha_dir
+
+    carpeta = QFileDialog.getExistingDirectory(
+      self,
+      "Seleccione la carpeta de Secuencia Continua a Decodificar",
+      initial_dir
+    )
+    if not carpeta:
+      self.log_console.append("> Decodificación continua cancelada por el usuario.\n")
+      return
+
+    if not os.path.isdir(carpeta):
+      self.log_console.append(f"> ERROR: La ruta seleccionada no es una carpeta válida: {carpeta}\n")
+      return
 
     kwargs = self.tab_dl_ml.get_autoencoder_kwargs()
     carpeta_clean = carpeta.replace("\\\\", "/")
@@ -2348,6 +2700,9 @@ import os
 project_root = r'{{ROOT_PROJECT_DIR}}'
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
+dl_dir = os.path.join(project_root, "deep_learning")
+if dl_dir not in sys.path:
+    sys.path.insert(0, dl_dir)
 
 with open(r'{{TEMP_JSON}}', 'r') as f:
     kwargs = json.load(f)
@@ -2355,11 +2710,13 @@ with open(r'{{TEMP_JSON}}', 'r') as f:
 carpeta_secuencia = r"{carpeta_clean}"
 
 out_dir = os.path.join(project_root, "resultados", "resultados_autoencoder")
-l_dim = kwargs.get('latent_dim', 8)
+l_dim = kwargs.get('latent_dim', 2)
 model_candidates = [
     os.path.join(out_dir, f"autoencoder_emg_{{l_dim}}d.pth"),
     os.path.join(out_dir, "autoencoder_campeon.pth"),
     os.path.join(out_dir, "autoencoder_emg.pth"),
+    os.path.join(out_dir, "autoencoder_emg_2d.pth"),
+    os.path.join(out_dir, "autoencoder_emg_8d.pth"),
 ]
 model_path = next((m for m in model_candidates if os.path.exists(m)), None)
 if not model_path:

@@ -31,24 +31,59 @@ def calcular_coordenadas_discretas(paths_mediciones, canales_seleccionados, mapp
             except Exception:
                 pass
                 
+        # Buscar picos del canal maestro (microfono canal_3 si existe)
+        mic_picos = None
+        mic_path = os.path.join(medicion_path, "canal_3", "analisis_results.json")
+        if os.path.exists(mic_path):
+            try:
+                with open(mic_path, 'r') as f:
+                    d_mic = json.load(f)
+                mic_picos = d_mic.get('maxima_per_cut', None)
+            except Exception:
+                pass
+
+        noise_levels_por_canal = {}
         for ch in canales_seleccionados:
             json_path = os.path.join(medicion_path, ch, "analisis_results.json")
+            if not os.path.exists(json_path):
+                json_path = os.path.join(medicion_path, ch, "results.json")
+
             if os.path.exists(json_path):
                 try:
                     with open(json_path, 'r') as f:
                         data = json.load(f)
                     segmentos = data.get('segmentos_rs', None)
-                    if segmentos is None:
+                    if segmentos is None or len(segmentos) == 0:
                         for k, v in data.items():
-                            if isinstance(v, dict) and 'segmentos_rs' in v:
+                            if isinstance(v, dict) and 'segmentos_rs' in v and v['segmentos_rs']:
                                 segmentos = v['segmentos_rs']
                                 break
+                                
+                    # Si no está pre-segmentado, extraer directamente de env_recortada
+                    if (segmentos is None or len(segmentos) == 0) and 'env_recortada' in data:
+                        env = np.array(data['env_recortada'])
+                        muestras_pulso = int(data.get('muestras_pulso', 4000))
+                        picos = mic_picos if (mic_picos and len(mic_picos) > 0) else data.get('maxima_per_cut', [])
+                        pre_s = int(muestras_pulso * 0.4)
+                        post_s = int(muestras_pulso * 0.6)
+                        
+                        segs_ext = []
+                        for p in picos:
+                            s_start = int(p - pre_s)
+                            s_end = int(p + post_s)
+                            if s_start >= 0 and s_end <= len(env):
+                                segs_ext.append(env[s_start:s_end].tolist())
+                        if len(segs_ext) > 0:
+                            segmentos = segs_ext
+
                     if segmentos and len(segmentos) > 0:
                         data_por_canal[ch] = segmentos
+                        noise_levels_por_canal[ch] = data.get('noise_levels', [])
                 except Exception as e:
                     print(f"    - Error leyendo {ch}: {e}")
                     
         if not data_por_canal:
+            print(f"    [!] No se encontraron segmentos válidos para procesar en {nombre_medicion}.")
             continue
             
         num_pulsos = min([len(segs) for segs in data_por_canal.values()])
@@ -75,67 +110,71 @@ def calcular_coordenadas_discretas(paths_mediciones, canales_seleccionados, mapp
         
         canales_validos = [ch for ch in canales_seleccionados if ch in data_por_canal]
         
-        # ----- LOGICA MODO ESTADISTICO -----
+        # ----- LOGICA MODO ESTADISTICO (Ruido Interpulso Trevisan + Supremo Global Tricanal) -----
         if mode == 'estadistico':
             ruido_stats = {}
             for ch in canales_validos:
-                segs = data_por_canal[ch]
-                ruido_vals = []
-                for i in range(num_pulsos):
-                    arr = np.array(segs[i])
-                    edge_len = max(1, int(len(arr) * 0.15))
-                    ruido_vals.extend(arr[:edge_len])
-                    ruido_vals.extend(arr[-edge_len:])
+                # Usar noise_levels exacto de Trevisan si existe en analisis_results.json
+                nl = noise_levels_por_canal.get(ch, [])
+                if nl and len(nl) >= num_pulsos:
+                    noise_vals = [float(x) for x in nl[:num_pulsos]]
+                else:
+                    # Si no hay noise_levels precalculado, estimar del segmento basal o recortes
+                    segs = data_por_canal[ch]
+                    noise_vals = [float(np.min(np.abs(segs[i]))) for i in range(num_pulsos)]
                     
-                ruido_mean = np.mean(ruido_vals)
-                ruido_std = np.std(ruido_vals)
-                thresh_abs = thresh_stats * ruido_std 
-                
-                max_canal = 0.0
-                for i in range(num_pulsos):
-                    arr = np.array(segs[i]) - ruido_mean
-                    m = np.max(np.abs(arr))
-                    if m > max_canal: max_canal = m
-                if max_canal == 0: max_canal = 1.0
-                
+                ruido_mean = float(np.mean(noise_vals)) if len(noise_vals) > 0 else 0.0
+                ruido_std = float(np.std(noise_vals)) if len(noise_vals) > 0 else 1.0
+                if ruido_std <= 0 or np.isnan(ruido_std):
+                    ruido_std = max(1e-6, ruido_mean * 0.1)
+                    
+                thresh_abs = thresh_stats * ruido_std
                 ruido_stats[ch] = {
                     'mean': ruido_mean,
-                    'thresh_abs': thresh_abs,
-                    'max_canal': max_canal
+                    'std': ruido_std,
+                    'thresh_abs': thresh_abs
                 }
-                umbrales_visuales[ch] = thresh_abs / max_canal
-                
+            
+            # Calcular señales normalizadas por el Supremo Global Tricanal de cada pulso
+            max_supremos = []
             for i in range(num_pulsos):
+                recortes_i = {ch: np.array(data_por_canal[ch][i]) for ch in canales_validos}
+                arr_sin_offset = {ch: np.maximum(recortes_i[ch] - ruido_stats[ch]['mean'], 0.0) for ch in canales_validos}
+                m_sup = max([float(np.max(arr_sin_offset[ch])) for ch in canales_validos] + [1e-6])
+                max_supremos.append(m_sup)
+                
                 codigo_pulso = {}
                 for ch in canales_validos:
-                    arr = np.array(data_por_canal[ch][i])
-                    stats = ruido_stats[ch]
-                    arr_sin_offset = arr - stats['mean']
-                    
-                    estado = 1 if np.max(arr_sin_offset) >= stats['thresh_abs'] else 0
-                    codigo_pulso[ch] = estado
-                    
-                    arr_norm = arr_sin_offset / stats['max_canal']
+                    # Normalización obligatoria por el Supremo Global Tricanal
+                    arr_norm = arr_sin_offset[ch] / m_sup
                     senales_concatenadas[ch].extend(arr_norm.tolist())
                     
+                    estado = 1 if np.max(arr_sin_offset[ch]) >= ruido_stats[ch]['thresh_abs'] else 0
+                    codigo_pulso[ch] = estado
+                    
                 codigos_binarios.append(codigo_pulso)
+                
+            prom_supremo = float(np.mean(max_supremos)) if len(max_supremos) > 0 else 1.0
+            for ch in canales_validos:
+                umbrales_visuales[ch] = min(1.0, max(0.01, ruido_stats[ch]['thresh_abs'] / (prom_supremo + 1e-6)))
 
-        # ----- LOGICA MODO MANUAL (Global por pulso) -----
+        # ----- LOGICA MODO MANUAL (Supremo Global Tricanal por pulso) -----
         else:
             for ch in canales_validos:
-                umbrales_visuales[ch] = thresh_manual.get(ch, 0.5)
+                th_val = thresh_manual.get(ch, 0.5) if isinstance(thresh_manual, dict) else float(thresh_manual or 0.5)
+                umbrales_visuales[ch] = th_val
                 
             for i in range(num_pulsos):
-                # Encontrar el máximo global para este pulso i (sin offsets, pura amplitud bruta)
                 recortes_i = {ch: np.array(data_por_canal[ch][i]) for ch in canales_validos}
-                max_global = max([np.max(np.abs(arr)) for arr in recortes_i.values()] + [0.0001])
+                # Supremo Global Tricanal del pulso i
+                max_supremo_i = max([float(np.max(np.abs(arr))) for arr in recortes_i.values()] + [1e-6])
                 
                 codigo_pulso = {}
                 for ch in canales_validos:
-                    norm_pulse = recortes_i[ch] / max_global
+                    norm_pulse = recortes_i[ch] / max_supremo_i
                     senales_concatenadas[ch].extend(norm_pulse.tolist())
                     
-                    umbral_ch = thresh_manual.get(ch, 0.5)
+                    umbral_ch = thresh_manual.get(ch, 0.5) if isinstance(thresh_manual, dict) else float(thresh_manual or 0.5)
                     estado = 1 if np.max(norm_pulse) >= umbral_ch else 0
                     codigo_pulso[ch] = estado
                     
@@ -208,3 +247,20 @@ def calcular_coordenadas_discretas(paths_mediciones, canales_seleccionados, mapp
         plt.savefig(out_file, dpi=300, bbox_inches='tight')
         plt.close()
         print(f"    -> Gráfico exportado: {out_file}")
+
+        # Replicar en resultados centrales para el visor
+        import shutil
+        try:
+            cur = save_dir
+            found_root = None
+            while cur and cur != os.path.dirname(cur):
+                if os.path.exists(os.path.join(cur, "resultados")) or os.path.exists(os.path.join(cur, "base_de_datos_electrodos")):
+                    found_root = cur
+                    break
+                cur = os.path.dirname(cur)
+            if found_root:
+                c_dir = os.path.join(found_root, "resultados", "resultados_coordenadas_discretas")
+                os.makedirs(c_dir, exist_ok=True)
+                shutil.copy2(out_file, os.path.join(c_dir, os.path.basename(out_file)))
+        except Exception as e:
+            pass
