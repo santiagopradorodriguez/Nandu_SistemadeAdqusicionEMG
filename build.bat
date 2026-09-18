@@ -11,7 +11,12 @@ echo ====================================================
 if exist "%ROOT_DIR%venv\Scripts\python.exe" (
     echo [Entorno] Usando entorno virtual: %ROOT_DIR%venv
     set PYTHON_EXEC="%ROOT_DIR%venv\Scripts\python.exe"
-    set PYINSTALLER_EXEC="%ROOT_DIR%venv\Scripts\pyinstaller.exe"
+) else if exist "%ROOT_DIR%.venv\Scripts\python.exe" (
+    echo [Entorno] Usando entorno virtual: %ROOT_DIR%.venv
+    set PYTHON_EXEC="%ROOT_DIR%.venv\Scripts\python.exe"
+) else if exist "%ROOT_DIR%EMG_desarrollo\venv\Scripts\python.exe" (
+    echo [Entorno] Usando entorno virtual: %ROOT_DIR%EMG_desarrollo\venv
+    set PYTHON_EXEC="%ROOT_DIR%EMG_desarrollo\venv\Scripts\python.exe"
 ) else (
     where python >nul 2>&1
     if !ERRORLEVEL! NEQ 0 (
@@ -19,8 +24,8 @@ if exist "%ROOT_DIR%venv\Scripts\python.exe" (
         exit /b 1
     )
     set PYTHON_EXEC=python
-    set PYINSTALLER_EXEC=pyinstaller
 )
+set PYINSTALLER_EXEC=%PYTHON_EXEC% -m PyInstaller
 
 echo [1/4] Creando entorno de compilacion temporal...
 %PYTHON_EXEC% herramientas_build\crear_entorno_ejecutable.py

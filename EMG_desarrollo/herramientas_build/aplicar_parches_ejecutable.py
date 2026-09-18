@@ -156,11 +156,13 @@ def lanzar_script(script_name, args=[]):
     reemplazos_main = [
         ("assets_dir = gui_dir / \"assets\"", "assets_dir = Path(resource_path(os.path.join('gui_app', 'assets')))"),
         ("search_dirs = [assets_dir, gui_dir, root_dir, pictures_dir]", "search_dirs = [assets_dir, pictures_dir]"),
+        ("search_dirs = [assets_dir, gui_dir, root_dir, Path(get_project_root()), pictures_dir]", "search_dirs = [assets_dir, pictures_dir]"),
         ("md_path = os.path.abspath(os.path.join(os.path.dirname(__file__), \"..\", \"justificacion_matematica.md\"))", "md_path = resource_path(os.path.join('archivos_md', 'justificacion_matematica.md'))"),
         ('comparative_path = os.path.join(root_dir, "analisis_comparativos")', 'comparative_path = user_data_path("analisis_comparativos")'),
         ('db_path = os.path.join(root_dir, "base_de_datos_electrodos")', 'db_path = user_data_path("base_de_datos_electrodos")'),
-        (viejo_launch, nuevo_launch)
     ]
+    if viejo_launch in open(os.path.join(build_dir, "gui_app", "main_app.py"), "r", encoding="utf-8").read():
+        reemplazos_main.append((viejo_launch, nuevo_launch))
     ruta_main = os.path.join(build_dir, "gui_app", "main_app.py")
     if os.path.exists(ruta_main):
         parchear_archivo(ruta_main, reemplazos_main)
@@ -185,6 +187,7 @@ def lanzar_script(script_name, args=[]):
         "acquisition/manual_daq.py",
         "acquisition/autoforge_daq.py",
         "acquisition/autoforge_daq_experimental.py",
+        "acquisition/calibracion_espacial_electrodos.py",
         "acquisition/modulo_de_entrenamiento.py",
         "analysis/plotter_calibrado.py", 
         "analysis/electrode_viewer_4.py", 
@@ -198,12 +201,17 @@ def lanzar_script(script_name, args=[]):
         "analysis/pca_motor.py",
         "analysis/training_motor.py",
         "analysis/umap_motor.py",
+        "analysis/filtro_adaptativo.py",
+        "analysis/analisis_espectral_candela.py",
+        "analysis/regenerar_fotos_sesion.py",
         "analysis/generar_graficos_y_ranking.py",
         "analysis/plot_metricas_tesis.py",
         "analysis/report_engine.py",
         "gui_app/views/report_dialog.py",
         "utils/actualizar_metadata.py", 
         "utils/migrar_mediciones_por_fecha.py",
+        "utils/limpiar_cache_analisis.py",
+        "utils/curar_dataset_exportacion.py",
         "deep_learning/binarizacion/analisis_trevisan.py",
         "deep_learning/binarizacion/analisis_trevisan_bandas.py",
         "deep_learning/binarizacion/analisis_binario.py",
@@ -212,11 +220,12 @@ def lanzar_script(script_name, args=[]):
         "deep_learning/pca_analysis.py",
         "deep_learning/umap_analysis.py",
         "deep_learning/pipeline_autoencoder_gui.py",
-        "deep_learning/experimento_grid_search_3_autoencoder.py",
         "deep_learning/dataset_tools/visor_features.py",
         "deep_learning/dataset_tools/generador_pca_tensorial.py",
-        "deep_learning/desacoplar_crosstalk_sesiones.py",
-        "deep_learning/reducir_dimensionalidad_con_encoder.py",
+        "deep_learning/motor_autoencoder_unificado.py",
+        "deep_learning/soft_dtw.py",
+        "deep_learning/autoencoder_no_supervisado_gui.py",
+        "deep_learning/corregir_canales_2026_09_16.py",
     ]
     for archivo in archivos_auxiliares:
         ruta = os.path.join(build_dir, archivo)

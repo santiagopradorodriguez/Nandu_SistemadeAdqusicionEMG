@@ -1264,3 +1264,57 @@ El autoencoder convolucional 1D entrenado sin supervisión con regularización p
          - Rostro anatómico frontal sin pelo, con ojos, nariz y labios definidos por código vectorial.
          - Señalización de zonas musculares exclusivamente mediante círculos de colores translúcidos (amarillo en orbicular, gama de verdes en cigomático/risorio/DAO/LAO, rojo en digástrico, verde lima en milohioideo, azul en platisma).
          - Sensores de registro sEMG marcados puntualmente. Cero texto.
+
+---
+
+### Hito 91 - 2026-09-17: Reestructuración Integral del Datasheet (Circuitos al Inicio y Fusión Contextual de Características)
+
+- **Instrucciones del Usuario:**
+  - *"primero va el circuito y luego esto"* (con captura de "1. Características Principales").
+  - *"la parte de amplificacion diferencial debajo de amplificacion diferencial , la parte de alimentacion debajo de alimentacion"*.
+- **Acciones Implementadas:**
+  - Se eliminó la sección genérica independiente *"1. Características Principales"* del inicio del documento.
+  - El documento comienza inmediatamente tras el encabezado en la primera página con la **Sección 1: Esquema del Circuito y Diseño de PCB** y el esquema electrónico integral de 3 canales (Figura 1).
+  - La Figura 2 (Layout de PCB) y la Tabla 1 (Lista Completa de Materiales - BOM) ocupan armónicamente la página 2.
+  - En la Subsección de *Detalle de Bloques y Canales Individuales*:
+    - Debajo del circuito de alimentación (Figura 3) se integraron directamente los puntos de **Alimentación y Protección Integral** junto a la descripción técnica de dicha etapa.
+    - Debajo del circuito del canal AD620 (Figura 4) se integraron directamente los puntos de **Amplificación Diferencial** junto a la descripción técnica de los canales.
+  - Se renumeraron las secciones correlativamente del 1 al 8 tanto en `datasheet_frontend_emg_ad620.tex` como en las copias Markdown (`EMG_desarrollo/documentacion_hardware/` y `EMG_desarrollo/archivos_md/`).
+  - Compilación exitosa con `pdflatex`: exactamente 10 páginas, 0 errores, estética limpia y profesional.
+  - PDF final desplegado en `./Datasheet_FrontEnd_EMG_AD620.pdf`.
+
+
+52. **Descarga y Procesamiento de Láminas Médicas Reales de Internet (0% IA, 0% Texto) (2026-09-17):**
+    - **Objetivo:** Obtener ilustraciones médicas auténticas creadas por ilustradores anatómicos humanos (descargadas directamente de Wikimedia Commons y OpenStax Anatomy), eliminando cualquier uso de IA generativa y suprimiendo todo texto o etiqueta textual:
+    - **Artefactos Guardados (300 DPI, Cero Texto, Cero IA):**
+      1. **`EMG_desarrollo/resultados/vista_submentoniana_internet_sin_ia.png`:**
+         - Lámina anatómica real de la región suprahioidea y piso de la boca vista desde abajo (mandíbula, hioides y cuello).
+         - Vientre anterior del digástrico señalado con círculos rojos y milohioideo con círculo verde lima profundo.
+         - Sensor Canal 0 marcado puntualmente. Sin texto.
+      2. **`EMG_desarrollo/resultados/cara_frontal_internet_sin_ia.png`:**
+         - Lámina anatómica frontal humana de atlas médico (OpenStax Anatomy 2e, CC BY 4.0), recortada sin leyendas editoriales.
+         - Zonas musculares señaladas puntualmente mediante círculos de colores:
+           * Orbicular de la boca: Círculo amarillo.
+           * Risorio, Zigomático Mayor, DAO y LAO: Círculos en gama de verdes.
+           * Milohioideo: Círculo más verde (lima).
+           * Vientre anterior del digástrico: Círculo rojo.
+           * Platisma: Círculos azules.
+         - Sensores sEMG de registro superpuestos. Sin texto.
+
+### Hito 92 - 2026-09-17: Preparación y Auditoría Integral de la Infraestructura de Compilación (Windows y Linux)
+
+- **Acciones Realizadas:**
+  1. **Actualización de `crear_spec_ejecutable.py`:**
+     - Se incorporaron a `candidate_assets` las carpetas `DataConfig` (conteniendo `modelos_vision/face_landmarker.task`) y `fotos/`.
+     - Se implementaron funciones auxiliares seguras (`_safe_collect`, `_safe_metadata`) para recolectar hooks de `mediapipe`, `cv2`, `nidaqmx`, `sounddevice`, `umap`, etc., evitando caídas si un paquete opcional no está presente.
+     - Se actualizaron los `additional_modules` incluyendo los módulos activos recientes (`acquisition.calibracion_espacial_electrodos`, `analysis.filtro_adaptativo`, `analysis.analisis_espectral_candela`, `analysis.regenerar_fotos_sesion`, `utils.limpiar_cache_analisis`, `utils.curar_dataset_exportacion`, `deep_learning.motor_autoencoder_unificado`, `deep_learning.soft_dtw`, `deep_learning.autoencoder_no_supervisado_gui`, `deep_learning.corregir_canales_2026_09_16`) y removiendo módulos obsoletos.
+  2. **Actualización de `aplicar_parches_ejecutable.py`:**
+     - Se actualizaron las reglas de reemplazo para `main_app.py` y se sincronizó la lista de archivos auxiliares con todos los módulos nuevos.
+  3. **Compatibilidad en `calibracion_espacial_electrodos.py`:**
+     - Se agregó soporte explícito para `sys._MEIPASS` en la búsqueda del modelo `face_landmarker.task`, permitiendo su ejecución transparente tanto en modo desarrollo como en el ejecutable empaquetado.
+  4. **Robustez en `build.bat` y `build_linux.sh`:**
+     - Se amplió la detección de entornos virtuales para soportar automáticamente `venv` y `.venv` en la raíz o en `EMG_desarrollo/`.
+     - Se adoptó la invocación `%PYTHON_EXEC% -m PyInstaller` para eliminar la dependencia de ejecutables intermediarios de consola.
+  5. **Verificación de Entorno:**
+     - Se ejecutaron secuencialmente `crear_entorno_ejecutable.py`, `aplicar_parches_ejecutable.py` y `crear_spec_ejecutable.py`, validando que `EMG_Ejecutable_Build` y `EMG_Studio.spec` quedan listos y sin errores.
+- **Estado Actual:** Infraestructura de compilación lista para ejecutarse directamente en Windows con `build.bat` o en Linux con `./build_linux.sh`.

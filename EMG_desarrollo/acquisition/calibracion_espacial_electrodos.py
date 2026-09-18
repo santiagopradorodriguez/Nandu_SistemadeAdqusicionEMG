@@ -133,6 +133,7 @@ class AntigravityAgent:
         # Rutas candidatas para el modelo face_landmarker.task
         rutas_candidatas = [
             model_asset_path,
+            os.path.join(getattr(sys, '_MEIPASS', ''), "DataConfig", "modelos_vision", "face_landmarker.task") if hasattr(sys, '_MEIPASS') else None,
             os.path.abspath(
                 os.path.join(
                     os.path.dirname(__file__), "..", "DataConfig", "modelos_vision", "face_landmarker.task"

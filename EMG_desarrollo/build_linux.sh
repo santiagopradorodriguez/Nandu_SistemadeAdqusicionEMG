@@ -10,14 +10,14 @@ echo "===================================================="
 # Determinar interprete de Python y PyInstaller
 if [ -f "$ROOT_DIR/venv/bin/python" ]; then
     PYTHON_EXEC="$ROOT_DIR/venv/bin/python"
-    PYINSTALLER_EXEC="$ROOT_DIR/venv/bin/pyinstaller"
+elif [ -f "$ROOT_DIR/.venv/bin/python" ]; then
+    PYTHON_EXEC="$ROOT_DIR/.venv/bin/python"
 elif [ -f "../venv/bin/python" ]; then
     PYTHON_EXEC="../venv/bin/python"
-    PYINSTALLER_EXEC="../venv/bin/pyinstaller"
 else
     PYTHON_EXEC="python3"
-    PYINSTALLER_EXEC="pyinstaller"
 fi
+PYINSTALLER_CMD=("$PYTHON_EXEC" -m PyInstaller)
 
 # 1. Crear el entorno base
 echo "[1/4] Creando entorno de compilacion..."
@@ -35,7 +35,7 @@ echo "[3/4] Generando SPEC..."
 echo "===================================================="
 echo "Iniciando PyInstaller..."
 cd EMG_Ejecutable_Build
-"$PYINSTALLER_EXEC" EMG_Studio.spec --noconfirm --clean
+"${PYINSTALLER_CMD[@]}" EMG_Studio.spec --noconfirm --clean
 cd ..
 
 # 5. Renombrar carpeta para el usuario

@@ -27,6 +27,8 @@ def generar_spec():
         ('palabras.txt', 'acquisition'),
         ('archivos_md', 'archivos_md'),
         ('papers', 'papers'),
+        ('DataConfig', 'DataConfig'),
+        ('fotos', 'fotos'),
         ('logo_nandu_lsd.png', '.'),
         ('logo_nandu_lsd.png', 'gui_app/assets'),
         ('logo_nandu_lsd.png', 'gui_app'),
@@ -51,16 +53,30 @@ def generar_spec():
 
 from PyInstaller.utils.hooks import collect_all, copy_metadata
 
-nidaqmx_datas, nidaqmx_binaries, nidaqmx_hiddenimports = collect_all('nidaqmx')
-sd_datas, sd_binaries, sd_hiddenimports = collect_all('sounddevice')
-sf_datas, sf_binaries, sf_hiddenimports = collect_all('soundfile')
-umap_datas, umap_binaries, umap_hiddenimports = collect_all('umap')
-sns_datas, sns_binaries, sns_hiddenimports = collect_all('seaborn')
-tly_datas, tly_binaries, tly_hiddenimports = collect_all('tensorly')
-numba_datas, numba_binaries, numba_hiddenimports = collect_all('numba')
-pynndescent_datas, pynndescent_binaries, pynndescent_hiddenimports = collect_all('pynndescent')
-tqdm_datas, tqdm_binaries, tqdm_hiddenimports = collect_all('tqdm')
-nitypes_metadata = copy_metadata('nitypes')
+def _safe_collect(pkg):
+    try:
+        return collect_all(pkg)
+    except Exception:
+        return [], [], []
+
+def _safe_metadata(pkg):
+    try:
+        return copy_metadata(pkg)
+    except Exception:
+        return []
+
+nidaqmx_datas, nidaqmx_binaries, nidaqmx_hiddenimports = _safe_collect('nidaqmx')
+sd_datas, sd_binaries, sd_hiddenimports = _safe_collect('sounddevice')
+sf_datas, sf_binaries, sf_hiddenimports = _safe_collect('soundfile')
+umap_datas, umap_binaries, umap_hiddenimports = _safe_collect('umap')
+sns_datas, sns_binaries, sns_hiddenimports = _safe_collect('seaborn')
+tly_datas, tly_binaries, tly_hiddenimports = _safe_collect('tensorly')
+numba_datas, numba_binaries, numba_hiddenimports = _safe_collect('numba')
+pynndescent_datas, pynndescent_binaries, pynndescent_hiddenimports = _safe_collect('pynndescent')
+tqdm_datas, tqdm_binaries, tqdm_hiddenimports = _safe_collect('tqdm')
+mp_datas, mp_binaries, mp_hiddenimports = _safe_collect('mediapipe')
+cv2_datas, cv2_binaries, cv2_hiddenimports = _safe_collect('cv2')
+nitypes_metadata = _safe_metadata('nitypes')
 
 block_cipher = None
 
@@ -69,6 +85,7 @@ additional_modules = [
     'acquisition.manual_daq',
     'acquisition.autoforge_daq',
     'acquisition.autoforge_daq_experimental',
+    'acquisition.calibracion_espacial_electrodos',
     'acquisition.metronomo_visual',
     'acquisition.modulo_de_entrenamiento',
     'acquisition.ventana_palabras',
@@ -83,6 +100,9 @@ additional_modules = [
     'analysis.pca_motor',
     'analysis.training_motor',
     'analysis.umap_motor',
+    'analysis.filtro_adaptativo',
+    'analysis.analisis_espectral_candela',
+    'analysis.regenerar_fotos_sesion',
     'analysis.generar_graficos_y_ranking',
     'analysis.plot_metricas_tesis',
     'analysis.report_engine',
@@ -93,9 +113,10 @@ additional_modules = [
     'utils.path_utils',
     'utils.sound_utils',
     'utils.logger',
+    'utils.limpiar_cache_analisis',
+    'utils.curar_dataset_exportacion',
     'instrucciones_uso',
     'views.config_dialog',
-    'views.report_dialog',
     'gui_app.core.threads',
     'gui_app.views.calibrated_viewer_widget',
     'gui_app.views.comparative_explorer_widget',
@@ -126,9 +147,10 @@ additional_modules = [
     'deep_learning.generador_umap_supervisado',
     'deep_learning.pca_analysis',
     'deep_learning.umap_analysis',
-    'deep_learning.experimento_grid_search_3_autoencoder',
-    'deep_learning.desacoplar_crosstalk_sesiones',
-    'deep_learning.reducir_dimensionalidad_con_encoder',
+    'deep_learning.motor_autoencoder_unificado',
+    'deep_learning.soft_dtw',
+    'deep_learning.autoencoder_no_supervisado_gui',
+    'deep_learning.corregir_canales_2026_09_16',
 ]
 
 # Librerías y módulos que PyInstaller requiere explícitamente
@@ -141,14 +163,14 @@ hidden_imports = [
     'deep_learning', 'tkinter', 'numba', 'tqdm', 'decouple', 'requests',
     'tzlocal', 'hightime', 'sklearn', 'sklearn.utils._typedefs',
     'sklearn.neighbors._quad_tree',
-    'sklearn.tree._utils', 'pynndescent',
-] + additional_modules + nidaqmx_hiddenimports + sd_hiddenimports + sf_hiddenimports + umap_hiddenimports + sns_hiddenimports + tly_hiddenimports + numba_hiddenimports + pynndescent_hiddenimports + tqdm_hiddenimports
+    'sklearn.tree._utils', 'pynndescent', 'cv2', 'mediapipe',
+] + additional_modules + nidaqmx_hiddenimports + sd_hiddenimports + sf_hiddenimports + umap_hiddenimports + sns_hiddenimports + tly_hiddenimports + numba_hiddenimports + pynndescent_hiddenimports + tqdm_hiddenimports + mp_hiddenimports + cv2_hiddenimports
 
 datas = [
         {datas_str}
-] + nidaqmx_datas + sd_datas + sf_datas + umap_datas + sns_datas + tly_datas + numba_datas + pynndescent_datas + tqdm_datas + nitypes_metadata
+] + nidaqmx_datas + sd_datas + sf_datas + umap_datas + sns_datas + tly_datas + numba_datas + pynndescent_datas + tqdm_datas + mp_datas + cv2_datas + nitypes_metadata
 
-binaries = nidaqmx_binaries + sd_binaries + sf_binaries + umap_binaries + sns_binaries + tly_binaries + numba_binaries + pynndescent_binaries + tqdm_binaries
+binaries = nidaqmx_binaries + sd_binaries + sf_binaries + umap_binaries + sns_binaries + tly_binaries + numba_binaries + pynndescent_binaries + tqdm_binaries + mp_binaries + cv2_binaries
 
 a = Analysis(
     ['gui_app/main_app.py'],
