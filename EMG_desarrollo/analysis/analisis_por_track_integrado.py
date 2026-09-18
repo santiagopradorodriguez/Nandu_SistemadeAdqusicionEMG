@@ -114,7 +114,7 @@ def _compute_env_full(signal_abs, apply_envelope, smooth_ms, samplerate, tipo_en
 
 
 # ---------------------- Noise estimation (initial window) -------------------
-def _estimate_noise_window(signal_recortada, samplerate, noise_seconds, smooth_ms, factor_umbral, tipo_env="media_movil"):
+def _estimate_noise_window(signal_recortada, samplerate, noise_seconds, smooth_ms, factor_umbral, tipo_env="media_movil", env_recortada=None):
     start_sample_noise = int(round(noise_seconds * samplerate))
     if start_sample_noise <= 0:
         start_sample_noise = 0
@@ -122,35 +122,81 @@ def _estimate_noise_window(signal_recortada, samplerate, noise_seconds, smooth_m
         start_sample_noise = min(len(signal_recortada)-1, int(round(0.01 * len(signal_recortada))))
 
     if start_sample_noise > 0:
-        skip_samples = int(round(1.0 * samplerate))
-        if start_sample_noise <= skip_samples + int(0.1 * samplerate):
-            skip_samples = min(int(round(0.1 * samplerate)), start_sample_noise // 2)
-            
-        noise_segment = signal_recortada[skip_samples:start_sample_noise]
-        if len(noise_segment) > 0:
-            env_noise = _compute_env_full(np.abs(noise_segment), True, smooth_ms, samplerate, tipo_env)
+        # Saltar transitorio inicial de conexión o encendido (máximo 0.2s o 20% de la ventana de ruido)
+        skip_samples = min(int(round(0.2 * samplerate)), start_sample_noise // 5)
+
+        if env_recortada is not None and len(env_recortada) >= start_sample_noise:
+            env_noise = np.abs(env_recortada[skip_samples:start_sample_noise])
         else:
-            env_noise = np.array([])
+            noise_segment = signal_recortada[skip_samples:start_sample_noise]
+            if len(noise_segment) > 0:
+                env_noise = _compute_env_full(np.abs(noise_segment), True, smooth_ms, samplerate, tipo_env)
+            else:
+                env_noise = np.array([])
         
+        clean_env = env_noise.copy()
         if len(env_noise) >= 5:
-            # Filtrar outliers de deglución en la envolvente de ruido usando IQR
-            q25, q75 = np.percentile(env_noise, [25, 75])
+            # Estimación robusta del piso basal a partir del percentil inferior (inmune a artefactos de deglución)
+            p35 = np.percentile(env_noise, 35)
+            floor_samples = env_noise[env_noise <= p35]
+            if len(floor_samples) >= 3:
+                floor_med = float(np.median(floor_samples))
+                floor_mad = float(np.median(np.abs(floor_samples - floor_med)))
+                sigma_base = floor_mad * 1.4826 if floor_mad > 0 else float(np.std(floor_samples))
+            else:
+                floor_med = float(np.median(env_noise))
+                floor_mad = float(np.median(np.abs(env_noise - floor_med)))
+                sigma_base = floor_mad * 1.4826 if floor_mad > 0 else float(np.std(env_noise))
+
+            # Cuartiles globales e IQR de Tukey
+            q25, q50, q75 = np.percentile(env_noise, [25, 50, 75])
             iqr = q75 - q25
-            clean_env = env_noise[env_noise <= q75 + 1.5 * iqr]
+
+            # Límites de corte para outliers y artefactos (tragar / deglución)
+            limite_iqr = q75 + 1.5 * iqr
+            limite_piso = floor_med + 3.5 * max(sigma_base, 1e-9)
+
+            # Si el valor máximo supera 2.0x el piso basal o el IQR está fuertemente expandido por una contracción
+            ratio_pico = (float(np.max(env_noise)) / floor_med) if floor_med > 0 else 1.0
+            if ratio_pico > 2.0 or (iqr > 2.5 * max(sigma_base, 1e-9)):
+                limite_corte = min(limite_iqr, limite_piso)
+            else:
+                limite_corte = limite_iqr
+
+            clean_env = env_noise[env_noise <= limite_corte]
+
+            # Segundo paso fino si se recortó un artefacto
+            if len(clean_env) >= 3 and len(clean_env) < len(env_noise):
+                med_c = float(np.median(clean_env))
+                mad_c = float(np.median(np.abs(clean_env - med_c)))
+                sigma_c = mad_c * 1.4826 if mad_c > 0 else float(np.std(clean_env))
+                corte_fino = med_c + 3.0 * max(sigma_c, 1e-9)
+                clean_env_fino = clean_env[clean_env <= corte_fino]
+                if len(clean_env_fino) >= 3:
+                    clean_env = clean_env_fino
+
             if len(clean_env) >= 3:
                 umbral = float(np.mean(clean_env))
                 noise_rms_from_noise_window = float(rms(clean_env))
+                mad = np.median(np.abs(clean_env - np.median(clean_env)))
+                sigma_est = float(mad * 1.4826)
             else:
-                umbral = float(np.median(env_noise))
-                noise_rms_from_noise_window = float(rms(env_noise))
-            mad = np.median(np.abs(env_noise - np.median(env_noise)))
-            sigma_est = mad * 1.4826
+                clean_env = floor_samples if len(floor_samples) >= 3 else env_noise
+                umbral = float(np.median(clean_env))
+                noise_rms_from_noise_window = float(rms(clean_env))
+                mad = np.median(np.abs(clean_env - umbral))
+                sigma_est = float(mad * 1.4826)
         else:
             sigma_est = np.std(env_noise) if len(env_noise) > 0 else 0.0
             umbral = np.mean(env_noise) if len(env_noise) > 0 else 0.0
             noise_rms_from_noise_window = rms(env_noise) if len(env_noise) > 0 else 0.0
 
-        print(f"[Umbral por ventana inicial Robusto] noise_seconds={noise_seconds}s, umbral={umbral:.5e}, noise_rms={noise_rms_from_noise_window:.5e}")
+        if len(clean_env) < len(env_noise):
+            descartadas = len(env_noise) - len(clean_env)
+            pct_desc = (descartadas / len(env_noise)) * 100.0
+            print(f"[Umbral por ventana inicial Robusto] Artefacto (deglución/tragar) filtrado: {descartadas}/{len(env_noise)} muestras ({pct_desc:.1f}%) ignoradas. noise_seconds={noise_seconds}s, umbral={umbral:.5e}, noise_rms={noise_rms_from_noise_window:.5e}")
+        else:
+            print(f"[Umbral por ventana inicial Robusto] noise_seconds={noise_seconds}s, umbral={umbral:.5e}, noise_rms={noise_rms_from_noise_window:.5e}")
         return start_sample_noise, env_noise, sigma_est, umbral, noise_rms_from_noise_window
     else:
         print(f"[Umbral] no se proporcionó ventana de ruido valida (noise_seconds={noise_seconds}).")
@@ -1371,6 +1417,7 @@ def procesar_wavs_promedio(
         resistencia_ohm = 100.0 # Por defecto
         measurement_date = ""
         comentario = ""
+        musc_canal = ""
         meta_path = os.path.join(carpeta, 'metadata.json')
         try:
             if os.path.exists(meta_path):
@@ -1380,6 +1427,14 @@ def procesar_wavs_promedio(
                         resistencia_ohm = meta_data['resistencia_ohm']
                     measurement_date = meta_data.get('measurement_date', '')
                     comentario = meta_data.get('comentario', '')
+                    musc_canal = meta_data.get('musculo', '')
+            if not musc_canal:
+                parent_ch0_meta = os.path.join(os.path.dirname(carpeta), 'canal_0', 'metadata.json')
+                if os.path.exists(parent_ch0_meta):
+                    with open(parent_ch0_meta, 'r', encoding='utf-8') as f0:
+                        m0 = json.load(f0)
+                        if 'muscles_map' in m0:
+                            musc_canal = m0['muscles_map'].get(f"canal_{channel_idx}", "")
         except Exception as e:
             pass
             
@@ -1480,7 +1535,9 @@ def procesar_wavs_promedio(
             continue
 
         # --- NUEVO: estimar ruido a partir de los primeros `noise_seconds` de la señal recortada ---
-        start_sample_noise, env_noise, sigma_est, umbral, noise_rms_from_noise_window = _estimate_noise_window(signal_recortada, samplerate, noise_seconds, smooth_ms, factor_umbral, tipo_envolvente)
+        start_sample_noise, env_noise, sigma_est, umbral, noise_rms_from_noise_window = _estimate_noise_window(
+            signal_recortada, samplerate, noise_seconds, smooth_ms, factor_umbral, tipo_envolvente, env_recortada=env_recortada
+        )
         if start_sample_noise <= 0:
             start_sample_noise = 0
 
@@ -1562,16 +1619,29 @@ def procesar_wavs_promedio(
                 print(f"[noise est.] {filename}: fallback a sigma_est: noise_rms={noise_rms:.5e}")
 
         # ---------- Calculo SNR ----------
-        # ---------- Calculo SNR y Ruido Interpulso Normalizado ----------
-        # Calcular ruido base (ahora usando la envolvente)
-        if start_sample_noise > 0:
-            skip_samples = int(round(1.0 * samplerate))
-            if start_sample_noise <= skip_samples + int(0.1 * samplerate):
-                skip_samples = min(int(round(0.1 * samplerate)), start_sample_noise // 2)
-                
+        # Ruido base: usar el umbral robusto ya calculado por _estimate_noise_window (libre de artefactos de deglución)
+        if umbral is not None and umbral > 0:
+            initial_noise_mean = float(umbral)
+            initial_noise_std = float(sigma_est) if (sigma_est is not None and sigma_est > 0) else 1e-12
+        elif start_sample_noise > 0:
+            skip_samples = min(int(round(0.2 * samplerate)), start_sample_noise // 5)
             initial_noise_segment = env_recortada[skip_samples:start_sample_noise]
-            initial_noise_mean = np.mean(np.abs(initial_noise_segment))
-            initial_noise_std = np.std(initial_noise_segment)
+            if len(initial_noise_segment) > 0:
+                p35_fb = np.percentile(initial_noise_segment, 35)
+                f_pts = initial_noise_segment[initial_noise_segment <= p35_fb]
+                f_med = float(np.median(f_pts)) if len(f_pts) > 0 else float(np.median(initial_noise_segment))
+                f_mad = float(np.median(np.abs(f_pts - f_med))) if len(f_pts) > 0 else 0.0
+                f_sig = f_mad * 1.4826 if f_mad > 0 else float(np.std(initial_noise_segment))
+                c_clean = initial_noise_segment[initial_noise_segment <= (f_med + 3.5 * max(f_sig, 1e-9))]
+                if len(c_clean) >= 3:
+                    initial_noise_mean = float(np.mean(c_clean))
+                    initial_noise_std = float(np.std(c_clean))
+                else:
+                    initial_noise_mean = float(np.mean(initial_noise_segment))
+                    initial_noise_std = float(np.std(initial_noise_segment))
+            else:
+                initial_noise_mean = 1e-12
+                initial_noise_std = 1e-12
         else:
             initial_noise_mean = 1e-12
             initial_noise_std = 1e-12
@@ -1767,7 +1837,20 @@ def procesar_wavs_promedio(
         pulso_std = np.std(segmentos_norm, axis=0)
 
         # color
-        color_prom = tuple(rng.rand(3).tolist()) if colores_aleatorios else colorgrafico
+        try:
+            from utils.config_manager import get_muscle_color
+            canonical_defaults = {0: '#ff754b', 1: '#00a896', 2: '#ffff00', 3: '#ff0000'}
+            default_c = canonical_defaults.get(channel_idx, colorgrafico)
+            if musc_canal:
+                colorgrafico_resuelto = get_muscle_color(musc_canal, default=default_c)
+            elif channel_idx == 3 or "mic" in str(display_name_for_plot).lower():
+                colorgrafico_resuelto = get_muscle_color("micrófono", default="#ff0000")
+            else:
+                colorgrafico_resuelto = default_c
+        except Exception:
+            colorgrafico_resuelto = colorgrafico
+
+        color_prom = tuple(rng.rand(3).tolist()) if colores_aleatorios else colorgrafico_resuelto
         # renombro el snr (sustituido por la definicion pedida: amplitud maxima sobre umbral)
         max_amp = np.max(pulso_promedio)
         snr_manual = max_amp / umbral if (umbral is not None and umbral > 0) else np.inf
@@ -2703,9 +2786,9 @@ def _comparative_session_plots(mediciones_data, nombre_salida_base):
             colores_resueltos = get_unique_channel_colors(ch_info_list)
             colors = {ch_idx: colores_resueltos[ch_idx] for ch_idx in range(len(ch_info_list))}
         else:
-            colors = {0: '#ffaa00', 1: '#39ff14', 2: '#ffff00'}
+            colors = {0: '#ff754b', 1: '#00a896', 2: '#ffff00'}
     except Exception:
-        colors = {0: '#ffaa00', 1: '#39ff14', 2: '#ffff00'}
+        colors = {0: '#ff754b', 1: '#00a896', 2: '#ffff00'}
     
     # --- PLOT 1: Evolución SNR ---
     fig_snr, ax_snr = plt.subplots(figsize=(15, 6))

@@ -331,6 +331,16 @@ class ElectrodeViewerWidget(QWidget):
                         scroll_meta.setWidget(lbl_meta)
                         canal_tab.addTab(scroll_meta, " Metadata")
                     except: pass
+            
+            if not canal_musculo:
+                ch0_meta = os.path.join(toma_path, "canal_0", "metadata.json")
+                if os.path.exists(ch0_meta):
+                    try:
+                        with open(ch0_meta, 'r', encoding='utf-8') as f0:
+                            m0 = json.load(f0)
+                            if 'muscles_map' in m0 and canal in m0['muscles_map']:
+                                canal_musculo = m0['muscles_map'][canal]
+                    except: pass
                     
             # Nombres bonitos para subpestañas
             img_tabs = {
@@ -377,7 +387,15 @@ class ElectrodeViewerWidget(QWidget):
                         break
                         
             tab_title = f"{canal.upper()} ({canal_musculo})" if canal_musculo else canal.upper()
-            self.tabs_channels.addTab(canal_tab, tab_title)
+            idx_added = self.tabs_channels.addTab(canal_tab, tab_title)
+            try:
+                from utils.config_manager import get_muscle_color
+                from PySide6.QtGui import QColor
+                target_name = canal_musculo if canal_musculo else ("micrófono" if "3" in canal else canal)
+                c_hex = get_muscle_color(target_name)
+                self.tabs_channels.tabBar().setTabTextColor(idx_added, QColor(c_hex))
+            except Exception:
+                pass
             
         # Restaurar la pestaña principal
         if current_main_tab_text:

@@ -16,10 +16,10 @@ matplotlib.use('TkAgg') # Garantizar ventana comparativa en Windows
 sys.path.append("/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo")
 import analysis.analisis_por_track_integrado as api
 
-mediciones = ['2026-07-10/A_T1_Lucas', '2026-07-10/A_T2_Lucas']
+mediciones = ['2026-09-08/A_Prueba1_Sujeto1', '2026-09-08/U_Prueba1_Sujeto1', '2026-09-08/a_Prueba2_Sujeto1', '2026-09-08/a_Prueba3_Sujeto1', '2026-09-08/a_Prueba4_Sujeto1', '2026-09-08/a_Prueba5_Sujeto1', '2026-09-08/u_Prueba2_Sujeto1', '2026-09-08/u_Prueba3_Sujeto1', '2026-09-08/u_Prueba4_Sujeto1']
 base_dir = "/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos"
-canal = "canal_1"
-nombre_custom = "comparacion"
+canal = "canal_0"
+nombre_custom = ""
 
 try:
   resultados_globales = {}

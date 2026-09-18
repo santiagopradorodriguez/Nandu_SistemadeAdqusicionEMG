@@ -1,0 +1,83 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish,es-tabla]{babel}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{hyperref}
+\usepackage{enumitem}
+
+\geometry{top=2cm, bottom=2cm, left=2cm, right=2cm}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    urlcolor=blue!80!black
+}
+
+\title{\textbf{Guía Rápida: Estructura de Datos y Catálogo de Imágenes sEMG}\\[0.2em]
+\large Sistema de Adquisición y Procesamiento Ñandú -- LSD, FCEyN, UBA}
+\author{Laboratorio de Sistemas Dinámicos}
+\date{Septiembre de 2026}
+
+\begin{document}
+\maketitle
+
+\section{Estructura de Carpetas}
+
+La base de datos y los paquetes exportados siguen una jerarquía fija de tres niveles (Fecha, Toma y Canales):
+
+\begin{verbatim}
+<Fecha>/ (ej. 2026-09-15, 2026-09-01)
+\-- <Toma_o_Sesion>/ (ej. A_Serie1_Candela, U_Prueba2_Candela)
+    |-- grabacion.csv               <- Matriz de muestras en texto plano
+    |-- photo.png                   <- Visualizacion oficial de senal cruda
+    |-- plot_paper_combined.png     <- Panel continuo y superpuesto
+    |-- canal_0/                    <- Canal 0 (Digastrico / Milohioideo)
+    |   |-- grabacion.wav           <- Biosenal nativa PCM a 2000 Hz (16 bits)
+    |   \-- metadata.json           <- Parametros de la toma
+    |-- canal_1/                    <- Canal 1 (Zigo / DAO) [WAV + metadata]
+    |-- canal_2/                    <- Canal 2 (Orbicular) [WAV + metadata]
+    \-- canal_3/                    <- Canal 3 (Microfono) [WAV + metadata]
+\end{verbatim}
+
+\textbf{Regla de lectura:} Todo módulo de procesamiento o red neuronal lee las bioseñales y metadatos accediendo estrictamente dentro de las subcarpetas \texttt{canal\_0}, \texttt{canal\_1}, \texttt{canal\_2} y \texttt{canal\_3}.
+
+\section{Archivos de Datos y Metadatos}
+
+\begin{itemize}[leftmargin=*, itemsep=4pt]
+    \item \textbf{\texttt{grabacion.wav}:} Bioseñal original en audio sin comprimir PCM lineal mono de 16 bits muestreada a 2000 Hz. Ubicada dentro de cada canal (\texttt{canal\_0} a \texttt{canal\_3}). Cada archivo dura unos 27 s y pesa apenas $\approx 108\,\text{KB}$.
+    \item \textbf{\texttt{grabacion.csv}:} Matriz temporal de texto plano ubicada en la raíz de cada toma con los valores numéricos de todos los canales en columnas.
+    \item \textbf{\texttt{metadata.json}:} Diccionario con los parámetros de registro: frecuencia de muestreo (2000 Hz), ritmo del metrónomo (BPM), segundos de reposo basal inicial (\texttt{noise\_seconds}), cantidad de pulsos por serie, fecha real de medición y nombres anatómicos de los músculos.
+\end{itemize}
+
+\section{Catálogo de Imágenes PNG}
+
+\subsection{Imágenes en la Raíz de la Medición}
+\begin{itemize}[leftmargin=*, itemsep=4pt]
+    \item \textbf{\texttt{photo.png}:} Imagen oficial de la toma. Presenta la señal 100\% cruda en microvoltios ($\mu\text{V}$) sin filtros Notch ni pasa-banda, con supresión de la mediana basal y normalización compartida por el Supremo Tricanal ($M_{\text{supremo}}$). Fondo negro puro, marcas de compás del metrónomo y líneas guía del piso de ruido interpulso.
+    \item \textbf{\texttt{plot\_paper\_combined.png}:} Figura de alta resolución (DPI 300) con panel doble: vista continua expandida de los primeros 6 ciclos (señal sEMG, envolvente RMS y micrófono) y vista concatenada con las contracciones superpuestas alineadas al inicio fonatorio.
+    \item \textbf{\texttt{plot\_calibrado\_...png}:} Trazado de señales en microvoltios con autoescala individualizada por canal y marcadores de picos.
+    \item \textbf{\texttt{patron\_muscular\_grabacion.png}:} Gráfico de barras de activación relativa promedio tricanal para verificar la dominancia del músculo agonista según la vocal emitida.
+\end{itemize}
+
+\subsection{Imágenes en las Subcarpetas de Canal}
+\begin{itemize}[leftmargin=*, itemsep=4pt]
+    \item \textbf{\texttt{pulses.png}:} Ventanas temporales individuales de cada pulso recortadas por el compás periódico del metrónomo.
+    \item \textbf{\texttt{pulses\_centrados.png}:} Pulsos recortados superpuestos con alineación fina por el pico de activación.
+    \item \textbf{\texttt{avg.png}:} Forma de onda promedio de la contracción ($\mu \pm \sigma$) con su envolvente RMS media.
+    \item \textbf{\texttt{avg\_lider.png}:} Pulso promedio contrastado temporalmente contra el micrófono acústico.
+    \item \textbf{\texttt{evolucion.png}:} Seguimiento secuencial del piso de ruido basal en los segmentos de reposo entre pulsos.
+    \item \textbf{\texttt{spec.png} y \texttt{spec\_lider.png}:} Espectrograma y espectro en frecuencia mono-canal.
+\end{itemize}
+
+\subsection{Imágenes en Carpetas de Análisis Global}
+\begin{itemize}[leftmargin=*, itemsep=4pt]
+    \item \textbf{\texttt{fft\_...png} y \texttt{psd\_...png}:} Espectro de amplitud Fourier (con detrending de continua) y densidad espectral Welch con frecuencia mediana (MDF) y media (MNF).
+    \item \textbf{\texttt{espectrograma\_compuesto\_RGB.png}:} Espectrograma donde cada canal muscular modula una componente cromática (Rojo, Verde y Amarillo).
+    \item \textbf{\texttt{informe\_autoencoder\_...png}:} Gráficos de reconstrucción de bioseñales y mapa del espacio latente continuo.
+\end{itemize}
+
+\end{document}

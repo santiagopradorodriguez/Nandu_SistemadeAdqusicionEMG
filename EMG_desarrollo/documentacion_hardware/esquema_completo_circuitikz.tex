@@ -1,0 +1,212 @@
+\documentclass[border=10pt]{standalone}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb}
+\usepackage[siunitx]{circuitikz}
+\usepackage{xcolor}
+
+\begin{document}
+\begin{circuitikz}[american, thick, font=\sffamily]
+
+  % ====================================================
+  % BLOQUE 1: ALIMENTACION Y PROTECCION ACTIVA (IZQUIERDA)
+  % ====================================================
+  \begin{scope}[xshift=-14cm, yshift=0cm]
+    \draw[dashed, draw=blue!60, fill=blue!2, rounded corners] (-2.8, 9.2) rectangle (13.6, -9.2);
+    \node[anchor=north west, font=\bfseries\color{blue!70!black}] at (-2.5, 8.8) {ETAPA DE ALIMENTACI\'ON Y PROTECCI\'ON ACTIVA $\pm 9\,\text{V}$};
+
+    % Bornera BAT TBLOCK-M3
+    \draw (-2.2, 5.0) rectangle (0.4, -5.0);
+    \node[font=\bfseries] at (-0.9, 4.4) {BAT};
+    \node[font=\scriptsize, anchor=west] at (-2.0, 3.4) {Pin 1: +9V};
+    \node[font=\scriptsize, anchor=west] at (-2.0, 0.0) {Pin 2: GND};
+    \node[font=\scriptsize, anchor=west] at (-2.0, -3.4) {Pin 3: -9V};
+    \draw (0.4, 3.4) -- (1.6, 3.4);
+    \draw (0.4, 0.0) -- (1.0, 0.0) node[ground]{};
+    \draw (0.4, -3.4) -- (1.6, -3.4);
+
+    % Bornera SWITCH TBLOCK-M4
+    \draw (1.6, 5.0) rectangle (3.8, -5.0);
+    \node[font=\bfseries] at (2.7, 4.4) {SWITCH};
+    \node[font=\scriptsize] at (2.0, 3.4) {1}; \node[font=\scriptsize] at (3.4, 3.4) {2};
+    \node[font=\scriptsize] at (2.0, -3.4) {3}; \node[font=\scriptsize] at (3.4, -3.4) {4};
+    \draw[very thick] (2.2, 3.4) -- (3.2, 3.4);
+    \draw[very thick] (2.2, -3.4) -- (3.2, -3.4);
+
+    % Fusibles
+    \draw (3.8, 3.4) to[fuse, *-*, l={\small $\text{FUSP} = 0.25\,\text{A}$}] (6.0, 3.4);
+    \draw (3.8, -3.4) to[fuse, *-*, l_={\small $\text{FUSN} = 0.25\,\text{A}$}] (6.0, -3.4);
+
+    % --- RIEL POSITIVO (+9V) ---
+    \draw (6.0, 3.4) -- (7.2, 3.4) coordinate (s_pos)
+          node[pmos, rotate=90, yscale=-1, anchor=S] (QP) {};
+    \node[above=6pt, font=\small\bfseries] at (7.2, 3.7) {F9540N};
+    \draw (QP.D) -- (12.2, 3.4) node[circle, fill, inner sep=2pt]{} 
+          node[right, font=\bfseries\color{red!70!black}] {+9V};
+
+    \draw (QP.G) -- (7.2, 1.8) coordinate (g_pos) -- (9.2, 1.8);
+    \draw (8.0, 3.4) to[zD, *-, l_={\small $D_2$}] (8.0, 1.8) node[circ]{};
+    \draw (9.2, 1.8) to[R, *-, l={\small $R_3 = 10\,\text{k}\Omega$}] (9.2, 0.0);
+
+    % --- RIEL NEGATIVO (-9V) ---
+    \draw (6.0, -3.4) -- (7.2, -3.4) coordinate (s_neg)
+          node[nmos, rotate=-90, yscale=-1, anchor=S] (QN) {};
+    \node[below=6pt, font=\small\bfseries] at (7.2, -3.7) {IRFZ44N};
+    \draw (QN.D) -- (12.2, -3.4) node[circle, fill, inner sep=2pt]{} 
+          node[right, font=\bfseries\color{blue!70!black}] {-9V};
+
+    \draw (QN.G) -- (7.2, -1.8) coordinate (g_neg) -- (10.2, -1.8);
+    \draw (8.0, -3.4) to[zD, *-, l={\small $D_1$}] (8.0, -1.8) node[circ]{};
+    \draw (10.2, -1.8) to[R, *-, l={\small $R_1 = 10\,\text{k}\Omega$}] (10.2, 0.0);
+
+    % Resistencias Bleeder
+    \draw (11.2, 3.4) to[R, *-, l_={\small $R_4 = 100\,\text{k}\Omega$}] (11.2, 0.0);
+    \draw (11.2, -3.4) to[R, *-, l={\small $R_2 = 100\,\text{k}\Omega$}] (11.2, 0.0);
+
+    % Masa GND
+    \draw (6.8, 0.0) node[ground]{} -- (12.2, 0.0) node[circle, fill, inner sep=2pt]{} 
+          node[right, font=\bfseries] {GND};
+    \draw (9.2, 0.0) node[circ]{};
+    \draw (10.2, 0.0) node[circ]{};
+    \draw (11.2, 0.0) node[circ]{};
+  \end{scope}
+
+  % ====================================================
+  % BLOQUE 2: CANAL 1 (U1 - AD620)
+  % ====================================================
+  \begin{scope}[xshift=4.8cm, yshift=6.0cm]
+    \draw[dashed, draw=blue!60, fill=blue!2, rounded corners] (-3.8, 2.8) rectangle (9.6, -2.8);
+    \node[anchor=north west, font=\bfseries\color{blue!70!black}] at (-3.5, 2.5) {CANAL 1};
+
+    % Bornera IN1
+    \draw (-3.4, 1.3) rectangle (-2.0, -1.3);
+    \node[font=\bfseries\scriptsize] at (-2.7, 0.9) {IN1};
+    \node[font=\tiny] at (-3.1, 0.45) {1}; \draw (-2.0, 0.45) -- (-1.6, 0.45) node[ground]{};
+    \node[font=\tiny] at (-3.1, 0.0) {2};  \draw (-2.0, 0.0) -- (-1.0, 0.0) -- (-1.0, 0.9) coordinate (in1_neg_start);
+    \node[font=\tiny] at (-3.1, -0.45) {3}; \draw (-2.0, -0.45) -- (-1.0, -0.45) -- (-1.0, -0.9) coordinate (in1_pos_start);
+
+    % Filtros de entrada
+    \draw (in1_neg_start) to[C, l={\scriptsize $C_2 = 33\,\text{nF}$}] (0.8, 0.9) coordinate (junc1_neg) -- (3.0, 0.9);
+    \draw (junc1_neg) to[R, *-, l_={\scriptsize $R_2 = 100\,\text{k}\Omega$}] (0.8, 1.7) node[ground, yscale=-1]{};
+
+    \draw (in1_pos_start) to[C, l_={\scriptsize $C_1 = 33\,\text{nF}$}] (0.8, -0.9) coordinate (junc1_pos) -- (3.0, -0.9);
+    \draw (junc1_pos) to[R, *-, l={\scriptsize $R_1 = 100\,\text{k}\Omega$}] (0.8, -1.7) node[ground]{};
+
+    % AD620 (U1)
+    \draw[thick] (3.0, 1.4) -- (5.4, 0.0) -- (3.0, -1.4) -- cycle;
+    \node at (4.1, 0.0) {\small AD620};
+    \node[below=4pt, font=\tiny] at (4.1, 0.0) {U1};
+    \node at (3.3, 0.9) {\scriptsize \(-\)};
+    \node at (3.3, -0.9) {\scriptsize \(+\)};
+
+    % Resistencia de ganancia RG (Pin 1 y 8)
+    \draw (3.0, 0.4) node[right=1pt, font=\tiny] {1} -- (2.2, 0.4) coordinate (rg1_top);
+    \draw (3.0, -0.4) node[right=1pt, font=\tiny] {8} -- (2.2, -0.4) coordinate (rg1_bot);
+    \draw (rg1_top) to[R, *-*, l_={\scriptsize $R_3 = 100\,\Omega$}] (rg1_bot);
+
+    % Alimentación U1
+    \draw (3.8, 0.9) -- ++(0, 0.7) node[above, font=\tiny\bfseries\color{red!70!black}] {+9V};
+    \draw (3.8, -0.9) -- ++(0, -0.7) node[below, font=\tiny\bfseries\color{blue!70!black}] {-9V};
+    \draw (4.6, -0.5) -- ++(0, -0.7) node[ground]{};
+
+    % Salida y Bornera OUT1
+    \draw (5.4, 0.0) -- (7.6, 0.0) coordinate (out1_wire);
+    \draw (7.6, 1.0) rectangle (9.2, -1.0);
+    \node[font=\bfseries\scriptsize] at (8.4, 0.6) {OUT1};
+    \node[font=\tiny] at (8.0, 0.0) {2}; \draw (out1_wire) -- (7.6, 0.0);
+    \node[font=\tiny] at (8.0, -0.5) {1}; \draw (9.2, -0.5) -- ++(0.3, 0) node[ground]{};
+  \end{scope}
+
+  % ====================================================
+  % BLOQUE 3: CANAL 2 (U2 - AD620)
+  % ====================================================
+  \begin{scope}[xshift=4.8cm, yshift=0.0cm]
+    \draw[dashed, draw=blue!60, fill=blue!2, rounded corners] (-3.8, 2.8) rectangle (9.6, -2.8);
+    \node[anchor=north west, font=\bfseries\color{blue!70!black}] at (-3.5, 2.5) {CANAL 2};
+
+    % Bornera IN2
+    \draw (-3.4, 1.3) rectangle (-2.0, -1.3);
+    \node[font=\bfseries\scriptsize] at (-2.7, 0.9) {IN2};
+    \node[font=\tiny] at (-3.1, 0.45) {1}; \draw (-2.0, 0.45) -- (-1.6, 0.45) node[ground]{};
+    \node[font=\tiny] at (-3.1, 0.0) {2};  \draw (-2.0, 0.0) -- (-1.0, 0.0) -- (-1.0, 0.9) coordinate (in2_neg_start);
+    \node[font=\tiny] at (-3.1, -0.45) {3}; \draw (-2.0, -0.45) -- (-1.0, -0.45) -- (-1.0, -0.9) coordinate (in2_pos_start);
+
+    % Filtros de entrada
+    \draw (in2_neg_start) to[C, l={\scriptsize $C_4 = 33\,\text{nF}$}] (0.8, 0.9) coordinate (junc2_neg) -- (3.0, 0.9);
+    \draw (junc2_neg) to[R, *-, l_={\scriptsize $R_4 = 100\,\text{k}\Omega$}] (0.8, 1.7) node[ground, yscale=-1]{};
+
+    \draw (in2_pos_start) to[C, l_={\scriptsize $C_3 = 33\,\text{nF}$}] (0.8, -0.9) coordinate (junc2_pos) -- (3.0, -0.9);
+    \draw (junc2_pos) to[R, *-, l={\scriptsize $R_5 = 100\,\text{k}\Omega$}] (0.8, -1.7) node[ground]{};
+
+    % AD620 (U2)
+    \draw[thick] (3.0, 1.4) -- (5.4, 0.0) -- (3.0, -1.4) -- cycle;
+    \node at (4.1, 0.0) {\small AD620};
+    \node[below=4pt, font=\tiny] at (4.1, 0.0) {U2};
+    \node at (3.3, 0.9) {\scriptsize \(-\)};
+    \node at (3.3, -0.9) {\scriptsize \(+\)};
+
+    % Resistencia de ganancia RG (Pin 1 y 8)
+    \draw (3.0, 0.4) node[right=1pt, font=\tiny] {1} -- (2.2, 0.4) coordinate (rg2_top);
+    \draw (3.0, -0.4) node[right=1pt, font=\tiny] {8} -- (2.2, -0.4) coordinate (rg2_bot);
+    \draw (rg2_top) to[R, *-*, l_={\scriptsize $R_6 = 100\,\Omega$}] (rg2_bot);
+
+    % Alimentación U2
+    \draw (3.8, 0.9) -- ++(0, 0.7) node[above, font=\tiny\bfseries\color{red!70!black}] {+9V};
+    \draw (3.8, -0.9) -- ++(0, -0.7) node[below, font=\tiny\bfseries\color{blue!70!black}] {-9V};
+    \draw (4.6, -0.5) -- ++(0, -0.7) node[ground]{};
+
+    % Salida y Bornera OUT2
+    \draw (5.4, 0.0) -- (7.6, 0.0) coordinate (out2_wire);
+    \draw (7.6, 1.0) rectangle (9.2, -1.0);
+    \node[font=\bfseries\scriptsize] at (8.4, 0.6) {OUT2};
+    \node[font=\tiny] at (8.0, 0.0) {2}; \draw (out2_wire) -- (7.6, 0.0);
+    \node[font=\tiny] at (8.0, -0.5) {1}; \draw (9.2, -0.5) -- ++(0.3, 0) node[ground]{};
+  \end{scope}
+
+  % ====================================================
+  % BLOQUE 4: CANAL 3 (U3 - AD620)
+  % ====================================================
+  \begin{scope}[xshift=4.8cm, yshift=-6.0cm]
+    \draw[dashed, draw=blue!60, fill=blue!2, rounded corners] (-3.8, 2.8) rectangle (9.6, -2.8);
+    \node[anchor=north west, font=\bfseries\color{blue!70!black}] at (-3.5, 2.5) {CANAL 3};
+
+    % Bornera IN3GND
+    \draw (-3.4, 1.3) rectangle (-2.0, -1.3);
+    \node[font=\bfseries\scriptsize] at (-2.7, 0.9) {IN3GND};
+    \node[font=\tiny] at (-3.1, 0.45) {1}; \draw (-2.0, 0.45) -- (-1.4, 0.45) node[ground]{} node[right=2pt, font=\tiny\bfseries] {REF};
+    \node[font=\tiny] at (-3.1, 0.0) {2};  \draw (-2.0, 0.0) -- (-1.0, 0.0) -- (-1.0, 0.9) coordinate (in3_neg_start);
+    \node[font=\tiny] at (-3.1, -0.45) {3}; \draw (-2.0, -0.45) -- (-1.0, -0.45) -- (-1.0, -0.9) coordinate (in3_pos_start);
+
+    % Filtros de entrada
+    \draw (in3_neg_start) to[C, l={\scriptsize $C_6 = 33\,\text{nF}$}] (0.8, 0.9) coordinate (junc3_neg) -- (3.0, 0.9);
+    \draw (junc3_neg) to[R, *-, l_={\scriptsize $R_7 = 100\,\text{k}\Omega$}] (0.8, 1.7) node[ground, yscale=-1]{};
+
+    \draw (in3_pos_start) to[C, l_={\scriptsize $C_5 = 33\,\text{nF}$}] (0.8, -0.9) coordinate (junc3_pos) -- (3.0, -0.9);
+    \draw (junc3_pos) to[R, *-, l={\scriptsize $R_8 = 100\,\text{k}\Omega$}] (0.8, -1.7) node[ground]{};
+
+    % AD620 (U3)
+    \draw[thick] (3.0, 1.4) -- (5.4, 0.0) -- (3.0, -1.4) -- cycle;
+    \node at (4.1, 0.0) {\small AD620};
+    \node[below=4pt, font=\tiny] at (4.1, 0.0) {U3};
+    \node at (3.3, 0.9) {\scriptsize \(-\)};
+    \node at (3.3, -0.9) {\scriptsize \(+\)};
+
+    % Resistencia de ganancia RG (Pin 1 y 8)
+    \draw (3.0, 0.4) node[right=1pt, font=\tiny] {1} -- (2.2, 0.4) coordinate (rg3_top);
+    \draw (3.0, -0.4) node[right=1pt, font=\tiny] {8} -- (2.2, -0.4) coordinate (rg3_bot);
+    \draw (rg3_top) to[R, *-*, l_={\scriptsize $R_9 = 100\,\Omega$}] (rg3_bot);
+
+    % Alimentación U3
+    \draw (3.8, 0.9) -- ++(0, 0.7) node[above, font=\tiny\bfseries\color{red!70!black}] {+9V};
+    \draw (3.8, -0.9) -- ++(0, -0.7) node[below, font=\tiny\bfseries\color{blue!70!black}] {-9V};
+    \draw (4.6, -0.5) -- ++(0, -0.7) node[ground]{};
+
+    % Salida y Bornera OUT3
+    \draw (5.4, 0.0) -- (7.6, 0.0) coordinate (out3_wire);
+    \draw (7.6, 1.0) rectangle (9.2, -1.0);
+    \node[font=\bfseries\scriptsize] at (8.4, 0.6) {OUT3};
+    \node[font=\tiny] at (8.0, 0.0) {2}; \draw (out3_wire) -- (7.6, 0.0);
+    \node[font=\tiny] at (8.0, -0.5) {1}; \draw (9.2, -0.5) -- ++(0.3, 0) node[ground]{};
+  \end{scope}
+
+\end{circuitikz}
+\end{document}

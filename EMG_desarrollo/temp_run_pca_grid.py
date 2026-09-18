@@ -11,10 +11,10 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 if script_dir not in sys.path:
     sys.path.append(script_dir)
 
-with open(r'/tmp/tmpuwv_k5j9.json', 'r') as f:
+with open(r'/tmp/tmpzparqtar.json', 'r') as f:
     kwargs = json.load(f)
 
-mediciones = ['2026-09-01/A_Prueba1_Candela', '2026-09-01/A_Prueba2_Candela', '2026-09-01/A_Prueba3_Candela', '2026-09-01/A_Prueba4_Candela', '2026-09-01/E_Prueba1_Candela', '2026-09-01/E_Prueba2_Candela', '2026-09-01/E_Prueba3_Candela', '2026-09-01/E_Prueba4_Candela', '2026-09-01/E_Prueba5_Candela', '2026-09-01/I_Prueba1_Candela', '2026-09-01/I_Prueba2_Candela', '2026-09-01/I_Prueba3_Candela', '2026-09-01/I_Prueba4_Candela', '2026-09-01/O_Prueba1_Candela', '2026-09-01/O_Prueba2_Candela', '2026-09-01/O_Prueba3_Candela', '2026-09-01/O_Prueba4_Candela', '2026-09-01/O_Prueba5_Candela', '2026-09-01/U_Prueba1_Candela', '2026-09-01/U_Prueba2_Candela', '2026-09-01/U_Prueba3_Candela', '2026-09-01/U_Prueba4_Candela']
+mediciones = ['2026-09-16/A_Serie1_Candela', '2026-09-16/A_Serie2_Candela', '2026-09-16/A_Serie3_Candela', '2026-09-16/A_Serie4_Candela', '2026-09-16/E_Serie1_Candela', '2026-09-16/E_Serie2_Candela', '2026-09-16/E_Serie3_Candela', '2026-09-16/E_Serie4_Candela', '2026-09-16/I_Serie1_Candela', '2026-09-16/I_Serie2_Candela', '2026-09-16/I_Serie3_Candela', '2026-09-16/I_Serie4_Candela', '2026-09-16/O_Serie1_Candela', '2026-09-16/O_Serie2_Candela', '2026-09-16/O_Serie3_Candela', '2026-09-16/O_Serie4_Candela', '2026-09-16/U_Serie1_Candela', '2026-09-16/U_Serie2_Candela', '2026-09-16/U_Serie3_Candela', '2026-09-16/U_Serie4_Candela']
 base_dir = r'/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos'
 
 import deep_learning.pca_analysis as pca_ana
@@ -26,7 +26,7 @@ print("=========================================================")
 res = pca_ana.buscar_mejor_configuracion_pca(
     mediciones=mediciones,
     base_dir=base_dir,
-    params_base=kwargs.get("params_3d", {}),
+    params_base=kwargs.get("params_2d", {}),
     aplicar_trevisan=kwargs.get("aplicar_trevisan", False),
     modo_alineacion=kwargs.get("modo_alineacion", "Pico Volumen Micrófono"),
     pre_pct=kwargs.get("pre_pct", 0.4),
@@ -35,10 +35,11 @@ res = pca_ana.buscar_mejor_configuracion_pca(
     ignorar_ventana_cero=kwargs.get("ignorar_ventana_cero", False),
     algoritmo_clustering=kwargs.get("algoritmo_clustering_pca", "GMM"),
     logger=print,
-    n_components=3,
+    n_components=2,
     aplicar_correccion_intersesion=kwargs.get("aplicar_correccion_intersesion", True),
     tag_nombre=kwargs.get("tag_nombre", None),
-    ejecutar_ganador_con_graficos=True
+    ejecutar_ganador_con_graficos=True,
+    estilo_visual=kwargs.get("estilo_visual", "Fronteras")
 )
 
 best_config = None
@@ -55,11 +56,19 @@ if isinstance(res, tuple) and len(res) >= 3:
     carpeta_salida = res[5] if len(res) >= 6 else ""
 
 if best_config:
-    if len(best_config) == 4:
+    if len(best_config) >= 7:
+        best_smooth, best_pts, best_alpha, best_notch, best_filtro, best_hp, best_lp = best_config[:7]
+    elif len(best_config) == 4:
         best_smooth, best_pts, best_alpha, best_notch = best_config
+        best_filtro = "notch"
+        best_hp = 20.0
+        best_lp = 300.0
     else:
         best_smooth, best_pts, best_alpha = best_config[:3]
         best_notch = 2.0
+        best_filtro = "notch"
+        best_hp = 20.0
+        best_lp = 300.0
     out_file = os.path.join(project_root, "deep_learning", "parametros_optimos_pca.json")
     with open(out_file, "w") as f:
         json.dump({
@@ -67,6 +76,9 @@ if best_config:
             "target_length": best_pts,
             "alpha_ruido": best_alpha,
             "notch_q": best_notch,
+            "tipo_filtro_ruido": best_filtro,
+            "highpass_cutoff_hz": best_hp,
+            "lowpass_cutoff_hz": best_lp,
             "accuracy_clasificacion": best_acc,
             "porcentaje_por_vocal": best_vocal_acc,
             "silhouette_score": best_sil
@@ -77,7 +89,9 @@ if best_config:
     print("  - Smooth (Envolvente): " + str(best_smooth) + " ms")
     print("  - Remuestreo (Pts):    " + str(best_pts))
     print("  - Alfa Ruido:          " + str(best_alpha))
+    print("  - Filtro Ruido:        " + str(best_filtro))
     print("  - Notch Q:             " + str(best_notch))
+    print("  - Pasabanda (HP / LP): " + str(best_hp) + " Hz / " + str(best_lp) + " Hz")
     print("  - Clasificación (%):   " + str(best_acc) + " %")
     if best_vocal_acc:
         print("  - Desglose por Vocal:")

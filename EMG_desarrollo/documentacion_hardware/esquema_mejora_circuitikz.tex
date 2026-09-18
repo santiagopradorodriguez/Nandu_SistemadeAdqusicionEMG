@@ -1,0 +1,49 @@
+\documentclass[border=10pt]{standalone}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb}
+\usepackage[siunitx]{circuitikz}
+\usepackage{xcolor}
+
+\begin{document}
+\begin{circuitikz}[american, thick, font=\sffamily]
+
+    % Marco delimitador con amplio margen vertical
+    \draw[dashed, draw=green!60!black, fill=green!2, rounded corners] (-6.8, 4.4) rectangle (4.8, -4.0);
+    \node[anchor=north west, font=\bfseries\color{green!50!black}] at (-6.5, 4.0) {CANAL CON MODIFICACI\'ON PROPUESTA: DESACOPLO AC EN LAZO DE GANANCIA};
+
+    % AD620
+    \draw[thick] (-0.6, 1.8) -- (2.6, 0) -- (-0.6, -1.8) -- cycle;
+    \node at (0.9, 0) {\Large AD620};
+    \node at (-0.2, 1.2) {\Large \(-\)};
+    \node at (-0.2, -1.2) {\Large \(+\)};
+
+    % Pines de Alimentación (±9V) y Referencia
+    \draw[-latex] (0.4, 1.2) -- ++(0, 0.8) node[above, font=\small\bfseries\color{red!70!black}] {+9V};
+    \node[left=1pt, font=\scriptsize] at (0.4, 1.4) {7};
+
+    \draw[-latex] (0.4, -1.2) -- ++(0, -0.8) node[below, font=\small\bfseries\color{blue!70!black}] {-9V};
+    \node[left=1pt, font=\scriptsize] at (0.4, -1.4) {4};
+
+    \draw (1.4, -0.7) -- ++(0, -0.9) node[ground]{};
+    \node[right=2pt, font=\scriptsize] at (1.4, -0.7) {5};
+
+    \draw (2.6, 0) -- ++(1.4, 0) node[ocirc]{} node[pos=0.6, above, font=\scriptsize] {6} node[right, font=\small\bfseries] {$V_{\text{out}}$};
+
+    % Lazo de ganancia horizontal (RG = 100 Ohm y CG = 100 uF para fc ≈ 16 Hz)
+    \draw (-0.6, 0.5) node[right=2pt, font=\scriptsize] {1} 
+          to[R, l_={\small $R_G = 100\,\Omega$}, *-*] (-2.6, 0.5) coordinate (rg_left);
+    \draw (-0.6, -0.5) node[right=2pt, font=\scriptsize] {8} 
+          to[C, l_={\small $C_G = 100\,\mu\text{F}$}, *-*] (-2.6, -0.5) coordinate (cg_left);
+    \draw (rg_left) -- (cg_left);
+
+    % Entradas directas acopladas en continua con alta impedancia (10 MOhm a GND)
+    \draw (-0.6, 1.2) -- (-1.6, 1.2) -- (-1.6, 1.6) -- (-4.4, 1.6) coordinate (juncA);
+    \draw (juncA) to[R, l_={\small $10\text{ M}\Omega$}] ++(0, 1.1) node[ground, yscale=-1]{};
+    \draw (juncA) -- ++(-1.4, 0) node[left, font=\small\bfseries] {\(V_{\mathrm{in}}^-\)};
+
+    \draw (-0.6, -1.2) -- (-1.6, -1.2) -- (-1.6, -1.6) -- (-4.4, -1.6) coordinate (juncB);
+    \draw (juncB) to[R, l={\small $10\text{ M}\Omega$}] ++(0, -1.1) node[ground]{};
+    \draw (juncB) -- ++(-1.4, 0) node[left, font=\small\bfseries] {\(V_{\mathrm{in}}^+\)};
+
+\end{circuitikz}
+\end{document}

@@ -105,7 +105,14 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_
     Tomas = []
     SNRs = []
     
-    canales_procesar = list(set(canales_features + ["canal_3"]))
+    modo_str = str(modo_alineacion).strip()
+    es_modo_canal = modo_str.lower().startswith("pico canal")
+    if es_modo_canal:
+        ch_num = modo_str.lower().split()[-1]
+        ch_target_global = f"canal_{ch_num}"
+        canales_procesar = list(set(canales_features + [ch_target_global]))
+    else:
+        canales_procesar = list(set(canales_features + ["canal_3"]))
     
     total_mediciones = len(mediciones)
     
@@ -171,40 +178,58 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_
                 fname = list(res_final.keys())[0]
                 canales_data[ch] = res_final[fname]
                 
-        if len(canales_data) < len(canales_procesar):
-            print(f"  -> Se omite porque no se pudieron cargar los {len(canales_procesar)} canales solicitados.")
+        canales_req = list(set(canales_features + [ch_target_global])) if es_modo_canal else list(set(canales_features + ["canal_3"]))
+        ch_target = ch_target_global if es_modo_canal else "canal_3"
+        if not all(ch in canales_data for ch in canales_req):
+            print(f"  -> Se omite porque no se pudieron cargar los canales requeridos ({canales_req}).")
             continue
             
-        # Alinear ventanas usando canal 3 como maestro (find_peaks global)
-        muestras_pulso = canales_data["canal_3"]['muestras_pulso']
-        env_mic_raw = canales_data["canal_3"]['env_recortada']
+        # Alinear ventanas usando canal maestro
+        muestras_pulso = canales_data[ch_target]['muestras_pulso'] if ch_target in canales_data else canales_data[canales_features[0]]['muestras_pulso']
+        sr_canal = canales_data[ch_target].get('samplerate', 2000)
         
-        # Encontrar picos en el micrófono como en el script interactivo
-        # distance: 80% del período esperado
-        # height: 20% del máximo del micrófono
-        dist_samples = int(0.8 * muestras_pulso)
-        min_height = np.max(env_mic_raw) * 0.2
-        
-        picos_mic, _ = find_peaks(env_mic_raw, distance=dist_samples, height=min_height)
-        
-        # --- ALINEACIÓN POR DERIVADA (NUEVO) ---
-        if modo_alineacion == "Pico Derivada Micrófono (Onset)":
-            periodo_sec = 60.0 / bpm_u
-            sr_aprox = int(muestras_pulso / periodo_sec)
+        if es_modo_canal:
+            env_ref = canales_data[ch_target]['env_recortada']
             
-            deriv_mic = np.gradient(env_mic_raw)
-            win_size = max(1, int(sr_aprox * 0.25))
-            deriv_mic = np.convolve(deriv_mic, np.ones(win_size)/win_size, mode='same')
+            # 1. Alto suavizado (~250 ms) para encontrar los intervalos de pulso robustamente
+            win_size_alto = max(5, int(sr_canal * 0.25))
+            if win_size_alto % 2 == 0:
+                win_size_alto += 1
+            env_smooth_cont = np.convolve(env_ref, np.ones(win_size_alto) / win_size_alto, mode='same')
             
-            picos_deriv = []
-            for p_amp in picos_mic:
-                rango_inicio = max(0, int(p_amp - pre_pct * muestras_pulso))
-                if rango_inicio < p_amp:
-                    idx_rel = np.argmax(deriv_mic[rango_inicio:p_amp])
-                    picos_deriv.append(rango_inicio + idx_rel)
-                else:
-                    picos_deriv.append(p_amp)
-            picos_mic = np.array(picos_deriv)
+            ch_noise = canales_data[ch_target].get('noise_levels', [0])[0] if len(canales_data[ch_target].get('noise_levels', [])) > 0 else 0
+            dist_samples = int(0.8 * muestras_pulso)
+            min_height = max(np.max(env_smooth_cont) * 0.15, ch_noise * 1.2)
+            picos_candidatos, _ = find_peaks(env_smooth_cont, distance=dist_samples, height=min_height)
+            
+            # 2. Descartar ventanas si en el canal maestro no hay activación real sobre el piso de ruido
+            picos_alineacion = []
+            for p_cand in picos_candidatos:
+                val_pico = env_smooth_cont[p_cand]
+                if val_pico >= 0.10 * np.max(env_smooth_cont) and val_pico > ch_noise * 1.1:
+                    picos_alineacion.append(p_cand)
+        else:
+            env_ref = canales_data["canal_3"]['env_recortada']
+            dist_samples = int(0.8 * muestras_pulso)
+            min_height = np.max(env_ref) * 0.2
+            picos_mic, _ = find_peaks(env_ref, distance=dist_samples, height=min_height)
+            
+            if modo_alineacion == "Pico Derivada Micrófono (Onset)":
+                deriv_mic = np.gradient(env_ref)
+                win_size = max(1, int(sr_canal * 0.25))
+                deriv_mic = np.convolve(deriv_mic, np.ones(win_size)/win_size, mode='same')
+                
+                picos_deriv = []
+                for p_amp in picos_mic:
+                    rango_inicio = max(0, int(p_amp - pre_pct * muestras_pulso))
+                    if rango_inicio < p_amp:
+                        idx_rel = np.argmax(deriv_mic[rango_inicio:p_amp])
+                        picos_deriv.append(rango_inicio + idx_rel)
+                    else:
+                        picos_deriv.append(p_amp)
+                picos_alineacion = np.array(picos_deriv)
+            else:
+                picos_alineacion = picos_mic
         
         TARGET_LEN = target_len
         
@@ -212,11 +237,11 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_
         ventanas_medicion = []
         picos_medicion = [] # para guardar el máximo de cada canal en la ventana
         
-        for win_idx, pico in enumerate(picos_mic):
+        for win_idx, pico in enumerate(picos_alineacion):
             if ignorar_ventana_cero and win_idx == 0:
                 continue
                 
-            # Definir ventana física simétrica basada en el pico del micrófono
+            # Definir ventana física simétrica basada en el pico de referencia
             pre_samples = int(muestras_pulso * pre_pct)
             post_samples = int(muestras_pulso * post_pct)
             
@@ -224,7 +249,7 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_
             real_cut_end = pico + post_samples
             
             # Verificar límites
-            if real_cut_start < 0 or real_cut_end > len(env_mic_raw):
+            if real_cut_start < 0 or real_cut_end > len(env_ref):
                 continue
                 
             valido = True
@@ -1301,13 +1326,48 @@ def ejecutar_procesamiento(
     ocultar_leyenda=False,
     estilo_visual="Elipses",
     ignorar_ventana_cero=False,
-    out_dir=None
+    out_dir=None,
+    tipo_filtro_ruido="notch",
+    notch_q=2.0,
+    highpass_cutoff_hz=20.0,
+    lowpass_cutoff_hz=300.0,
+    **kwargs
 ):
     if out_dir is None:
         script_dir = os.path.dirname(os.path.abspath(__file__))
         out_dir = os.path.join(script_dir, "resultados_pca_umap")
     os.makedirs(out_dir, exist_ok=True)
     
+    if params_2d is not None and isinstance(params_2d, dict):
+        if 'tipo_filtro_ruido' not in params_2d:
+            params_2d['tipo_filtro_ruido'] = tipo_filtro_ruido
+        if 'notch_q' not in params_2d:
+            params_2d['notch_q'] = notch_q
+        if 'highpass_cutoff_hz' not in params_2d:
+            params_2d['highpass_cutoff_hz'] = highpass_cutoff_hz
+        if 'lowpass_cutoff_hz' not in params_2d:
+            params_2d['lowpass_cutoff_hz'] = lowpass_cutoff_hz
+
+    if params_3d is not None and isinstance(params_3d, dict):
+        if 'tipo_filtro_ruido' not in params_3d:
+            params_3d['tipo_filtro_ruido'] = tipo_filtro_ruido
+        if 'notch_q' not in params_3d:
+            params_3d['notch_q'] = notch_q
+        if 'highpass_cutoff_hz' not in params_3d:
+            params_3d['highpass_cutoff_hz'] = highpass_cutoff_hz
+        if 'lowpass_cutoff_hz' not in params_3d:
+            params_3d['lowpass_cutoff_hz'] = lowpass_cutoff_hz
+
+    if params_umap is not None and isinstance(params_umap, dict):
+        if 'tipo_filtro_ruido' not in params_umap:
+            params_umap['tipo_filtro_ruido'] = tipo_filtro_ruido
+        if 'notch_q' not in params_umap:
+            params_umap['notch_q'] = notch_q
+        if 'highpass_cutoff_hz' not in params_umap:
+            params_umap['highpass_cutoff_hz'] = highpass_cutoff_hz
+        if 'lowpass_cutoff_hz' not in params_umap:
+            params_umap['lowpass_cutoff_hz'] = lowpass_cutoff_hz
+
     import numpy as np
     from sklearn.decomposition import PCA
     import umap
@@ -1717,7 +1777,7 @@ class GeneradorPCAGUI:
         align_frame.pack(fill="x", pady=(0,5))
         
         tk.Label(align_frame, text="Centrar ventana en:", width=20, anchor="w", bg="#1F2833", fg="white").pack(side="left")
-        self.combo_align = ttk.Combobox(align_frame, values=["Pico Volumen Micrófono", "Pico Derivada Micrófono (Onset)"], width=30)
+        self.combo_align = ttk.Combobox(align_frame, values=["Pico Volumen Micrófono", "Pico Derivada Micrófono (Onset)", "Pico Canal 0", "Pico Canal 1", "Pico Canal 2"], width=30)
         self.combo_align.pack(side="left")
         self.combo_align.set("Pico Volumen Micrófono")
         

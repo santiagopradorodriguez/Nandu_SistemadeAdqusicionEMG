@@ -9,9 +9,10 @@ import os
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox, QTabWidget,
     QLabel, QSpinBox, QDoubleSpinBox, QCheckBox, QPushButton, QLineEdit, QComboBox,
-    QScrollArea, QRadioButton, QGridLayout, QDialog, QListWidget
+    QScrollArea, QRadioButton, QGridLayout, QDialog, QListWidget, QPlainTextEdit
 )
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
 
 class ProcessingTab(QWidget):
     """Pestaña 1: Reemplaza al ProcessingOptionsDialog original de Tkinter"""
@@ -289,6 +290,21 @@ class ComparativeTab(QWidget):
             QPushButton:disabled { border: 2px solid #555; color: #555; }
         """)
         self.layout.addWidget(self.btn_generar_reporte)
+
+        self.btn_limpiar_analisis_results = QPushButton("BORRAR ARCHIVOS DE ANÁLISIS RESULTS (LIBERAR ESPACIO)")
+        self.btn_limpiar_analisis_results.setFixedHeight(40)
+        self.btn_limpiar_analisis_results.setCursor(Qt.PointingHandCursor)
+        self.btn_limpiar_analisis_results.setToolTip("Elimina los archivos JSON de análisis intermedio para recuperar espacio en disco.")
+        self.btn_limpiar_analisis_results.setStyleSheet("""
+            QPushButton {
+                font-weight: bold; font-size: 12px;
+                background-color: transparent; color: #ff5555; border: 2px solid #ff5555; border-radius: 5px;
+                margin-top: 5px;
+            }
+            QPushButton:hover { background-color: #ff5555; color: #ffffff; }
+            QPushButton:disabled { border: 2px solid #555; color: #555; }
+        """)
+        self.layout.addWidget(self.btn_limpiar_analisis_results)
 
 
 class DiscreteMotorTab(QWidget):
@@ -615,7 +631,7 @@ class PcaTab(QWidget):
         l_cluster = QHBoxLayout()
         l_cluster.addWidget(QLabel("Evaluar PCA:"))
         self.cmb_cluster = QComboBox()
-        self.cmb_cluster.addItems(["GMM", "K-Means"])
+        self.cmb_cluster.addItems(["GMM", "GMM Jerárquico (PCA Local)", "K-Means"])
         l_cluster.addWidget(self.cmb_cluster)
         g_cluster.setLayout(l_cluster)
         lay.addWidget(g_cluster)
@@ -655,15 +671,65 @@ class PcaTab(QWidget):
         self.inp_gate.setValue(0.0)
         self.inp_gate.setFixedWidth(60)
         l_adv.addWidget(self.inp_gate, 3, 1)
+
+        l_adv.addWidget(QLabel("Filtro Ruido Línea:"), 3, 2)
+        self.cmb_noise_filter = QComboBox()
+        self.cmb_noise_filter.addItems(["Filtro Notch (IIR)", "Filtro Adaptativo (NLMS)", "Desactivado"])
+        self.cmb_noise_filter.setCurrentIndex(0)
+        self.cmb_noise_filter.setToolTip("Selecciona el método de supresión de interferencia de línea eléctrica (50 Hz y armónicos):\n- Filtro Notch (IIR): Notch convencional de 50 Hz con factor de calidad Q.\n- Filtro Adaptativo (NLMS): Cancelación adaptativa NLMS con armónicos sintéticos (50, 100, 150, 200 Hz).\n- Desactivado: Sin supresión de línea.")
+        l_adv.addWidget(self.cmb_noise_filter, 3, 3)
+
+        self.lbl_notch_q = QLabel("Notch Factor Q:")
+        l_adv.addWidget(self.lbl_notch_q, 4, 0)
+        self.inp_notch_q = QDoubleSpinBox()
+        self.inp_notch_q.setRange(0.1, 100.0)
+        self.inp_notch_q.setSingleStep(0.5)
+        self.inp_notch_q.setValue(2.0)
+        self.inp_notch_q.setFixedWidth(60)
+        self.inp_notch_q.setToolTip("Factor de calidad Q para el filtro Notch IIR (un valor más bajo ensancha el ancho de rechazo).")
+        l_adv.addWidget(self.inp_notch_q, 4, 1)
+
+        l_adv.addWidget(QLabel("Filtro Pasaltos:"), 4, 2)
+        self.inp_highpass = QDoubleSpinBox()
+        self.inp_highpass.setRange(0.0, 500.0)
+        self.inp_highpass.setSingleStep(1.0)
+        self.inp_highpass.setValue(20.0)
+        self.inp_highpass.setSuffix(" Hz")
+        self.inp_highpass.setToolTip("Frecuencia de corte inferior pasaltos (Butterworth orden 4).\n0.0 Hz desactiva el filtro pasaltos.")
+        l_adv.addWidget(self.inp_highpass, 4, 3)
+
+        l_adv.addWidget(QLabel("Filtro Pasabajos:"), 5, 0)
+        self.cmb_lowpass = QComboBox()
+        self.cmb_lowpass.addItems(["300 Hz (Rangayyan)", "500 Hz (Previo)", "Desactivado"])
+        self.cmb_lowpass.setCurrentIndex(0)
+        self.cmb_lowpass.setToolTip("Selecciona el filtrado pasabajos antes de extraer envolventes:\n- 300 Hz: Butterworth orden 6 de Rangayyan (recomendado).\n- 500 Hz: Butterworth orden 4 estándar previo.\n- Desactivado: Sin filtro pasabajos.")
+        l_adv.addWidget(self.cmb_lowpass, 5, 1, 1, 3)
         
         g_adv.setLayout(l_adv)
         lay.addWidget(g_adv)
+
+        def _on_noise_filter_changed_pca(idx):
+            is_notch = (idx == 0)
+            self.lbl_notch_q.setEnabled(is_notch)
+            self.inp_notch_q.setEnabled(is_notch)
+            if hasattr(self, 'inp_notch_2d'):
+                self.inp_notch_2d.setEnabled(is_notch)
+            if hasattr(self, 'inp_notch_3d'):
+                self.inp_notch_3d.setEnabled(is_notch)
+        self.cmb_noise_filter.currentIndexChanged.connect(_on_noise_filter_changed_pca)
+
+        # Sincronización bidireccional entre Notch Q general y Notch Q 2D / 3D
+        if hasattr(self, 'inp_notch_2d') and hasattr(self, 'inp_notch_3d'):
+            self.inp_notch_q.valueChanged.connect(lambda v: (self.inp_notch_2d.blockSignals(True), self.inp_notch_2d.setValue(v), self.inp_notch_2d.blockSignals(False)))
+            self.inp_notch_q.valueChanged.connect(lambda v: (self.inp_notch_3d.blockSignals(True), self.inp_notch_3d.setValue(v), self.inp_notch_3d.blockSignals(False)))
+            self.inp_notch_2d.valueChanged.connect(lambda v: (self.inp_notch_q.blockSignals(True), self.inp_notch_q.setValue(v), self.inp_notch_q.blockSignals(False)))
+            self.inp_notch_3d.valueChanged.connect(lambda v: (self.inp_notch_q.blockSignals(True), self.inp_notch_q.setValue(v), self.inp_notch_q.blockSignals(False)))
 
         g_align = QGroupBox("Alineación Temporal")
         l_align = QHBoxLayout()
         l_align.addWidget(QLabel("Centrar ventana en:"))
         self.cmb_align = QComboBox()
-        self.cmb_align.addItems(["Pico Volumen Micrófono", "Pico Derivada Micrófono (Onset)"])
+        self.cmb_align.addItems(["Pico Volumen Micrófono", "Pico Derivada Micrófono (Onset)", "Pico Canal 0", "Pico Canal 1", "Pico Canal 2"])
         l_align.addWidget(self.cmb_align)
         g_align.setLayout(l_align)
         lay.addWidget(g_align)
@@ -863,15 +929,60 @@ class UmapTab(QWidget):
         self.inp_gate.setValue(0.0)
         self.inp_gate.setFixedWidth(60)
         l_adv.addWidget(self.inp_gate, 3, 1)
+
+        l_adv.addWidget(QLabel("Filtro Ruido Línea:"), 3, 2)
+        self.cmb_noise_filter = QComboBox()
+        self.cmb_noise_filter.addItems(["Filtro Notch (IIR)", "Filtro Adaptativo (NLMS)", "Desactivado"])
+        self.cmb_noise_filter.setCurrentIndex(0)
+        self.cmb_noise_filter.setToolTip("Selecciona el método de supresión de interferencia de línea eléctrica (50 Hz y armónicos):\n- Filtro Notch (IIR): Notch convencional de 50 Hz con factor de calidad Q.\n- Filtro Adaptativo (NLMS): Cancelación adaptativa NLMS con armónicos sintéticos (50, 100, 150, 200 Hz).\n- Desactivado: Sin supresión de línea.")
+        l_adv.addWidget(self.cmb_noise_filter, 3, 3)
+
+        self.lbl_notch_q = QLabel("Notch Factor Q:")
+        l_adv.addWidget(self.lbl_notch_q, 4, 0)
+        self.inp_notch_q = QDoubleSpinBox()
+        self.inp_notch_q.setRange(0.1, 100.0)
+        self.inp_notch_q.setSingleStep(0.5)
+        self.inp_notch_q.setValue(2.0)
+        self.inp_notch_q.setFixedWidth(60)
+        self.inp_notch_q.setToolTip("Factor de calidad Q para el filtro Notch IIR.")
+        l_adv.addWidget(self.inp_notch_q, 4, 1)
+
+        l_adv.addWidget(QLabel("Filtro Pasaltos:"), 4, 2)
+        self.inp_highpass = QDoubleSpinBox()
+        self.inp_highpass.setRange(0.0, 500.0)
+        self.inp_highpass.setSingleStep(1.0)
+        self.inp_highpass.setValue(20.0)
+        self.inp_highpass.setSuffix(" Hz")
+        self.inp_highpass.setToolTip("Frecuencia de corte inferior pasaltos (Butterworth orden 4).\n0.0 Hz desactiva el filtro pasaltos.")
+        l_adv.addWidget(self.inp_highpass, 4, 3)
+
+        l_adv.addWidget(QLabel("Filtro Pasabajos:"), 5, 0)
+        self.cmb_lowpass = QComboBox()
+        self.cmb_lowpass.addItems(["300 Hz (Rangayyan)", "500 Hz (Previo)", "Desactivado"])
+        self.cmb_lowpass.setCurrentIndex(0)
+        self.cmb_lowpass.setToolTip("Selecciona el filtrado pasabajos antes de extraer envolventes:\n- 300 Hz: Butterworth orden 6 de Rangayyan (recomendado).\n- 500 Hz: Butterworth orden 4 estándar previo.\n- Desactivado: Sin filtro pasabajos.")
+        l_adv.addWidget(self.cmb_lowpass, 5, 1, 1, 3)
         
         g_adv.setLayout(l_adv)
         lay.addWidget(g_adv)
+
+        def _on_noise_filter_changed_umap(idx):
+            is_notch = (idx == 0)
+            self.lbl_notch_q.setEnabled(is_notch)
+            self.inp_notch_q.setEnabled(is_notch)
+            if hasattr(self, 'inp_notch_u'):
+                self.inp_notch_u.setEnabled(is_notch)
+        self.cmb_noise_filter.currentIndexChanged.connect(_on_noise_filter_changed_umap)
+
+        if hasattr(self, 'inp_notch_u'):
+            self.inp_notch_q.valueChanged.connect(lambda v: (self.inp_notch_u.blockSignals(True), self.inp_notch_u.setValue(v), self.inp_notch_u.blockSignals(False)))
+            self.inp_notch_u.valueChanged.connect(lambda v: (self.inp_notch_q.blockSignals(True), self.inp_notch_q.setValue(v), self.inp_notch_q.blockSignals(False)))
 
         g_align = QGroupBox("Alineación Temporal")
         l_align = QHBoxLayout()
         l_align.addWidget(QLabel("Centrar ventana en:"))
         self.cmb_align = QComboBox()
-        self.cmb_align.addItems(["Pico Volumen Micrófono", "Pico Derivada Micrófono (Onset)"])
+        self.cmb_align.addItems(["Pico Volumen Micrófono", "Pico Derivada Micrófono (Onset)", "Pico Canal 0", "Pico Canal 1", "Pico Canal 2"])
         l_align.addWidget(self.cmb_align)
         g_align.setLayout(l_align)
         lay.addWidget(g_align)
@@ -1270,6 +1381,837 @@ class AutoencodersTab(QWidget):
     def get_test_sessions(self):
         return [self.lst_test.item(i).text() for i in range(self.lst_test.count())]
 
+class AutoencoderNoSupervisadoTab(QWidget):
+    """Pestaña dedicada al Autoencoder 100% No Supervisado (Cero Etiquetas) vinculado al Gestor de Sesiones"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.rutas_actuales = []
+        
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        
+        content = QWidget()
+        self.layout = QVBoxLayout(content)
+        self.layout.setContentsMargins(12, 12, 12, 12)
+        self.layout.setSpacing(10)
+
+        # Encabezado
+        lbl_title = QLabel("ESTUDIO DE AUTOENCODERS NO SUPERVISADOS (CERO ETIQUETAS)")
+        lbl_title.setStyleSheet("font-size: 15px; font-weight: bold; color: #66FCF1;")
+        self.layout.addWidget(lbl_title)
+
+        lbl_desc = QLabel(
+            "Plataforma unificada para descubrimiento de variedades latentes y geometrías mioeléctricas.\n"
+            "• Sincronización directa con el Gestor de Sesiones de la izquierda.\n"
+            "• Modalidades: Envolvente 1D (200 Hz), Señal Cruda 1D (2000 Hz, GAP+GMP), Espectrogramas 2D y 3D (STFT).\n"
+            "• Auditoría de Metadatos: Detección estricta de discrepancias anatómicas (músculos por canal) y BPM.\n"
+            "• Normalización obligatoria por el Supremo Tricanal del pulso individual.\n"
+            "• Cero Etiquetas: Función de pérdida sin etiquetas y evaluación diagnóstica ciega con GMM canónico."
+        )
+        lbl_desc.setStyleSheet("color: #C5C6C7; font-size: 11px;")
+        self.layout.addWidget(lbl_desc)
+
+        # 1. Sesiones del Gestor y Auditoría Anatómica
+        g_ses = QGroupBox("1. Mediciones Seleccionadas del Gestor de Sesiones y Auditoría Inter-Día")
+        l_ses = QVBoxLayout()
+        
+        bar_sync = QHBoxLayout()
+        self.btn_sync_sesiones = QPushButton("Sincronizar Selección del Gestor")
+        self.btn_sync_sesiones.setStyleSheet(
+            "background-color: #1F2833; color: #66FCF1; border: 1px solid #45A29E; font-weight: bold; padding: 6px;"
+        )
+        bar_sync.addWidget(self.btn_sync_sesiones)
+        
+        self.lbl_sesiones_count = QLabel("Total seleccionadas: 0 mediciones")
+        self.lbl_sesiones_count.setStyleSheet("color: #00FF88; font-weight: bold; font-size: 11px;")
+        bar_sync.addWidget(self.lbl_sesiones_count)
+        bar_sync.addStretch()
+        l_ses.addLayout(bar_sync)
+        
+        self.lst_sesiones = QListWidget()
+        self.lst_sesiones.setFixedHeight(95)
+        self.lst_sesiones.setStyleSheet("background-color: #0c0c0c; color: #66FCF1; border: 1px solid #333333; font-family: monospace; font-size: 11px;")
+        l_ses.addWidget(self.lst_sesiones)
+        
+        self.lbl_alerta_audit = QLabel("[AUDITORIA]: Seleccione sesiones en el Gestor de Sesiones de la izquierda.")
+        self.lbl_alerta_audit.setWordWrap(True)
+        self.lbl_alerta_audit.setStyleSheet("background-color: #111111; color: #45A29E; border: 1px solid #333333; padding: 6px; font-family: monospace; font-size: 10px; border-radius: 4px;")
+        l_ses.addWidget(self.lbl_alerta_audit)
+        
+        g_ses.setLayout(l_ses)
+        self.layout.addWidget(g_ses)
+
+        # ----------------------------------------------------------------------
+        # 2. MODALIDAD 1: ENVOLVENTE 1D
+        # ----------------------------------------------------------------------
+        g_env = QGroupBox("2. Modalidad: Envolvente 1D (RMS / Contorno Cinemático)")
+        l_env = QGridLayout()
+        l_env.setContentsMargins(6, 6, 6, 6)
+        l_env.setSpacing(6)
+
+        self.rb_env = QRadioButton("Activar Envolvente 1D")
+        self.rb_env.setChecked(True)
+        self.rb_env.setStyleSheet("color: #00FF88; font-weight: bold;")
+        l_env.addWidget(self.rb_env, 0, 0, 1, 2)
+
+        l_env.addWidget(QLabel("Técnica:"), 0, 2)
+        self.cmb_tipo_env = QComboBox()
+        self.cmb_tipo_env.addItems(["RMS", "Media Móvil", "TKEO (Teager-Kaiser)", "Hilbert"])
+        self.cmb_tipo_env.setStyleSheet("background-color: #1F2833; color: #00FF88; border: 1px solid #00AA55; padding: 3px; font-weight: bold;")
+        l_env.addWidget(self.cmb_tipo_env, 0, 3)
+
+        l_env.addWidget(QLabel("Smooth:"), 0, 4)
+        self.inp_smooth_ms = QSpinBox()
+        self.inp_smooth_ms.setRange(10, 1000)
+        self.inp_smooth_ms.setValue(90)
+        self.inp_smooth_ms.setSuffix(" ms")
+        self.inp_smooth_ms.setFixedWidth(70)
+        l_env.addWidget(self.inp_smooth_ms, 0, 5)
+
+        l_env.addWidget(QLabel("Puntos:"), 0, 6)
+        self.inp_pts_env = QSpinBox()
+        self.inp_pts_env.setRange(10, 5000)
+        self.inp_pts_env.setValue(100)
+        self.inp_pts_env.setFixedWidth(65)
+        l_env.addWidget(self.inp_pts_env, 0, 7)
+
+        l_env.addWidget(QLabel("Dimensión Latente:"), 1, 0)
+        self.rb_dim_2d_env = QRadioButton("2D (Plano Canónico)")
+        self.rb_dim_2d_env.setChecked(False)
+        self.rb_dim_2d_env.setStyleSheet("color: #00FF88; font-weight: bold;")
+        self.rb_dim_3d_env = QRadioButton("3D (Espacio Tridimensional)")
+        self.rb_dim_3d_env.setChecked(True)
+        self.rb_dim_3d_env.setStyleSheet("color: #66FCF1; font-weight: bold;")
+        row_dim_env = QHBoxLayout()
+        row_dim_env.addWidget(self.rb_dim_2d_env)
+        row_dim_env.addWidget(self.rb_dim_3d_env)
+        row_dim_env.addStretch()
+        l_env.addLayout(row_dim_env, 1, 1, 1, 7)
+
+        g_env.setLayout(l_env)
+        self.layout.addWidget(g_env)
+
+        # ----------------------------------------------------------------------
+        # 3. MODALIDAD 2: SEÑAL CRUDA 1D
+        # ----------------------------------------------------------------------
+        g_cruda = QGroupBox("3. Modalidad: Señal Cruda 1D (2000 Hz / GAP+GMP)")
+        l_cruda = QGridLayout()
+        l_cruda.setContentsMargins(6, 6, 6, 6)
+        l_cruda.setSpacing(6)
+
+        self.rb_cruda = QRadioButton("Activar Señal Cruda 1D")
+        self.rb_cruda.setStyleSheet("color: #66FCF1; font-weight: bold;")
+        l_cruda.addWidget(self.rb_cruda, 0, 0, 1, 2)
+
+        l_cruda.addWidget(QLabel("Puntos Temporales:"), 0, 2)
+        self.inp_pts_cruda = QSpinBox()
+        self.inp_pts_cruda.setRange(10, 5000)
+        self.inp_pts_cruda.setValue(1000)
+        self.inp_pts_cruda.setFixedWidth(70)
+        l_cruda.addWidget(self.inp_pts_cruda, 0, 3)
+
+        lbl_gap_desc = QLabel("Pooling: Dual GAP + GMP (Invarianza Temporal)")
+        lbl_gap_desc.setStyleSheet("color: #45A29E; font-size: 11px;")
+        l_cruda.addWidget(lbl_gap_desc, 0, 4, 1, 4)
+
+        l_cruda.addWidget(QLabel("Dimensión Latente:"), 1, 0)
+        self.rb_dim_2d_cruda = QRadioButton("2D (Plano Canónico)")
+        self.rb_dim_2d_cruda.setChecked(True)
+        self.rb_dim_2d_cruda.setStyleSheet("color: #00FF88; font-weight: bold;")
+        self.rb_dim_3d_cruda = QRadioButton("3D (Espacio Tridimensional)")
+        self.rb_dim_3d_cruda.setStyleSheet("color: #66FCF1; font-weight: bold;")
+        row_dim_cruda = QHBoxLayout()
+        row_dim_cruda.addWidget(self.rb_dim_2d_cruda)
+        row_dim_cruda.addWidget(self.rb_dim_3d_cruda)
+        row_dim_cruda.addStretch()
+        l_cruda.addLayout(row_dim_cruda, 1, 1, 1, 7)
+
+        g_cruda.setLayout(l_cruda)
+        self.layout.addWidget(g_cruda)
+
+        # ----------------------------------------------------------------------
+        # 4. MODALIDAD 3: ESPECTROGRAMA (STFT)
+        # ----------------------------------------------------------------------
+        g_spec = QGroupBox("4. Modalidad: Espectrograma (STFT Calibrada)")
+        l_spec = QGridLayout()
+        l_spec.setContentsMargins(6, 6, 6, 6)
+        l_spec.setSpacing(6)
+
+        self.rb_spec = QRadioButton("Activar Espectrograma")
+        self.rb_spec.setStyleSheet("color: #FFE600; font-weight: bold;")
+        l_spec.addWidget(self.rb_spec, 0, 0, 1, 2)
+
+        lbl_spec_desc = QLabel("Resolución: 32 frecuencias x 64 tiempos (Escala Logarítmica en dB)")
+        lbl_spec_desc.setStyleSheet("color: #45A29E; font-size: 11px;")
+        l_spec.addWidget(lbl_spec_desc, 0, 2, 1, 6)
+
+        l_spec.addWidget(QLabel("Dimensión Latente:"), 1, 0)
+        self.rb_dim_2d_spec = QRadioButton("2D (Plano Canónico)")
+        self.rb_dim_2d_spec.setChecked(True)
+        self.rb_dim_2d_spec.setStyleSheet("color: #00FF88; font-weight: bold;")
+        self.rb_dim_3d_spec = QRadioButton("3D (Espacio Tridimensional)")
+        self.rb_dim_3d_spec.setStyleSheet("color: #66FCF1; font-weight: bold;")
+        row_dim_spec = QHBoxLayout()
+        row_dim_spec.addWidget(self.rb_dim_2d_spec)
+        row_dim_spec.addWidget(self.rb_dim_3d_spec)
+        row_dim_spec.addStretch()
+        l_spec.addLayout(row_dim_spec, 1, 1, 1, 7)
+
+        g_spec.setLayout(l_spec)
+        self.layout.addWidget(g_spec)
+
+        # Agrupador exclusivo de modalidades
+        from PySide6.QtWidgets import QButtonGroup
+        self.grp_modalidad = QButtonGroup(self)
+        self.grp_modalidad.addButton(self.rb_env)
+        self.grp_modalidad.addButton(self.rb_cruda)
+        self.grp_modalidad.addButton(self.rb_spec)
+
+        self.grp_dim_env = QButtonGroup(self)
+        self.grp_dim_env.addButton(self.rb_dim_2d_env)
+        self.grp_dim_env.addButton(self.rb_dim_3d_env)
+
+        self.grp_dim_cruda = QButtonGroup(self)
+        self.grp_dim_cruda.addButton(self.rb_dim_2d_cruda)
+        self.grp_dim_cruda.addButton(self.rb_dim_3d_cruda)
+
+        self.grp_dim_spec = QButtonGroup(self)
+        self.grp_dim_spec.addButton(self.rb_dim_2d_spec)
+        self.grp_dim_spec.addButton(self.rb_dim_3d_spec)
+
+        # ----------------------------------------------------------------------
+        # 5. ALINEACIÓN DE PULSO FISIOLÓGICO
+        # ----------------------------------------------------------------------
+        g_align = QGroupBox("5. Alineación de Pulso Fisiológico")
+        l_align = QHBoxLayout()
+        l_align.setContentsMargins(6, 6, 6, 6)
+        l_align.addWidget(QLabel("Método de Alineación:"))
+        self.cmb_align = QComboBox()
+        self.cmb_align.addItems([
+            "Pico Volumen Micrófono",
+            "Pico Derivada Micrófono (Onset)",
+            "Pico Canal 0",
+            "Pico Canal 1",
+            "Pico Canal 2",
+            "Pico Envolvente Muscular (Supremo)"
+        ])
+        self.cmb_align.setCurrentText("Pico Derivada Micrófono (Onset)")
+        self.cmb_align.setStyleSheet("background-color: #1F2833; color: #66FCF1; border: 1px solid #45A29E; padding: 4px; font-weight: bold;")
+        l_align.addWidget(self.cmb_align)
+        l_align.addStretch()
+        g_align.setLayout(l_align)
+        self.layout.addWidget(g_align)
+
+        # ----------------------------------------------------------------------
+        # 6. PARÁMETROS DSP PREVIOS Y ACONDICIONAMIENTO
+        # ----------------------------------------------------------------------
+        g_dsp = QGroupBox("6. Parámetros DSP Previos y Acondicionamiento")
+        l_dsp = QGridLayout()
+        l_dsp.setContentsMargins(6, 6, 6, 6)
+        l_dsp.setSpacing(6)
+
+        # Fila 0: Filtro Pasa-banda y Notch
+        l_dsp.addWidget(QLabel("HP Cutoff:"), 0, 0)
+        self.inp_hp = QDoubleSpinBox()
+        self.inp_hp.setRange(1.0, 100.0)
+        self.inp_hp.setValue(20.0)
+        self.inp_hp.setSuffix(" Hz")
+        self.inp_hp.setFixedWidth(65)
+        l_dsp.addWidget(self.inp_hp, 0, 1)
+
+        l_dsp.addWidget(QLabel("LP Cutoff:"), 0, 2)
+        self.inp_lp = QDoubleSpinBox()
+        self.inp_lp.setRange(100.0, 950.0)
+        self.inp_lp.setValue(450.0)
+        self.inp_lp.setSuffix(" Hz")
+        self.inp_lp.setFixedWidth(70)
+        l_dsp.addWidget(self.inp_lp, 0, 3)
+
+        l_dsp.addWidget(QLabel("Notch Q:"), 0, 4)
+        self.inp_notch = QDoubleSpinBox()
+        self.inp_notch.setRange(0.1, 100.0)
+        self.inp_notch.setValue(2.0)
+        self.inp_notch.setFixedWidth(55)
+        l_dsp.addWidget(self.inp_notch, 0, 5)
+
+        l_dsp.addWidget(QLabel("Alpha Ruido:"), 0, 6)
+        self.inp_alpha = QDoubleSpinBox()
+        self.inp_alpha.setRange(0.0, 10.0)
+        self.inp_alpha.setValue(1.0)
+        self.inp_alpha.setFixedWidth(55)
+        l_dsp.addWidget(self.inp_alpha, 0, 7)
+
+        # Fila 1: Filtro de Línea (Notch vs Adaptativo), Compuerta, SNR, Outliers
+        l_dsp.addWidget(QLabel("Filtro Línea:"), 1, 0)
+        self.cmb_filtro_linea = QComboBox()
+        self.cmb_filtro_linea.addItems([
+            "Adaptativo (NLMS 50Hz+Armónicos)",
+            "Notch (IIR en Cascada)"
+        ])
+        self.cmb_filtro_linea.setCurrentText("Adaptativo (NLMS 50Hz+Armónicos)")
+        self.cmb_filtro_linea.setStyleSheet("background-color: #1F2833; color: #66FCF1; border: 1px solid #45A29E; padding: 2px; font-weight: bold;")
+        l_dsp.addWidget(self.cmb_filtro_linea, 1, 1, 1, 2)
+
+        l_dsp.addWidget(QLabel("Gate Ruido:"), 1, 3)
+        self.inp_gate = QDoubleSpinBox()
+        self.inp_gate.setRange(0.0, 100.0)
+        self.inp_gate.setValue(0.0)
+        self.inp_gate.setFixedWidth(50)
+        l_dsp.addWidget(self.inp_gate, 1, 4)
+
+        l_dsp.addWidget(QLabel("SNR:"), 1, 5)
+        self.inp_snr = QDoubleSpinBox()
+        self.inp_snr.setRange(0.0, 100.0)
+        self.inp_snr.setValue(0.5)
+        self.inp_snr.setFixedWidth(50)
+        l_dsp.addWidget(self.inp_snr, 1, 6)
+
+        l_dsp.addWidget(QLabel("Outliers:"), 1, 7)
+        self.inp_outliers = QDoubleSpinBox()
+        self.inp_outliers.setRange(0.0, 0.50)
+        self.inp_outliers.setValue(0.10)
+        self.inp_outliers.setFixedWidth(50)
+        l_dsp.addWidget(self.inp_outliers, 1, 8)
+
+        # Fila 2: Ponderación de Canales
+        l_dsp.addWidget(QLabel("W Ch0:"), 2, 0)
+        self.inp_w0 = QDoubleSpinBox()
+        self.inp_w0.setRange(0.0, 20.0)
+        self.inp_w0.setValue(1.0)
+        self.inp_w0.setFixedWidth(55)
+        l_dsp.addWidget(self.inp_w0, 2, 1)
+
+        l_dsp.addWidget(QLabel("W Ch1:"), 2, 2)
+        self.inp_w1 = QDoubleSpinBox()
+        self.inp_w1.setRange(0.0, 20.0)
+        self.inp_w1.setValue(1.0)
+        self.inp_w1.setFixedWidth(55)
+        l_dsp.addWidget(self.inp_w1, 2, 3)
+
+        l_dsp.addWidget(QLabel("W Ch2:"), 2, 4)
+        self.inp_w2 = QDoubleSpinBox()
+        self.inp_w2.setRange(0.0, 20.0)
+        self.inp_w2.setValue(1.0)
+        self.inp_w2.setFixedWidth(55)
+        l_dsp.addWidget(self.inp_w2, 2, 5)
+
+        g_dsp.setLayout(l_dsp)
+        self.layout.addWidget(g_dsp)
+
+        # 7. Parámetros de Optimización y Calibración
+        g_par = QGroupBox("7. Parámetros de Optimización y Calibración")
+        l_par = QGridLayout()
+        
+        # Fila 0: Parámetros numéricos base
+        l_par.addWidget(QLabel("Épocas:"), 0, 0)
+        self.inp_epochs = QSpinBox()
+        self.inp_epochs.setRange(1, 1000)
+        self.inp_epochs.setValue(150)
+        self.inp_epochs.setFixedWidth(65)
+        l_par.addWidget(self.inp_epochs, 0, 1)
+        
+        l_par.addWidget(QLabel("Batch Size:"), 0, 2)
+        self.inp_batch = QSpinBox()
+        self.inp_batch.setRange(1, 512)
+        self.inp_batch.setValue(32)
+        self.inp_batch.setFixedWidth(65)
+        l_par.addWidget(self.inp_batch, 0, 3)
+        
+        l_par.addWidget(QLabel("Learning Rate:"), 0, 4)
+        self.inp_lr = QDoubleSpinBox()
+        self.inp_lr.setRange(0.0001, 0.1)
+        self.inp_lr.setSingleStep(0.001)
+        self.inp_lr.setDecimals(4)
+        self.inp_lr.setValue(0.0020)
+        self.inp_lr.setFixedWidth(75)
+        l_par.addWidget(self.inp_lr, 0, 5)
+
+        # Fila 1: Función de Pérdida (MSE vs Soft-DTW) y parámetro Gamma
+        l_par.addWidget(QLabel("Función Pérdida:"), 1, 0)
+        self.cmb_loss = QComboBox()
+        self.cmb_loss.addItems([
+            "MSE (Error Cuadrático Medio)",
+            "Soft-DTW (Alineación Temporal Suave)",
+            "Divergencia Soft-DTW (Simétrica)",
+            "Híbrida (MSE + Soft-DTW)"
+        ])
+        self.cmb_loss.setCurrentText("MSE (Error Cuadrático Medio)")
+        self.cmb_loss.setStyleSheet("background-color: #1F2833; color: #66FCF1; border: 1px solid #45A29E; padding: 3px; font-weight: bold;")
+        l_par.addWidget(self.cmb_loss, 1, 1, 1, 2)
+
+        l_par.addWidget(QLabel("Gamma Soft-DTW:"), 1, 3)
+        self.inp_gamma_sdtw = QDoubleSpinBox()
+        self.inp_gamma_sdtw.setRange(0.01, 50.0)
+        self.inp_gamma_sdtw.setValue(1.00)
+        self.inp_gamma_sdtw.setSingleStep(0.1)
+        self.inp_gamma_sdtw.setDecimals(2)
+        self.inp_gamma_sdtw.setFixedWidth(65)
+        l_par.addWidget(self.inp_gamma_sdtw, 1, 4)
+
+        # Fila 2: Algoritmo de Clustering y Regularización de Ortogonalidad Latente
+        l_par.addWidget(QLabel("Clustering:"), 2, 0)
+        self.cmb_clustering = QComboBox()
+        self.cmb_clustering.addItems([
+            "GMM (Gaussian Mixture)",
+            "K-Means (k-medias)"
+        ])
+        self.cmb_clustering.setCurrentText("GMM (Gaussian Mixture)")
+        self.cmb_clustering.setStyleSheet("background-color: #1F2833; color: #66FCF1; border: 1px solid #45A29E; padding: 3px; font-weight: bold;")
+        l_par.addWidget(self.cmb_clustering, 2, 1, 1, 2)
+
+        l_par.addWidget(QLabel("Ortogonalidad Latente (\u03bb):"), 2, 3)
+        self.inp_lambda_orto = QDoubleSpinBox()
+        self.inp_lambda_orto.setRange(0.0, 50.0)
+        self.inp_lambda_orto.setValue(0.0)
+        self.inp_lambda_orto.setSingleStep(0.1)
+        self.inp_lambda_orto.setDecimals(2)
+        self.inp_lambda_orto.setFixedWidth(65)
+        self.inp_lambda_orto.setToolTip("Penaliza la covarianza no diagonal en el espacio latente para forzar que los ejes sean ortogonales.")
+        l_par.addWidget(self.inp_lambda_orto, 2, 4)
+
+        # Fila 3: Reescalado Fisiológico Directo por Promedios
+        self.chk_p95 = QCheckBox("Reescalado Fisiológico por Promedios (Rojo en /a/ -> 1.0, Verde en /i/ -> 1.0, Amarillo en /u/ -> 1.0)")
+        self.chk_p95.setChecked(True)
+        self.chk_p95.setStyleSheet("color: #66FCF1; font-weight: bold;")
+        l_par.addWidget(self.chk_p95, 3, 0, 1, 6)
+        
+        g_par.setLayout(l_par)
+        self.layout.addWidget(g_par)
+
+        # 8. Arquitectura de Red Neuronal (Editor de Código PyTorch)
+        g_arch = QGroupBox("8. Arquitectura de Red Neuronal (Editor de Código PyTorch)")
+        l_arch = QVBoxLayout()
+
+        bar_arch = QHBoxLayout()
+        self.chk_usar_custom = QCheckBox("Usar Arquitectura Personalizada del Editor (PyTorch nn.Module)")
+        self.chk_usar_custom.setChecked(False)
+        self.chk_usar_custom.setStyleSheet("color: #FFE600; font-weight: bold;")
+        bar_arch.addWidget(self.chk_usar_custom)
+
+        self.btn_restablecer_arch = QPushButton("Restablecer Plantilla Oficial")
+        self.btn_restablecer_arch.setStyleSheet("background-color: #1F2833; color: #45A29E; border: 1px solid #45A29E; font-size: 11px; padding: 4px;")
+        bar_arch.addWidget(self.btn_restablecer_arch)
+
+        self.btn_verificar_arch = QPushButton("Verificar Sintaxis y Capas")
+        self.btn_verificar_arch.setStyleSheet("background-color: #1F2833; color: #00FF88; border: 1px solid #00AA55; font-size: 11px; font-weight: bold; padding: 4px;")
+        bar_arch.addWidget(self.btn_verificar_arch)
+        bar_arch.addStretch()
+        l_arch.addLayout(bar_arch)
+
+        self.txt_codigo_arch = QPlainTextEdit()
+        self.txt_codigo_arch.setFixedHeight(230)
+        self.txt_codigo_arch.setStyleSheet(
+            "background-color: #0c0c0c; color: #66FCF1; border: 1px solid #333333; "
+            "font-family: Consolas, Courier New, monospace; font-size: 11px; padding: 6px;"
+        )
+        self.txt_codigo_arch.setPlainText(self.get_plantilla_codigo("envolvente"))
+        l_arch.addWidget(self.txt_codigo_arch)
+
+        self.lbl_arch_status = QLabel("[INFO]: Arquitectura oficial pre-cargada con Invarianza Temporal (GAP + GMP).")
+        self.lbl_arch_status.setStyleSheet("background-color: #111111; color: #45A29E; border: 1px solid #333333; padding: 5px; font-family: monospace; font-size: 10px; border-radius: 4px;")
+        l_arch.addWidget(self.lbl_arch_status)
+
+        g_arch.setLayout(l_arch)
+        self.layout.addWidget(g_arch)
+
+        # Conectar eventos de la arquitectura
+        self.btn_restablecer_arch.clicked.connect(self.on_restablecer_plantilla)
+        self.btn_verificar_arch.clicked.connect(self.on_verificar_arquitectura)
+        self.rb_env.toggled.connect(self.on_modalidad_toggled)
+        self.rb_cruda.toggled.connect(self.on_modalidad_toggled)
+        self.rb_spec.toggled.connect(self.on_modalidad_toggled)
+        self.rb_dim_2d_env.toggled.connect(self.on_modalidad_toggled)
+        self.rb_dim_3d_env.toggled.connect(self.on_modalidad_toggled)
+        self.rb_dim_2d_cruda.toggled.connect(self.on_modalidad_toggled)
+        self.rb_dim_3d_cruda.toggled.connect(self.on_modalidad_toggled)
+        self.rb_dim_2d_spec.toggled.connect(self.on_modalidad_toggled)
+        self.rb_dim_3d_spec.toggled.connect(self.on_modalidad_toggled)
+
+        # 9. Acciones de Procesamiento y Entrenamiento
+        g_act = QGroupBox("9. Acciones de Procesamiento y Entrenamiento")
+        l_act = QVBoxLayout()
+        
+        row_steps = QHBoxLayout()
+        self.btn_extraer = QPushButton("1. Extraer Dataset")
+        self.btn_extraer.setStyleSheet("background-color: #1F2833; color: #45A29E; font-weight: bold; padding: 8px; border: 1px solid #45A29E;")
+        row_steps.addWidget(self.btn_extraer)
+        
+        self.btn_entrenar = QPushButton("2. Entrenar Autoencoder")
+        self.btn_entrenar.setStyleSheet("background-color: #1F2833; color: #66FCF1; font-weight: bold; padding: 8px; border: 1px solid #66FCF1;")
+        row_steps.addWidget(self.btn_entrenar)
+        
+        self.btn_plotear = QPushButton("3. Plotear Espacio Latente")
+        self.btn_plotear.setStyleSheet("background-color: #1F2833; color: #00FF88; font-weight: bold; padding: 8px; border: 1px solid #00FF88;")
+        row_steps.addWidget(self.btn_plotear)
+        l_act.addLayout(row_steps)
+        
+        self.btn_flujo_completo = QPushButton("FLUJO COMPLETO: EXTRACCION -> ENTRENAMIENTO -> EVALUACION (1-CLICK)")
+        self.btn_flujo_completo.setStyleSheet("background-color: #004d33; color: #00FF88; font-weight: bold; font-size: 12px; padding: 12px; border: 2px solid #00FF88; border-radius: 4px;")
+        l_act.addWidget(self.btn_flujo_completo)
+        
+        row_aux = QHBoxLayout()
+        self.btn_lanzar_estudio = QPushButton("Abrir Estudio Gráfico Completo (GUI Externa)")
+        self.btn_lanzar_estudio.setStyleSheet("background-color: #1F2833; color: #66FCF1; font-weight: bold; padding: 7px; border: 1px solid #45A29E;")
+        row_aux.addWidget(self.btn_lanzar_estudio)
+
+        self.btn_ver_ultimo_grafico = QPushButton("Visualizar Último Gráfico (PNG)")
+        self.btn_ver_ultimo_grafico.setStyleSheet("background-color: #1F2833; color: #00FF88; font-weight: bold; padding: 7px; border: 1px solid #00AA55;")
+        row_aux.addWidget(self.btn_ver_ultimo_grafico)
+        
+        self.btn_abrir_resultados = QPushButton("Abrir Carpeta de Resultados")
+        self.btn_abrir_resultados.setStyleSheet("background-color: #1F2833; color: #FFE600; font-weight: bold; padding: 7px; border: 1px solid #FFE600;")
+        row_aux.addWidget(self.btn_abrir_resultados)
+        l_act.addLayout(row_aux)
+        
+        g_act.setLayout(l_act)
+        self.layout.addWidget(g_act)
+
+        self.layout.addStretch()
+        scroll.setWidget(content)
+        main_layout.addWidget(scroll)
+
+    def get_plantilla_codigo(self, modalidad=None):
+        if modalidad is None:
+            if self.rb_cruda.isChecked():
+                modalidad = "cruda"
+            elif self.rb_spec.isChecked():
+                modalidad = "espectrograma"
+            else:
+                modalidad = "envolvente"
+
+        latent_dim = 3 if self.rb_dim_3d.isChecked() else 2
+
+        if modalidad == "cruda":
+            return f'''import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class AutoencoderPersonalizado(nn.Module):
+    """
+    Autoencoder Convolucional 1D para Señal Cruda con Invarianza Temporal (Línea Base Histórica 54.3%).
+    Utiliza núcleos amplios con ReLU para rectificación aprendida y pooling dual (GAP + GMP).
+    """
+    def __init__(self, in_channels=3, latent_dim={latent_dim}, target_len=1000):
+        super().__init__()
+        self.target_len = target_len
+        self.in_channels = in_channels
+        self.latent_dim = latent_dim
+
+        self.conv = nn.Sequential(
+            nn.Conv1d(in_channels, 32, kernel_size=31, padding=15),
+            nn.ReLU(),
+            nn.Conv1d(32, 16, kernel_size=15, padding=7),
+            nn.ReLU()
+        )
+        # Cálculo dinámico de canales para el pooling (GAP + GMP)
+        with torch.no_grad():
+            num_features = self.conv(torch.zeros(1, in_channels, self.target_len)).shape[1]
+
+        # Invarianza Temporal: Global Average Pooling + Global Max Pooling (GAP + GMP)
+        self.gap = nn.AdaptiveAvgPool1d(1)
+        self.gmp = nn.AdaptiveMaxPool1d(1)
+        self.fc_enc = nn.Sequential(
+            nn.Linear(num_features * 2, 32),
+            nn.LeakyReLU(0.2),
+            nn.Linear(32, latent_dim)
+        )
+        self.decoder = nn.Sequential(
+            nn.Linear(latent_dim, 64),
+            nn.LeakyReLU(0.2),
+            nn.Linear(64, in_channels * target_len)
+        )
+
+    def encode(self, x):
+        h = self.conv(x)
+        avg_f = self.gap(h).squeeze(-1)
+        max_f = self.gmp(h).squeeze(-1)
+        z = self.fc_enc(torch.cat([avg_f, max_f], dim=1))
+        return z
+
+    def forward(self, x):
+        z = self.encode(x)
+        x_rec = self.decoder(z).view(-1, self.in_channels, self.target_len)
+        if x.shape[-1] != self.target_len:
+            x_rec = F.interpolate(x_rec, size=x.shape[-1], mode='linear', align_corners=False)
+        return x_rec, z
+'''
+        elif modalidad.startswith("espectrograma"):
+            return f'''import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class AutoencoderPersonalizado(nn.Module):
+    """Autoencoder 2D para espectrogramas calibrados en dB (3x32x64)"""
+    def __init__(self, in_channels=3, latent_dim={latent_dim}):
+        super().__init__()
+        self.in_channels = in_channels
+        self.latent_dim = latent_dim
+        act = lambda: nn.LeakyReLU(0.1)
+
+        self.enc = nn.Sequential(
+            nn.Conv2d(in_channels, 32, 3, padding=1), nn.BatchNorm2d(32), act(),
+            nn.MaxPool2d(2, 2),
+            nn.Conv2d(32, 64, 3, padding=1), nn.BatchNorm2d(64), act(),
+            nn.MaxPool2d(2, 2),
+            nn.Conv2d(64, 64, 3, padding=1), nn.BatchNorm2d(64), act(),
+            nn.MaxPool2d(2, 2)
+        )
+        self.fc_enc = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(64 * 4 * 8, 64), act(),
+            nn.Linear(64, latent_dim)
+        )
+        self.fc_dec = nn.Sequential(
+            nn.Linear(latent_dim, 64), act(),
+            nn.Linear(64, 64 * 4 * 8), act()
+        )
+        self.up3 = nn.ConvTranspose2d(64, 64, 2, stride=2)
+        self.dec3 = nn.Sequential(nn.Conv2d(64, 64, 3, padding=1), act())
+        self.up2 = nn.ConvTranspose2d(64, 32, 2, stride=2)
+        self.dec2 = nn.Sequential(nn.Conv2d(32, 32, 3, padding=1), act())
+        self.up1 = nn.ConvTranspose2d(32, 16, 2, stride=2)
+        self.dec1 = nn.Sequential(nn.Conv2d(16, 16, 3, padding=1), act())
+        self.out_conv = nn.Conv2d(16, in_channels, 3, padding=1)
+
+    def forward(self, x):
+        h = self.enc(x)
+        z = self.fc_enc(h)
+        h_dec = self.fc_dec(z).view(z.shape[0], 64, 4, 8)
+        d = self.dec3(self.up3(h_dec))
+        d = self.dec2(self.up2(d))
+        d = self.dec1(self.up1(d))
+        x_rec = self.out_conv(d)
+        return x_rec, z
+'''
+        else:
+            return f'''import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+class AutoencoderPersonalizado(nn.Module):
+    """
+    Autoencoder Convolucional 1D para envolventes continuas con Invarianza Temporal.
+    Utiliza pooling dual (GAP + GMP) para capturar la integral de activación y el pico
+    de contracción de forma completamente independiente de la longitud temporal.
+    """
+    def __init__(self, in_channels=3, latent_dim={latent_dim}, target_len=100):
+        super().__init__()
+        self.in_channels = in_channels
+        self.target_len = target_len
+        self.latent_dim = latent_dim
+        act = lambda: nn.LeakyReLU(0.1)
+
+        self.conv = nn.Sequential(
+            nn.Conv1d(in_channels, 16, kernel_size=7, padding=3), act(),
+            nn.Conv1d(16, 32, kernel_size=5, padding=2), act(),
+            nn.Conv1d(32, 16, kernel_size=5, padding=2), act()
+        )
+        # Cálculo dinámico de canales para el pooling (GAP + GMP)
+        with torch.no_grad():
+            num_features = self.conv(torch.zeros(1, in_channels, self.target_len)).shape[1]
+
+        # Reducción Global Independiente del Tiempo (GAP + GMP)
+        self.gap = nn.AdaptiveAvgPool1d(1)
+        self.gmp = nn.AdaptiveMaxPool1d(1)
+        self.fc_enc = nn.Sequential(
+            nn.Linear(num_features * 2, 32),
+            act(),
+            nn.Linear(32, latent_dim)
+        )
+        self.decoder = nn.Sequential(
+            nn.Linear(latent_dim, 32),
+            act(),
+            nn.Linear(32, in_channels * target_len)
+        )
+
+    def encode(self, x):
+        h = self.conv(x)
+        avg_f = self.gap(h).squeeze(-1)
+        max_f = self.gmp(h).squeeze(-1)
+        z = self.fc_enc(torch.cat([avg_f, max_f], dim=1))
+        return z
+
+    def forward(self, x):
+        z = self.encode(x)
+        x_rec = self.decoder(z).view(-1, self.in_channels, self.target_len)
+        if x.shape[-1] != self.target_len:
+            x_rec = F.interpolate(x_rec, size=x.shape[-1], mode='linear', align_corners=False)
+        return x_rec, z
+'''
+
+    @property
+    def rb_dim_2d(self):
+        class _D2Proxy:
+            def __init__(proxy_self, parent):
+                proxy_self.parent = parent
+            def isChecked(proxy_self):
+                if proxy_self.parent.rb_cruda.isChecked():
+                    return proxy_self.parent.rb_dim_2d_cruda.isChecked()
+                elif proxy_self.parent.rb_spec.isChecked():
+                    return proxy_self.parent.rb_dim_2d_spec.isChecked()
+                return proxy_self.parent.rb_dim_2d_env.isChecked()
+        return _D2Proxy(self)
+
+    @property
+    def rb_dim_3d(self):
+        class _D3Proxy:
+            def __init__(proxy_self, parent):
+                proxy_self.parent = parent
+            def isChecked(proxy_self):
+                if proxy_self.parent.rb_cruda.isChecked():
+                    return proxy_self.parent.rb_dim_3d_cruda.isChecked()
+                elif proxy_self.parent.rb_spec.isChecked():
+                    return proxy_self.parent.rb_dim_3d_spec.isChecked()
+                return proxy_self.parent.rb_dim_3d_env.isChecked()
+        return _D3Proxy(self)
+
+    @property
+    def inp_pts(self):
+        if hasattr(self, 'rb_cruda') and self.rb_cruda.isChecked():
+            return self.inp_pts_cruda
+        return self.inp_pts_env
+
+    def on_modalidad_toggled(self):
+        if not self.chk_usar_custom.isChecked():
+            self.txt_codigo_arch.setPlainText(self.get_plantilla_codigo())
+            self.lbl_arch_status.setText("[INFO]: Plantilla actualizada para la modalidad seleccionada.")
+            self.lbl_arch_status.setStyleSheet("background-color: #111111; color: #45A29E; border: 1px solid #333333; padding: 5px; font-family: monospace; font-size: 10px; border-radius: 4px;")
+
+    def on_restablecer_plantilla(self):
+        self.txt_codigo_arch.setPlainText(self.get_plantilla_codigo())
+        self.lbl_arch_status.setText("[INFO]: Plantilla oficial restablecida.")
+        self.lbl_arch_status.setStyleSheet("background-color: #111111; color: #45A29E; border: 1px solid #333333; padding: 5px; font-family: monospace; font-size: 10px; border-radius: 4px;")
+
+    def on_verificar_arquitectura(self):
+        codigo = self.txt_codigo_arch.toPlainText()
+        modalidad = "cruda" if self.rb_cruda.isChecked() else ("espectrograma" if self.rb_spec.isChecked() else "envolvente")
+        latent_dim = 3 if self.rb_dim_3d.isChecked() else 2
+        try:
+            import deep_learning.motor_autoencoder_unificado as motor
+            ok, msg = motor.verificar_arquitectura_codigo(codigo, modalidad=modalidad, latent_dim=latent_dim)
+            if ok:
+                self.lbl_arch_status.setText(f"[VALIDACION OK]: {msg}")
+                self.lbl_arch_status.setStyleSheet("background-color: #002211; color: #00FF88; border: 1px solid #00AA55; padding: 6px; font-family: monospace; font-size: 10px; border-radius: 4px;")
+            else:
+                self.lbl_arch_status.setText(f"[ERROR]: {msg}")
+                self.lbl_arch_status.setStyleSheet("background-color: #330011; color: #FF4444; border: 1px solid #FF0055; padding: 6px; font-family: monospace; font-size: 10px; border-radius: 4px; font-weight: bold;")
+        except Exception as e:
+            self.lbl_arch_status.setText(f"[ERROR]: {e}")
+            self.lbl_arch_status.setStyleSheet("background-color: #330011; color: #FF4444; border: 1px solid #FF0055; padding: 6px; font-family: monospace; font-size: 10px; border-radius: 4px;")
+
+    def set_sessions(self, rutas):
+        self.rutas_actuales = rutas or []
+        n = len(self.rutas_actuales)
+        self.lbl_sesiones_count.setText(f"Total seleccionadas: {n} mediciones")
+        
+        self.lst_sesiones.clear()
+        for r in self.rutas_actuales:
+            nombre = os.path.basename(r)
+            padre = os.path.basename(os.path.dirname(r))
+            self.lst_sesiones.addItem(f"[{padre}] {nombre}")
+            
+        if n == 0:
+            self.lbl_alerta_audit.setText("[AUDITORIA]: No hay sesiones seleccionadas en el Gestor de Sesiones.")
+            self.lbl_alerta_audit.setStyleSheet("background-color: #111111; color: #888888; border: 1px solid #333333; padding: 6px; font-family: monospace; font-size: 10px; border-radius: 4px;")
+            self.btn_extraer.setEnabled(False)
+            self.btn_flujo_completo.setEnabled(False)
+            return
+
+        self.btn_extraer.setEnabled(True)
+        self.btn_flujo_completo.setEnabled(True)
+
+        try:
+            import deep_learning.motor_autoencoder_unificado as motor
+            res = motor.auditar_metadatos_sesiones(self.rutas_actuales)
+            if not res['compatible']:
+                adv_txt = " | ".join(res['advertencias'][:2])
+                self.lbl_alerta_audit.setText(f"[ALERTA ANATOMICA INTER-DIA]: {adv_txt}")
+                self.lbl_alerta_audit.setStyleSheet("background-color: #330011; color: #FF4444; border: 1px solid #FF0055; padding: 6px; font-family: monospace; font-size: 10px; border-radius: 4px; font-weight: bold;")
+            else:
+                m_res = res.get('musculos_resumen', {})
+                bpm_val = res.get('bpm_comun', 'N/D') or "N/D"
+                fechas_d = res.get('fechas_detectadas', [])
+                fechas_txt = f" | Fechas: {', '.join(fechas_d)}" if fechas_d else ""
+                self.lbl_alerta_audit.setText(f"[COHERENCIA ANATOMICA OK] {n} tomas validadas{fechas_txt} | Ch0: {m_res.get('canal_0', 'N/D')}, Ch1: {m_res.get('canal_1', 'N/D')}, Ch2: {m_res.get('canal_2', 'N/D')} | Metrónomo: {bpm_val} BPM")
+                self.lbl_alerta_audit.setStyleSheet("background-color: #002211; color: #00FF88; border: 1px solid #00AA55; padding: 6px; font-family: monospace; font-size: 10px; border-radius: 4px;")
+        except Exception as e:
+            self.lbl_alerta_audit.setText(f"[AUDITORIA]: Error al inspeccionar metadatos: {e}")
+            self.lbl_alerta_audit.setStyleSheet("background-color: #221100; color: #FFAA00; border: 1px solid #FFAA00; padding: 6px; font-family: monospace; font-size: 10px; border-radius: 4px;")
+
+    def get_kwargs(self):
+        if self.rb_cruda.isChecked():
+            modalidad = "cruda"
+            latent_dim = 3 if self.rb_dim_3d_cruda.isChecked() else 2
+            target_len = self.inp_pts_cruda.value()
+        elif self.rb_spec.isChecked():
+            modalidad = "espectrograma"
+            latent_dim = 3 if self.rb_dim_3d_spec.isChecked() else 2
+            target_len = 1000
+        else:
+            modalidad = "envolvente"
+            latent_dim = 3 if self.rb_dim_3d_env.isChecked() else 2
+            target_len = self.inp_pts_env.value()
+
+        env_text = self.cmb_tipo_env.currentText().lower()
+        if "media" in env_text:
+            tipo_env = "media_movil"
+        elif "tkeo" in env_text:
+            tipo_env = "tkeo"
+        elif "hilbert" in env_text:
+            tipo_env = "hilbert"
+        else:
+            tipo_env = "rms"
+
+        loss_text = self.cmb_loss.currentText().lower()
+        if "divergencia" in loss_text:
+            tipo_perdida = "soft_dtw_divergence"
+        elif "híbrida" in loss_text or "hibrida" in loss_text:
+            tipo_perdida = "hibrida"
+        elif "soft-dtw" in loss_text or "soft_dtw" in loss_text:
+            tipo_perdida = "soft_dtw"
+        else:
+            tipo_perdida = "mse"
+
+        gamma_sdtw = float(self.inp_gamma_sdtw.value())
+        clustering_text = self.cmb_clustering.currentText().lower()
+        algoritmo_clustering = "kmeans" if "k-means" in clustering_text or "kmeans" in clustering_text else "gmm"
+        lambda_orto = float(self.inp_lambda_orto.value())
+        filtro_linea_text = self.cmb_filtro_linea.currentText().lower()
+        tipo_filtro_linea = "notch" if "notch" in filtro_linea_text else "adaptativo"
+            
+        return {
+            'modalidad': modalidad,
+            'latent_dim': latent_dim,
+            'epochs': self.inp_epochs.value(),
+            'batch_size': self.inp_batch.value(),
+            'lr': float(self.inp_lr.value()),
+            'tipo_perdida': tipo_perdida,
+            'gamma_sdtw': gamma_sdtw,
+            'algoritmo_clustering': algoritmo_clustering,
+            'lambda_orto': lambda_orto,
+            'tipo_filtro_linea': tipo_filtro_linea,
+            'usar_calibracion_p95': self.chk_p95.isChecked(),
+            'usar_custom_arch': self.chk_usar_custom.isChecked(),
+            'codigo_custom_arch': self.txt_codigo_arch.toPlainText(),
+            'modo_alineacion': self.cmb_align.currentText(),
+            'tipo_envolvente': tipo_env,
+            'smooth_ms': self.inp_smooth_ms.value(),
+            'alpha_ruido': float(self.inp_alpha.value()),
+            'target_len': target_len,
+            'highpass_cutoff_hz': float(self.inp_hp.value()),
+            'lowpass_cutoff_hz': float(self.inp_lp.value()),
+            'snr_min': float(self.inp_snr.value()),
+            'outlier_contamination': float(self.inp_outliers.value()),
+            'notch_q': float(self.inp_notch.value()),
+            'gate_ratio_ruido': float(self.inp_gate.value()),
+            'w_canales': [float(self.inp_w0.value()), float(self.inp_w1.value()), float(self.inp_w2.value())],
+            'rutas': list(self.rutas_actuales)
+        }
+
 class MachineLearningTab(QWidget):
     def __init__(self):
         super().__init__()
@@ -1400,9 +2342,13 @@ class MachineLearningPanel(QWidget):
         self.tab_umap_sup = UmapSupervisadoTab()
         self.tabs.addTab(self.tab_umap_sup, "UMAP Supervisado")
         
-        # 5. Autoencoders
+        # 5. Autoencoders (Supervisado)
         self.tab_autoencoders = AutoencodersTab()
-        self.tabs.addTab(self.tab_autoencoders, "Autoencoders")
+        self.tabs.addTab(self.tab_autoencoders, "Autoencoders (Supervisado)")
+        
+        # 6. Autoencoder No Supervisado (Cero Etiquetas)
+        self.tab_autoencoder_no_sup = AutoencoderNoSupervisadoTab()
+        self.tabs.addTab(self.tab_autoencoder_no_sup, "Autoencoder No Supervisado (Cero Etiquetas)")
         
         # 6. Otros Clasificadores y Herramientas
         self.tab_otros = QWidget()
@@ -1446,12 +2392,35 @@ class MachineLearningPanel(QWidget):
         if t.rb_elipses.isChecked(): estilo_visual = "Elipses"
         elif t.rb_sombreado.isChecked(): estilo_visual = "Sombreado"
         
+        lowpass_txt = t.cmb_lowpass.currentText() if hasattr(t, 'cmb_lowpass') else "300 Hz (Rangayyan)"
+        if "300" in lowpass_txt:
+            lowpass_val = 300.0
+        elif "500" in lowpass_txt:
+            lowpass_val = 500.0
+        else:
+            lowpass_val = 0.0
+        
+        noise_txt = t.cmb_noise_filter.currentText() if hasattr(t, 'cmb_noise_filter') else "Notch (IIR)"
+        if "adaptativo" in noise_txt.lower() or "nlms" in noise_txt.lower():
+            tipo_filtro_ruido = "adaptativo"
+        elif "desactivado" in noise_txt.lower():
+            tipo_filtro_ruido = "desactivado"
+        else:
+            tipo_filtro_ruido = "notch"
+
+        highpass_val = t.inp_highpass.value() if hasattr(t, 'inp_highpass') else 20.0
+        notch_q_val = t.inp_notch_q.value() if hasattr(t, 'inp_notch_q') else 2.0
+        
         return {
             'proc_pca_2d': t.chk_pca_2d.isChecked(),
             'proc_pca_3d': t.chk_pca_3d.isChecked(),
             'proc_umap_2d': False,
             'proc_umap_3d': False,
             'ocultar_leyenda': t.chk_ocultar_leyenda.isChecked(),
+            'tipo_filtro_ruido': tipo_filtro_ruido,
+            'notch_q': notch_q_val,
+            'highpass_cutoff_hz': highpass_val,
+            'lowpass_cutoff_hz': lowpass_val,
             'params_2d': {
                 'alpha_ruido': t.inp_alpha_2d.value(),
                 'gate_ratio_ruido': t.inp_gate.value() if hasattr(t, 'inp_gate') else (t.inp_gate_2d.value() if hasattr(t, 'inp_gate_2d') else 0.0),
@@ -1459,7 +2428,10 @@ class MachineLearningPanel(QWidget):
                 'target_length': t.inp_pts_2d.value(),
                 'snr_threshold': t.inp_snr_2d.value(),
                 'outlier_contamination': t.inp_outliers_2d.value(),
-                'notch_q': t.inp_notch_2d.value(),
+                'notch_q': t.inp_notch_2d.value() if hasattr(t, 'inp_notch_2d') else notch_q_val,
+                'tipo_filtro_ruido': tipo_filtro_ruido,
+                'highpass_cutoff_hz': highpass_val,
+                'lowpass_cutoff_hz': lowpass_val,
                 'comp_x': t.cmb_pc_x_2d.currentText() if hasattr(t, 'cmb_pc_x_2d') else 'PC1',
                 'comp_y': t.cmb_pc_y_2d.currentText() if hasattr(t, 'cmb_pc_y_2d') else 'PC2',
                 'pesos_canales': [
@@ -1475,7 +2447,10 @@ class MachineLearningPanel(QWidget):
                 'target_length': t.inp_pts_3d.value(),
                 'snr_threshold': t.inp_snr_3d.value(),
                 'outlier_contamination': t.inp_outliers_3d.value(),
-                'notch_q': t.inp_notch_3d.value(),
+                'notch_q': t.inp_notch_3d.value() if hasattr(t, 'inp_notch_3d') else notch_q_val,
+                'tipo_filtro_ruido': tipo_filtro_ruido,
+                'highpass_cutoff_hz': highpass_val,
+                'lowpass_cutoff_hz': lowpass_val,
                 'comp_x': t.cmb_pc_x_3d.currentText() if hasattr(t, 'cmb_pc_x_3d') else 'PC1',
                 'comp_y': t.cmb_pc_y_3d.currentText() if hasattr(t, 'cmb_pc_y_3d') else 'PC2',
                 'comp_z': t.cmb_pc_z_3d.currentText() if hasattr(t, 'cmb_pc_z_3d') else 'PC3',
@@ -1508,12 +2483,35 @@ class MachineLearningPanel(QWidget):
         if t.chk_canal_1.isChecked(): canales.append("canal_1")
         if t.chk_canal_2.isChecked(): canales.append("canal_2")
         
+        lowpass_txt = t.cmb_lowpass.currentText() if hasattr(t, 'cmb_lowpass') else "300 Hz (Rangayyan)"
+        if "300" in lowpass_txt:
+            lowpass_val = 300.0
+        elif "500" in lowpass_txt:
+            lowpass_val = 500.0
+        else:
+            lowpass_val = 0.0
+        
+        noise_txt = t.cmb_noise_filter.currentText() if hasattr(t, 'cmb_noise_filter') else "Notch (IIR)"
+        if "adaptativo" in noise_txt.lower() or "nlms" in noise_txt.lower():
+            tipo_filtro_ruido = "adaptativo"
+        elif "desactivado" in noise_txt.lower():
+            tipo_filtro_ruido = "desactivado"
+        else:
+            tipo_filtro_ruido = "notch"
+
+        highpass_val = t.inp_highpass.value() if hasattr(t, 'inp_highpass') else 20.0
+        notch_q_val = t.inp_notch_q.value() if hasattr(t, 'inp_notch_q') else 2.0
+
         return {
             'proc_pca_2d': False,
             'proc_pca_3d': False,
             'proc_umap_2d': t.chk_umap_2d.isChecked(),
             'proc_umap_3d': t.chk_umap_3d.isChecked(),
             'ocultar_leyenda': t.chk_ocultar_leyenda.isChecked(),
+            'tipo_filtro_ruido': tipo_filtro_ruido,
+            'notch_q': notch_q_val,
+            'highpass_cutoff_hz': highpass_val,
+            'lowpass_cutoff_hz': lowpass_val,
             'params_2d': {},
             'params_3d': {},
             'params_umap': {
@@ -1523,7 +2521,10 @@ class MachineLearningPanel(QWidget):
                 'target_length': t.inp_pts_u.value(),
                 'snr_threshold': t.inp_snr_u.value(),
                 'outlier_contamination': t.inp_outliers_u.value(),
-                'notch_q': t.inp_notch_u.value()
+                'notch_q': t.inp_notch_u.value() if hasattr(t, 'inp_notch_u') else notch_q_val,
+                'tipo_filtro_ruido': tipo_filtro_ruido,
+                'highpass_cutoff_hz': highpass_val,
+                'lowpass_cutoff_hz': lowpass_val
             },
             'umap_n_neighbors': t.inp_n_neighbors.value(),
             'umap_min_dist': t.inp_min_dist.value(),
@@ -1548,6 +2549,23 @@ class MachineLearningPanel(QWidget):
         if t_umap.chk_canal_1.isChecked(): canales.append("canal_1")
         if t_umap.chk_canal_2.isChecked(): canales.append("canal_2")
 
+        noise_txt = t_umap.cmb_noise_filter.currentText() if hasattr(t_umap, 'cmb_noise_filter') else "Notch (IIR)"
+        if "adaptativo" in noise_txt.lower() or "nlms" in noise_txt.lower():
+            tipo_filtro_ruido = "adaptativo"
+        elif "desactivado" in noise_txt.lower():
+            tipo_filtro_ruido = "desactivado"
+        else:
+            tipo_filtro_ruido = "notch"
+
+        highpass_val = t_umap.inp_highpass.value() if hasattr(t_umap, 'inp_highpass') else 20.0
+        lowpass_txt = t_umap.cmb_lowpass.currentText() if hasattr(t_umap, 'cmb_lowpass') else "300 Hz (Rangayyan)"
+        if "300" in lowpass_txt:
+            lowpass_val = 300.0
+        elif "500" in lowpass_txt:
+            lowpass_val = 500.0
+        else:
+            lowpass_val = 0.0
+
         return {
             'alpha_ruido': t.inp_alpha.value(),
             'smooth_ms': t.inp_smooth.value(),
@@ -1555,6 +2573,9 @@ class MachineLearningPanel(QWidget):
             'snr_threshold': t.inp_snr.value(),
             'outlier_contamination': t.inp_outliers.value(),
             'notch_q': t.inp_notch.value(),
+            'tipo_filtro_ruido': tipo_filtro_ruido,
+            'highpass_cutoff_hz': highpass_val,
+            'lowpass_cutoff_hz': lowpass_val,
             'umap_n_neighbors': t.inp_umap_nn.value(),
             'umap_min_dist': t.inp_umap_md.value(),
             'umap_metric': t.cmb_metric.currentText(),

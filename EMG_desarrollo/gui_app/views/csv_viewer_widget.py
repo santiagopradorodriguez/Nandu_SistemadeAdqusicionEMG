@@ -31,8 +31,20 @@ root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if root_dir not in sys.path:
     sys.path.append(root_dir)
 
+emg_base_dir = os.path.dirname(root_dir)
+if emg_base_dir not in sys.path:
+    sys.path.append(emg_base_dir)
+
 from utils.config_manager import ConfigManager
 config_mgr = ConfigManager()
+
+try:
+    from analysis.filtro_adaptativo import cancelar_ruido_linea_adaptativo
+except ImportError:
+    try:
+        from filtro_adaptativo import cancelar_ruido_linea_adaptativo
+    except ImportError:
+        cancelar_ruido_linea_adaptativo = None
 
 # --- OPTIMIZACIÓN EXTREMA DE FLUIDEZ ---
 # Antialiasing se ve "suave" pero devora la CPU al hacer zoom con cientos de miles de puntos.
@@ -229,6 +241,11 @@ class CsvViewerWidget(QWidget):
         self.grp_filters = QGroupBox("Filtros")
         self.grp_filters.setStyleSheet("font-weight: bold; color: #aaa;")
         lyt_filt = QVBoxLayout(self.grp_filters)
+        
+        self.chk_adaptive = QCheckBox("Filtro Adaptativo")
+        self.chk_adaptive.stateChanged.connect(self.update_plot)
+        lyt_filt.addWidget(self.chk_adaptive)
+        
         row_notch = QHBoxLayout()
         self.chk_notch = QCheckBox("Notch 50Hz")
         self.chk_notch.stateChanged.connect(self.update_plot)
@@ -292,6 +309,7 @@ class CsvViewerWidget(QWidget):
         
         self.slayout.addWidget(grp_env)
         
+        self.chk_adaptive.stateChanged.connect(self._on_config_changed)
         self.chk_notch.stateChanged.connect(self._on_config_changed)
         self.chk_bandpass.stateChanged.connect(self._on_config_changed)
         self.spin_lp.editingFinished.connect(self._on_config_changed)
@@ -418,7 +436,7 @@ class CsvViewerWidget(QWidget):
             try:
                 from utils.config_manager import get_muscle_color
                 if ch_num == 3 or "mic" in nombre_musc.lower():
-                    color_canal = "#ff0000"
+                    color_canal = get_muscle_color("micrófono", default="#ff0000")
                 else:
                     default_c = self.channel_colors[ch_num] if ch_num < len(self.channel_colors) else '#ffffff'
                     color_canal = get_muscle_color(nombre_musc, default_c)
@@ -490,7 +508,30 @@ class CsvViewerWidget(QWidget):
             if chk.isChecked():
                 y_data = self.canales_originales[canal].copy()
                 
-                # Filtros
+                ch_num = chk.property("ch_num")
+                nombre_plot = chk.property("nombre_plot")
+                color = chk.property("color_plot")
+                if not color:
+                    try:
+                        from utils.config_manager import get_muscle_color
+                        if ch_num == 3 or "mic" in str(nombre_plot).lower():
+                            color = get_muscle_color("micrófono", default="#ff0000")
+                        else:
+                            default_c = self.channel_colors[ch_num] if ch_num < len(self.channel_colors) else '#ffffff'
+                            color = get_muscle_color(nombre_plot, default_c)
+                    except Exception:
+                        color = "#ff0000" if ch_num == 3 else (self.channel_colors[ch_num] if ch_num < len(self.channel_colors) else '#ffffff')
+
+                is_emg = (ch_num != 3 and "mic" not in str(nombre_plot).lower())
+                
+                # Filtro Adaptativo (NLMS de 50 Hz con referencia sintética en cuadratura)
+                if self.chk_adaptive.isChecked() and is_emg and fs > 110 and cancelar_ruido_linea_adaptativo is not None:
+                    e_clean, _, _ = cancelar_ruido_linea_adaptativo(
+                        y_data, fs, f0=50.0, mu=0.01, normalizado=True
+                    )
+                    y_data = e_clean
+
+                # 3. Filtros convencionales
                 if notch and fs > 110:
                     notch_q = self.spin_notch_q.value()
                     b, a = signal.iirnotch(50.0, notch_q, fs)
@@ -504,7 +545,7 @@ class CsvViewerWidget(QWidget):
                         b, a = signal.butter(4, lp / (0.5 * fs), btype='low')
                         y_data = signal.filtfilt(b, a, y_data)
                 
-                # Envolvente
+                # 4. Envolvente
                 if tipo_env != "ninguna":
                     from scipy.ndimage import uniform_filter1d
                     if tipo_env == "rms":
@@ -517,26 +558,12 @@ class CsvViewerWidget(QWidget):
                     if self.chk_env_offset.isChecked():
                         y_data = y_data - np.min(y_data)
                     
-                # Offset Manual
+                # 5. Offset Manual
                 offset_val = self.channel_offsets.get(canal, 0)
                 y_data = y_data + offset_val
                     
-                # Downsampling
+                # 6. Downsampling y Graficación
                 x_plot, y_plot = downsample_lttb_fast(self.time_data, y_data, MAX_POINTS_TO_PLOT)
-                
-                ch_num = chk.property("ch_num")
-                nombre_plot = chk.property("nombre_plot")
-                color = chk.property("color_plot")
-                if not color:
-                    try:
-                        from utils.config_manager import get_muscle_color
-                        if ch_num == 3 or "mic" in str(nombre_plot).lower():
-                            color = "#ff0000"
-                        else:
-                            default_c = self.channel_colors[ch_num] if ch_num < len(self.channel_colors) else '#ffffff'
-                            color = get_muscle_color(nombre_plot, default_c)
-                    except Exception:
-                        color = "#ff0000" if ch_num == 3 else (self.channel_colors[ch_num] if ch_num < len(self.channel_colors) else '#ffffff')
                 self.plot_widget.plot(x_plot, y_plot, name=nombre_plot, pen=pg.mkPen(color, width=1.5))
 
     def _on_offset_changed(self, canal, offset_val):
@@ -624,6 +651,8 @@ class CsvViewerWidget(QWidget):
         config_mgr.set("csv_viewer", "env", self.cmb_env.currentText())
         config_mgr.set("csv_viewer", "env_ms", self.spin_env.value())
         config_mgr.set("csv_viewer", "env_offset", self.chk_env_offset.isChecked())
+        # Persistencia de filtro adaptativo
+        config_mgr.set("csv_viewer", "adaptive_filter", self.chk_adaptive.isChecked())
         self.update_plot()
 
     def _load_config_state(self):
@@ -638,3 +667,6 @@ class CsvViewerWidget(QWidget):
         if idx >= 0: self.cmb_env.setCurrentIndex(idx)
         self.spin_env.setValue(saved.get("env_ms", 50))
         self.chk_env_offset.setChecked(saved.get("env_offset", False))
+        
+        # Carga de estado de filtro adaptativo
+        self.chk_adaptive.setChecked(saved.get("adaptive_filter", False))

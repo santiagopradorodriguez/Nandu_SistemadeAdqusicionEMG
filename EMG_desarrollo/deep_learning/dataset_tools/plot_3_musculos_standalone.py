@@ -124,6 +124,13 @@ def main():
         print("No se encontraron picos en canal_3")
         sys.exit(1)
         
+    # Selección de la mitad de los pulsos para mayor claridad visual y detalle en el paper
+    frac_pulsos = float(sys.argv[4]) if len(sys.argv) > 4 else 0.5
+    total_picos = len(picos)
+    num_picos_mostrar = max(1, int(np.ceil(total_picos * frac_pulsos)))
+    picos = picos[:num_picos_mostrar]
+    print(f"Pulsos detectados en total: {total_picos} | Graficando los primeros {num_picos_mostrar} pulsos (fraccion: {frac_pulsos:.2f})")
+        
     # Envolvente real del micrófono para dibujar (con el suavizado elegido)
     env3_plot, _ = apply_dsp_pipeline(sig3, sr, noise_seconds_a_usar, smooth_ms=smooth_ms_val)
     
@@ -152,12 +159,25 @@ def main():
     # --- Estética ---
     config_mgr = ConfigManager()
     
+    meta_ch0 = os.path.join(med_path, "canal_0", "metadata.json")
+    muscles_map = {}
+    if os.path.exists(meta_ch0):
+        try:
+            with open(meta_ch0, 'r', encoding='utf-8') as f0:
+                d0 = json.load(f0)
+                if 'muscles_map' in d0 and isinstance(d0['muscles_map'], dict):
+                    muscles_map = d0['muscles_map']
+                elif 'muscles' in d0 and isinstance(d0['muscles'], list):
+                    for idx_m, m_name in enumerate(d0['muscles']):
+                        muscles_map[f"canal_{idx_m}"] = m_name
+        except: pass
+
     labels = []
     ch_info_list = []
     
     for i in range(3):
         ch_conf = config_mgr.get_channel_config(i)
-        musculo = ch_conf.get("musculo", f"Canal {i}")
+        musculo = muscles_map.get(f"canal_{i}") or ch_conf.get("musculo", f"Canal {i}")
         meta_chi = os.path.join(med_path, f"canal_{i}", "metadata.json")
         if os.path.exists(meta_chi):
             try:
@@ -178,11 +198,11 @@ def main():
         from utils.config_manager import get_unique_channel_colors
         colors = get_unique_channel_colors(ch_info_list)
     except Exception:
-        colors = ['#ffaa00', '#39ff14', '#ffff00']
+        colors = ['#ff754b', '#00a896', '#ffff00']
         
-    # Obtener configuración del micrófono (Canal 3) - SIEMPRE ROJO
+    # Obtener configuración del micrófono (Canal 3)
     mic_conf = config_mgr.get_channel_config(3)
-    mic_name = mic_conf.get("musculo", "Micrófono")
+    mic_name = muscles_map.get("canal_3") or mic_conf.get("musculo", "Micrófono")
     meta_ch3 = os.path.join(med_path, "canal_3", "metadata.json")
     if os.path.exists(meta_ch3):
         try:
@@ -191,7 +211,11 @@ def main():
                 if 'musculo' in m3_data and m3_data['musculo']:
                     mic_name = m3_data['musculo']
         except: pass
-    mic_color = "#ff0000"
+    try:
+        from utils.config_manager import get_muscle_color
+        mic_color = get_muscle_color(mic_name, default="#ff0000")
+    except Exception:
+        mic_color = "#ff0000"
 
     if theme == "dark":
         plt.style.use('dark_background')

@@ -10,10 +10,10 @@ dl_dir = os.path.join(project_root, "deep_learning")
 if dl_dir not in sys.path:
     sys.path.insert(0, dl_dir)
 
-with open(r'/tmp/tmpb_y08t7g.json', 'r') as f:
+with open(r'/tmp/tmp9dxe49o5.json', 'r') as f:
     kwargs = json.load(f)
 
-carpeta_secuencia = r"/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-06-22/SecuenciaContinua_Prueba5_SANTI"
+carpeta_secuencia = r"/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/SecuenciaContinua_Prueba1_Candela"
 
 out_dir = os.path.join(project_root, "resultados", "resultados_autoencoder")
 l_dim = kwargs.get('latent_dim', 2)

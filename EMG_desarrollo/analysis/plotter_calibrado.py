@@ -457,6 +457,15 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
                     if 'resistencia_ohm' in md_ch:
                         res_ohm = float(md_ch['resistencia_ohm'])
                         ganancia = 1.0 + (49400.0 / res_ohm)
+            if not musculo or musculo == nom_limpio:
+                meta_ch0 = os.path.join(path_medicion, "canal_0", "metadata.json")
+                if os.path.exists(meta_ch0):
+                    with open(meta_ch0, 'r', encoding='utf-8') as f0:
+                        m0 = json.load(f0)
+                        if 'muscles_map' in m0 and f"canal_{ch_idx}" in m0['muscles_map']:
+                            musculo = m0['muscles_map'][f"canal_{ch_idx}"]
+                        elif 'muscles' in m0 and isinstance(m0['muscles'], list) and ch_idx < len(m0['muscles']):
+                            musculo = m0['muscles'][ch_idx]
         except Exception:
             pass
 
@@ -479,7 +488,7 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
         from utils.config_manager import get_unique_channel_colors
         colores_canales = get_unique_channel_colors(ch_info_list)
     except Exception:
-        colores_canales = ["#ffaa00", "#39ff14", "#ffff00", "#ff0000"]
+        colores_canales = ["#ff754b", "#00a896", "#ffff00", "#ff0000"]
 
     # --- PASO 1: Procesar todas las señales ---
     processed_channels = []

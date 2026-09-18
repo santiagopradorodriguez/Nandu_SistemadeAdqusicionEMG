@@ -95,7 +95,7 @@ def get_interpulse_noise(processed_segment, initial_noise):
         
     return curr_mean
 
-def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, gate_ratio_ruido=8.0, smooth_ms=250, notch_q=2.0, target_len=100, return_raw_cache=False, aplicar_trevisan=False, modo_alineacion="Pico Volumen Micrófono", pre_pct=0.4, post_pct=0.6, canales_features=["canal_0", "canal_1", "canal_2"], ignorar_ventana_cero=False, cache_canales_data=None, aplicar_correccion_intersesion=False):
+def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, gate_ratio_ruido=8.0, smooth_ms=250, notch_q=2.0, target_len=100, return_raw_cache=False, aplicar_trevisan=False, modo_alineacion="Pico Volumen Micrófono", pre_pct=0.4, post_pct=0.6, canales_features=["canal_0", "canal_1", "canal_2"], ignorar_ventana_cero=False, cache_canales_data=None, aplicar_correccion_intersesion=False, lowpass_cutoff_hz=300.0, tipo_filtro_ruido="notch", highpass_cutoff_hz=20.0):
     """
     Extrae y alinea las ventanas de los canales solicitados.
     Devuelve X (matriz de features), Y (labels/vocales) y Tomas (nombres de las mediciones).
@@ -106,7 +106,14 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, gate_ra
     SNRs = []
     mediciones_procesadas = []
     
-    canales_procesar = list(set(canales_features + ["canal_3"]))
+    modo_str = str(modo_alineacion).strip()
+    es_modo_canal = modo_str.lower().startswith("pico canal")
+    if es_modo_canal:
+        ch_num = modo_str.lower().split()[-1]
+        ch_target_global = f"canal_{ch_num}"
+        canales_procesar = list(set(canales_features + [ch_target_global]))
+    else:
+        canales_procesar = list(set(canales_features + ["canal_3"]))
     
     total_mediciones = len(mediciones)
     
@@ -129,7 +136,8 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, gate_ra
                 data_excl = json.load(f)
                 excluded_windows = data_excl.get("excluded_windows", [])
                 
-        cache_key = f"{med_name}_{smooth_ms}_{notch_q}"
+        bpm_u, noise_u, pulsos_u = 50, 2.0, None
+        cache_key = f"{med_name}_{smooth_ms}_{tipo_filtro_ruido}_{notch_q}_{highpass_cutoff_hz}_{lowpass_cutoff_hz}"
         if cache_canales_data is not None and cache_key in cache_canales_data:
             canales_data = cache_canales_data[cache_key]
         else:
@@ -139,7 +147,6 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, gate_ra
                 if not os.path.exists(carpeta):
                     continue
                     
-                bpm_u, noise_u, pulsos_u = 50, 2.0, None
                 meta_path = os.path.join(carpeta, 'metadata.json')
                 try:
                     if os.path.exists(meta_path):
@@ -161,6 +168,9 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, gate_ra
                         excluded_windows=excluded_windows,
                         show_interactive_plot=False,
                         notch_q_factor=notch_q,
+                        tipo_filtro_ruido=tipo_filtro_ruido,
+                        highpass_cutoff_hz=highpass_cutoff_hz,
+                        lowpass_cutoff_hz=lowpass_cutoff_hz,
                         tipo_envolvente="rms", smooth_ms=smooth_ms,
                         pre_pct=pre_pct, post_pct=post_pct
                     )
@@ -174,39 +184,57 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, gate_ra
             if cache_canales_data is not None and len(canales_data) == len(canales_procesar):
                 cache_canales_data[cache_key] = canales_data
                 
-        if len(canales_data) < len(canales_procesar):
+        canales_req = list(set(canales_features + [ch_target_global])) if es_modo_canal else list(set(canales_features + ["canal_3"]))
+        ch_target = ch_target_global if es_modo_canal else "canal_3"
+        if not all(ch in canales_data for ch in canales_req):
             continue
             
-        # Alinear ventanas usando canal 3 como maestro (find_peaks global)
-        muestras_pulso = canales_data["canal_3"]['muestras_pulso']
-        env_mic_raw = canales_data["canal_3"]['env_recortada']
+        # Alinear ventanas usando canal maestro
+        muestras_pulso = canales_data[ch_target]['muestras_pulso'] if ch_target in canales_data else canales_data[canales_features[0]]['muestras_pulso']
+        sr_canal = canales_data[ch_target].get('samplerate', 2000)
         
-        # Encontrar picos en el micrófono como en el script interactivo
-        # distance: 80% del período esperado
-        # height: 20% del máximo del micrófono
-        dist_samples = int(0.8 * muestras_pulso)
-        min_height = np.max(env_mic_raw) * 0.2
-        
-        picos_mic, _ = find_peaks(env_mic_raw, distance=dist_samples, height=min_height)
-        
-        # --- ALINEACIÓN POR DERIVADA (NUEVO) ---
-        if modo_alineacion == "Pico Derivada Micrófono (Onset)":
-            periodo_sec = 60.0 / bpm_u
-            sr_aprox = int(muestras_pulso / periodo_sec)
+        if es_modo_canal:
+            env_ref = canales_data[ch_target]['env_recortada']
             
-            deriv_mic = np.gradient(env_mic_raw)
-            win_size = max(1, int(sr_aprox * 0.25))
-            deriv_mic = np.convolve(deriv_mic, np.ones(win_size)/win_size, mode='same')
+            # 1. Alto suavizado (~250 ms) para encontrar los intervalos de pulso robustamente
+            win_size_alto = max(5, int(sr_canal * 0.25))
+            if win_size_alto % 2 == 0:
+                win_size_alto += 1
+            env_smooth_cont = np.convolve(env_ref, np.ones(win_size_alto) / win_size_alto, mode='same')
             
-            picos_deriv = []
-            for p_amp in picos_mic:
-                rango_inicio = max(0, int(p_amp - pre_pct * muestras_pulso))
-                if rango_inicio < p_amp:
-                    idx_rel = np.argmax(deriv_mic[rango_inicio:p_amp])
-                    picos_deriv.append(rango_inicio + idx_rel)
-                else:
-                    picos_deriv.append(p_amp)
-            picos_mic = np.array(picos_deriv)
+            ch_noise = canales_data[ch_target].get('noise_levels', [0])[0] if len(canales_data[ch_target].get('noise_levels', [])) > 0 else 0
+            dist_samples = int(0.8 * muestras_pulso)
+            min_height = max(np.max(env_smooth_cont) * 0.15, ch_noise * 1.2)
+            picos_candidatos, _ = find_peaks(env_smooth_cont, distance=dist_samples, height=min_height)
+            
+            # 2. Descartar ventanas si en el canal maestro no hay activación real sobre el piso de ruido
+            picos_alineacion = []
+            for p_cand in picos_candidatos:
+                val_pico = env_smooth_cont[p_cand]
+                if val_pico >= 0.10 * np.max(env_smooth_cont) and val_pico > ch_noise * 1.1:
+                    picos_alineacion.append(p_cand)
+        else:
+            env_ref = canales_data["canal_3"]['env_recortada']
+            dist_samples = int(0.8 * muestras_pulso)
+            min_height = np.max(env_ref) * 0.2
+            picos_mic, _ = find_peaks(env_ref, distance=dist_samples, height=min_height)
+            
+            if modo_alineacion == "Pico Derivada Micrófono (Onset)":
+                deriv_mic = np.gradient(env_ref)
+                win_size = max(1, int(sr_canal * 0.25))
+                deriv_mic = np.convolve(deriv_mic, np.ones(win_size)/win_size, mode='same')
+                
+                picos_deriv = []
+                for p_amp in picos_mic:
+                    rango_inicio = max(0, int(p_amp - pre_pct * muestras_pulso))
+                    if rango_inicio < p_amp:
+                        idx_rel = np.argmax(deriv_mic[rango_inicio:p_amp])
+                        picos_deriv.append(rango_inicio + idx_rel)
+                    else:
+                        picos_deriv.append(p_amp)
+                picos_alineacion = np.array(picos_deriv)
+            else:
+                picos_alineacion = picos_mic
         
         TARGET_LEN = target_len
         
@@ -214,11 +242,11 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, gate_ra
         ventanas_medicion = []
         picos_medicion = [] # para guardar el máximo de cada canal en la ventana
         
-        for win_idx, pico in enumerate(picos_mic):
+        for win_idx, pico in enumerate(picos_alineacion):
             if ignorar_ventana_cero and win_idx == 0:
                 continue
                 
-            # Definir ventana física simétrica basada en el pico del micrófono
+            # Definir ventana física simétrica basada en el pico de referencia
             pre_samples = int(muestras_pulso * pre_pct)
             post_samples = int(muestras_pulso * post_pct)
             
@@ -226,7 +254,7 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, gate_ra
             real_cut_end = pico + post_samples
             
             # Verificar límites
-            if real_cut_start < 0 or real_cut_end > len(env_mic_raw):
+            if real_cut_start < 0 or real_cut_end > len(env_ref):
                 continue
                 
             valido = True
@@ -311,7 +339,7 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, gate_ra
                 segs_brutos.append(segmento_ch)
                 picos_canales.append(m_val)
                 
-            if not valido:
+            if not valido or max_supremo <= 1e-6:
                 continue
                 
             ventanas_medicion.append({
@@ -466,7 +494,7 @@ def evaluate_classifier(X_proj, Y, name):
         scores.append(accuracy_score(Y[test_idx], clf.predict(X_proj[test_idx])))
     print(f"Accuracy {name} (5-fold): {np.mean(scores):.4f} (+/- {np.std(scores):.4f})")
 
-def evaluar_clustering_no_supervisado(X, Y, nombre, algoritmo="K-Means", verbose=True):
+def evaluar_clustering_no_supervisado(X, Y, nombre, algoritmo="K-Means", verbose=True, X_features=None):
     # Obtener etiquetas reales y cantidad de clases
     vocales_unicas = sorted(list(set(Y)))
     n_clases = len(vocales_unicas)
@@ -479,10 +507,82 @@ def evaluar_clustering_no_supervisado(X, Y, nombre, algoritmo="K-Means", verbose
     if algoritmo == "GMM":
         from sklearn.mixture import GaussianMixture
         model = GaussianMixture(n_components=n_clases, covariance_type='full', random_state=42, n_init=100, max_iter=500)
+        y_pred_kmeans = model.fit_predict(X)
+    elif algoritmo == "GMM Jerárquico (PCA Local)":
+        from sklearn.mixture import GaussianMixture
+        from sklearn.decomposition import PCA
+        
+        X_feat = X_features if (X_features is not None and len(X_features) == len(X)) else X
+        
+        if n_clases <= 3:
+            model = GaussianMixture(n_components=n_clases, covariance_type='full', random_state=42, n_init=100, max_iter=500)
+            y_pred_kmeans = model.fit_predict(X)
+        else:
+            # Etapa 1: Macro-clustering en espacio global (K=3 macro-atractores)
+            n_macro = 3
+            macro_dim = min(3, X.shape[1])
+            macro_model = GaussianMixture(n_components=n_macro, covariance_type='full', random_state=42, n_init=100, max_iter=500)
+            macro_labels = macro_model.fit_predict(X[:, :macro_dim])
+            
+            # Evaluar sub-estructura de cada macro-clúster mediante PCA Local y BIC
+            macro_info = []
+            for m in range(n_macro):
+                idx_m = np.where(macro_labels == m)[0]
+                if len(idx_m) < 4:
+                    macro_info.append({"m": m, "delta_bic": -1e9, "idx": idx_m, "sub_preds": None})
+                    continue
+                
+                X_sub = X_feat[idx_m]
+                n_loc_comps = min(2, X_sub.shape[1], len(X_sub) - 1)
+                loc_pca = PCA(n_components=max(1, n_loc_comps), random_state=42)
+                X_sub_loc = loc_pca.fit_transform(X_sub)
+                
+                try:
+                    gmm1 = GaussianMixture(n_components=1, covariance_type='full', random_state=42, max_iter=200)
+                    gmm1.fit(X_sub_loc)
+                    bic1 = gmm1.bic(X_sub_loc)
+                    
+                    gmm2 = GaussianMixture(n_components=2, covariance_type='full', random_state=42, n_init=50, max_iter=300)
+                    sub_preds = gmm2.fit_predict(X_sub_loc)
+                    bic2 = gmm2.bic(X_sub_loc)
+                    delta_bic = bic1 - bic2 # Positivo si prefiere dividirse en 2
+                except Exception:
+                    delta_bic = -1e9
+                    sub_preds = np.zeros(len(idx_m), dtype=int)
+                
+                macro_info.append({
+                    "m": m,
+                    "delta_bic": delta_bic,
+                    "idx": idx_m,
+                    "sub_preds": sub_preds
+                })
+            
+            num_splits = min(n_clases - n_macro, n_macro)
+            macro_info.sort(key=lambda x: x["delta_bic"], reverse=True)
+            
+            y_pred_kmeans = np.zeros(len(Y), dtype=int)
+            cluster_id_counter = 0
+            
+            for rank, info in enumerate(macro_info):
+                idx_m = info["idx"]
+                if len(idx_m) == 0:
+                    continue
+                if rank < num_splits and info["delta_bic"] > -1e8 and info["sub_preds"] is not None and len(np.unique(info["sub_preds"])) == 2:
+                    sub_p = info["sub_preds"]
+                    y_pred_kmeans[idx_m[sub_p == 0]] = cluster_id_counter
+                    cluster_id_counter += 1
+                    y_pred_kmeans[idx_m[sub_p == 1]] = cluster_id_counter
+                    cluster_id_counter += 1
+                    if verbose:
+                        print(f"   [GMM Jerárquico] Macro-clúster {info['m']} (N={len(idx_m)}) dividido con PCA Local (ΔBIC={info['delta_bic']:.1f}).")
+                else:
+                    y_pred_kmeans[idx_m] = cluster_id_counter
+                    cluster_id_counter += 1
+                    if verbose:
+                        print(f"   [GMM Jerárquico] Macro-clúster {info['m']} (N={len(idx_m)}) conservado como atractor único.")
     else:
         model = KMeans(n_clusters=n_clases, random_state=42, n_init=100)
-        
-    y_pred_kmeans = model.fit_predict(X)
+        y_pred_kmeans = model.fit_predict(X)
     
     y_true_int = np.array([vocales_unicas.index(v) for v in Y])
     
@@ -837,7 +937,7 @@ def plot_analisis_errores_2d(X, Y, Tomas, title, output_path, variance_ratios=No
     for k, v in sorted(collections.Counter(Y).items()):
         print(f"  {k}: {v} muestras")
 
-    if algoritmo == "GMM":
+    if algoritmo in ["GMM", "GMM Jerárquico (PCA Local)"]:
         from sklearn.mixture import GaussianMixture
         model = GaussianMixture(n_components=n_clases, covariance_type='full', random_state=42, n_init=100, max_iter=500)
         y_pred_kmeans = model.fit_predict(X)
@@ -872,7 +972,7 @@ def plot_analisis_errores_2d(X, Y, Tomas, title, output_path, variance_ratios=No
     palette = sns.color_palette("Set1", n_colors=n_clases)
     
     # --- RENDERIZADO AVANZADO (Fondo) ---
-    if algoritmo == "GMM" and estilo_visual in ["Sombreado", "Fronteras"]:
+    if algoritmo in ["GMM", "GMM Jerárquico (PCA Local)"] and estilo_visual in ["Sombreado", "Fronteras"]:
         x_min, x_max = X[:, 0].min() - (X[:, 0].max() - X[:, 0].min())*0.1, X[:, 0].max() + (X[:, 0].max() - X[:, 0].min())*0.1
         y_min, y_max = X[:, 1].min() - (X[:, 1].max() - X[:, 1].min())*0.1, X[:, 1].max() + (X[:, 1].max() - X[:, 1].min())*0.1
         ax.set_xlim(x_min, x_max)
@@ -1322,6 +1422,8 @@ def extraer_y_filtrar(mediciones, base_dir, params, aplicar_trevisan, modo_aline
         gate_ratio_ruido=params.get('gate_ratio_ruido', 0.0),
         smooth_ms=params.get('smooth_ms', 90), 
         notch_q=params.get('notch_q', 2.0), 
+        tipo_filtro_ruido=params.get('tipo_filtro_ruido', 'notch'),
+        highpass_cutoff_hz=params.get('highpass_cutoff_hz', 20.0),
         target_len=params.get('target_length', 20), 
         aplicar_trevisan=aplicar_trevisan, 
         modo_alineacion=modo_alineacion, 
@@ -1330,7 +1432,8 @@ def extraer_y_filtrar(mediciones, base_dir, params, aplicar_trevisan, modo_aline
         canales_features=canales_features,
         ignorar_ventana_cero=ignorar_ventana_cero,
         cache_canales_data=cache_canales_data,
-        aplicar_correccion_intersesion=aplicar_correccion_intersesion
+        aplicar_correccion_intersesion=aplicar_correccion_intersesion,
+        lowpass_cutoff_hz=params.get('lowpass_cutoff_hz', 300.0)
     )
     
     if len(X) == 0:
@@ -1388,6 +1491,21 @@ def extraer_y_filtrar(mediciones, base_dir, params, aplicar_trevisan, modo_aline
     
     return np.array(X_clean), np.array(Y_clean), np.array(Tomas_clean), descartados
 
+def aplicar_pesos_canales(X, canales_list, pesos):
+    if pesos is None or not isinstance(pesos, (list, tuple)) or len(pesos) == 0:
+        return X
+    if all(float(w) == 1.0 for w in pesos):
+        return X
+    X_out = np.array(X, copy=True)
+    n_feat = X_out.shape[1]
+    n_ch = len(canales_list) if len(canales_list) > 0 else 3
+    pts_per_ch = n_feat // n_ch
+    for c_idx in range(min(n_ch, len(pesos))):
+        w = float(pesos[c_idx])
+        if w != 1.0:
+            X_out[:, c_idx*pts_per_ch : (c_idx+1)*pts_per_ch] *= w
+    return X_out
+
 def ejecutar_procesamiento(
     mediciones, 
     base_dir, 
@@ -1412,13 +1530,48 @@ def ejecutar_procesamiento(
     estilo_visual="Elipses",
     ignorar_ventana_cero=False,
     out_dir=None,
-    aplicar_correccion_intersesion=True
+    aplicar_correccion_intersesion=True,
+    tipo_filtro_ruido="notch",
+    notch_q=2.0,
+    highpass_cutoff_hz=20.0,
+    lowpass_cutoff_hz=300.0,
+    **kwargs
 ):
     if out_dir is None:
         script_dir = os.path.dirname(os.path.abspath(__file__))
         out_dir = os.path.join(script_dir, "resultados_pca_umap")
     os.makedirs(out_dir, exist_ok=True)
     
+    if params_2d is not None and isinstance(params_2d, dict):
+        if 'tipo_filtro_ruido' not in params_2d:
+            params_2d['tipo_filtro_ruido'] = tipo_filtro_ruido
+        if 'notch_q' not in params_2d:
+            params_2d['notch_q'] = notch_q
+        if 'highpass_cutoff_hz' not in params_2d:
+            params_2d['highpass_cutoff_hz'] = highpass_cutoff_hz
+        if 'lowpass_cutoff_hz' not in params_2d:
+            params_2d['lowpass_cutoff_hz'] = lowpass_cutoff_hz
+
+    if params_3d is not None and isinstance(params_3d, dict):
+        if 'tipo_filtro_ruido' not in params_3d:
+            params_3d['tipo_filtro_ruido'] = tipo_filtro_ruido
+        if 'notch_q' not in params_3d:
+            params_3d['notch_q'] = notch_q
+        if 'highpass_cutoff_hz' not in params_3d:
+            params_3d['highpass_cutoff_hz'] = highpass_cutoff_hz
+        if 'lowpass_cutoff_hz' not in params_3d:
+            params_3d['lowpass_cutoff_hz'] = lowpass_cutoff_hz
+
+    if params_umap is not None and isinstance(params_umap, dict):
+        if 'tipo_filtro_ruido' not in params_umap:
+            params_umap['tipo_filtro_ruido'] = tipo_filtro_ruido
+        if 'notch_q' not in params_umap:
+            params_umap['notch_q'] = notch_q
+        if 'highpass_cutoff_hz' not in params_umap:
+            params_umap['highpass_cutoff_hz'] = highpass_cutoff_hz
+        if 'lowpass_cutoff_hz' not in params_umap:
+            params_umap['lowpass_cutoff_hz'] = lowpass_cutoff_hz
+
     import numpy as np
     from sklearn.decomposition import PCA
     import umap
@@ -1565,7 +1718,7 @@ def ejecutar_procesamiento(
             
             plot_scatter(X_pca_2d, Y_2d, f"PCA 2D ({comp_x_2d_str} vs {comp_y_2d_str}) - Vocales EMG", os.path.join(out_dir, "PCA_2D.png"), is_3d=False, variance_ratios=var_ratios_2d, ocultar_leyenda=ocultar_leyenda, axis_labels=[comp_x_2d_str, comp_y_2d_str])
             plot_analisis_errores_2d(X_pca_2d, Y_2d, Tomas_2d, f"Análisis de Aciertos y Errores (PCA 2D: {comp_x_2d_str}-{comp_y_2d_str}) - {algoritmo_clustering_pca}", os.path.join(out_dir, "PCA_2D_Analisis_Errores.png"), variance_ratios=var_ratios_2d, algoritmo=algoritmo_clustering_pca, is_umap=False, ocultar_leyenda=ocultar_leyenda, estilo_visual=estilo_visual, axis_labels=[comp_x_2d_str, comp_y_2d_str])
-            acc_pca_2d, acc_vocales_pca_2d, voc_pca_2d, df_cm_pca_2d, mapeo_pca_2d = evaluar_clustering_no_supervisado(X_pca_2d, Y_2d, "PCA 2D", algoritmo_clustering_pca)
+            acc_pca_2d, acc_vocales_pca_2d, voc_pca_2d, df_cm_pca_2d, mapeo_pca_2d = evaluar_clustering_no_supervisado(X_pca_2d, Y_2d, "PCA 2D", algoritmo_clustering_pca, X_features=X_2d_proc)
             print(f"=> TOTAL Accuracy Clustering No Supervisado (PCA 2D) : {acc_pca_2d:.2f}%")
             plot_confusion_matrix_heatmap(df_cm_pca_2d, "Matriz de Confusión - PCA 2D", os.path.join(out_dir, "heatmap_confusion_pca_2d.png"))
             guardar_matriz_latex(df_cm_pca_2d, "Matriz de Confusión - PCA 2D", os.path.join(out_dir, "matriz_confusion_pca_2d.tex"))
@@ -1654,7 +1807,7 @@ def ejecutar_procesamiento(
             
             plot_scatter_3d_multi_angle(X_pca_3d, Y_3d, f"PCA 3D ({comp_x_3d_str}, {comp_y_3d_str}, {comp_z_3d_str}) - Vocales EMG", os.path.join(out_dir, "PCA_3D.png"), variance_ratios=var_ratios_3d, axis_labels=[comp_x_3d_str, comp_y_3d_str, comp_z_3d_str])
             plot_analisis_errores_3d_proyecciones_2d(X_pca_3d, Y_3d, f"Análisis de Aciertos y Errores (PCA 3D: {comp_x_3d_str}-{comp_y_3d_str}-{comp_z_3d_str}) - {algoritmo_clustering_pca}", os.path.join(out_dir, "PCA_3D_Analisis_Errores.png"), variance_ratios=var_ratios_3d, algoritmo=algoritmo_clustering_pca, axis_labels=[comp_x_3d_str, comp_y_3d_str, comp_z_3d_str])
-            acc_pca_3d, acc_vocales_pca_3d, voc_pca_3d, df_cm_pca_3d, mapeo_pca_3d = evaluar_clustering_no_supervisado(X_pca_3d, Y_3d, "PCA 3D", algoritmo_clustering_pca)
+            acc_pca_3d, acc_vocales_pca_3d, voc_pca_3d, df_cm_pca_3d, mapeo_pca_3d = evaluar_clustering_no_supervisado(X_pca_3d, Y_3d, "PCA 3D", algoritmo_clustering_pca, X_features=X_3d_proc)
             print(f"=> TOTAL Accuracy Clustering No Supervisado (PCA 3D) : {acc_pca_3d:.2f}%")
             plot_confusion_matrix_heatmap(df_cm_pca_3d, "Matriz de Confusión - PCA 3D", os.path.join(out_dir, "heatmap_confusion_pca_3d.png"))
             guardar_matriz_latex(df_cm_pca_3d, "Matriz de Confusión - PCA 3D", os.path.join(out_dir, "matriz_confusion_pca_3d.tex"))
@@ -1727,14 +1880,28 @@ def ejecutar_procesamiento(
                 pd.DataFrame(desc_3d_u).to_csv(os.path.join(out_dir, "reporte_mediciones_descartadas_UMAP_3D.csv"), index=False)
 
     import subprocess
-    plots_to_open = [
-        os.path.join(out_dir, "PCA_2D.png"),
-        os.path.join(out_dir, "PCA_3D.png"),
-        os.path.join(out_dir, "PCA_2D_Analisis_Errores.png"),
-        os.path.join(out_dir, "PCA_3D_Analisis_Errores.png"),
-        os.path.join(out_dir, "UMAP_2D.png"),
-        os.path.join(out_dir, "UMAP_3D.png")
-    ]
+    plots_to_open = []
+    if proc_pca_2d:
+        plots_to_open.extend([
+            os.path.join(out_dir, "PCA_2D.png"),
+            os.path.join(out_dir, "PCA_2D_Analisis_Errores.png")
+        ])
+    if proc_pca_3d:
+        plots_to_open.extend([
+            os.path.join(out_dir, "PCA_3D.png"),
+            os.path.join(out_dir, "PCA_3D_Analisis_Errores.png")
+        ])
+    if proc_umap_2d:
+        plots_to_open.extend([
+            os.path.join(out_dir, "UMAP_2D.png"),
+            os.path.join(out_dir, "UMAP_2D_Analisis_Errores.png")
+        ])
+    if proc_umap_3d:
+        plots_to_open.extend([
+            os.path.join(out_dir, "UMAP_3D.png"),
+            os.path.join(out_dir, "UMAP_3D_Analisis_Errores.png")
+        ])
+
     for p in plots_to_open:
         if os.path.exists(p):
             try:
@@ -1837,7 +2004,13 @@ def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_tr
     total_comb = len(combis)
 
     gate_ruido_val = params_base.get('gate_ratio_ruido', 0.0)
-    logger(f"\n[GRID SEARCH PCA] Iniciando proceso (Barrido de {total_comb} combinaciones con {num_workers} hilos de CPU | Notch Q = 2.0 | Gate Ruido = {gate_ruido_val})...")
+    pesos_canales = params_base.get('pesos_canales', [1.0, 1.0, 1.0])
+    tipo_filtro_val = params_base.get('tipo_filtro_ruido', 'notch')
+    hp_val = params_base.get('highpass_cutoff_hz', 20.0)
+    lp_val = params_base.get('lowpass_cutoff_hz', 300.0)
+
+    desc_filtro = f"Filtro: {str(tipo_filtro_val).upper()}" + (f" (Q={notch_q_grid})" if "notch" in str(tipo_filtro_val).lower() else "")
+    logger(f"\n[GRID SEARCH PCA] Iniciando proceso (Barrido de {total_comb} combinaciones con {num_workers} hilos de CPU | {desc_filtro} | Pasabanda: [{hp_val} - {lp_val}] Hz | Gate Ruido = {gate_ruido_val} | Pesos Canales = {pesos_canales})...")
     logger("  - [Paso 1/2] Cargando audios y aplicando pre-filtros en memoria RAM...")
 
     cache_canales = {}
@@ -1850,7 +2023,11 @@ def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_tr
             p_temp = params_base.copy()
             p_temp['smooth_ms'] = s_ms
             p_temp['notch_q'] = q_val
+            p_temp['tipo_filtro_ruido'] = tipo_filtro_val
+            p_temp['highpass_cutoff_hz'] = hp_val
+            p_temp['lowpass_cutoff_hz'] = lp_val
             p_temp['gate_ratio_ruido'] = gate_ruido_val
+            p_temp['pesos_canales'] = pesos_canales
             extraer_y_filtrar(
                 mediciones, base_dir, p_temp, aplicar_trevisan, modo_alineacion,
                 pre_pct, post_pct, canales_features, ignorar_ventana_cero=ignorar_ventana_cero,
@@ -1875,7 +2052,11 @@ def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_tr
         p['target_length'] = t_len
         p['alpha_ruido'] = a_ruido
         p['notch_q'] = q_val
+        p['tipo_filtro_ruido'] = tipo_filtro_val
+        p['highpass_cutoff_hz'] = hp_val
+        p['lowpass_cutoff_hz'] = lp_val
         p['gate_ratio_ruido'] = gate_ruido_val
+        p['pesos_canales'] = pesos_canales
 
         raw_acc = -1.0
         motivo_descarte = ""
@@ -1889,10 +2070,11 @@ def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_tr
             )
 
             if len(X) > 5 and len(np.unique(Y)) > 1:
+                X_proc = aplicar_pesos_canales(X, canales_features, pesos_canales)
                 pca = PCA(n_components=n_components)
-                X_pca = pca.fit_transform(X)
+                X_pca = pca.fit_transform(X_proc)
                 sil_score = silhouette_score(X_pca, Y)
-                acc_score, acc_por_vocal, vocales_unicas, _, _ = evaluar_clustering_no_supervisado(X_pca, Y, f"Grid PCA {n_components}D", algoritmo=algoritmo_clustering, verbose=False)
+                acc_score, acc_por_vocal, vocales_unicas, _, _ = evaluar_clustering_no_supervisado(X_pca, Y, f"Grid PCA {n_components}D", algoritmo=algoritmo_clustering, verbose=False, X_features=X_proc)
                 raw_acc = acc_score
                 vocal_acc_dict = {str(v): round(float(a), 2) for v, a in zip(vocales_unicas, acc_por_vocal)}
                 
@@ -1904,17 +2086,21 @@ def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_tr
                 sil_score = -1.0
                 acc_score = -1.0
                 motivo_descarte = "Muestras insuficientes"
-        except Exception:
+        except Exception as e:
             sil_score = -1.0
             acc_score = -1.0
-            motivo_descarte = "Error numérico"
+            motivo_descarte = f"Error: {type(e).__name__}: {str(e)}"
 
         res_dict = {
             "smooth_ms": s_ms,
             "target_length": t_len,
             "alpha_ruido": a_ruido,
+            "tipo_filtro_ruido": tipo_filtro_val,
             "notch_q": q_val,
+            "highpass_cutoff_hz": hp_val,
+            "lowpass_cutoff_hz": lp_val,
             "gate_ratio_ruido": gate_ruido_val,
+            "pesos_canales": str(pesos_canales),
             "accuracy_clasificacion": acc_score,
             "raw_accuracy": raw_acc,
             "motivo_descarte": motivo_descarte,
@@ -1960,7 +2146,7 @@ def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_tr
                 best_acc = acc_score
                 best_sil = sil_score
                 best_vocal_acc = vocal_acc
-                best_config = (s_ms, t_len, a_ruido, q_val)
+                best_config = (s_ms, t_len, a_ruido, q_val, tipo_filtro_val, hp_val, lp_val)
                 is_best = True
 
             tag = " ¡NUEVO ÓPTIMO!" if is_best else ""
@@ -1979,7 +2165,8 @@ def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_tr
     if best_config is not None:
         vocal_summary = " | ".join([f"Vocal {v}: {acc:.1f}%" for v, acc in best_vocal_acc.items()])
         logger(f"\n[GRID SEARCH PCA] Búsqueda finalizada al 100%.")
-        logger(f"  -> Configuración óptima: Smooth={best_config[0]}ms, Pts={best_config[1]}, Alpha={best_config[2]}, Notch Q={best_config[3]}")
+        filtro_str_opt = f"{best_config[4].upper()}" + (f" (Q={best_config[3]})" if "notch" in str(best_config[4]).lower() else "")
+        logger(f"  -> Configuración óptima: Smooth={best_config[0]}ms, Pts={best_config[1]}, Alpha={best_config[2]}, {filtro_str_opt}, Pasabanda=[{best_config[5]}-{best_config[6]}]Hz")
         logger(f"  -> Clasificación Global: {best_acc:.2f}% (Silhouette: {best_sil:.4f})")
         if vocal_summary:
             logger(f"  -> Desglose por Vocal: {vocal_summary}")
@@ -2022,7 +2209,11 @@ def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_tr
             "target_length": int(best_config[1]),
             "alpha_ruido": float(best_config[2]),
             "notch_q": float(best_config[3]) if len(best_config) > 3 else 2.0,
+            "tipo_filtro_ruido": str(best_config[4]) if len(best_config) > 4 else tipo_filtro_val,
+            "highpass_cutoff_hz": float(best_config[5]) if len(best_config) > 5 else hp_val,
+            "lowpass_cutoff_hz": float(best_config[6]) if len(best_config) > 6 else lp_val,
             "gate_ratio_ruido": float(params_base.get("gate_ratio_ruido", 0.0)),
+            "pesos_canales": pesos_canales,
             "snr_threshold": float(params_base.get("snr_threshold", 0.5)),
             "outlier_contamination": float(params_base.get("outlier_contamination", 0.10)),
             "accuracy_clasificacion": float(best_acc),
@@ -2051,6 +2242,9 @@ def buscar_mejor_configuracion_pca(mediciones, base_dir, params_base, aplicar_tr
                 params_ganador["target_length"] = int(best_config[1])
                 params_ganador["alpha_ruido"] = float(best_config[2])
                 params_ganador["notch_q"] = float(best_config[3]) if len(best_config) > 3 else 2.0
+                params_ganador["tipo_filtro_ruido"] = str(best_config[4]) if len(best_config) > 4 else tipo_filtro_val
+                params_ganador["highpass_cutoff_hz"] = float(best_config[5]) if len(best_config) > 5 else hp_val
+                params_ganador["lowpass_cutoff_hz"] = float(best_config[6]) if len(best_config) > 6 else lp_val
                 params_ganador["gate_ratio_ruido"] = float(params_base.get("gate_ratio_ruido", 0.0))
                 params_ganador["snr_threshold"] = float(params_base.get("snr_threshold", 0.5))
                 params_ganador["outlier_contamination"] = float(params_base.get("outlier_contamination", 0.10))
@@ -2257,7 +2451,7 @@ class GeneradorPCAGUI:
         cluster_frame.pack(fill="x", pady=(0,5))
         
         tk.Label(cluster_frame, text="Evaluar PCA:", anchor="w", bg="#1F2833", fg="white").pack(side="left", padx=(0,5))
-        self.combo_cluster_pca = ttk.Combobox(cluster_frame, values=["K-Means", "GMM"], width=10)
+        self.combo_cluster_pca = ttk.Combobox(cluster_frame, values=["GMM", "GMM Jerárquico (PCA Local)", "K-Means"], width=24)
         self.combo_cluster_pca.pack(side="left", padx=(0, 15))
         self.combo_cluster_pca.set("GMM")
         
@@ -2294,6 +2488,36 @@ class GeneradorPCAGUI:
         self.ent_gate.grid(row=3, column=1, padx=2, pady=2)
         self.ent_gate.insert(0, "0.0")
 
+        # Fila 4: Filtro de Ruido de Línea
+        tk.Label(trev_frame, text="Filtro Ruido Red:", width=15, anchor="w", bg="#1F2833", fg="white").grid(row=4, column=0, padx=2, pady=2)
+        self.combo_noise_filter = ttk.Combobox(trev_frame, values=["Filtro Notch (IIR)", "Filtro Adaptativo (NLMS)", "Desactivado"], width=18, state="readonly")
+        self.combo_noise_filter.grid(row=4, column=1, padx=2, pady=2)
+        self.combo_noise_filter.set("Filtro Notch (IIR)")
+
+        tk.Label(trev_frame, text="Notch Q:", width=15, anchor="w", bg="#1F2833", fg="white").grid(row=4, column=2, padx=2, pady=2)
+        self.ent_notch = tk.Entry(trev_frame, width=8, bg="#0B0C10", fg="white", insertbackground="white")
+        self.ent_notch.grid(row=4, column=3, padx=2, pady=2)
+        self.ent_notch.insert(0, "30.0")
+
+        def _on_noise_filter_changed(event=None):
+            val = self.combo_noise_filter.get()
+            if "Notch" in val:
+                self.ent_notch.config(state="normal")
+            else:
+                self.ent_notch.config(state="disabled")
+        self.combo_noise_filter.bind("<<ComboboxSelected>>", _on_noise_filter_changed)
+
+        # Fila 5: Pasabanda (Pasaaltos y Pasabajos)
+        tk.Label(trev_frame, text="Pasaaltos HP (Hz):", width=15, anchor="w", bg="#1F2833", fg="white").grid(row=5, column=0, padx=2, pady=2)
+        self.ent_highpass = tk.Entry(trev_frame, width=8, bg="#0B0C10", fg="white", insertbackground="white")
+        self.ent_highpass.grid(row=5, column=1, padx=2, pady=2)
+        self.ent_highpass.insert(0, "20.0")
+
+        tk.Label(trev_frame, text="Pasabajos LP:", width=15, anchor="w", bg="#1F2833", fg="white").grid(row=5, column=2, padx=2, pady=2)
+        self.combo_lowpass = ttk.Combobox(trev_frame, values=["300 Hz (Rangayyan)", "500 Hz (Previo)", "Desactivado"], width=18, state="readonly")
+        self.combo_lowpass.grid(row=5, column=3, padx=2, pady=2)
+        self.combo_lowpass.set("300 Hz (Rangayyan)")
+
         self.ent_gate_2d = self.ent_gate
         self.ent_gate_3d = self.ent_gate
         self.ent_gate_umap = self.ent_gate
@@ -2303,7 +2527,7 @@ class GeneradorPCAGUI:
         align_frame.pack(fill="x", pady=(0,5))
         
         tk.Label(align_frame, text="Centrar ventana en:", width=20, anchor="w", bg="#1F2833", fg="white").pack(side="left")
-        self.combo_align = ttk.Combobox(align_frame, values=["Pico Volumen Micrófono", "Pico Derivada Micrófono (Onset)"], width=30)
+        self.combo_align = ttk.Combobox(align_frame, values=["Pico Volumen Micrófono", "Pico Derivada Micrófono (Onset)", "Pico Canal 0", "Pico Canal 1", "Pico Canal 2"], width=30)
         self.combo_align.pack(side="left")
         self.combo_align.set("Pico Volumen Micrófono")
         
@@ -2372,6 +2596,19 @@ class GeneradorPCAGUI:
             outlier_val = float(self.ent_outliers_2d.get()) if n_components == 2 else float(self.ent_outliers_3d.get())
             gate_val = float(self.ent_gate.get()) if hasattr(self, 'ent_gate') else 0.0
             
+            noise_filter_txt = self.combo_noise_filter.get() if hasattr(self, 'combo_noise_filter') else "Filtro Notch (IIR)"
+            if "adapt" in noise_filter_txt.lower():
+                tipo_filtro_val = "adaptativo"
+            elif "desact" in noise_filter_txt.lower():
+                tipo_filtro_val = "desactivado"
+            else:
+                tipo_filtro_val = "notch"
+
+            notch_q_val = float(self.ent_notch.get()) if hasattr(self, 'ent_notch') and isinstance(self.ent_notch, tk.Entry) and self.ent_notch.get().strip() else 2.0
+            hp_val = float(self.ent_highpass.get()) if hasattr(self, 'ent_highpass') and isinstance(self.ent_highpass, tk.Entry) and self.ent_highpass.get().strip() else 20.0
+            lowpass_txt = self.combo_lowpass.get() if hasattr(self, 'combo_lowpass') else "300 Hz (Rangayyan)"
+            lowpass_val = 300.0 if "300" in lowpass_txt else (500.0 if "500" in lowpass_txt else 0.0)
+
             params_base = {
                 "alpha_ruido": 0.5,
                 "snr_threshold": snr_val,
@@ -2379,7 +2616,10 @@ class GeneradorPCAGUI:
                 "gate_ratio_ruido": gate_val,
                 "smooth_ms": 90,
                 "target_length": 20,
-                "notch_q": 2.0
+                "tipo_filtro_ruido": tipo_filtro_val,
+                "notch_q": notch_q_val,
+                "highpass_cutoff_hz": hp_val,
+                "lowpass_cutoff_hz": lowpass_val
             }
             val_trevisan = self.var_aplicar_trevisan.get()
             val_pre_pct = float(self.ent_pre_pct.get())
@@ -2420,11 +2660,19 @@ class GeneradorPCAGUI:
             messagebox.showerror("Error Grid Search", "No se pudo encontrar una configuración válida.")
             return
 
-        if len(best_config) == 4:
-            best_smooth, best_pts, best_alpha, best_notch = best_config
+        if len(best_config) >= 7:
+            best_smooth, best_pts, best_alpha, best_notch, best_tipo_filtro, best_hp, best_lp = best_config[:7]
+        elif len(best_config) >= 4:
+            best_smooth, best_pts, best_alpha, best_notch = best_config[:4]
+            best_tipo_filtro = tipo_filtro_val
+            best_hp = hp_val
+            best_lp = lowpass_val
         else:
             best_smooth, best_pts, best_alpha = best_config[:3]
             best_notch = 2.0
+            best_tipo_filtro = tipo_filtro_val
+            best_hp = hp_val
+            best_lp = lowpass_val
 
         if n_components == 2:
             self.ent_alpha_2d.delete(0, tk.END)
@@ -2451,14 +2699,29 @@ class GeneradorPCAGUI:
         if hasattr(self, 'ent_notch') and isinstance(self.ent_notch, tk.Entry):
             self.ent_notch.delete(0, tk.END)
             self.ent_notch.insert(0, str(best_notch))
+        if hasattr(self, 'ent_highpass') and isinstance(self.ent_highpass, tk.Entry):
+            self.ent_highpass.delete(0, tk.END)
+            self.ent_highpass.insert(0, str(best_hp))
+        if hasattr(self, 'combo_noise_filter'):
+            if "adapt" in str(best_tipo_filtro).lower():
+                self.combo_noise_filter.set("Filtro Adaptativo (NLMS)")
+            elif "desact" in str(best_tipo_filtro).lower():
+                self.combo_noise_filter.set("Desactivado")
+            else:
+                self.combo_noise_filter.set("Filtro Notch (IIR)")
+
+        filtro_info = f"- Filtro Ruido: {best_tipo_filtro.upper()}\n"
+        if "notch" in str(best_tipo_filtro).lower():
+            filtro_info += f"- Notch Q: {best_notch}\n"
+        filtro_info += f"- Pasabanda: [{best_hp} - {best_lp}] Hz\n\n"
 
         messagebox.showinfo(
             "Grid Search Finalizado",
-            f"¡Configuración Óptima Encontrada!\n\n"
+            f"Configuración Óptima Encontrada:\n\n"
             f"- Envolvente (Smooth): {best_smooth} ms\n"
             f"- Puntos Remuestreo: {best_pts}\n"
             f"- Alfa Ruido: {best_alpha}\n"
-            f"- Notch Q: {best_notch}\n\n"
+            f"{filtro_info}"
             f"Clasificación PCA ({n_components}D): {best_score:.2f}%\n\n"
             f"Se ejecutó el PCA con la configuración ganadora.\n"
             f"Resultados, gráficos y distribución archivados en:\n{carpeta_salida}"
@@ -2486,6 +2749,19 @@ class GeneradorPCAGUI:
                 messagebox.showwarning("Advertencia", "Debe seleccionar al menos un procesamiento.")
                 return
                 
+            noise_filter_txt = self.combo_noise_filter.get() if hasattr(self, 'combo_noise_filter') else "Filtro Notch (IIR)"
+            if "adapt" in noise_filter_txt.lower():
+                tipo_filtro_val = "adaptativo"
+            elif "desact" in noise_filter_txt.lower():
+                tipo_filtro_val = "desactivado"
+            else:
+                tipo_filtro_val = "notch"
+
+            notch_q_val = float(self.ent_notch.get()) if hasattr(self, 'ent_notch') and isinstance(self.ent_notch, tk.Entry) and self.ent_notch.get().strip() else 2.0
+            hp_val = float(self.ent_highpass.get()) if hasattr(self, 'ent_highpass') and isinstance(self.ent_highpass, tk.Entry) and self.ent_highpass.get().strip() else 20.0
+            lowpass_txt = self.combo_lowpass.get() if hasattr(self, 'combo_lowpass') else "300 Hz (Rangayyan)"
+            lowpass_val = 300.0 if "300" in lowpass_txt else (500.0 if "500" in lowpass_txt else 0.0)
+
             params_2d = {
                 "alpha_ruido": float(self.ent_alpha_2d.get()),
                 "gate_ratio_ruido": float(self.ent_gate_2d.get()),
@@ -2493,7 +2769,10 @@ class GeneradorPCAGUI:
                 "outlier_contamination": float(self.ent_outliers_2d.get()),
                 "smooth_ms": int(self.ent_smooth_2d.get()),
                 "target_length": int(self.ent_target_len_2d.get()),
-                "notch_q": float(self.ent_notch.get()) if hasattr(self, 'ent_notch') and isinstance(self.ent_notch, tk.Entry) else 2.0
+                "tipo_filtro_ruido": tipo_filtro_val,
+                "notch_q": notch_q_val,
+                "highpass_cutoff_hz": hp_val,
+                "lowpass_cutoff_hz": lowpass_val
             }
             
             params_3d = {
@@ -2503,7 +2782,10 @@ class GeneradorPCAGUI:
                 "outlier_contamination": float(self.ent_outliers_3d.get()),
                 "smooth_ms": int(self.ent_smooth_3d.get()),
                 "target_length": int(self.ent_target_len_3d.get()),
-                "notch_q": float(self.ent_notch.get()) if hasattr(self, 'ent_notch') and isinstance(self.ent_notch, tk.Entry) else 2.0
+                "tipo_filtro_ruido": tipo_filtro_val,
+                "notch_q": notch_q_val,
+                "highpass_cutoff_hz": hp_val,
+                "lowpass_cutoff_hz": lowpass_val
             }
             
             params_umap = {
@@ -2513,7 +2795,10 @@ class GeneradorPCAGUI:
                 "outlier_contamination": float(self.ent_outliers_umap.get()),
                 "smooth_ms": int(self.ent_smooth_umap.get()),
                 "target_length": int(self.ent_target_len_umap.get()),
-                "notch_q": float(self.ent_notch.get()) if hasattr(self, 'ent_notch') and isinstance(self.ent_notch, tk.Entry) else 2.0
+                "tipo_filtro_ruido": tipo_filtro_val,
+                "notch_q": notch_q_val,
+                "highpass_cutoff_hz": hp_val,
+                "lowpass_cutoff_hz": lowpass_val
             }
             
             val_umap_nn = int(self.ent_umap_nn.get())

@@ -11,16 +11,16 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 if script_dir not in sys.path:
     sys.path.append(script_dir)
 
-with open(r'/tmp/tmp_n03hnkl.json', 'r') as f:
+with open(r'/tmp/tmpbpc3grj9.json', 'r') as f:
     kwargs = json.load(f)
 
-mediciones = ['2026-08-28/A_med1_clase24_Petra', '2026-08-28/A_med2_clase4_Petra', '2026-08-28/E_med1_clase24_Petra', '2026-08-28/E_med2_clase4_Petra', '2026-08-28/I_med1_clase24_Petra', '2026-08-28/I_med2_clase4_Petra', '2026-08-28/O_med1_clase24_Petra', '2026-08-28/O_med2_clase4_Petra', '2026-08-28/U_med1_clase24_Petra', '2026-08-28/U_med2_clase4_Petra', '2026-08-21/A_Prueba1silicona_Petra', '2026-08-21/A_silicona_aeiou_Petra', '2026-08-21/E_Prueba1silicona_Petra', '2026-08-21/E_silicona_aeiou_Petra', '2026-08-21/I_Prueba1silicona_Petra', '2026-08-21/I_silicona_aeiou_Petra', '2026-08-21/O_Prueba1silicona_Petra', '2026-08-21/O_silicona_aeiou_Petra', '2026-08-21/U_Prueba1silicona_Petra', '2026-08-21/U_silicona_aeiou_Petra']
+mediciones = ['2026-09-16/A_Serie1_Candela', '2026-09-16/A_Serie2_Candela', '2026-09-16/A_Serie3_Candela', '2026-09-16/A_Serie4_Candela', '2026-09-16/E_Serie1_Candela', '2026-09-16/E_Serie2_Candela', '2026-09-16/E_Serie3_Candela', '2026-09-16/E_Serie4_Candela', '2026-09-16/I_Serie1_Candela', '2026-09-16/I_Serie2_Candela', '2026-09-16/I_Serie3_Candela', '2026-09-16/I_Serie4_Candela', '2026-09-16/O_Serie1_Candela', '2026-09-16/O_Serie2_Candela', '2026-09-16/O_Serie3_Candela', '2026-09-16/O_Serie4_Candela', '2026-09-16/U_Serie1_Candela', '2026-09-16/U_Serie2_Candela', '2026-09-16/U_Serie3_Candela', '2026-09-16/U_Serie4_Candela', '2026-09-15/A_Prueba1_Candela', '2026-09-15/A_Prueba2_Candela', '2026-09-15/A_Prueba2a_2_Candela', '2026-09-15/A_Prueba2a_Candela', '2026-09-15/A_Prueba5_Candela', '2026-09-15/A_Prueba6_Candela', '2026-09-15/O_Prueba4_Candela', '2026-09-15/O_Prueba5_Candela', '2026-09-15/O_PruebaEXTRA_2_Candela', '2026-09-15/O_PruebaEXTRA_Candela', '2026-09-15/U_Prueba1_Candela', '2026-09-15/U_Prueba2_Candela', '2026-09-15/U_Prueba2a_2_Candela', '2026-09-15/U_Prueba2a_Candela', '2026-09-15/U_Prueba4_Candela', '2026-09-15/U_Prueba5_Candela', '2026-09-15/U_Prueba6_Candela', '2026-09-15/U_Prueba7_Candela', '2026-09-15/U_PruebaEXTRA_2_Candela', '2026-09-15/U_PruebaEXTRA_Candela']
 base_dir = r'/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos'
 
 import deep_learning.pca_umap_clustering.generador_pca_umap as generador
 
 # Define explicit out_dir based on user input
-pca_umap_dir = os.path.join(project_root, "deep_learning", "pca_umap_clustering", "resultados_pca_umap", "petra_todas")
+pca_umap_dir = os.path.join(project_root, "deep_learning", "pca_umap_clustering", "resultados_pca_umap", "cc")
 os.makedirs(pca_umap_dir, exist_ok=True)
 
 # Save the kwargs into the folder

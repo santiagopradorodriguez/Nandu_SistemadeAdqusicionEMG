@@ -10,7 +10,7 @@ dl_dir = os.path.join(project_root, "deep_learning")
 if dl_dir not in sys.path:
     sys.path.insert(0, dl_dir)
 
-with open(r'/tmp/tmpp9w9od8p.json', 'r') as f:
+with open(r'/tmp/tmpku99si3u.json', 'r') as f:
     kwargs = json.load(f)
 
 csv_candidates = [

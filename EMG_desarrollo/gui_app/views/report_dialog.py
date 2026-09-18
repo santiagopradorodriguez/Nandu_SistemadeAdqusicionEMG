@@ -152,10 +152,28 @@ class ReportDialog(QDialog):
         l_hw = QFormLayout(gb_hw)
         l_hw.setLabelAlignment(Qt.AlignRight)
         
+        # Attempt to read existing .tex to pre-fill
+        default_bat = "No se midió"
+        default_tie = "Mastoide"
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+        tex_path = os.path.join(repo_root, "reportes_experimentos", f"Reporte_EMG_{self.meta_info['fecha']}.tex")
+        
+        if os.path.exists(tex_path):
+            try:
+                with open(tex_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    import re
+                    match_bat = re.search(r"Baterías y Alimentación:\}\s*(.+)", content)
+                    if match_bat: default_bat = match_bat.group(1).strip()
+                    match_tie = re.search(r"Electrodo de Referencia \(Tierra\):\}\s*(.+)", content)
+                    if match_tie: default_tie = match_tie.group(1).strip()
+            except Exception:
+                pass
+
         self.inp_fecha = QLineEdit(self.meta_info['fecha'])
         self.inp_sujeto = QLineEdit(self.meta_info['sujeto'])
-        self.inp_baterias = QLineEdit("8.30 V y 8.20 V")
-        self.inp_tierra = QLineEdit("Frente")
+        self.inp_baterias = QLineEdit(default_bat)
+        self.inp_tierra = QLineEdit(default_tie)
         
         l_hw.addRow("Fecha:", self.inp_fecha)
         l_hw.addRow("Sujeto:", self.inp_sujeto)

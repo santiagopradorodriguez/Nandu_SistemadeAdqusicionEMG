@@ -38,6 +38,8 @@ build_windows/*
 **/resultados_grid_search/
 **/resultados_autoencoder/
 **/resultados_umbrales/
+**/archivo_historico/
+*.npz
 EMG_desarrollo/resultados/
 
 # Logs y depuracion temporal
@@ -51,3 +53,12 @@ EMG_desarrollo/resultados/
 *.synctex.gz
 reportes_experimentos/*.pdf
 reportes_experimentos/analisis_pca_generado/
+
+# Codigos y figuras de prueba archivados
+codigos_de_prueba/
+**/codigos_de_prueba/
+
+# Excepciones para figuras anatomicas y esquemas de documentacion
+!EMG_desarrollo/fotos/*.png
+!EMG_desarrollo/documentacion_hardware/imagenes/*.png
+

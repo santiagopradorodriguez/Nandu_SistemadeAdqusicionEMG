@@ -1,0 +1,1261 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{geometry}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{hyperref}
+\usepackage{float}
+\addto\captionsspanish{\renewcommand{\tablename}{Tabla}}
+\addto\captionsspanish{\renewcommand{\figurename}{Figura}}
+\geometry{top=2cm, bottom=2cm, left=2.2cm, right=2.2cm}
+
+\title{\textbf{Reporte Técnico: Análisis de SNR y Calidad de Señal (2026-09-15)}}
+\author{Laboratorio de Sistemas Dinámicos (LSD) - Sistema Ñandú}
+\date{2026-09-15}
+
+\begin{document}
+\maketitle
+
+\tableofcontents
+\newpage
+\section{Condiciones Experimentales}
+\begin{itemize}
+    \item \textbf{Fecha:} 2026-09-15
+    \item \textbf{Sujeto:} Candela
+    \item \textbf{Frecuencia de Muestreo:} 2000 Hz
+    \item \textbf{Total de Registros Analizados:} 20
+\end{itemize}
+
+\section{Tabla de Relación Señal-Ruido (SNR) de Todas las Mediciones}
+A continuación se presentan los valores de Relación Señal-Ruido promedio por pulso con su correspondiente dispersión ($	ext{SNR} \pm \sigma$) obtenidos para cada una de las pruebas registradas en la sesión:
+\begin{table}[H]
+\centering
+\small
+\setlength{\tabcolsep}{4.5pt}
+\begin{tabular}{c l c c c c c}
+\toprule
+\textbf{Nº} & \textbf{Identificador} & \textbf{Vocal} & \textbf{Serie} & \multicolumn{3}{c}{\textbf{Relación Señal-Ruido ($\text{SNR} \pm \sigma$)}} \\
+\cmidrule(lr){5-7}
+& & & & \textbf{Ch0: Anterior Belly} & \textbf{Ch1: Zygomaticus Major} & \textbf{Ch2: Orbicularis Oris} \\
+\midrule
+1 & A\_Serie1\_Candela & A & Serie 1 & $5.7 \pm 0.7$ & $1.6 \pm 0.3$ & $7.7 \pm 2.3$ \\
+2 & E\_Serie1\_Candela & E & Serie 1 & $8.3 \pm 1.9$ & $4.5 \pm 0.9$ & $9.8 \pm 2.4$ \\
+3 & I\_Serie1\_Candela & I & Serie 1 & $4.1 \pm 0.4$ & $7.4 \pm 2.0$ & $7.7 \pm 2.2$ \\
+4 & O\_Serie1\_Candela & O & Serie 1 & $5.0 \pm 0.7$ & $5.4 \pm 1.0$ & $36.8 \pm 9.9$ \\
+5 & U\_Serie1\_Candela & U & Serie 1 & $2.7 \pm 0.4$ & $6.5 \pm 0.9$ & $20.6 \pm 5.7$ \\
+6 & O\_Serie2\_Candela & O & Serie 2 & $3.4 \pm 0.6$ & $5.6 \pm 0.7$ & $19.9 \pm 5.4$ \\
+7 & E\_Serie2\_Candela & E & Serie 2 & $5.3 \pm 0.7$ & $2.8 \pm 0.3$ & $3.2 \pm 0.5$ \\
+8 & I\_Serie2\_Candela & I & Serie 2 & $9.2 \pm 1.9$ & $4.7 \pm 1.5$ & $5.2 \pm 1.5$ \\
+9 & A\_Serie2\_Candela & A & Serie 2 & $6.8 \pm 1.5$ & $2.9 \pm 0.3$ & $2.7 \pm 0.5$ \\
+10 & U\_Serie2\_Candela & U & Serie 2 & $2.3 \pm 0.3$ & $4.3 \pm 0.7$ & $7.4 \pm 1.5$ \\
+11 & U\_Serie3\_Candela & U & Serie 3 & $3.8 \pm 0.2$ & $7.8 \pm 1.9$ & $17.8 \pm 4.3$ \\
+12 & O\_Serie3\_Candela & O & Serie 3 & $4.8 \pm 0.3$ & $7.9 \pm 1.9$ & $18.9 \pm 4.9$ \\
+13 & A\_Serie3\_Candela & A & Serie 3 & $5.0 \pm 0.7$ & $7.1 \pm 1.9$ & $6.0 \pm 1.1$ \\
+14 & I\_Serie3\_Candela & I & Serie 3 & $7.8 \pm 2.1$ & $22.4 \pm 9.1$ & $12.5 \pm 4.6$ \\
+15 & E\_Serie3\_Candela & E & Serie 3 & $5.2 \pm 1.1$ & $4.3 \pm 0.7$ & $8.2 \pm 2.0$ \\
+16 & A\_Serie4\_Candela & A & Serie 4 & $9.0 \pm 2.1$ & $7.0 \pm 1.7$ & $5.1 \pm 0.5$ \\
+17 & E\_Serie4\_Candela & E & Serie 4 & $4.1 \pm 1.0$ & $2.6 \pm 0.5$ & $3.0 \pm 0.5$ \\
+18 & I\_Serie4\_Candela & I & Serie 4 & $11.7 \pm 3.0$ & $28.9 \pm 9.2$ & $32.7 \pm 15.6$ \\
+19 & O\_Serie4\_Candela & O & Serie 4 & $2.4 \pm 0.2$ & $5.9 \pm 1.1$ & $29.9 \pm 7.1$ \\
+20 & U\_Serie4\_Candela & U & Serie 4 & $5.6 \pm 0.6$ & $8.5 \pm 2.0$ & $33.4 \pm 9.7$ \\
+\bottomrule
+\end{tabular}
+\caption{Relación Señal-Ruido ($\text{SNR} \pm \sigma$) calculada por pulso para la totalidad de registros adquiridos en la sesión.}
+\end{table}
+
+\section{Resumen Estadístico de Relación Señal-Ruido (SNR)}
+\begin{table}[H]
+\centering
+\begin{tabular}{lccc}
+\toprule
+\textbf{Vocal} & \textbf{Canal 0: Anterior Belly} & \textbf{Canal 1: Zygomaticus Major} & \textbf{Canal 2: Orbicularis Oris} \\
+\midrule
+Vocal A & $6.6 \pm 2.0$ & $4.7 \pm 2.8$ & $5.4 \pm 2.2$ \\
+Vocal E & $5.7 \pm 2.0$ & $3.6 \pm 1.1$ & $6.0 \pm 3.4$ \\
+Vocal I & $8.2 \pm 3.4$ & $15.9 \pm 12.1$ & $14.5 \pm 13.6$ \\
+Vocal O & $3.9 \pm 1.2$ & $6.2 \pm 1.6$ & $26.4 \pm 10.3$ \\
+Vocal U & $3.6 \pm 1.3$ & $6.8 \pm 2.2$ & $19.8 \pm 11.1$ \\
+\bottomrule
+\end{tabular}
+\caption{Relación Señal-Ruido promedio ($\text{SNR} \pm \sigma$) registrada por vocal y canal.}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/evolucion_sesion/Sesion_SNR_Timeline.png}
+\caption{Evolución temporal del SNR a lo largo de la sesión.}
+\end{figure}
+
+\newpage
+\section{Desglose de Calidad de Señal, Recortes y Ruido Interpulso}
+\subsection{Serie1}
+\subsubsection{Vocal A: A\_Serie1\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie1_Candela/canal_0/avg_lider.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie1_Candela/canal_1/avg_lider.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie1_Candela/canal_2/avg_lider.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Forma de onda promedio con su intervalo de dispersión ($\mu \pm \sigma$) y envolvente RMS media para A\_Serie1\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie1_Candela/canal_0/pulses.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie1_Candela/canal_1/pulses.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie1_Candela/canal_2/pulses.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Superposición gráfica de la totalidad de ventanas/epochs recortadas por pulso de metrónomo para A\_Serie1\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie1_Candela/canal_0/evolucion.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie1_Candela/canal_1/evolucion.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie1_Candela/canal_2/evolucion.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Evolución temporal del nivel de ruido interpulso para A\_Serie1\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal E: E\_Serie1\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie1_Candela/canal_0/avg_lider.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie1_Candela/canal_1/avg_lider.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie1_Candela/canal_2/avg_lider.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Forma de onda promedio con su intervalo de dispersión ($\mu \pm \sigma$) y envolvente RMS media para E\_Serie1\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie1_Candela/canal_0/pulses.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie1_Candela/canal_1/pulses.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie1_Candela/canal_2/pulses.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Superposición gráfica de la totalidad de ventanas/epochs recortadas por pulso de metrónomo para E\_Serie1\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie1_Candela/canal_0/evolucion.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie1_Candela/canal_1/evolucion.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie1_Candela/canal_2/evolucion.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Evolución temporal del nivel de ruido interpulso para E\_Serie1\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal I: I\_Serie1\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie1_Candela/canal_0/avg_lider.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie1_Candela/canal_1/avg_lider.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie1_Candela/canal_2/avg_lider.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Forma de onda promedio con su intervalo de dispersión ($\mu \pm \sigma$) y envolvente RMS media para I\_Serie1\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie1_Candela/canal_0/pulses.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie1_Candela/canal_1/pulses.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie1_Candela/canal_2/pulses.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Superposición gráfica de la totalidad de ventanas/epochs recortadas por pulso de metrónomo para I\_Serie1\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie1_Candela/canal_0/evolucion.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie1_Candela/canal_1/evolucion.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie1_Candela/canal_2/evolucion.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Evolución temporal del nivel de ruido interpulso para I\_Serie1\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal O: O\_Serie1\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie1_Candela/canal_0/avg_lider.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie1_Candela/canal_1/avg_lider.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie1_Candela/canal_2/avg_lider.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Forma de onda promedio con su intervalo de dispersión ($\mu \pm \sigma$) y envolvente RMS media para O\_Serie1\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie1_Candela/canal_0/pulses.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie1_Candela/canal_1/pulses.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie1_Candela/canal_2/pulses.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Superposición gráfica de la totalidad de ventanas/epochs recortadas por pulso de metrónomo para O\_Serie1\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie1_Candela/canal_0/evolucion.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie1_Candela/canal_1/evolucion.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie1_Candela/canal_2/evolucion.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Evolución temporal del nivel de ruido interpulso para O\_Serie1\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal U: U\_Serie1\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie1_Candela/canal_0/avg_lider.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie1_Candela/canal_1/avg_lider.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie1_Candela/canal_2/avg_lider.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Forma de onda promedio con su intervalo de dispersión ($\mu \pm \sigma$) y envolvente RMS media para U\_Serie1\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie1_Candela/canal_0/pulses.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie1_Candela/canal_1/pulses.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie1_Candela/canal_2/pulses.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Superposición gráfica de la totalidad de ventanas/epochs recortadas por pulso de metrónomo para U\_Serie1\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie1_Candela/canal_0/evolucion.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie1_Candela/canal_1/evolucion.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie1_Candela/canal_2/evolucion.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Evolución temporal del nivel de ruido interpulso para U\_Serie1\_Candela.}
+\end{figure}
+
+\subsection{Serie2}
+\subsubsection{Vocal O: O\_Serie2\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie2_Candela/canal_0/avg_lider.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie2_Candela/canal_1/avg_lider.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie2_Candela/canal_2/avg_lider.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Forma de onda promedio con su intervalo de dispersión ($\mu \pm \sigma$) y envolvente RMS media para O\_Serie2\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie2_Candela/canal_0/pulses.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie2_Candela/canal_1/pulses.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie2_Candela/canal_2/pulses.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Superposición gráfica de la totalidad de ventanas/epochs recortadas por pulso de metrónomo para O\_Serie2\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie2_Candela/canal_0/evolucion.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie2_Candela/canal_1/evolucion.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie2_Candela/canal_2/evolucion.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Evolución temporal del nivel de ruido interpulso para O\_Serie2\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal E: E\_Serie2\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie2_Candela/canal_0/avg_lider.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie2_Candela/canal_1/avg_lider.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie2_Candela/canal_2/avg_lider.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Forma de onda promedio con su intervalo de dispersión ($\mu \pm \sigma$) y envolvente RMS media para E\_Serie2\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie2_Candela/canal_0/pulses.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie2_Candela/canal_1/pulses.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie2_Candela/canal_2/pulses.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Superposición gráfica de la totalidad de ventanas/epochs recortadas por pulso de metrónomo para E\_Serie2\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie2_Candela/canal_0/evolucion.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie2_Candela/canal_1/evolucion.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie2_Candela/canal_2/evolucion.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Evolución temporal del nivel de ruido interpulso para E\_Serie2\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal I: I\_Serie2\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie2_Candela/canal_0/avg_lider.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie2_Candela/canal_1/avg_lider.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie2_Candela/canal_2/avg_lider.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Forma de onda promedio con su intervalo de dispersión ($\mu \pm \sigma$) y envolvente RMS media para I\_Serie2\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie2_Candela/canal_0/pulses.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie2_Candela/canal_1/pulses.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie2_Candela/canal_2/pulses.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Superposición gráfica de la totalidad de ventanas/epochs recortadas por pulso de metrónomo para I\_Serie2\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie2_Candela/canal_0/evolucion.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie2_Candela/canal_1/evolucion.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie2_Candela/canal_2/evolucion.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Evolución temporal del nivel de ruido interpulso para I\_Serie2\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal A: A\_Serie2\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie2_Candela/canal_0/avg_lider.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie2_Candela/canal_1/avg_lider.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie2_Candela/canal_2/avg_lider.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Forma de onda promedio con su intervalo de dispersión ($\mu \pm \sigma$) y envolvente RMS media para A\_Serie2\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie2_Candela/canal_0/pulses.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie2_Candela/canal_1/pulses.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie2_Candela/canal_2/pulses.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Superposición gráfica de la totalidad de ventanas/epochs recortadas por pulso de metrónomo para A\_Serie2\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie2_Candela/canal_0/evolucion.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie2_Candela/canal_1/evolucion.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie2_Candela/canal_2/evolucion.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Evolución temporal del nivel de ruido interpulso para A\_Serie2\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal U: U\_Serie2\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie2_Candela/canal_0/avg_lider.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie2_Candela/canal_1/avg_lider.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie2_Candela/canal_2/avg_lider.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Forma de onda promedio con su intervalo de dispersión ($\mu \pm \sigma$) y envolvente RMS media para U\_Serie2\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie2_Candela/canal_0/pulses.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie2_Candela/canal_1/pulses.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie2_Candela/canal_2/pulses.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Superposición gráfica de la totalidad de ventanas/epochs recortadas por pulso de metrónomo para U\_Serie2\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie2_Candela/canal_0/evolucion.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie2_Candela/canal_1/evolucion.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie2_Candela/canal_2/evolucion.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Evolución temporal del nivel de ruido interpulso para U\_Serie2\_Candela.}
+\end{figure}
+
+\subsection{Serie3}
+\subsubsection{Vocal U: U\_Serie3\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie3_Candela/canal_0/avg_lider.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie3_Candela/canal_1/avg_lider.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie3_Candela/canal_2/avg_lider.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Forma de onda promedio con su intervalo de dispersión ($\mu \pm \sigma$) y envolvente RMS media para U\_Serie3\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie3_Candela/canal_0/pulses.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie3_Candela/canal_1/pulses.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie3_Candela/canal_2/pulses.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Superposición gráfica de la totalidad de ventanas/epochs recortadas por pulso de metrónomo para U\_Serie3\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie3_Candela/canal_0/evolucion.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie3_Candela/canal_1/evolucion.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie3_Candela/canal_2/evolucion.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Evolución temporal del nivel de ruido interpulso para U\_Serie3\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal O: O\_Serie3\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie3_Candela/canal_0/avg_lider.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie3_Candela/canal_1/avg_lider.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie3_Candela/canal_2/avg_lider.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Forma de onda promedio con su intervalo de dispersión ($\mu \pm \sigma$) y envolvente RMS media para O\_Serie3\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie3_Candela/canal_0/pulses.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie3_Candela/canal_1/pulses.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie3_Candela/canal_2/pulses.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Superposición gráfica de la totalidad de ventanas/epochs recortadas por pulso de metrónomo para O\_Serie3\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie3_Candela/canal_0/evolucion.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie3_Candela/canal_1/evolucion.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie3_Candela/canal_2/evolucion.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Evolución temporal del nivel de ruido interpulso para O\_Serie3\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal A: A\_Serie3\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie3_Candela/canal_0/avg_lider.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie3_Candela/canal_1/avg_lider.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie3_Candela/canal_2/avg_lider.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Forma de onda promedio con su intervalo de dispersión ($\mu \pm \sigma$) y envolvente RMS media para A\_Serie3\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie3_Candela/canal_0/pulses.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie3_Candela/canal_1/pulses.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie3_Candela/canal_2/pulses.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Superposición gráfica de la totalidad de ventanas/epochs recortadas por pulso de metrónomo para A\_Serie3\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie3_Candela/canal_0/evolucion.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie3_Candela/canal_1/evolucion.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie3_Candela/canal_2/evolucion.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Evolución temporal del nivel de ruido interpulso para A\_Serie3\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal I: I\_Serie3\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie3_Candela/canal_0/avg_lider.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie3_Candela/canal_1/avg_lider.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie3_Candela/canal_2/avg_lider.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Forma de onda promedio con su intervalo de dispersión ($\mu \pm \sigma$) y envolvente RMS media para I\_Serie3\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie3_Candela/canal_0/pulses.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie3_Candela/canal_1/pulses.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie3_Candela/canal_2/pulses.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Superposición gráfica de la totalidad de ventanas/epochs recortadas por pulso de metrónomo para I\_Serie3\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie3_Candela/canal_0/evolucion.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie3_Candela/canal_1/evolucion.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie3_Candela/canal_2/evolucion.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Evolución temporal del nivel de ruido interpulso para I\_Serie3\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal E: E\_Serie3\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie3_Candela/canal_0/avg_lider.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie3_Candela/canal_1/avg_lider.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie3_Candela/canal_2/avg_lider.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Forma de onda promedio con su intervalo de dispersión ($\mu \pm \sigma$) y envolvente RMS media para E\_Serie3\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie3_Candela/canal_0/pulses.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie3_Candela/canal_1/pulses.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie3_Candela/canal_2/pulses.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Superposición gráfica de la totalidad de ventanas/epochs recortadas por pulso de metrónomo para E\_Serie3\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie3_Candela/canal_0/evolucion.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie3_Candela/canal_1/evolucion.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie3_Candela/canal_2/evolucion.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Evolución temporal del nivel de ruido interpulso para E\_Serie3\_Candela.}
+\end{figure}
+
+\subsection{Serie4}
+\subsubsection{Vocal A: A\_Serie4\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie4_Candela/canal_0/avg_lider.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie4_Candela/canal_1/avg_lider.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie4_Candela/canal_2/avg_lider.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Forma de onda promedio con su intervalo de dispersión ($\mu \pm \sigma$) y envolvente RMS media para A\_Serie4\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie4_Candela/canal_0/pulses.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie4_Candela/canal_1/pulses.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie4_Candela/canal_2/pulses.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Superposición gráfica de la totalidad de ventanas/epochs recortadas por pulso de metrónomo para A\_Serie4\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie4_Candela/canal_0/evolucion.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie4_Candela/canal_1/evolucion.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie4_Candela/canal_2/evolucion.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Evolución temporal del nivel de ruido interpulso para A\_Serie4\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal E: E\_Serie4\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie4_Candela/canal_0/avg_lider.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie4_Candela/canal_1/avg_lider.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie4_Candela/canal_2/avg_lider.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Forma de onda promedio con su intervalo de dispersión ($\mu \pm \sigma$) y envolvente RMS media para E\_Serie4\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie4_Candela/canal_0/pulses.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie4_Candela/canal_1/pulses.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie4_Candela/canal_2/pulses.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Superposición gráfica de la totalidad de ventanas/epochs recortadas por pulso de metrónomo para E\_Serie4\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie4_Candela/canal_0/evolucion.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie4_Candela/canal_1/evolucion.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie4_Candela/canal_2/evolucion.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Evolución temporal del nivel de ruido interpulso para E\_Serie4\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal I: I\_Serie4\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie4_Candela/canal_0/avg_lider.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie4_Candela/canal_1/avg_lider.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie4_Candela/canal_2/avg_lider.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Forma de onda promedio con su intervalo de dispersión ($\mu \pm \sigma$) y envolvente RMS media para I\_Serie4\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie4_Candela/canal_0/pulses.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie4_Candela/canal_1/pulses.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie4_Candela/canal_2/pulses.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Superposición gráfica de la totalidad de ventanas/epochs recortadas por pulso de metrónomo para I\_Serie4\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie4_Candela/canal_0/evolucion.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie4_Candela/canal_1/evolucion.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie4_Candela/canal_2/evolucion.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Evolución temporal del nivel de ruido interpulso para I\_Serie4\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal O: O\_Serie4\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie4_Candela/canal_0/avg_lider.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie4_Candela/canal_1/avg_lider.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie4_Candela/canal_2/avg_lider.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Forma de onda promedio con su intervalo de dispersión ($\mu \pm \sigma$) y envolvente RMS media para O\_Serie4\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie4_Candela/canal_0/pulses.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie4_Candela/canal_1/pulses.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie4_Candela/canal_2/pulses.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Superposición gráfica de la totalidad de ventanas/epochs recortadas por pulso de metrónomo para O\_Serie4\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie4_Candela/canal_0/evolucion.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie4_Candela/canal_1/evolucion.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie4_Candela/canal_2/evolucion.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Evolución temporal del nivel de ruido interpulso para O\_Serie4\_Candela.}
+\end{figure}
+
+\subsubsection{Vocal U: U\_Serie4\_Candela}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie4_Candela/canal_0/avg_lider.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie4_Candela/canal_1/avg_lider.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie4_Candela/canal_2/avg_lider.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Forma de onda promedio con su intervalo de dispersión ($\mu \pm \sigma$) y envolvente RMS media para U\_Serie4\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie4_Candela/canal_0/pulses.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie4_Candela/canal_1/pulses.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie4_Candela/canal_2/pulses.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Superposición gráfica de la totalidad de ventanas/epochs recortadas por pulso de metrónomo para U\_Serie4\_Candela.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie4_Candela/canal_0/evolucion.png}
+    \caption{Canal 0: Anterior Belly}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie4_Candela/canal_1/evolucion.png}
+    \caption{Canal 1: Zygomaticus Major}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie4_Candela/canal_2/evolucion.png}
+    \caption{Canal 2: Orbicularis Oris}
+\end{subfigure}
+\caption{Evolución temporal del nivel de ruido interpulso para U\_Serie4\_Candela.}
+\end{figure}
+
+\end{document}

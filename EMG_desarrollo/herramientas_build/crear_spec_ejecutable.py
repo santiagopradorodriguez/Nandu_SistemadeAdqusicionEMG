@@ -85,6 +85,7 @@ additional_modules = [
     'analysis.umap_motor',
     'analysis.generar_graficos_y_ranking',
     'analysis.plot_metricas_tesis',
+    'analysis.report_engine',
     'utils.editor_mediciones',
     'utils.actualizar_metadata',
     'utils.migrar_mediciones_por_fecha',
@@ -94,6 +95,7 @@ additional_modules = [
     'utils.logger',
     'instrucciones_uso',
     'views.config_dialog',
+    'views.report_dialog',
     'gui_app.core.threads',
     'gui_app.views.calibrated_viewer_widget',
     'gui_app.views.comparative_explorer_widget',
@@ -102,6 +104,7 @@ additional_modules = [
     'gui_app.views.electrode_viewer_widget',
     'gui_app.views.session_explorer',
     'gui_app.views.ui_analysis',
+    'gui_app.views.report_dialog',
     'gui_app.temp_comparativo',
     'gui_app.temp_procesar',
     'gui_app.temp_sesion',
@@ -124,6 +127,8 @@ additional_modules = [
     'deep_learning.pca_analysis',
     'deep_learning.umap_analysis',
     'deep_learning.experimento_grid_search_3_autoencoder',
+    'deep_learning.desacoplar_crosstalk_sesiones',
+    'deep_learning.reducir_dimensionalidad_con_encoder',
 ]
 
 # Librerías y módulos que PyInstaller requiere explícitamente
@@ -150,6 +155,7 @@ a = Analysis(
     pathex=[
         '.',
         'gui_app',
+        'gui_app/views',
         'deep_learning',
         'deep_learning/binarizacion',
         'deep_learning/dataset_tools',

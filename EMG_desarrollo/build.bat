@@ -9,29 +9,37 @@ echo ====================================================
 echo NANDU LSD - Compilacion Multiplataforma (WINDOWS)
 echo ====================================================
 
-where python >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
-    echo Error: Python no se encuentra en el PATH.
-    exit /b 1
+if exist "%ROOT_DIR%venv\Scripts\python.exe" (
+    echo [Entorno] Usando entorno virtual: %ROOT_DIR%venv
+    set PYTHON_EXEC="%ROOT_DIR%venv\Scripts\python.exe"
+    set PYINSTALLER_EXEC="%ROOT_DIR%venv\Scripts\pyinstaller.exe"
+) else (
+    where python >nul 2>&1
+    if !ERRORLEVEL! NEQ 0 (
+        echo Error: Python no se encuentra en el PATH.
+        exit /b 1
+    )
+    set PYTHON_EXEC=python
+    set PYINSTALLER_EXEC=pyinstaller
 )
 
 :: 1. Crear el entorno base
 echo [1/4] Creando entorno de compilacion...
-python herramientas_build\crear_entorno_ejecutable.py
+%PYTHON_EXEC% herramientas_build\crear_entorno_ejecutable.py
 
 :: 2. Aplicar los parches para PyInstaller
 echo [2/4] Aplicando parches...
-python herramientas_build\aplicar_parches_ejecutable.py
+%PYTHON_EXEC% herramientas_build\aplicar_parches_ejecutable.py
 
 :: 3. Generar el SPEC
 echo [3/4] Generando SPEC...
-python herramientas_build\crear_spec_ejecutable.py
+%PYTHON_EXEC% herramientas_build\crear_spec_ejecutable.py
 
 :: 4. Compilar con PyInstaller
 echo ====================================================
 echo Iniciando PyInstaller...
 cd EMG_Ejecutable_Build
-pyinstaller EMG_Studio.spec --noconfirm --clean
+%PYINSTALLER_EXEC% EMG_Studio.spec --noconfirm --clean
 cd ..
 
 :: 5. Compilar el Launcher en C#

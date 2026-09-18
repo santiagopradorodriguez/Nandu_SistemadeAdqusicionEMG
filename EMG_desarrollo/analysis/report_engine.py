@@ -410,11 +410,18 @@ class ReportEngine:
 
         return output_path.replace('\\', '/')
 
-    def generate_muscle_activation_cube_all_pulses_3d(self, session_paths, info, output_path):
+    def generate_muscle_activation_cube_all_pulses_3d(self, session_paths, info=None, output_path=None, cmap=None):
         """Genera el cubo 3D graficando todos los puntos (pulsos individuales) registrados por vocal."""
         import matplotlib.pyplot as plt
+        import matplotlib as mpl
         from mpl_toolkits.mplot3d import Axes3D
         
+        if not info or not info.get('mediciones'):
+            info = self.extract_session_metadata(session_paths)
+            
+        if output_path is None:
+            output_path = os.path.join(self.output_dir, "evolucion_sesion", "Sesion_cubo_todos_los_pulsos_3d.png")
+            
         canales_map = info.get('canales', {0: "Canal 0", 1: "Canal 1", 2: "Canal 2"})
         m0_label = canales_map.get(0, "Canal 0")
         m1_label = canales_map.get(1, "Canal 1")
@@ -428,37 +435,67 @@ class ReportEngine:
             'U': '#ff7f00'
         }
         
+        # Validar colormap si se proporciona
+        cmap_obj = None
+        if cmap is not None:
+            try:
+                if isinstance(cmap, str):
+                    if cmap in plt.colormaps():
+                        cmap_obj = mpl.colormaps[cmap]
+                    else:
+                        print(f"[Aviso] Colormap '{cmap}' no reconocido en Matplotlib. Se usará paleta canónica.")
+                elif isinstance(cmap, mpl.colors.Colormap):
+                    cmap_obj = cmap
+            except Exception as e_cmap:
+                print(f"[Aviso] Error al inicializar colormap '{cmap}': {e_cmap}")
+                cmap_obj = None
+        
         puntos_por_vocal = {v: [] for v in ['A', 'E', 'I', 'O', 'U']}
-        global_max_pulse = 1e-6
         
         for med in info.get('mediciones', []):
-            vocal = med.get('letra', '')
+            vocal = med.get('letra', '').upper()
             if vocal not in puntos_por_vocal:
                 continue
-            m_path = med['path']
+            m_path = med.get('path', '')
+            if not m_path or not os.path.isdir(m_path):
+                continue
             
             picos_ch = {}
             for c_idx in [0, 1, 2]:
                 ch_dir = os.path.join(m_path, f"canal_{c_idx}")
                 picos_ch[c_idx] = []
+                # 1. Probar en results.json y analisis_results.json
                 for rf in ["results.json", "analisis_results.json"]:
                     rp = os.path.join(ch_dir, rf)
                     if os.path.exists(rp):
                         try:
                             with open(rp, 'r', encoding='utf-8') as f:
                                 res = json.load(f)
+                                # Prioridad A: picos_ventana
                                 picos = res.get('picos_ventana', [])
                                 if picos and isinstance(picos, list):
-                                    picos_ch[c_idx] = [float(x) for x in picos if x is not None and not np.isnan(x) and x > 0]
-                                    if picos_ch[c_idx]: break
-                        except Exception:
-                            pass
+                                    vals = [float(x) for x in picos if x is not None and np.isfinite(x) and x > 0]
+                                    if vals:
+                                        picos_ch[c_idx] = vals
+                                        break
+                                # Prioridad B: segmentos_rs
+                                segs = res.get('segmentos_rs', [])
+                                if segs and isinstance(segs, list):
+                                    vals = [float(np.max(np.abs(p))) for p in segs if len(p) > 0 and np.isfinite(np.max(np.abs(p))) and np.max(np.abs(p)) > 0]
+                                    if vals:
+                                        picos_ch[c_idx] = vals
+                                        break
+                        except Exception as e_json:
+                            print(f"[Aviso] Lectura de picos en {rp}: {e_json}")
                             
-            if 0 in picos_ch and 1 in picos_ch and 2 in picos_ch:
+            if len(picos_ch.get(0, [])) > 0 and len(picos_ch.get(1, [])) > 0 and len(picos_ch.get(2, [])) > 0:
                 n_pulses = min(len(picos_ch[0]), len(picos_ch[1]), len(picos_ch[2]))
                 for i in range(n_pulses):
-                    pt = (picos_ch[0][i], picos_ch[1][i], picos_ch[2][i])
-                    puntos_por_vocal[vocal].append(pt)
+                    p0 = picos_ch[0][i]
+                    p1 = picos_ch[1][i]
+                    p2 = picos_ch[2][i]
+                    if np.isfinite(p0) and np.isfinite(p1) and np.isfinite(p2):
+                        puntos_por_vocal[vocal].append((p0, p1, p2))
 
         all_pts = [pt for v in puntos_por_vocal for pt in puntos_por_vocal[v]]
         if all_pts:
@@ -467,7 +504,7 @@ class ReportEngine:
                 for c in range(3)
             ]
             for c in range(3):
-                if max_pulse_per_ch[c] <= 0:
+                if not np.isfinite(max_pulse_per_ch[c]) or max_pulse_per_ch[c] <= 0:
                     max_pulse_per_ch[c] = 1.0
         else:
             max_pulse_per_ch = [1.0, 1.0, 1.0]
@@ -487,19 +524,32 @@ class ReportEngine:
         ax.set_ylabel(f"Y: {m1_label} (Proporción)", fontsize=10, labelpad=8)
         ax.set_zlabel(f"Z: {m2_label} (Proporción)", fontsize=10, labelpad=8)
         
-        for vocal in ['A', 'E', 'I', 'O', 'U']:
+        vocales_con_puntos = 0
+        norm_vocal = mpl.colors.Normalize(vmin=0, vmax=4) if cmap_obj else None
+        
+        for v_idx, vocal in enumerate(['A', 'E', 'I', 'O', 'U']):
             pts = puntos_por_vocal[vocal]
-            if not pts: continue
-            xs = [min(1.0, p[0] / max_pulse_per_ch[0]) for p in pts]
-            ys = [min(1.0, p[1] / max_pulse_per_ch[1]) for p in pts]
-            zs = [min(1.0, p[2] / max_pulse_per_ch[2]) for p in pts]
-            col = colores_vocales[vocal]
-            ax.scatter(xs, ys, zs, color=col, s=80, alpha=0.9, edgecolors='black', linewidth=0.7, label=f"Vocal {vocal} (N={len(pts)})")
+            if not pts:
+                continue
+            xs = [np.clip(p[0] / max_pulse_per_ch[0], 0.0, 1.0) for p in pts]
+            ys = [np.clip(p[1] / max_pulse_per_ch[1], 0.0, 1.0) for p in pts]
+            zs = [np.clip(p[2] / max_pulse_per_ch[2], 0.0, 1.0) for p in pts]
             
-        ax.legend(loc='center left', bbox_to_anchor=(1.05, 0.5), fontsize=10, frameon=True, framealpha=0.95)
+            if cmap_obj:
+                col = cmap_obj(norm_vocal(v_idx))
+            else:
+                col = colores_vocales[vocal]
+                
+            ax.scatter(xs, ys, zs, color=col, s=80, alpha=0.9, edgecolors='black', linewidth=0.7, label=f"Vocal {vocal} (N={len(pts)})")
+            vocales_con_puntos += 1
+            
+        if vocales_con_puntos > 0:
+            ax.legend(loc='center left', bbox_to_anchor=(1.05, 0.5), fontsize=10, frameon=True, framealpha=0.95)
+            
+        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
         plt.tight_layout()
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
-        plt.close()
+        plt.close(fig)
         return output_path.replace('\\', '/')
 
     def generate_dynamic_phase_space_3d(self, session_paths, info, output_path, projections_output_path=None):
@@ -584,24 +634,25 @@ class ReportEngine:
                     if max(np.max(trajs[0]), np.max(trajs[1]), np.max(trajs[2])) > 5e-6:
                         vocales_data[vocal].append(trajs)
 
-        # Normalización Tricanal: el máximo del músculo dominante en su vocal representativa es 1.0
+        # Normalización Tricanal Agnostica
         max_c0 = 1e-9
-        if vocales_data["A"]:
-            arr_a_c0 = [t[0] for t in vocales_data["A"]]
-            max_c0 = float(np.max(np.mean(arr_a_c0, axis=0)))
-
         max_c1 = 1e-9
-        if vocales_data["O"]:
-            arr_o_c1 = [t[1] for t in vocales_data["O"]]
-            max_c1 = float(np.max(np.mean(arr_o_c1, axis=0)))
-        elif vocales_data["U"]:
-            arr_u_c1 = [t[1] for t in vocales_data["U"]]
-            max_c1 = float(np.max(np.mean(arr_u_c1, axis=0)))
-
         max_c2 = 1e-9
-        if vocales_data["I"]:
-            arr_i_c2 = [t[2] for t in vocales_data["I"]]
-            max_c2 = float(np.max(np.mean(arr_i_c2, axis=0)))
+
+        for v, pulsos in vocales_data.items():
+            if not pulsos:
+                continue
+            arr_c0 = [t[0] for t in pulsos]
+            arr_c1 = [t[1] for t in pulsos]
+            arr_c2 = [t[2] for t in pulsos]
+            
+            val0 = float(np.max(np.mean(arr_c0, axis=0)))
+            val1 = float(np.max(np.mean(arr_c1, axis=0)))
+            val2 = float(np.max(np.mean(arr_c2, axis=0)))
+            
+            if val0 > max_c0: max_c0 = val0
+            if val1 > max_c1: max_c1 = val1
+            if val2 > max_c2: max_c2 = val2
 
         if max_c0 <= 1e-9: max_c0 = 1.0
         if max_c1 <= 1e-9: max_c1 = 1.0
@@ -735,7 +786,8 @@ class ReportEngine:
         """Genera automáticamente los gráficos de evolución de sesión (Amplitud Timeline, Cubo 3D, etc.)."""
         import analysis.analisis_por_track_integrado as track_mod
         
-        evolucion_dir = os.path.join(self.output_dir, "evolucion_sesion")
+        fecha_sesion = info['fecha'] if info and 'fecha' in info else datetime.now().strftime("%Y-%m-%d")
+        evolucion_dir = os.path.join(self.output_dir, f"evolucion_sesion_{fecha_sesion}")
         os.makedirs(evolucion_dir, exist_ok=True)
         nombre_salida_base = os.path.join(evolucion_dir, "Sesion")
         
@@ -871,12 +923,23 @@ class ReportEngine:
         cubo_pulsos_path = os.path.join(evolucion_dir, "Sesion_cubo_todos_los_pulsos_3d.png")
         fases_path = os.path.join(evolucion_dir, "Sesion_espacio_fases_dinamico_3d.png")
         fases_proy_path = os.path.join(evolucion_dir, "Sesion_espacio_fases_proyecciones_caras_2d.png")
+        if not info or not info.get('mediciones'):
+            info = self.extract_session_metadata(session_paths)
+
         try:
-            self.generate_muscle_activation_cube_3d(session_paths, info if 'info' in locals() else {}, cubo_path, projections_output_path=proy_path)
-            self.generate_muscle_activation_cube_all_pulses_3d(session_paths, info if 'info' in locals() else {}, cubo_pulsos_path)
-            self.generate_dynamic_phase_space_3d(session_paths, info if 'info' in locals() else {}, fases_path, projections_output_path=fases_proy_path)
+            self.generate_muscle_activation_cube_3d(session_paths, info, cubo_path, projections_output_path=proy_path)
         except Exception as e:
-            logger(f"Aviso al generar gráficos de cubos 3D y espacio de fases: {e}")
+            logger(f"Aviso al generar cubo 3D de proporciones: {e}")
+            
+        try:
+            self.generate_muscle_activation_cube_all_pulses_3d(session_paths, info, cubo_pulsos_path)
+        except Exception as e:
+            logger(f"Aviso al generar cubo 3D de todos los pulsos: {e}")
+            
+        try:
+            self.generate_dynamic_phase_space_3d(session_paths, info, fases_path, projections_output_path=fases_proy_path)
+        except Exception as e:
+            logger(f"Aviso al generar espacio de fases 3D: {e}")
 
         # Calcular estadísticas de Amplitud Máxima Promedio (mu +- sigma) por vocal y por canal
         amp_stats_per_vocal = {}
@@ -908,9 +971,13 @@ class ReportEngine:
         images = {}
         search_dirs = []
         
-        evolucion_dir = os.path.join(self.output_dir, "evolucion_sesion")
+        evolucion_dir = os.path.join(self.output_dir, f"evolucion_sesion_{fecha}")
+        evolucion_dir_old = os.path.join(self.output_dir, "evolucion_sesion")
+        
         if os.path.isdir(evolucion_dir):
             search_dirs.append(evolucion_dir)
+        elif os.path.isdir(evolucion_dir_old):
+            search_dirs.append(evolucion_dir_old)
             
         if custom_comp_dir and os.path.isdir(custom_comp_dir):
             search_dirs.append(custom_comp_dir)
@@ -937,11 +1004,11 @@ class ReportEngine:
             'amp_max_bar': ["*amplitud_max_bar.png", "*amp_bar.png", "*AMP_Bar*.png", "*Amplitud_Maxima*.png"],
             'snr_timeline': ["*SNR_Timeline.png", "*snr_vs_tiempo.png", "*Evolucion_SNR*.png"],
             'amp_timeline': ["*AMP_Timeline.png", "*amplitud_vs_tiempo.png", "*Evolucion_Amplitud*.png"],
-            'cubo_3d': ["*cubo_activacion*.png", "*cubo_3d*.png", "*cube_3d*.png"],
-            'cubo_proyecciones': ["*cubo_proyecciones*.png", "*proyecciones_caras*.png"],
+            'cubo_3d': ["*cubo_activacion_proporciones*.png", "*cubo_activacion*.png", "*cubo_3d*.png", "*cube_3d*.png"],
+            'cubo_proyecciones': ["*cubo_proyecciones_caras*.png", "*cubo_proyecciones*.png", "*proyecciones_caras*.png"],
             'cubo_pulsos': ["*cubo_todos_los_pulsos*.png", "*cubo_pulsos*.png"],
-            'espacio_fases': ["*espacio_fases*.png", "*fases_dinamico*.png"],
-            'espacio_fases_proyecciones': ["*fases_proyecciones*.png", "*espacio_fases_proyecciones*.png"],
+            'espacio_fases': ["*espacio_fases_dinamico_3d*.png", "*espacio_fases_dinamico*.png", "*fases_dinamico*.png"],
+            'espacio_fases_proyecciones': ["*espacio_fases_proyecciones_caras*.png", "*espacio_fases_proyecciones*.png", "*fases_proyecciones*.png"],
             'overlay': ["*overlay*.png", "*superposicion*.png", "comparativa.png"]
         }
         
@@ -1333,7 +1400,7 @@ class ReportEngine:
         doc.append(r"\addto\captionsspanish{\renewcommand{\figurename}{Figura}}")
         doc.append(r"\geometry{top=2cm, bottom=2cm, left=2.2cm, right=2.2cm}")
         doc.append("")
-        doc.append(f"\\title{{\\textbf{{Cuaderno de Laboratorio: Mediciones del {escape_latex(fecha)}}}}}")
+        doc.append(r"\title{\textbf{Reporte de Experimento}}")
         doc.append(r"\author{Laboratorio de Sistemas Dinámicos (LSD) - Sistema Ñandú}")
         doc.append(f"\\date{{{escape_latex(fecha)}}}")
         doc.append("")
@@ -1879,6 +1946,8 @@ class ReportEngine:
         doc.append(r"\begin{document}")
         doc.append(r"\maketitle")
         doc.append("")
+        doc.append(r"\tableofcontents")
+        doc.append(r"\newpage")
         
         # 1. Resumen y condiciones
         doc.append(r"\section{Condiciones Experimentales}")
@@ -1886,34 +1955,135 @@ class ReportEngine:
         doc.append(f"    \\item \\textbf{{Fecha:}} {escape_latex(fecha)}")
         doc.append(f"    \\item \\textbf{{Sujeto:}} {escape_latex(sujeto)}")
         doc.append(f"    \\item \\textbf{{Frecuencia de Muestreo:}} 2000 Hz")
+        doc.append(f"    \\item \\textbf{{Total de Registros Analizados:}} {len(info['mediciones'])}")
         doc.append(r"\end{itemize}")
         doc.append("")
         
-        # 2. Resumen Estadístico de SNR
-        doc.append(r"\section{Resumen Estadístico de Relación Señal-Ruido (SNR)}")
+        # Extracción y cálculo dinámico de SNR por toma y canal con error (media +- std por pulso)
+        import scipy.io.wavfile
+        mediciones_snr = []
         vocal_snr = {v: {0: [], 1: [], 2: []} for v in ['A', 'E', 'I', 'O', 'U']}
-        for med in info['mediciones']:
+
+        for idx, med in enumerate(info['mediciones']):
             letra = med['letra']
-            if letra not in vocal_snr: continue
+            m_path = med['path']
+            m_name = med['name']
+            prueba = med.get('prueba_tag', med.get('prueba', 'Serie'))
+            serie_str = prueba.replace('Serie', 'Serie ') if 'Serie' in prueba else prueba
+            
+            noise_sec = 3.0
+            bpm = 30.0
+            fs = 2000
+            pulse_count = 12
+            meta_ch0 = os.path.join(m_path, 'canal_0', 'metadata.json')
+            if os.path.exists(meta_ch0):
+                try:
+                    with open(meta_ch0, 'r', encoding='utf-8') as f:
+                        meta_data = json.load(f)
+                        noise_sec = float(meta_data.get('noise_seconds', 3.0))
+                        bpm = float(meta_data.get('bpm', 30.0))
+                        fs = int(meta_data.get('sample_rate', 2000))
+                        pulse_count = int(meta_data.get('pulse_count', 12))
+                except Exception:
+                    pass
+            w_ciclo = int(round((60.0 / bpm) * fs))
+                    
+            snr_toma = {0: (np.nan, np.nan), 1: (np.nan, np.nan), 2: (np.nan, np.nan)}
             for ch_idx in range(3):
                 ch_key = f'canal_{ch_idx}'
-                ch_path = os.path.join(med['path'], ch_key)
+                ch_path = os.path.join(m_path, ch_key)
+                pulses_s = []
                 for fname in ['results.json', 'analisis_results.json']:
                     rp = os.path.join(ch_path, fname)
                     if os.path.exists(rp):
                         try:
-                            with open(rp, 'r') as f:
+                            with open(rp, 'r', encoding='utf-8') as f:
                                 r_data = json.load(f)
                                 snrs = r_data.get('snr_per_pulse', [])
                                 if snrs:
-                                    vocal_snr[letra][ch_idx].extend([float(x) for x in snrs if x is not None and not np.isnan(x)])
-                                    break
-                        except Exception: pass
-                        
+                                    clean_s = [float(x) for x in snrs if x is not None and not np.isnan(x) and x > 0]
+                                    if clean_s:
+                                        pulses_s = clean_s
+                                        break
+                        except Exception:
+                            pass
+                if not pulses_s:
+                    wav_p = os.path.join(ch_path, 'grabacion.wav')
+                    if os.path.exists(wav_p):
+                        try:
+                            sr, data_w = scipy.io.wavfile.read(wav_p)
+                            if data_w.ndim > 1:
+                                data_w = data_w[:, 0]
+                            data_w = data_w.astype(float)
+                            n_noise = int(noise_sec * sr)
+                            noise_seg = data_w[:n_noise]
+                            q25, q75 = np.percentile(noise_seg, [25, 75])
+                            clean_noise = noise_seg[np.abs(noise_seg - np.median(noise_seg)) <= 2.5 * (q75 - q25)]
+                            noise_std = np.std(clean_noise) if len(clean_noise) > 10 else np.std(noise_seg)
+                            if noise_std < 1e-6:
+                                noise_std = np.std(data_w) * 0.1 + 1e-6
+                            
+                            for p_idx in range(pulse_count):
+                                p_start = n_noise + p_idx * w_ciclo
+                                p_end = min(len(data_w), p_start + w_ciclo)
+                                if p_start >= len(data_w): break
+                                p_seg = data_w[p_start:p_end]
+                                if len(p_seg) < 100: continue
+                                p_rect = np.abs(p_seg - np.median(p_seg))
+                                peak_val = np.percentile(p_rect, 98.0)
+                                pulses_s.append(float(peak_val / noise_std))
+                        except Exception:
+                            pass
+
+                if pulses_s:
+                    snr_mean = float(np.mean(pulses_s))
+                    snr_std = float(np.std(pulses_s))
+                    snr_toma[ch_idx] = (snr_mean, snr_std)
+                    if letra in vocal_snr:
+                        vocal_snr[letra][ch_idx].extend(pulses_s)
+
+            mediciones_snr.append({
+                'orden': idx + 1,
+                'name': m_name,
+                'letra': letra,
+                'serie_str': serie_str,
+                'snr': snr_toma
+            })
+
         m0_t = canales_final.get(0, "Canal 0")
         m1_t = canales_final.get(1, "Canal 1")
         m2_t = canales_final.get(2, "Canal 2")
         
+        # 2. Tabla Detallada de SNR por Medición con Error
+        doc.append(r"\section{Tabla de Relación Señal-Ruido (SNR) de Todas las Mediciones}")
+        doc.append("A continuación se presentan los valores de Relación Señal-Ruido promedio por pulso con su correspondiente dispersión ($\text{SNR} \pm \sigma$) obtenidos para cada una de las pruebas registradas en la sesión:")
+        doc.append(r"\begin{table}[H]")
+        doc.append(r"\centering")
+        doc.append(r"\small")
+        doc.append(r"\setlength{\tabcolsep}{4.5pt}")
+        doc.append(r"\begin{tabular}{c l c c c c c}")
+        doc.append(r"\toprule")
+        doc.append(r"\textbf{Nº} & \textbf{Identificador} & \textbf{Vocal} & \textbf{Serie} & \multicolumn{3}{c}{\textbf{Relación Señal-Ruido ($\text{SNR} \pm \sigma$)}} \\")
+        doc.append(r"\cmidrule(lr){5-7}")
+        doc.append(f"& & & & \\textbf{{Ch0: {escape_latex(m0_t)}}} & \\textbf{{Ch1: {escape_latex(m1_t)}}} & \\textbf{{Ch2: {escape_latex(m2_t)}}} \\\\")
+        doc.append(r"\midrule")
+        for item in mediciones_snr:
+            s_strs = []
+            for c_i in range(3):
+                m_val, s_val = item['snr'][c_i]
+                if not np.isnan(m_val):
+                    s_strs.append(f"${m_val:.1f} \\pm {s_val:.1f}$")
+                else:
+                    s_strs.append("--")
+            doc.append(f"{item['orden']} & {escape_latex(item['name'])} & {escape_latex(item['letra'])} & {escape_latex(item['serie_str'])} & {s_strs[0]} & {s_strs[1]} & {s_strs[2]} \\\\")
+        doc.append(r"\bottomrule")
+        doc.append(r"\end{tabular}")
+        doc.append(r"\caption{Relación Señal-Ruido ($\text{SNR} \pm \sigma$) calculada por pulso para la totalidad de registros adquiridos en la sesión.}")
+        doc.append(r"\end{table}")
+        doc.append("")
+
+        # 3. Resumen Estadístico de SNR
+        doc.append(r"\section{Resumen Estadístico de Relación Señal-Ruido (SNR)}")
         doc.append(r"\begin{table}[H]")
         doc.append(r"\centering")
         doc.append(r"\begin{tabular}{lccc}")
@@ -1943,9 +2113,9 @@ class ReportEngine:
             doc.append(r"\end{figure}")
             doc.append("")
             
-        # 3. Desglose detallado de ruido y espectros por serie
+        # 4. Desglose detallado de calidad, recortes y ruido por serie
         doc.append(r"\newpage")
-        doc.append(r"\section{Desglose de Evolución de Ruido Interpulso}")
+        doc.append(r"\section{Desglose de Calidad de Señal, Recortes y Ruido Interpulso}")
         for p_idx, (prueba_tag, meds_en_prueba) in enumerate(info['pruebas_agrupadas'].items()):
             doc.append(f"\\subsection{{{escape_latex(prueba_tag)}}}")
             for med in meds_en_prueba:
@@ -1956,27 +2126,81 @@ class ReportEngine:
                 for c_idx in range(3):
                     c_dir = os.path.join(m_path, f"canal_{c_idx}")
                     imgs_ch[c_idx] = {
-                        'spec': find_first_existing([os.path.join(c_dir, "spec.png")]),
-                        'evolucion': find_first_existing([os.path.join(c_dir, "evolucion.png")])
+                        'promedio': find_first_existing([
+                            os.path.join(c_dir, "avg_lider.png"),
+                            os.path.join(c_dir, "avg.png")
+                        ]),
+                        'recortes': find_first_existing([
+                            os.path.join(c_dir, "pulses.png")
+                        ]),
+                        'evolucion': find_first_existing([
+                            os.path.join(c_dir, "evolucion.png")
+                        ]),
+                        'spec': find_first_existing([
+                            os.path.join(c_dir, "spec_lider.png"),
+                            os.path.join(c_dir, "spec.png")
+                        ])
                     }
-                active_chs = [c for c in range(3) if imgs_ch[c]['evolucion']]
-                if active_chs:
-                    doc.append(f"\\subsubsection{{Vocal {escape_latex(letra)}: {escape_latex(m_name)}}}")
-                    chunk_size = 2
-                    for c_start in range(0, len(active_chs), chunk_size):
-                        chunk = active_chs[c_start:c_start + chunk_size]
-                        doc.append(r"\begin{figure}[H]")
-                        doc.append(r"\centering")
-                        for c_idx in chunk:
-                            m_label = info['canales'].get(c_idx, f"Canal {c_idx}")
-                            doc.append(r"\begin{subfigure}{0.88\textwidth}")
-                            doc.append(f"    \\includegraphics[width=\\textwidth]{{{imgs_ch[c_idx]['evolucion']}}}")
-                            doc.append(f"    \\caption{{Evolución de Ruido - Canal {c_idx} ({escape_latex(m_label)})}}")
-                            doc.append(r"\end{subfigure}")
-                            doc.append(r"\vspace{0.3cm}")
-                        doc.append(f"\\caption{{Evolución del ruido interpulso para {escape_latex(m_name)}.}}")
-                        doc.append(r"\end{figure}")
-                        doc.append("")
+                
+                has_any = any(imgs_ch[c]['promedio'] or imgs_ch[c]['recortes'] or imgs_ch[c]['evolucion'] for c in range(3))
+                if not has_any:
+                    continue
+
+                doc.append(f"\\subsubsection{{Vocal {escape_latex(letra)}: {escape_latex(m_name)}}}")
+
+                # 1. Pulso Promedio (Traza promedio, intervalo de confianza/desvío estándar y envolvente RMS media)
+                chs_prom = [c for c in range(3) if imgs_ch[c]['promedio']]
+                if chs_prom:
+                    doc.append(r"\begin{figure}[H]")
+                    doc.append(r"\centering")
+                    sub_w = "0.32\\textwidth" if len(chs_prom) == 3 else "0.48\\textwidth"
+                    for idx_c, c_idx in enumerate(chs_prom):
+                        m_label = info['canales'].get(c_idx, f"Canal {c_idx}")
+                        doc.append(f"\\begin{{subfigure}}{{{sub_w}}}")
+                        doc.append(f"    \\includegraphics[width=\\textwidth]{{{imgs_ch[c_idx]['promedio']}}}")
+                        doc.append(f"    \\caption{{Canal {c_idx}: {escape_latex(m_label)}}}")
+                        doc.append(r"\end{subfigure}")
+                        if idx_c < len(chs_prom) - 1:
+                            doc.append(r"\hfill")
+                    doc.append(f"\\caption{{Forma de onda promedio con su intervalo de dispersión ($\\mu \\pm \\sigma$) y envolvente RMS media para {escape_latex(m_name)}.}}")
+                    doc.append(r"\end{figure}")
+                    doc.append("")
+
+                # 2. Plot de Recortes (Superposición de todas las ventanas/epochs por pulso de metrónomo)
+                chs_rec = [c for c in range(3) if imgs_ch[c]['recortes']]
+                if chs_rec:
+                    doc.append(r"\begin{figure}[H]")
+                    doc.append(r"\centering")
+                    sub_w = "0.32\\textwidth" if len(chs_rec) == 3 else "0.48\\textwidth"
+                    for idx_c, c_idx in enumerate(chs_rec):
+                        m_label = info['canales'].get(c_idx, f"Canal {c_idx}")
+                        doc.append(f"\\begin{{subfigure}}{{{sub_w}}}")
+                        doc.append(f"    \\includegraphics[width=\\textwidth]{{{imgs_ch[c_idx]['recortes']}}}")
+                        doc.append(f"    \\caption{{Canal {c_idx}: {escape_latex(m_label)}}}")
+                        doc.append(r"\end{subfigure}")
+                        if idx_c < len(chs_rec) - 1:
+                            doc.append(r"\hfill")
+                    doc.append(f"\\caption{{Superposición gráfica de la totalidad de ventanas/epochs recortadas por pulso de metrónomo para {escape_latex(m_name)}.}}")
+                    doc.append(r"\end{figure}")
+                    doc.append("")
+
+                # 3. Evolución de Ruido Interpulso y SNR
+                chs_evol = [c for c in range(3) if imgs_ch[c]['evolucion']]
+                if chs_evol:
+                    doc.append(r"\begin{figure}[H]")
+                    doc.append(r"\centering")
+                    sub_w = "0.32\\textwidth" if len(chs_evol) == 3 else "0.48\\textwidth"
+                    for idx_c, c_idx in enumerate(chs_evol):
+                        m_label = info['canales'].get(c_idx, f"Canal {c_idx}")
+                        doc.append(f"\\begin{{subfigure}}{{{sub_w}}}")
+                        doc.append(f"    \\includegraphics[width=\\textwidth]{{{imgs_ch[c_idx]['evolucion']}}}")
+                        doc.append(f"    \\caption{{Canal {c_idx}: {escape_latex(m_label)}}}")
+                        doc.append(r"\end{subfigure}")
+                        if idx_c < len(chs_evol) - 1:
+                            doc.append(r"\hfill")
+                    doc.append(f"\\caption{{Evolución temporal del nivel de ruido interpulso para {escape_latex(m_name)}.}}")
+                    doc.append(r"\end{figure}")
+                    doc.append("")
                         
         doc.append(r"\end{document}")
         clean_date = re.sub(r'[^a-zA-Z0-9_-]', '_', fecha)

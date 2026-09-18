@@ -283,9 +283,25 @@ class ConfiguracionDialog(QDialog):
                     "color_hex": color,
                     "activo_por_defecto": activo
                 }
-                # Guardar asociación personalizada músculo -> color
+                # Guardar asociación personalizada músculo -> color y propagar a sinónimos anatómicos
                 if musc and not ("mic" in musc.lower() or i == 3):
                     colores_musculos[musc.lower()] = color
+                    m_low = musc.lower()
+                    if "anterior belly" in m_low or "digastric" in m_low:
+                        for syn in ["anterior belly", "anterior belly of digastric", "vientre anterior", "vientre anterior del digastrico", "digastrico"]:
+                            colores_musculos[syn] = color
+                    elif "zygomatic" in m_low or "zigomatic" in m_low or "cigomatic" in m_low:
+                        for syn in ["zygomaticus major", "zygomaticus", "zigomatico", "zigomatico mayor", "cigomatico"]:
+                            colores_musculos[syn] = color
+                    elif "orbicular" in m_low:
+                        for syn in ["orbicularis oris", "orbicularis", "orbicular"]:
+                            colores_musculos[syn] = color
+                    elif "depres" in m_low:
+                        for syn in ["depresor anguli oris", "depresor", "depressor"]:
+                            colores_musculos[syn] = color
+                    elif "mylo" in m_low or "milo" in m_low:
+                        for syn in ["mylohyoid", "milohioideo", "milohiode"]:
+                            colores_musculos[syn] = color
             except Exception as e:
                 print(f"Error guardando canal {i}: {e}")
                 

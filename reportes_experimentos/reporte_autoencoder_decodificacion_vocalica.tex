@@ -1,0 +1,376 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish,es-noshorthands,es-tabla]{babel}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{geometry}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{hyperref}
+\usepackage{float}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,babel}
+
+\geometry{top=2cm, bottom=2cm, left=2.2cm, right=2.2cm}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!70!black,
+    citecolor=blue!70!black,
+    urlcolor=blue!70!black
+}
+
+\title{\textbf{Decodificación No Supervisada e Invariantes Biomecánicos en Electromiografía Facial Superficial}\\
+\large Arquitectura de Autoencoder de Espacio de Estados, Geometría Cruciforme y Base Canónica Muscular}
+\author{\textbf{Santiago Prado} \and \textbf{Lucas Braunstein}\\
+\small Laboratorio de Sistemas Dinámicos (LSD) - Departamento de Física\\
+\small Facultad de Ciencias Exactas y Naturales (FCEyN) - Universidad de Buenos Aires (UBA)}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+En este trabajo se presenta una cadena metodológica para la decodificación no supervisada de señales de electromiografía de superficie (sEMG) facial durante la articulación submáximal de las cinco vocales del español (/a/, /e/, /i/, /o/, /u/). Se diseña e implementa un autoencoder convolucional 1D de espacio de estados $(X, \dot{X}_{\text{norm}})$ regularizado mediante una penalización de decorrelación latente ($\mathcal{L}_{\text{decorr}}$). El análisis empírico sobre 1078 ventanas mioeléctricas distribuidas en tres sujetos experimentales (Candela, Lucas y Petra) revela que el espacio latente converge de forma determinística hacia una macroestructura estelar cruciforme continua donde cada vocal se propaga como un rayo radial desde el origen neutro de reposo. Se demuestra que la orientación direccional sobre la hiperesfera unitaria constituye un invariante biomecánico independiente del usuario, permitiendo el desacoplamiento analítico de variaciones de ganancia e impedancia tisular. Asimismo, la comparación entre configuraciones anatómicas demuestra el rol del músculo cigomático mayor como interruptor fonético binario para las vocales de sonrisa (/e/, /i/) y del vientre anterior del digástrico para la apertura mandibular (/a/). A partir de estos hallazgos, se formaliza la tríada muscular canónica óptima y se establece el diseño de un decodificador en tiempo real con latencia de inferencia inferior a un milisegundo.
+\end{abstract}
+
+\vspace{0.5cm}
+
+\section{Registro Experimental y Correspondencia Anatómica}
+\label{sec:registro_experimental}
+
+El registro electromiográfico superficial de biopotenciales orofaciales se llevó a cabo utilizando la plataforma de adquisición Ñandú LSD. Las emisiones fueron guiadas mediante metrónomo a cadencia controlada ($30\,\text{BPM}$), intercalando intervalos de reposo articular para la calibración periódica de la línea base estocástica.
+
+Las adquisiciones analizadas abarcan tres conjuntos experimentales:
+\begin{enumerate}
+    \item \textbf{Sujeto Candela (2026-09-01):} 238 ventanas temporales distribuidas en tomas discretas de vocales aisladas.
+    \item \textbf{Sujeto Lucas (2026-07-10):} 555 ventanas temporales distribuidas en 35 tomas de calibración.
+    \item \textbf{Sujeto Petra (2026-08-21 y 2026-08-28):} 285 ventanas temporales correspondientes a 20 sesiones completas con electrodos de silicona y gel conductor.
+\end{enumerate}
+
+\subsection{Topología de Electrodos y Músculos Evaluados}
+\label{subsec:topologia_muscular}
+
+El estudio de las diferentes campañas de medición permitió identificar la respuesta diferencial de cuatro complejos musculares principales:
+\begin{itemize}
+    \item \textbf{Músculo Orbicular de la Boca (\textit{Orbicularis Oris}):} Dispuesto en la región peribucal superior o lateral. Gobierna el cierre labial, el fruncimiento y la protrusión anteroposterior requerida de forma eminente en la vocal /u/.
+    \item \textbf{Músculo Depresor del Ángulo de la Boca (\textit{Depressor Anguli Oris}, DAO):} Ubicado hacia el modíolo comisural inferior. Actúa en el descenso y la tensión lateral de la comisura.
+    \item \textbf{Músculo Digástrico y Complejo Suprahioideo (\textit{Anterior Belly}):} Situado en el triángulo submentoniano del piso de la boca. Desciende la mandíbula y tracciona el hioides hacia adelante, dominando la apertura bucal de la vocal /a/.
+    \item \textbf{Músculo Cigomático Mayor (\textit{Zygomaticus Major}):} Dispuesto diagonalmente entre el hueso cigomático y el modíolo comisural. Gobierna la elevación y retracción lateral de las comisuras labiales durante la articulación de vocales anteriores (/e/, /i/).
+\end{itemize}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{\textwidth}{l p{3.5cm} p{3.5cm} X}
+\toprule
+\textbf{Sujeto} & \textbf{Canal 0} & \textbf{Canal 1} & \textbf{Canal 2} \\
+\midrule
+Candela & Orbicular (Superior) & DAO / Modíolo & Vientre Anterior / Digástrico \\
+Lucas   & Orbicular (Lateral)  & DAO / Modíolo & Vientre Anterior / Milohioideo \\
+Petra   & Levator Anguli Oris  & Vientre Anterior Digástrico & Cigomático Mayor \\
+\bottomrule
+\end{tabularx}
+\caption{Asignación de canales físicos según el sujeto experimental analizado.}
+\label{tab:canales_sujetos}
+\end{table}
+
+\section{Cadena de Acondicionamiento y Normalización}
+\label{sec:acondicionamiento}
+
+La transformación de las tensiones eléctricas analógicas digitalizadas a $f_s = 2000\,\text{Hz}$ comprende tres etapas determinísticas orientadas a preservar las razones energéticas relativas entre músculos.
+
+\subsection{Filtrado y Extracción de Envolventes RMS}
+\label{subsec:filtrado_rms}
+
+Cada canal se somete a un filtro de muesca (Notch IIR) a $50\,\text{Hz}$ con factor de calidad $Q = 2.0$, seguido de un filtro pasabanda Butterworth de cuarto orden con frecuencias de corte entre $20\,\text{Hz}$ y $500\,\text{Hz}$. La envolvente temporal de energía se computa mediante valor cuadrático medio (RMS) sobre ventanas deslizantes de integración:
+
+\begin{equation}
+    x_c(t) = \sqrt{\frac{1}{W_{\text{RMS}}} \sum_{k=0}^{W_{\text{RMS}}-1} s_c^2(t - k)}
+    \label{eq:rms_envolvente}
+\end{equation}
+donde:
+\begin{itemize}
+    \item $s_c(t)$ es la señal cruda filtrada del canal $c \in \{0, 1, 2\}$ expresada en microvoltios ($\mu\text{V}$).
+    \item $W_{\text{RMS}} = \tau_{\text{RMS}} \cdot f_s$ es la cantidad de muestras en la ventana de integración, con $\tau_{\text{RMS}} = 75\,\text{ms}$.
+    \item $x_c(t)$ es la amplitud de la envolvente RMS resultante en microvoltios ($\mu\text{V}$).
+\end{itemize}
+
+\subsection{Sustracción del Piso de Ruido Basal Inter-Pulso}
+\label{subsec:sustraccion_ruido}
+
+Para desacoplar el sesgo de reposo térmico y muscular entre pulsos fonatorios, se calcula la media estocástica de la línea base $\mu_{c,\text{ruido}}$ durante el reposo inter-pulso previo:
+
+\begin{equation}
+    x_{c,\text{rect}}(t) = \max\left(0,\, x_c(t) - \alpha_{\text{ruido}} \cdot \mu_{c,\text{ruido}}\right)
+    \label{eq:sustraccion_ruido}
+\end{equation}
+donde $\alpha_{\text{ruido}} = 1.0$ representa la sustracción total ($100\%$) del umbral basal, y $x_{c,\text{rect}}(t)$ es la envolvente rectificada libre de polarización continua.
+
+\subsection{Normalización Obligatoria por el Supremo Global Tricanal}
+\label{subsec:supremo_global}
+
+Se descarta formalmente el escalado independiente por canal ($x_c / \max(x_c)$), en tanto destruye la información fonética de reclutamiento relativo (amplifica ruidos residuales de $8\,\mu\text{V}$ en músculos pasivos equiparándolos a contracciones activas de $150\,\mu\text{V}$). Todas las trayectorias de un mismo evento motor se normalizan por el Supremo Global tricanal:
+
+\begin{equation}
+    M_{\text{supremo}} = \max_{c \in \{0, 1, 2\}} \left( \max_t |x_{c,\text{rect}}(t)| \right)
+    \label{eq:supremo_global}
+\end{equation}
+
+\begin{equation}
+    \tilde{x}_c(t) = \frac{x_{c,\text{rect}}(t)}{M_{\text{supremo}}}
+    \label{eq:senial_normalizada}
+\end{equation}
+donde $M_{\text{supremo}}$ representa el valor escalar pico absoluto registrado entre los tres sensores durante el pulso, y $\tilde{x}_c(t) \in [0, 1]$ es la trayectoria normalizada adimensional.
+
+\subsection{Compuerta Multivariable de Silenciamiento}
+\label{subsec:compuerta_multivariable}
+
+Para suprimir el arrastre espurio en canales inactivos sin descartar la información útil de los canales activos, se evalúa el índice compuesto de actividad:
+
+\begin{equation}
+    \text{Score}_{\text{act}} = \text{RIC}_{\text{rel}} \cdot \text{Ratio}_{\text{centro}} \cdot \left( \frac{\tau_{50}}{50.0} \right)
+    \label{eq:score_act}
+\end{equation}
+donde:
+\begin{itemize}
+    \item $\text{RIC}_{\text{rel}} = \frac{\text{RIC}_{\text{señal}}}{\text{RIC}_{\text{ruido}}}$ es la razón entre el rango intercuartílico de la ventana activa y el del ruido en reposo.
+    \item $\text{Ratio}_{\text{centro}} = \frac{\text{RMS}_{\text{núcleo}}}{\text{RMS}_{\text{bordes}}}$ mide la concentración energética en el centro de la ventana frente a los extremos temporales.
+    \item $\tau_{50}$ es el ancho temporal (en milisegundos) donde la envolvente supera la mitad de su amplitud máxima.
+\end{itemize}
+Si $\text{Score}_{\text{act}} < \text{Gate}$ (con $\text{Gate} = 2.0$), la envolvente completa de ese canal se anula a cero estricto ($\tilde{\mathbf{x}}_c = \mathbf{0}$) conservando los canales activos de la ventana.
+
+\section{Arquitectura del Autoencoder de Espacio de Estados}
+\label{sec:arquitectura_red}
+
+El modelo implementa una transformación no lineal hacia variedades latentes bidimensionales y tridimensionales mediante un Autoencoder Convolucional 1D.
+
+\subsection{Formulación del Espacio de Estados}
+\label{subsec:espacio_estados}
+
+Cada ventana de observación se parametriza no sólo mediante su amplitud instantánea, sino también a través de su velocidad de cambio temporal, configurando un retrato de fase continuo:
+
+\begin{equation}
+    \mathbf{S}(t) = \left[ \tilde{\mathbf{x}}(t),\, \dot{\tilde{\mathbf{x}}}_{\text{norm}}(t) \right]^T \in \mathbb{R}^{6 \times T}
+    \label{eq:estado_cinematico}
+\end{equation}
+donde $\tilde{\mathbf{x}}(t) \in \mathbb{R}^{3 \times T}$ corresponde a las amplitudes tricanales normalizadas remuestreadas a $T = 10$ puntos, y $\dot{\tilde{\mathbf{x}}}_{\text{norm}}(t) = \frac{1}{\omega_{\text{norm}}} \frac{d\tilde{\mathbf{x}}}{dt}$ representa la derivada temporal numérica escalada por la velocidad máxima observada.
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[
+    layer/.style={rectangle, draw=black!80, fill=blue!10, thick, minimum width=2.6cm, minimum height=0.9cm, align=center, rounded corners=2pt},
+    latent/.style={circle, draw=red!80, fill=red!15, thick, minimum size=1.3cm, align=center},
+    arrow/.style={->, >=Stealth, thick}
+]
+    \node[layer, fill=gray!20] (input) {Entrada $\mathbf{S}(t)$\\$6 \times 10$ (Amplitud + $\dot{X}$)};
+    \node[layer, right=0.6cm of input] (conv1) {Conv1D (32)\\$k=5, s=2$};
+    \node[layer, right=0.6cm of conv1] (conv2) {Conv1D (64)\\$k=5, s=2$};
+    \node[layer, right=0.6cm of conv2] (conv3) {Conv1D (128)\\$k=3, s=2$};
+    \node[latent, right=0.7cm of conv3] (z) {$\mathbf{z} \in \mathbb{R}^d$\\$d \in \{2, 3\}$};
+    \node[layer, fill=green!15, below=0.8cm of z] (fc_dec) {Densa Decod.\\$64 \times 10$};
+    \node[layer, fill=green!15, left=0.6cm of fc_dec] (deconv1) {ConvTrans1D\\(64 filtros)};
+    \node[layer, fill=green!15, left=0.6cm of deconv1] (deconv2) {ConvTrans1D\\(32 filtros)};
+    \node[layer, fill=gray!20, left=0.6cm of deconv2] (output) {Reconstrucción $\hat{\mathbf{S}}(t)$\\$6 \times 10$};
+
+    \draw[arrow] (input) -- (conv1);
+    \draw[arrow] (conv1) -- (conv2);
+    \draw[arrow] (conv2) -- (conv3);
+    \draw[arrow] (conv3) -- (z);
+    \draw[arrow] (z) -- (fc_dec);
+    \draw[arrow] (fc_dec) -- (deconv1);
+    \draw[arrow] (deconv1) -- (deconv2);
+    \draw[arrow] (deconv2) -- (output);
+\end{tikzpicture}
+\caption{Diagrama de bloques de la arquitectura del Autoencoder Convolucional 1D de Espacio de Estados.}
+\label{fig:diagrama_autoencoder}
+\end{figure}
+
+\subsection{Función de Pérdida con Regularización de Decorrelación}
+\label{subsec:perdida_decorr}
+
+La optimización busca simultáneamente la fidelidad reconstructiva y la ortogonalidad intrínseca de los ejes latentes mediante la función de costo:
+
+\begin{equation}
+    \mathcal{L}_{\text{total}} = \mathcal{L}_{\text{recons}} + \lambda_{\text{decorr}} \mathcal{L}_{\text{decorr}}
+    \label{eq:loss_total}
+\end{equation}
+
+El error cuadrático de reconstrucción evalúa la concordancia cinemática:
+\begin{equation}
+    \mathcal{L}_{\text{recons}} = \frac{1}{B \cdot 6 \cdot T} \sum_{b=1}^{B} \sum_{k=1}^{6} \sum_{t=1}^{T} \left( S_{b,k}(t) - \hat{S}_{b,k}(t) \right)^2
+    \label{eq:loss_recons}
+\end{equation}
+donde $B$ denota el tamaño del lote ($B=16$), $S_{b,k}(t)$ es el valor de entrada original y $\hat{S}_{b,k}(t)$ su estimación reconstruida.
+
+El término de decorrelación latente penaliza las covarianzas cruzadas fuera de la diagonal principal:
+\begin{equation}
+    \mathcal{L}_{\text{decorr}} = \frac{1}{d^2 - d} \sum_{i=1}^{d} \sum_{j \neq i}^{d} \left( C_{ij} \right)^2
+    \label{eq:loss_decorr}
+\end{equation}
+donde $\mathbf{C} = \frac{1}{B-1} \sum_{b=1}^{B} (\mathbf{z}_b - \bar{\mathbf{z}})(\mathbf{z}_b - \bar{\mathbf{z}})^T$ es la matriz de covarianza empírica de las variables latentes en el lote, con hiperparámetro de penalización $\lambda_{\text{decorr}} = 0.05$.
+
+\section{Geometría Cruciforme e Invariancia Inter-Sujeto}
+\label{sec:geometria_invarianza}
+
+\subsection{Topología Estelar Continua}
+\label{subsec:topologia_estelar}
+
+Tanto en representaciones bidimensionales como tridimensionales, los datos no conforman cúmulos gaussianos esféricos compactos, sino una variedad de rayos que divergen desde el origen neutro:
+
+\begin{equation}
+    \mathbf{z}_i = \rho_i \cdot \hat{\mathbf{u}}(\text{vocal}) + \boldsymbol{\epsilon}
+    \label{eq:modelo_radial}
+\end{equation}
+donde:
+\begin{itemize}
+    \item $\mathbf{z}_i \in \mathbb{R}^d$ es la coordenada latente de la muestra $i$.
+    \item $\rho_i = \|\mathbf{z}_i\|_2$ es la magnitud escalar de la contracción motora, proporcional a la intensidad de emisión y variable entre repeticiones.
+    \item $\hat{\mathbf{u}}(\text{vocal}) = \frac{\mathbf{z}_i}{\|\mathbf{z}_i\|_2} \in S^{d-1}$ es el vector unitario direccional propio del gesto biomecánico en la hiperesfera.
+    \item $\boldsymbol{\epsilon}$ representa el residuo estocástico intra-sujeto.
+\end{itemize}
+
+\subsection{Invarianza Anatómica del Vector Direccional}
+\label{subsec:invarianza_vectorial}
+
+La magnitud $\rho_i$ absorbe la variabilidad de ganancia biológica, impedancia de piel y esfuerzo fonatorio. En contraposición, el vector director $\hat{\mathbf{u}}(\text{vocal})$ está gobernado estrictamente por la anatomía del aparato fonador: la articulación de /u/ requiere protrusión labial, la /a/ exige apertura mandibular y la /i/ demanda retracción comisural lateral. 
+
+Consecuentemente, las variaciones entre sujetos no alteran la topología de la estrella latente, sino que se reducen formalmente a transformaciones ortogonales rígidas en el grupo especial ortogonal $\mathbf{R} \in \text{SO}(d)$. La calibración inter-sujeto puede resolverse en forma determinística mediante el problema ortogonal de Procrustes:
+
+\begin{equation}
+    \mathbf{R}^* = \arg\min_{\mathbf{R} \in \text{SO}(d)} \|\mathbf{Z}_{\text{nuevo}} \mathbf{R} - \mathbf{Z}_{\text{canónico}}\|_F
+    \label{eq:procrustes}
+\end{equation}
+lo cual permite alinear la variedad latente de un nuevo participante utilizando una única secuencia de fonación de cinco segundos.
+
+\section{Resultados Experimentales por Sujeto}
+\label{sec:resultados_sujetos}
+
+\subsection{Sujeto Candela y la Diferenciación Submentoniana}
+\label{subsec:resultados_candela}
+
+En el sujeto Candela se registró una exactitud de agrupamiento no supervisado del \textbf{73.11\%} en 2D ($\text{Gate} = 2.0$, silueta $+0.426$). El hallazgo determinante consistió en el desacople biomecánico entre /o/ y /u/:
+\begin{itemize}
+    \item La vocal /o/ exhibe una contracción activa moderada en el vientre anterior del digástrico ($\text{Score}_{\text{act}} \in [2.0, 3.5]$) para inducir el descenso mandibular.
+    \item La vocal /u/ carece de activación submentoniana activa ($\text{Score}_{\text{act}} \le 1.8$).
+    \item La compuerta multivariable silenció a cero el canal inactivo de /u/ sin mutilar la contracción débil de /o/, elevando la exactitud de /u/ del $38\%$ al $79.5\%$.
+\end{itemize}
+
+\subsection{Sujeto Lucas y la Apertura Tridimensional}
+\label{subsec:resultados_lucas}
+
+En Lucas (555 ventanas), K-Means alcanzó un \textbf{59.46\%} en 2D (silueta $+0.565$). Las vocales /e/ e /i/ proyectaron colinealmente sobre el mismo cuadrante sur debido a la captación basal predominante en el electrodo DAO. Al proyectar en tres dimensiones ($d=3$), la coordenada latente $z_3$ introdujo una torsión angular que levantó la degeneración geométrica de dicho par.
+
+\subsection{Sujeto Petra y el Hallazgo del Cigomático Mayor}
+\label{subsec:resultados_petra}
+
+El procesamiento conjunto de las 20 sesiones de Petra (285 ventanas, Levator, Digástrico y Cigomático Mayor) arrojó los siguientes resultados:
+\begin{itemize}
+    \item \textbf{Espacio Latente 2D:} K-Means alcanzó \textbf{61.05\%} con silueta de \textbf{+0.5161} (/a/ al $98.1\%$, /o/ al $81.8\%$, /e/ al $55.0\%$, /i/ al $44.1\%$, /u/ al $32.2\%$).
+    \item \textbf{Espacio Latente 3D:} GMM alcanzó \textbf{57.54\%} (/a/ al $100.0\%$, /e/ al $98.3\%$, /o/ al $65.5\%$).
+    \item \textbf{Desacoplamiento Latente:} La matriz de correlación residual entre $z_1, z_2, z_3$ fue inferior al $1.3\%$ ($|\rho| \le 0.013$).
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{EMG_desarrollo/resultados/resultados_autoencoder/Petra_Silicona_med1_med2/retrato_de_fases_vocales.png}
+\caption{Retratos de fases dinámicos $(X, \dot{X})$ para Petra. Se observa el comportamiento binario del Cigomático Mayor (Canal 2), activo únicamente en /e/ e /i/, y el dominio de /a/ en el vientre anterior del digástrico (Canal 1).}
+\label{fig:retratos_fase_petra}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{EMG_desarrollo/resultados/resultados_autoencoder/Petra_Silicona_med1_med2/proyeccion_encoder_2d_unsupervised.png}
+    \caption{Espacio Latente 2D ($61.1\%$, Sil: $+0.516$).}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{EMG_desarrollo/resultados/resultados_autoencoder/Petra_Silicona_med1_med2/proyeccion_encoder_3d_unsupervised.png}
+    \caption{Espacio Latente 3D ($57.5\%$, Sil: $+0.471$).}
+\end{subfigure}
+\caption{Proyecciones latentes no supervisadas para el conjunto de datos de Petra.}
+\label{fig:proyecciones_petra}
+\end{figure}
+
+\section{Formalización de la Tríada Muscular Canónica}
+\label{sec:triada_canonica}
+
+A partir de la evidencia experimental comparada, se concluye que la configuración tricanal con máxima ortogonalidad fisiológica en el espacio euclidiano $\mathbb{R}^3$ está integrada por:
+
+\begin{enumerate}
+    \item \textbf{Canal $X$ (Vientre Anterior del Digástrico / Milohioideo):}
+    Grado de libertad de descenso mandibular vertical. Representa el vector de base $\hat{\mathbf{e}}_x = (1, 0, 0)$, polarizado de forma pura por la vocal \textbf{/a/}.
+    \item \textbf{Canal $Y$ (Orbicular de la Boca, Porción Medial):}
+    Grado de libertad de protrusión y cierre labial anteroposterior. Representa el vector de base $\hat{\mathbf{e}}_y = (0, 1, 0)$, polarizado de forma pura por la vocal \textbf{/u/}.
+    \item \textbf{Canal $Z$ (Cigomático Mayor, Región Superior del Modíolo):}
+    Grado de libertad de elevación y tracción lateral comisural (sonrisa fonética). Representa el vector de base $\hat{\mathbf{e}}_z = (0, 0, 1)$, polarizado de forma pura por la vocal \textbf{/i/}.
+\end{enumerate}
+
+Bajo esta parametrización, las vocales intermedias constituyen combinaciones lineales coplanares naturales:
+\begin{itemize}
+    \item \textbf{Vocal /o/:} Coplanar en el plano $(X, Y)$, combinando apertura mandibular moderada con protrusión labial.
+    \item \textbf{Vocal /e/:} Coplanar en el plano $(X, Z)$, combinando apertura mandibular intermedia con tracción comisural del cigomático mayor.
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=1.1, >=Stealth, thick]
+    % Axes
+    \draw[->, black!70] (0,0,0) -- (4,0,0) node[anchor=north east]{$X$: Digástrico (Apertura)};
+    \draw[->, black!70] (0,0,0) -- (0,4,0) node[anchor=south]{$Z$: Cigomático (Sonrisa)};
+    \draw[->, black!70] (0,0,0) -- (0,0,4) node[anchor=north west]{$Y$: Orbicular (Protrusión)};
+
+    % Vowel Rays
+    \draw[->, red, very thick] (0,0,0) -- (3.2,0,0) node[anchor=south west]{\textbf{/a/} $(1,0,0)$};
+    \draw[->, green!70!black, very thick] (0,0,0) -- (0,3.2,0) node[anchor=east]{\textbf{/i/} $(0,0,1)$};
+    \draw[->, orange!90!black, very thick] (0,0,0) -- (0,0,3.2) node[anchor=south east]{\textbf{/u/} $(0,1,0)$};
+    
+    % Coplanar Rays
+    \draw[->, blue!80!black, very thick, dashed] (0,0,0) -- (2.3,2.3,0) node[anchor=south west]{\textbf{/e/} $(X+Z)$};
+    \draw[->, purple!80!black, very thick, dashed] (0,0,0) -- (2.3,0,2.3) node[anchor=north west]{\textbf{/o/} $(X+Y)$};
+    
+    % Origin
+    \filldraw[black] (0,0,0) circle (2pt) node[anchor=north east]{Reposo $(0,0,0)$};
+\end{tikzpicture}
+\caption{Representación en la base canónica muscular tridimensional de las cinco vocales del español.}
+\label{fig:base_canonica_tikz}
+\end{figure}
+
+\section{Diseño del Decodificador Neuronal en Tiempo Real}
+\label{sec:decodificador_tiempo_real}
+
+La estructura angular en la hiperesfera $S^2$ viabiliza una arquitectura de decodificación en tiempo real sin demanda de cómputo intensivo:
+
+\begin{enumerate}
+    \item \textbf{Búfer Temporal Deslizante:} Adquisición continua a $f_s = 2000\,\text{Hz}$ con ventana móvil de longitud $W = 100\,\text{ms}$ (200 muestras) refrescada cada $20\,\text{ms}$ ($50\,\text{FPS}$).
+    \item \textbf{Acondicionamiento Rápido:} Filtrado IIR directo, rectificación, resta de línea base estática y silenciamiento por compuerta multivariable.
+    \item \textbf{Inferencia en el Codificador:} Pase hacia adelante (\textit{forward pass}) del Codificador Convolucional 1D ($< 20.000$ parámetros). En arquitecturas CPU estándares, la latencia de inferencia es de $t_{\text{inf}} \approx 0.4\,\text{ms}$, permitiendo holgura para la tasa de refresco requerida.
+    \item \textbf{Regla de Decisión por Producto Interno:}
+    \begin{itemize}
+        \item Si $\|\mathbf{z}(t)\|_2 < \rho_{\text{reposo}}$, el sistema clasifica el fotograma como estado de reposo articular neutro (silencio).
+        \item Si $\|\mathbf{z}(t)\|_2 \ge \rho_{\text{reposo}}$, se normaliza el vector unitario $\hat{\mathbf{u}}(t) = \frac{\mathbf{z}(t)}{\|\mathbf{z}(t)\|_2}$ y se asigna el fonema que maximiza la proyección sobre los vectores directores canónicos $\hat{\mathbf{c}}_k$:
+        \begin{equation}
+            \text{Vocal}^*(t) = \arg\max_{k \in \{\text{A, E, I, O, U}\}} \left( \hat{\mathbf{u}}(t) \cdot \hat{\mathbf{c}}_k \right)
+            \label{eq:regla_decision}
+        \end{equation}
+        donde $\hat{\mathbf{u}}(t) \cdot \hat{\mathbf{c}}_k = \sum_{j=1}^3 u_j(t) c_{k,j}$ requiere únicamente 15 operaciones aritméticas básicas por fotograma.
+    \end{itemize}
+\end{enumerate}
+
+\section{Conclusiones}
+\label{sec:conclusiones}
+
+\begin{enumerate}
+    \item Se demostró que la regularización por decorrelación latente en autoencoders convolucionales 1D organiza de forma autónoma los patrones electromiográficos en una variedad cruciforme estelar continua.
+    \item La descomposición entre norma euclidiana $\|\mathbf{z}\|_2$ y vector director angular $\hat{\mathbf{u}} \in S^{d-1}$ resuelve la dispersión de ganancia tisular inter-sujeto, reduciendo la transferencia entre usuarios a una transformación ortogonal $\text{SO}(3)$ calibrable en cinco segundos.
+    \item El músculo cigomático mayor opera como un discriminador booleano estricto para vocales de retracción comisural, permitiendo junto con el orbicular y el digástrico conformar una base canónica ortogonal en $\mathbb{R}^3$.
+    \item El decodificador formulado sobre proyecciones cosenoidales provee un esquema de clasificación continua en tiempo real con latencias de cómputo sub-milisegundo.
+\end{enumerate}
+
+\end{document}

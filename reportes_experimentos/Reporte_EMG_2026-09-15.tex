@@ -1,0 +1,940 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{geometry}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{hyperref}
+\usepackage{float}
+\addto\captionsspanish{\renewcommand{\tablename}{Tabla}}
+\addto\captionsspanish{\renewcommand{\figurename}{Figura}}
+\geometry{top=2cm, bottom=2cm, left=2.2cm, right=2.2cm}
+
+\title{\textbf{Reporte de Experimento}}
+\author{Laboratorio de Sistemas Dinámicos (LSD) - Sistema Ñandú}
+\date{2026-09-15}
+
+\begin{document}
+\maketitle
+
+\tableofcontents
+\newpage
+
+\section{Datos de la Sesión y Montaje Experimental}
+\begin{itemize}
+    \item \textbf{Fecha de las Mediciones:} 2026-09-15
+    \item \textbf{Sujeto Experimental:} Candela
+    \item \textbf{Hora de Inicio:} 15:52:35
+    \item \textbf{Hora de Finalización:} 16:15:24
+    \item \textbf{Duración Total de la Sesión:} 22.8 min
+    \item \textbf{Baterías y Alimentación:} No se midió
+    \item \textbf{Electrodo de Referencia (Tierra):} Mastoide
+    \item \textbf{Frecuencia de Muestreo:} 2000 Hz
+    \item \textbf{Total de Registros Realizados:} 20
+    \item \textbf{Series / Pruebas Identificadas:} 4
+\end{itemize}
+
+\subsection{Ubicación de los Músculos y Asignación de Canales}
+En la presente sesión se midió simultáneamente en los siguientes canales y ubicaciones musculares:
+\begin{table}[H]
+\centering
+\begin{tabularx}{\textwidth}{c p{6.5cm} X}
+\toprule
+\textbf{Canal} & \textbf{Músculo Registrado} & \textbf{Ubicación / Rol Anatómico} \\
+\midrule
+Canal 0 & \textbf{Anterior Belly} & Electrodo bipolar de superficie \\
+Canal 1 & \textbf{Zygomaticus Major} & Electrodo bipolar de superficie \\
+Canal 2 & \textbf{Orbicularis Oris} & Electrodo bipolar de superficie \\
+Canal 3 & \textbf{Micrófono} & Canal acústico / Sincronización temporal con micrófono \\
+\bottomrule
+\end{tabularx}
+\caption{Distribución anatómica y configuración de canales musculares en el montaje experimental.}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \centering
+    \includegraphics[width=0.95\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/fotos/anatomia_digastrico_anterior_belly.png}
+    \caption{Canal 0: Vientre anterior del digástrico (\textit{Anterior Belly}) y piso de boca.}
+\end{subfigure}
+\vspace{0.3cm}
+
+\begin{subfigure}{0.42\textwidth}
+    \centering
+    \includegraphics[width=0.85\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/fotos/anatomia_zygomaticus_major.jpg}
+    \caption{Canal 1: Músculo cigomático mayor (\textit{Zygomaticus major}).}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.42\textwidth}
+    \centering
+    \includegraphics[width=0.85\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/fotos/anatomia_orbicularis_oris.jpg}
+    \caption{Canal 2: Músculo orbicular de los labios (\textit{Orbicularis oris}).}
+\end{subfigure}
+\caption{Referencias anatómicas de los tres grupos musculares seleccionados para el registro electromiográfico.}
+\label{fig:referencias_anatomicas}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{\textwidth}{c X c c c c}
+\toprule
+\textbf{Orden} & \textbf{Carpeta / Archivo} & \textbf{Vocal} & \textbf{Hora de Toma} & \textbf{Pulsos Totales} & \textbf{Serie} \\
+\midrule
+1 & A\_Serie1\_Candela & A & 15:52:35 & 12 & Serie 1 \\
+2 & E\_Serie1\_Candela & E & 15:53:21 & 12 & Serie 1 \\
+3 & I\_Serie1\_Candela & I & 15:54:07 & 12 & Serie 1 \\
+4 & O\_Serie1\_Candela & O & 15:54:53 & 12 & Serie 1 \\
+5 & U\_Serie1\_Candela & U & 15:55:39 & 12 & Serie 1 \\
+6 & O\_Serie2\_Candela & O & 15:56:25 & 12 & Serie 2 \\
+7 & E\_Serie2\_Candela & E & 15:57:11 & 12 & Serie 2 \\
+8 & I\_Serie2\_Candela & I & 15:57:57 & 12 & Serie 2 \\
+9 & A\_Serie2\_Candela & A & 15:58:43 & 12 & Serie 2 \\
+10 & U\_Serie2\_Candela & U & 15:59:29 & 12 & Serie 2 \\
+11 & U\_Serie3\_Candela & U & 16:08:29 & 12 & Serie 3 \\
+12 & O\_Serie3\_Candela & O & 16:09:15 & 12 & Serie 3 \\
+13 & A\_Serie3\_Candela & A & 16:10:01 & 12 & Serie 3 \\
+14 & I\_Serie3\_Candela & I & 16:10:47 & 12 & Serie 3 \\
+15 & E\_Serie3\_Candela & E & 16:11:33 & 12 & Serie 3 \\
+16 & A\_Serie4\_Candela & A & 16:12:19 & 12 & Serie 4 \\
+17 & E\_Serie4\_Candela & E & 16:13:05 & 12 & Serie 4 \\
+18 & I\_Serie4\_Candela & I & 16:13:52 & 12 & Serie 4 \\
+19 & O\_Serie4\_Candela & O & 16:14:38 & 12 & Serie 4 \\
+20 & U\_Serie4\_Candela & U & 16:15:24 & 12 & Serie 4 \\
+\bottomrule
+\end{tabularx}
+\caption{Detalle de registros y cronograma de mediciones en la sesión experimental.}
+\end{table}
+
+\subsection{Objetivo del Experimento}
+\label{subsec:exp3_objetivo}
+Evaluar el acoplamiento de ruido de red eléctrica ($50\,\text{Hz}$ y armónicos) al multiplexar y adquirir 3 canales en simultáneo, registrando a su vez los patrones temporales de activación muscular durante la fonación de las 5 vocales del español (/a/, /e/, /i/, /o/, /u/).
+
+\subsection{Geometría, Sitios Anatómicos y Ajustes de Medición}
+\label{subsec:exp3_geometria}
+
+\textit{Nota experimental de tolerancia:} Debido a la complejidad de medición in situ sobre tejido blando, se asume un margen de error/resolución de $\pm 1\,\text{mm}$ para todas las cotas tomadas con calibre.
+
+\begin{itemize}
+    \item \textbf{Electrodo de Referencia (GND):} Apófisis mastoides (electrodo Medi-Trace recortado).
+    \item \textbf{Canal 1 --- Belly (vientre anterior del digástrico / piso de boca):}
+    \begin{itemize}
+        \item Cable: Mallado 1.
+        \item Distancia inter-electrodo inicial: $15 \pm 1\,\text{mm}$ ($1{,}5\,\text{cm}$).
+        \item Modificación final: Reubicado al final del protocolo a una separación inter-electrodo de $19 \pm 1\,\text{mm}$ ($1{,}9\,\text{cm}$; fe de erratas si aparece anotado como $19\,\text{cm}$).
+    \end{itemize}
+    \item \textbf{Canal 2 --- Zygomaticus major (cigomático mayor):}
+    \begin{itemize}
+        \item Cable: Sin mallar.
+        \item Distancia inter-electrodo: $15 \pm 1\,\text{mm}$ ($1{,}5\,\text{cm}$).
+    \end{itemize}
+    \item \textbf{Canal 3 --- Orbicularis oris (labio superior):}
+    \begin{itemize}
+        \item Cable: Mallado 2.
+        \item Distancia inter-electrodo (centro a centro): $25 \pm 1\,\text{mm}$ ($2{,}5\,\text{cm}$; con cota periférica máxima de $29 \pm 1\,\text{mm}$).
+    \end{itemize}
+    \item \textbf{Geometría de electrodos:} Diámetro de electrodos recortados $= 16 \pm 1\,\text{mm}$ ($1{,}6\,\text{cm}$).
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.55\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/fotos/WhatsApp Image 2026-09-16 at 12.52.46 (1).jpeg}
+\caption{Electrodo de referencia (Medi-Trace recortado) fijado sobre la apófisis mastoides.}
+\label{fig:gnd_mastoides}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.55\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/fotos/WhatsApp Image 2026-09-16 at 12.52.45 (1).jpeg}
+\caption{Disposición bipolar sobre el vientre anterior del digástrico (piso de boca) con Cable Mallado 1. Separación inter-electrodo: $15 \pm 1\,\text{mm}$ (reubicado a $19 \pm 1\,\text{mm}$ al final del protocolo).}
+\label{fig:canal1_belly}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.55\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/fotos/WhatsApp Image 2026-09-16 at 12.52.44.jpeg}
+\caption{Disposición bipolar sobre el músculo cigomático mayor (\textit{Zygomaticus major}) con cable sin mallar. Separación inter-electrodo: $15 \pm 1\,\text{mm}$.}
+\label{fig:canal2_zygomaticus}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/fotos/WhatsApp Image 2026-09-16 at 12.52.46.jpeg}
+    \caption{Detalle de fijación bipolar con Cable Mallado 2.}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/fotos/orbicularis_oris_candela_frontal.jpeg}
+    \caption{Vista frontal del posicionamiento sobre el labio superior.}
+\end{subfigure}
+\caption{Disposición bipolar sobre el músculo orbicular de los labios (labio superior, \textit{Orbicularis oris}) con Cable Mallado 2. Distancia centro a centro: $25 \pm 1\,\text{mm}$ (cota periférica máx: $29 \pm 1\,\text{mm}$).}
+\label{fig:canal3_orbicularis}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.55\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/fotos/WhatsApp Image 2026-09-16 at 12.52.45.jpeg}
+\caption{Dimensiones y geometría de los electrodos de superficie recortados (diámetro: $16 \pm 1\,\text{mm}$).}
+\label{fig:geometria_electrodos}
+\end{figure}
+
+\subsection{Metodología de Registro}
+\label{subsec:exp3_metodologia}
+\begin{itemize}
+    \item \textbf{Sujeto:} Candela.
+    \item \textbf{Registro:} 12 pulsos vocálicos por toma.
+    \item \textbf{Protocolo:} 4 series con orden pseudoaleatorio de vocales para mitigar fatiga muscular y acomodación.
+\end{itemize}
+
+\newpage
+\section{Resultados y Análisis de Señales}
+A continuación se presentan las señales bioeléctricas calibradas y los patrones musculares correspondientes a cada una de las pruebas registradas en la sesión.
+
+\subsection{Serie1: Secuencia de Vocales}
+Análisis detallado de las mediciones registradas en el bloque \textbf{Serie1}.
+
+\begin{table}[H]
+\centering
+\begin{tabularx}{\textwidth}{c c X c c}
+\toprule
+\textbf{Orden} & \textbf{Vocal} & \textbf{Identificador de Medición} & \textbf{Hora Exacta} & $\mathbf{\Delta t}$ \textbf{(min)} \\
+\midrule
+1 & A & A\_Serie1\_Candela & 15:52:35 & 0.0 \\
+2 & E & E\_Serie1\_Candela & 15:53:21 & 0.8 \\
+3 & I & I\_Serie1\_Candela & 15:54:07 & 1.5 \\
+4 & O & O\_Serie1\_Candela & 15:54:53 & 2.3 \\
+5 & U & U\_Serie1\_Candela & 15:55:39 & 3.1 \\
+\bottomrule
+\end{tabularx}
+\caption{Cronograma y secuencia de vocales registradas en Serie1.}
+\end{table}
+
+\subsubsection{Vocal A: A\_Serie1\_Candela (15:52:35)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie1_Candela/plot_calibrado_2026-09-16_A_Serie1_Candela.png}
+\caption{Figura: Señales calibradas de la vocal A. Se aplicó filtro Notch en 50 Hz ($Q=2.0$), filtro pasabanda Butterworth (20--500 Hz) y envolvente RMS.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie1_Candela/plot_paper_combined.png}
+\caption{Registro combinado de la vocal A. Señal con ruido restado entre pulsos, alineada y normalizada.}
+\end{figure}
+
+\subsubsection{Vocal E: E\_Serie1\_Candela (15:53:21)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie1_Candela/plot_calibrado_2026-09-16_E_Serie1_Candela.png}
+\caption{Figura: Señales calibradas de la vocal E. Se aplicó filtro Notch en 50 Hz ($Q=2.0$), filtro pasabanda Butterworth (20--500 Hz) y envolvente RMS.}
+\end{figure}
+
+\subsubsection{Vocal I: I\_Serie1\_Candela (15:54:07)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie1_Candela/plot_calibrado_2026-09-16_I_Serie1_Candela.png}
+\caption{Figura: Señales calibradas de la vocal I. Se aplicó filtro Notch en 50 Hz ($Q=2.0$), filtro pasabanda Butterworth (20--500 Hz) y envolvente RMS.}
+\end{figure}
+
+\subsubsection{Vocal O: O\_Serie1\_Candela (15:54:53)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie1_Candela/plot_calibrado_2026-09-16_O_Serie1_Candela.png}
+\caption{Figura: Señales calibradas de la vocal O. Se aplicó filtro Notch en 50 Hz ($Q=2.0$), filtro pasabanda Butterworth (20--500 Hz) y envolvente RMS.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie1_Candela/plot_paper_combined.png}
+\caption{Registro combinado de la vocal O. Señal con ruido restado entre pulsos, alineada y normalizada.}
+\end{figure}
+
+\subsubsection{Vocal U: U\_Serie1\_Candela (15:55:39)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie1_Candela/plot_calibrado_2026-09-16_U_Serie1_Candela.png}
+\caption{Figura: Señales calibradas de la vocal U. Se aplicó filtro Notch en 50 Hz ($Q=2.0$), filtro pasabanda Butterworth (20--500 Hz) y envolvente RMS.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie1_Candela/plot_paper_combined.png}
+\caption{Registro combinado de la vocal U. Señal con ruido restado entre pulsos, alineada y normalizada.}
+\end{figure}
+
+\subsection{Serie2: Secuencia de Vocales}
+Análisis detallado de las mediciones registradas en el bloque \textbf{Serie2}.
+
+\begin{table}[H]
+\centering
+\begin{tabularx}{\textwidth}{c c X c c}
+\toprule
+\textbf{Orden} & \textbf{Vocal} & \textbf{Identificador de Medición} & \textbf{Hora Exacta} & $\mathbf{\Delta t}$ \textbf{(min)} \\
+\midrule
+1 & O & O\_Serie2\_Candela & 15:56:25 & 3.8 \\
+2 & E & E\_Serie2\_Candela & 15:57:11 & 4.6 \\
+3 & I & I\_Serie2\_Candela & 15:57:57 & 5.4 \\
+4 & A & A\_Serie2\_Candela & 15:58:43 & 6.1 \\
+5 & U & U\_Serie2\_Candela & 15:59:29 & 6.9 \\
+\bottomrule
+\end{tabularx}
+\caption{Cronograma y secuencia de vocales registradas en Serie2.}
+\end{table}
+
+\subsubsection{Vocal O: O\_Serie2\_Candela (15:56:25)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie2_Candela/plot_calibrado_2026-09-16_O_Serie2_Candela.png}
+\caption{Figura: Señales calibradas de la vocal O. Se aplicó filtro Notch en 50 Hz ($Q=2.0$), filtro pasabanda Butterworth (20--500 Hz) y envolvente RMS.}
+\end{figure}
+
+\subsubsection{Vocal E: E\_Serie2\_Candela (15:57:11)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie2_Candela/plot_calibrado_2026-09-16_E_Serie2_Candela.png}
+\caption{Figura: Señales calibradas de la vocal E. Se aplicó filtro Notch en 50 Hz ($Q=2.0$), filtro pasabanda Butterworth (20--500 Hz) y envolvente RMS.}
+\end{figure}
+
+\subsubsection{Vocal I: I\_Serie2\_Candela (15:57:57)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie2_Candela/plot_calibrado_2026-09-16_I_Serie2_Candela.png}
+\caption{Figura: Señales calibradas de la vocal I. Se aplicó filtro Notch en 50 Hz ($Q=2.0$), filtro pasabanda Butterworth (20--500 Hz) y envolvente RMS.}
+\end{figure}
+
+\subsubsection{Vocal A: A\_Serie2\_Candela (15:58:43)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie2_Candela/plot_calibrado_2026-09-16_A_Serie2_Candela.png}
+\caption{Figura: Señales calibradas de la vocal A. Se aplicó filtro Notch en 50 Hz ($Q=2.0$), filtro pasabanda Butterworth (20--500 Hz) y envolvente RMS.}
+\end{figure}
+
+\subsubsection{Vocal U: U\_Serie2\_Candela (15:59:29)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie2_Candela/plot_calibrado_2026-09-16_U_Serie2_Candela.png}
+\caption{Figura: Señales calibradas de la vocal U. Se aplicó filtro Notch en 50 Hz ($Q=2.0$), filtro pasabanda Butterworth (20--500 Hz) y envolvente RMS.}
+\end{figure}
+
+\subsection{Serie3: Secuencia de Vocales}
+Análisis detallado de las mediciones registradas en el bloque \textbf{Serie3}.
+
+\begin{table}[H]
+\centering
+\begin{tabularx}{\textwidth}{c c X c c}
+\toprule
+\textbf{Orden} & \textbf{Vocal} & \textbf{Identificador de Medición} & \textbf{Hora Exacta} & $\mathbf{\Delta t}$ \textbf{(min)} \\
+\midrule
+1 & U & U\_Serie3\_Candela & 16:08:29 & 15.9 \\
+2 & O & O\_Serie3\_Candela & 16:09:15 & 16.7 \\
+3 & A & A\_Serie3\_Candela & 16:10:01 & 17.4 \\
+4 & I & I\_Serie3\_Candela & 16:10:47 & 18.2 \\
+5 & E & E\_Serie3\_Candela & 16:11:33 & 19.0 \\
+\bottomrule
+\end{tabularx}
+\caption{Cronograma y secuencia de vocales registradas en Serie3.}
+\end{table}
+
+\subsubsection{Vocal U: U\_Serie3\_Candela (16:08:29)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie3_Candela/plot_calibrado_2026-09-16_U_Serie3_Candela.png}
+\caption{Figura: Señales calibradas de la vocal U. Se aplicó filtro Notch en 50 Hz ($Q=2.0$), filtro pasabanda Butterworth (20--500 Hz) y envolvente RMS.}
+\end{figure}
+
+\subsubsection{Vocal O: O\_Serie3\_Candela (16:09:15)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie3_Candela/plot_calibrado_2026-09-16_O_Serie3_Candela.png}
+\caption{Figura: Señales calibradas de la vocal O. Se aplicó filtro Notch en 50 Hz ($Q=2.0$), filtro pasabanda Butterworth (20--500 Hz) y envolvente RMS.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie3_Candela/plot_paper_combined.png}
+\caption{Registro combinado de la vocal O. Señal con ruido restado entre pulsos, alineada y normalizada.}
+\end{figure}
+
+\subsubsection{Vocal A: A\_Serie3\_Candela (16:10:01)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie3_Candela/plot_calibrado_2026-09-16_A_Serie3_Candela.png}
+\caption{Figura: Señales calibradas de la vocal A. Se aplicó filtro Notch en 50 Hz ($Q=2.0$), filtro pasabanda Butterworth (20--500 Hz) y envolvente RMS.}
+\end{figure}
+
+\subsubsection{Vocal I: I\_Serie3\_Candela (16:10:47)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie3_Candela/plot_calibrado_2026-09-16_I_Serie3_Candela.png}
+\caption{Figura: Señales calibradas de la vocal I. Se aplicó filtro Notch en 50 Hz ($Q=2.0$), filtro pasabanda Butterworth (20--500 Hz) y envolvente RMS.}
+\end{figure}
+
+\subsubsection{Vocal E: E\_Serie3\_Candela (16:11:33)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie3_Candela/plot_calibrado_2026-09-16_E_Serie3_Candela.png}
+\caption{Figura: Señales calibradas de la vocal E. Se aplicó filtro Notch en 50 Hz ($Q=2.0$), filtro pasabanda Butterworth (20--500 Hz) y envolvente RMS.}
+\end{figure}
+
+\subsection{Serie4: Secuencia de Vocales}
+Análisis detallado de las mediciones registradas en el bloque \textbf{Serie4}.
+
+\begin{table}[H]
+\centering
+\begin{tabularx}{\textwidth}{c c X c c}
+\toprule
+\textbf{Orden} & \textbf{Vocal} & \textbf{Identificador de Medición} & \textbf{Hora Exacta} & $\mathbf{\Delta t}$ \textbf{(min)} \\
+\midrule
+1 & A & A\_Serie4\_Candela & 16:12:19 & 19.7 \\
+2 & E & E\_Serie4\_Candela & 16:13:05 & 20.5 \\
+3 & I & I\_Serie4\_Candela & 16:13:52 & 21.3 \\
+4 & O & O\_Serie4\_Candela & 16:14:38 & 22.0 \\
+5 & U & U\_Serie4\_Candela & 16:15:24 & 22.8 \\
+\bottomrule
+\end{tabularx}
+\caption{Cronograma y secuencia de vocales registradas en Serie4.}
+\end{table}
+
+\subsubsection{Vocal A: A\_Serie4\_Candela (16:12:19)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie4_Candela/plot_calibrado_2026-09-16_A_Serie4_Candela.png}
+\caption{Figura: Señales calibradas de la vocal A. Se aplicó filtro Notch en 50 Hz ($Q=2.0$), filtro pasabanda Butterworth (20--500 Hz) y envolvente RMS.}
+\end{figure}
+
+\subsubsection{Vocal E: E\_Serie4\_Candela (16:13:05)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie4_Candela/plot_calibrado_2026-09-16_E_Serie4_Candela.png}
+\caption{Figura: Señales calibradas de la vocal E. Se aplicó filtro Notch en 50 Hz ($Q=2.0$), filtro pasabanda Butterworth (20--500 Hz) y envolvente RMS.}
+\end{figure}
+
+\subsubsection{Vocal I: I\_Serie4\_Candela (16:13:52)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie4_Candela/plot_calibrado_2026-09-16_I_Serie4_Candela.png}
+\caption{Figura: Señales calibradas de la vocal I. Se aplicó filtro Notch en 50 Hz ($Q=2.0$), filtro pasabanda Butterworth (20--500 Hz) y envolvente RMS.}
+\end{figure}
+
+\subsubsection{Vocal O: O\_Serie4\_Candela (16:14:38)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie4_Candela/plot_calibrado_2026-09-16_O_Serie4_Candela.png}
+\caption{Figura: Señales calibradas de la vocal O. Se aplicó filtro Notch en 50 Hz ($Q=2.0$), filtro pasabanda Butterworth (20--500 Hz) y envolvente RMS.}
+\end{figure}
+
+\subsubsection{Vocal U: U\_Serie4\_Candela (16:15:24)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie4_Candela/plot_calibrado_2026-09-16_U_Serie4_Candela.png}
+\caption{Figura: Señales calibradas de la vocal U. Se aplicó filtro Notch en 50 Hz ($Q=2.0$), filtro pasabanda Butterworth (20--500 Hz) y envolvente RMS.}
+\end{figure}
+
+\newpage
+\section{Evolución Temporal de la Sesión}
+Evaluación de la estabilidad temporal de las amplitudes pico y la consistencia biomecánica muscular a lo largo de toda la sesión.
+
+\subsection{Amplitudes Pico Promedio por Vocal y Músculo}
+\begin{table}[H]
+\centering
+\begin{tabularx}{\textwidth}{l c c X}
+\toprule
+\textbf{Vocal} & \textbf{Canal 0: Anterior Belly} & \textbf{Canal 1: Zygomaticus Major} & \textbf{Canal 2: Orbicularis Oris} \\
+\midrule
+Vocal A & $41.0 \pm 5.5\,\mu\text{V}$ & $9.9 \pm 2.2\,\mu\text{V}$ & $10.6 \pm 4.2\,\mu\text{V}$ \\
+Vocal E & $32.5 \pm 7.0\,\mu\text{V}$ & $7.4 \pm 1.5\,\mu\text{V}$ & $15.3 \pm 5.9\,\mu\text{V}$ \\
+Vocal I & $30.1 \pm 7.3\,\mu\text{V}$ & $58.5 \pm 21.0\,\mu\text{V}$ & $44.8 \pm 13.6\,\mu\text{V}$ \\
+Vocal O & $19.6 \pm 5.5\,\mu\text{V}$ & $16.6 \pm 2.7\,\mu\text{V}$ & $119.5 \pm 17.1\,\mu\text{V}$ \\
+Vocal U & $15.0 \pm 4.1\,\mu\text{V}$ & $17.8 \pm 2.8\,\mu\text{V}$ & $108.8 \pm 18.8\,\mu\text{V}$ \\
+\bottomrule
+\end{tabularx}
+\caption{Amplitudes pico máximas promedio ($\mu \pm \sigma$) registradas para cada vocal y canal muscular.}
+\end{table}
+
+\subsection{Línea de Tiempo de Amplitud}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/evolucion_sesion/Sesion_AMP_Timeline.png}
+\caption{Figura: Evolución temporal de la amplitud pico muscular (en $\mu\text{V}$) a lo largo de la sesión con franja de dispersión promedio ($\mu \pm \sigma$).}
+\end{figure}
+
+\subsection{Cubo 3D de Proporciones de Activación Muscular}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/evolucion_sesion/Sesion_cubo_activacion_proporciones_3d.png}
+\caption{Figura: Proyección vectorial tridimensional de activación relativa intermuscular (Cubo 3D) para las 5 vocales comparadas a lo largo de las series de la sesión. Las líneas discontinuas conectan la misma vocal entre pruebas para visualizar la repetibilidad y estabilidad biomecánica.}
+\end{figure}
+
+\subsection{Proyecciones Bidimensionales en las Caras del Cubo (Planos XY, XZ y YZ)}
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/evolucion_sesion/Sesion_cubo_proyecciones_caras_2d.png}
+\caption{Figura: Proyecciones ortogonales sobre cada una de las tres caras del cubo de activación (Planos XY, XZ e YZ) mostrando la trayectoria relativa intermuscular entre series para cada vocal.}
+\end{figure}
+
+\subsection{Cubo 3D de la Totalidad de Pulsos Registrados}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/evolucion_sesion/Sesion_cubo_todos_los_pulsos_3d.png}
+\caption{Figura: Nube de dispersión tridimensional con la totalidad de pulsos individuales registrados en la sesión agrupados por vocal (excluyendo secuencias continuas).}
+\end{figure}
+
+\subsection{Espacio de Fases Dinámico Tridimensional Continuo}
+Representación del atractor dinámico en el espacio tridimensional de estados intermusculares $(\tilde{x}_0(t), \tilde{x}_1(t), \tilde{x}_2(t))$. A diferencia de las representaciones discretas basadas exclusivamente en la amplitud pico, este espacio mapea la trayectoria temporal continua completa de cada pulso de habla desde el reposo fisiológico, pasando por la contracción y coactivación motora, hasta la relajación.
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/evolucion_sesion/Sesion_espacio_fases_proyecciones_caras_2d.png}
+\caption{Figura: Galería del espacio de fases dinámico continuo tridimensional para las cinco vocales registradas. En cada panel vocálico individual se grafican las trayectorias temporales continuas de la totalidad de pulsos (haz de curvas semi-transparentes) junto a su órbita promedio representativa (trazo negro continuo) y su vértice de excursión máxima (estrella dorada). El eje $X$ corresponde al Canal 0, el eje $Y$ al Canal 1 y el eje $Z$ al Canal 2, escalados mediante normalización tricanal fisiológica. El sexto panel presenta la síntesis comparativa de los lazos cerrados naciendo simultáneamente del punto de reposo basal $(0,0,0)$.}
+\end{figure}
+
+\subsection{Proyecciones Ortogonales en las Caras del Cubo (Lazos Continuos)}
+Descomposición ortogonal bidimensional de las órbitas promedio continuas sobre las tres caras ortogonales del cubo unitario. Esta proyección permite aislar de manera analítica la interacción y coordinación biomecánica entre cada par muscular específico.
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/evolucion_sesion/Sesion_espacio_fases_proyecciones_caras_2d.png}
+\caption{Figura: Proyecciones ortogonales bidimensionales de los lazos continuos promedio sobre las tres caras del cubo de estados: Cara Inferior (Plano XY: Canal 0 vs. Canal 1), Cara Lateral (Plano XZ: Canal 0 vs. Canal 2) y Cara Frontal (Plano YZ: Canal 1 vs. Canal 2). Cada lazo cerrado evidencia la histéresis y direccionalidad del ciclo fonatorio completo retornando al reposo $(0,0)$.}
+\end{figure}
+
+\newpage
+\section{Patrones Musculares Promedio}
+Comparación conjunta de los perfiles de activación muscular envolvente promedio normalizados entre las diferentes series registradas en la sesión.
+
+\subsection{Patrón Muscular: Vocal A}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie1_Candela/patron_muscular_grabacion.png}
+    \caption{Serie1: A\_Serie1\_Candela}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie2_Candela/patron_muscular_grabacion.png}
+    \caption{Serie2: A\_Serie2\_Candela}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie3_Candela/patron_muscular_grabacion.png}
+    \caption{Serie3: A\_Serie3\_Candela}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/A_Serie4_Candela/patron_muscular_grabacion.png}
+    \caption{Serie4: A\_Serie4\_Candela}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Comparativa de los patrones musculares promedio suavizados para la vocal A entre series.}
+\end{figure}
+
+\subsection{Patrón Muscular: Vocal E}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie1_Candela/patron_muscular_grabacion.png}
+    \caption{Serie1: E\_Serie1\_Candela}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie2_Candela/patron_muscular_grabacion.png}
+    \caption{Serie2: E\_Serie2\_Candela}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie3_Candela/patron_muscular_grabacion.png}
+    \caption{Serie3: E\_Serie3\_Candela}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/E_Serie4_Candela/patron_muscular_grabacion.png}
+    \caption{Serie4: E\_Serie4\_Candela}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Comparativa de los patrones musculares promedio suavizados para la vocal E entre series.}
+\end{figure}
+
+\subsection{Patrón Muscular: Vocal I}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie1_Candela/patron_muscular_grabacion.png}
+    \caption{Serie1: I\_Serie1\_Candela}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie2_Candela/patron_muscular_grabacion.png}
+    \caption{Serie2: I\_Serie2\_Candela}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie3_Candela/patron_muscular_grabacion.png}
+    \caption{Serie3: I\_Serie3\_Candela}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/I_Serie4_Candela/patron_muscular_grabacion.png}
+    \caption{Serie4: I\_Serie4\_Candela}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Comparativa de los patrones musculares promedio suavizados para la vocal I entre series.}
+\end{figure}
+
+\subsection{Patrón Muscular: Vocal O}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie1_Candela/patron_muscular_grabacion.png}
+    \caption{Serie1: O\_Serie1\_Candela}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie2_Candela/patron_muscular_grabacion.png}
+    \caption{Serie2: O\_Serie2\_Candela}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie3_Candela/patron_muscular_grabacion.png}
+    \caption{Serie3: O\_Serie3\_Candela}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/O_Serie4_Candela/patron_muscular_grabacion.png}
+    \caption{Serie4: O\_Serie4\_Candela}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Comparativa de los patrones musculares promedio suavizados para la vocal O entre series.}
+\end{figure}
+
+\subsection{Patrón Muscular: Vocal U}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie1_Candela/patron_muscular_grabacion.png}
+    \caption{Serie1: U\_Serie1\_Candela}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie2_Candela/patron_muscular_grabacion.png}
+    \caption{Serie2: U\_Serie2\_Candela}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie3_Candela/patron_muscular_grabacion.png}
+    \caption{Serie3: U\_Serie3\_Candela}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-16/U_Serie4_Candela/patron_muscular_grabacion.png}
+    \caption{Serie4: U\_Serie4\_Candela}
+\end{subfigure}
+\vspace{0.3cm}
+\caption{Comparativa de los patrones musculares promedio suavizados para la vocal U entre series.}
+\end{figure}
+
+\newpage
+\section{Análisis de Componentes Principales (PCA)}
+Proyecciones ortogonales y clustering con fronteras de decisión sobre el conjunto integral de las series experimentadas, evaluando la tríada muscular completa y cada par en 2D y 3D.
+
+\subsection{Optimización de Hiperparámetros (Grid Search 2D y 3D)}
+A continuación se presentan las configuraciones óptimas seleccionadas por el algoritmo de búsqueda exhaustiva en grilla:
+\begin{table}[H]
+\centering
+\begin{tabular}{lcc}
+\toprule
+\textbf{Hiperparámetro} & \textbf{Óptimo PCA 2D} & \textbf{Óptimo PCA 3D} \\
+\midrule
+Ventana de Suavizado ($\tau_{\text{suavizado}}$) & 50 ms & 50 ms \\
+Puntos de Remuestreo ($W_{\text{ciclo}}$) & 10 muestras & 10 muestras \\
+Factor de Supresión de Ruido ($\alpha_{\text{ruido}}$) & 0.1 & 0.1 \\
+Factor $Q$ del Filtro Notch & 2.0 (Fijo) & 2.0 (Fijo) \\
+\midrule
+Exactitud Promedio Macro (Por Clase) & \textbf{78.17\%} & \textbf{78.02\%} \\
+Coeficiente Silhouette Global & 0.2270 & 0.2332 \\
+\bottomrule
+\end{tabular}
+\caption{Hiperparámetros óptimos seleccionados mediante búsqueda en grilla integral (Notch $Q=2.0$, Gate $=0.0$, Outliers $=10\%$).}
+\end{table}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{cccccc}
+\toprule
+\textbf{Modelo} & \textbf{Vocal A} & \textbf{Vocal E} & \textbf{Vocal I} & \textbf{Vocal O} & \textbf{Vocal U} \\
+\midrule
+PCA 2D & 81.58\% & 64.1\% & 100.0\% & 60.98\% & 84.21\% \\
+PCA 3D & 86.84\% & 66.67\% & 100.0\% & 36.59\% & 100.0\% \\
+\bottomrule
+\end{tabular}
+\caption{Desglose de exactitud de clasificación no supervisada (GMM con mapeo húngaro) por vocal.}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/distribucion_accuracy_grid_search.png}
+\caption{Figura: Distribución de densidades de la exactitud macro a lo largo de las combinaciones evaluadas en el espacio de hiperparámetros.}
+\end{figure}
+
+\newpage
+\subsection{Tríada Muscular Completa: Anterior Belly (C0), Zygomaticus Major (C1) y Orbicularis Oris (C2)}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/triada/PCA_2D_Analisis_Errores.png}
+    \caption{Proyección PCA 2D (Fronteras de Decisión)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/triada/PCA_3D.png}
+    \caption{Proyección PCA 3D}
+\end{subfigure}
+\caption{Figura: Espacio de características y fronteras de decisión para Tríada Muscular Completa: Anterior Belly (C0), Zygomaticus Major (C1) y Orbicularis Oris (C2).}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/triada/heatmap_confusion_pca_2d.png}
+    \caption{Matriz de Confusión 2D}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/triada/heatmap_confusion_pca_3d.png}
+    \caption{Matriz de Confusión 3D}
+\end{subfigure}
+\caption{Figura: Matrices de confusión y tasas de clasificación para Tríada Muscular Completa: Anterior Belly (C0), Zygomaticus Major (C1) y Orbicularis Oris (C2).}
+\end{figure}
+
+\newpage
+\subsection{Par Muscular: Anterior Belly (Canal 0) y Zygomaticus Major (Canal 1)}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/par_0_1/PCA_2D_Analisis_Errores.png}
+    \caption{Proyección PCA 2D (Fronteras de Decisión)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/par_0_1/PCA_3D.png}
+    \caption{Proyección PCA 3D}
+\end{subfigure}
+\caption{Figura: Espacio de características y fronteras de decisión para Par Muscular: Anterior Belly (Canal 0) y Zygomaticus Major (Canal 1).}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/par_0_1/heatmap_confusion_pca_2d.png}
+    \caption{Matriz de Confusión 2D}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/par_0_1/heatmap_confusion_pca_3d.png}
+    \caption{Matriz de Confusión 3D}
+\end{subfigure}
+\caption{Figura: Matrices de confusión y tasas de clasificación para Par Muscular: Anterior Belly (Canal 0) y Zygomaticus Major (Canal 1).}
+\end{figure}
+
+\newpage
+\subsection{Par Muscular: Zygomaticus Major (Canal 1) y Orbicularis Oris (Canal 2)}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/par_1_2/PCA_2D_Analisis_Errores.png}
+    \caption{Proyección PCA 2D (Fronteras de Decisión)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/par_1_2/PCA_3D.png}
+    \caption{Proyección PCA 3D}
+\end{subfigure}
+\caption{Figura: Espacio de características y fronteras de decisión para Par Muscular: Zygomaticus Major (Canal 1) y Orbicularis Oris (Canal 2).}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/par_1_2/heatmap_confusion_pca_2d.png}
+    \caption{Matriz de Confusión 2D}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/par_1_2/heatmap_confusion_pca_3d.png}
+    \caption{Matriz de Confusión 3D}
+\end{subfigure}
+\caption{Figura: Matrices de confusión y tasas de clasificación para Par Muscular: Zygomaticus Major (Canal 1) y Orbicularis Oris (Canal 2).}
+\end{figure}
+
+\newpage
+\subsection{Par Muscular: Anterior Belly (Canal 0) y Orbicularis Oris (Canal 2)}
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/par_0_2/PCA_2D_Analisis_Errores.png}
+    \caption{Proyección PCA 2D (Fronteras de Decisión)}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/par_0_2/PCA_3D.png}
+    \caption{Proyección PCA 3D}
+\end{subfigure}
+\caption{Figura: Espacio de características y fronteras de decisión para Par Muscular: Anterior Belly (Canal 0) y Orbicularis Oris (Canal 2).}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/par_0_2/heatmap_confusion_pca_2d.png}
+    \caption{Matriz de Confusión 2D}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/par_0_2/heatmap_confusion_pca_3d.png}
+    \caption{Matriz de Confusión 3D}
+\end{subfigure}
+\caption{Figura: Matrices de confusión y tasas de clasificación para Par Muscular: Anterior Belly (Canal 0) y Orbicularis Oris (Canal 2).}
+\end{figure}
+
+%% ====================================================================
+%% Análisis Espectral Promedio (Post-PCA)
+%% ====================================================================
+
+\newpage
+\section{Análisis Espectral Promedio}
+\label{subsec:exp3_espectral}
+A continuación se presentan los espectros promedio consolidados calculados a partir de la totalidad de las 4 series registradas, evaluando la distribución de energía por canal muscular y vocal en el dominio de la frecuencia.
+
+\subsection{Comparativa Global de las 5 Vocales}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.92\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/resultados/analisis_espectral_candela_2026-09-16/resumen_comparativo_global/comparativa_fft_5vocales.png}
+\caption{Espectro de amplitud FFT promedio comparativo de las 5 vocales para los 3 canales musculares registrados.}
+\label{fig:exp3_fft_global}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.92\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/resultados/analisis_espectral_candela_2026-09-16/resumen_comparativo_global/comparativa_psd_5vocales.png}
+\caption{Densidad espectral de potencia (PSD) promedio comparativa de las 5 vocales para los 3 canales musculares.}
+\label{fig:exp3_psd_global}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.92\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/resultados/analisis_espectral_candela_2026-09-16/resumen_comparativo_global/comparativa_espectrogramas_5vocales.png}
+\caption{Espectrogramas promedio comparativos de las 5 vocales para los 3 canales musculares.}
+\label{fig:exp3_spectrograms_global}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.92\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/resultados/analisis_espectral_candela_2026-09-16/resumen_comparativo_global/comparativa_rgb_5vocales.png}
+\caption{Representación RGB de los espectros comparativos de las 5 vocales.}
+\label{fig:exp3_rgb_global}
+\end{figure}
+
+\subsection{Densidad Espectral de Potencia Promedio por Vocal}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/resultados/analisis_espectral_candela_2026-09-16/espectros_potencia_psd/vocal_A/psd_potencia_promedio_vocal_A.png}
+    \caption{Vocal A}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/resultados/analisis_espectral_candela_2026-09-16/espectros_potencia_psd/vocal_E/psd_potencia_promedio_vocal_E.png}
+    \caption{Vocal E}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/resultados/analisis_espectral_candela_2026-09-16/espectros_potencia_psd/vocal_I/psd_potencia_promedio_vocal_I.png}
+    \caption{Vocal I}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/resultados/analisis_espectral_candela_2026-09-16/espectros_potencia_psd/vocal_O/psd_potencia_promedio_vocal_O.png}
+    \caption{Vocal O}
+\end{subfigure}
+\vspace{0.3cm}
+\begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/resultados/analisis_espectral_candela_2026-09-16/espectros_potencia_psd/vocal_U/psd_potencia_promedio_vocal_U.png}
+    \caption{Vocal U}
+\end{subfigure}
+\caption{Densidad espectral de potencia (PSD) promedio desglosada por vocal individual. Cada panel muestra la distribución de energía de los 3 canales musculares (Anterior Belly, Zygomaticus Major y Orbicularis Oris) promediada sobre las 4 series registradas.}
+\label{fig:exp3_psd_por_vocal}
+\end{figure}
+
+%% ====================================================================
+%% Autoencoder Convolucional 1D (Post-PCA)
+%% ====================================================================
+
+\newpage
+\section{Autoencoder Convolucional 1D No Supervisado}
+\label{subsec:exp3_autoencoder}
+
+Con el objetivo de extraer representaciones latentes compactas de la actividad mioeléctrica más allá de las proyecciones lineales de PCA, se entrenó un Autoencoder Convolucional 1D sobre las envolventes RMS de la sesión del 2026-09-15, aprovechando las condiciones de ruido de red excepcionalmente bajo registradas en dicha campaña.
+
+\subsection{Configuración y Parámetros del Entrenamiento}
+\begin{itemize}
+    \item \textbf{Modalidad de entrada:} Envolvente RMS ($\tau_{\text{suavizado}} = 91\,\text{ms}$).
+    \item \textbf{Tensor de entrada:} $3 \times 100$ muestras (3 canales $\times$ 100 puntos temporales remuestreados).
+    \item \textbf{Dimensión del espacio latente:} $d = 3$ ($\mathbf{z} \in \mathbb{R}^3$).
+    \item \textbf{Normalización:} Supremo Tricanal por pulso individual ($M_{\text{supremo, pulso}}$).
+    \item \textbf{Régimen de optimización:} Full-Batch, $\eta = 0.008$, optimizador Adam, 250 épocas.
+    \item \textbf{Supervisión:} 100\% no supervisado (Zero-Labels). Las etiquetas se utilizan exclusivamente en la evaluación diagnóstica post-entrenamiento mediante GMM con asignación húngara.
+    \item \textbf{Ventanas totales:} 213 contracciones ($N_A = 43$, $N_E = 43$, $N_I = 43$, $N_O = 43$, $N_U = 41$).
+    \item \textbf{Metrónomo:} $30\,\text{BPM}$, frecuencia de muestreo $f_s = 2000\,\text{Hz}$.
+    \item \textbf{Purga de artefactos:} Isolation Forest ($10\%$ contaminación) sobre envolvente macroscópica.
+    \item \textbf{Músculos registrados:} Anterior Belly (C0), Zygomaticus Major (C1), Orbicularis Oris (C2).
+\end{itemize}
+
+\subsection{Resultados Cuantitativos}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lc}
+\toprule
+\textbf{Métrica} & \textbf{Valor} \\
+\midrule
+Exactitud GMM Global & \textbf{87.79\%} \\
+Coeficiente de Silueta & $+0.285$ \\
+Índice Davies-Bouldin & $1.42$ \\
+\bottomrule
+\end{tabular}
+\caption{Métricas globales del Autoencoder Convolucional 1D de envolvente en 3D sobre la sesión del 2026-09-15.}
+\label{tab:exp3_autoencoder_metricas_globales}
+\end{table}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{cccccc}
+\toprule
+\textbf{Modelo} & \textbf{Vocal A} & \textbf{Vocal E} & \textbf{Vocal I} & \textbf{Vocal O} & \textbf{Vocal U} \\
+\midrule
+Autoencoder 3D & 88.37\% & 88.37\% & 100.0\% & 83.72\% & 78.05\% \\
+\bottomrule
+\end{tabular}
+\caption{Desglose de exactitud de clasificación no supervisada (GMM con mapeo húngaro) por vocal para el Autoencoder 3D.}
+\label{tab:exp3_autoencoder_por_vocal}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.92\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/resultados/resultados_autoencoder/procesamiento_2026-09-16_13-16-27_envolvente_3d/informe_autoencoder_envolvente_3d.png}
+\caption{Informe consolidado del Autoencoder Convolucional 1D de envolvente en 3D: espacio latente con clusters GMM, reconstrucción por vocal y métricas de agrupamiento.}
+\label{fig:exp3_autoencoder_informe}
+\end{figure}
+
+\subsection{Impacto del Ruido de Línea y Discrepancia PCA frente a Autoencoder}
+Las grabaciones del 2026-09-15 contaron con un ruido de red excepcionalmente bajo. Se constató que el zumbido de $50\,\text{Hz}$ (incluso tras pasar por el filtro Notch) introduce artefactos de fase no lineales que distorsionan el gradiente del autoencoder durante el entrenamiento. En consecuencia, combinaciones de canales que en PCA aparecían separadas rendían mal en el autoencoder cuando la señal contenía ruido de línea residual, mientras que con señal limpia el autoencoder alcanza un $87{,}8\%$ de exactitud GMM aun cuando en PCA dicha separación no resultaba tan evidente ($78{,}2\%$).
+
+\subsection{Resistencia de la Frontera /o/ frente a /u/}
+Si bien ambas vocales alcanzaron métricas récord ($83{,}7\%$ en /o/ y $78{,}0\%$ en /u/), el par /o/-/u/ continúa siendo el más próximo en el espacio latente. Esto obedece al reclutamiento co-dependiente del músculo orbicular de los labios: ambas vocales exigen protrusión y constricción labial, diferenciándose fisiológicamente por el grado de descenso mandibular (activo en /o/, mínimo en /u/). Esta proximidad marca el límite de separabilidad del registro de superficie sobre la zona peribucal con la configuración tricanal actual.
+
+\end{document}

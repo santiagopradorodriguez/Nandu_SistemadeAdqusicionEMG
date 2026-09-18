@@ -298,6 +298,27 @@ def moving_average(buffer: np.ndarray, window_size: int) -> np.ndarray:
         
     return out
 
+def calcular_ruido_linea_50hz(noise_signal_uV: np.ndarray, fs: float) -> float:
+    """
+    Calcula el voltaje RMS en microvoltios (uV) de la componente de 50 Hz de la red eléctrica
+    en un segmento de señal en reposo.
+    """
+    if noise_signal_uV is None or len(noise_signal_uV) < int(fs * 0.2):
+        return 0.0
+    try:
+        N = len(noise_signal_uV)
+        fft_vals = np.fft.rfft(noise_signal_uV)
+        freqs = np.fft.rfftfreq(N, 1.0 / fs)
+        idx_50 = np.where((freqs >= 48.0) & (freqs <= 52.0))[0]
+        if len(idx_50) == 0:
+            return 0.0
+        power_50 = np.sum(np.abs(fft_vals[idx_50]) ** 2) / (N ** 2)
+        rms_50 = float(np.sqrt(2.0 * power_50))
+        return rms_50
+    except Exception as e:
+        print(f"[Error 50Hz] {e}")
+        return 0.0
+
 @jit(nopython=True, nogil=True)
 def apply_iir_filter(data: np.ndarray, b: np.ndarray, a: np.ndarray, zi: np.ndarray) -> tuple:
     """
@@ -800,82 +821,405 @@ def guardar_grabacion_csv(datos_completos, sample_rate, output_dir, num_canales,
     return False
 
 # =============================================================================
-# BLOQUE 3.3: GENERADOR DE GRÁFICO (Sin cambios)
+# BLOQUE 3.3: GENERADOR DE GRÁFICO (SEÑAL CRUDA NORMALIZADA / ESTÉTICA CALIBRADA)
 # =============================================================================
 def generar_grafico_grabacion(datos_completos, sample_rate, output_dir, num_canales, canales_daq, base_name="photo"):
   """
-  Ejecuta la funcionalidad de generar_grafico_grabacion.
-
-  Args:
-    datos_completos (Any): Argumento posicional datos_completos.
-    sample_rate (Any): Argumento posicional sample_rate.
-    output_dir (Any): Argumento posicional output_dir.
-    num_canales (Any): Argumento posicional num_canales.
-    canales_daq (Any): Argumento posicional canales_daq.
-    base_name (Any): Argumento posicional base_name.
-
-  Returns:
-    Any: Resultado de la ejecución de la función.
+  Genera el gráfico de señal cruda normalizada y calibrada al finalizar la grabación,
+  replicando la estética, código de colores y layout de plotter_calibrado.
+  Guarda la imagen resultante exclusivamente como photo.png en output_dir.
   """
-  if not datos_completos:
+  if datos_completos is None or len(datos_completos) == 0:
     return False
 
-  print("Generando gráfico de la grabación completa...")
+  print("Generando gráfico de señal cruda calibrada (estética plotter calibrado)...")
   try:
     from matplotlib.figure import Figure
     from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
   except ImportError:
     print("Error: matplotlib no está instalado.")
     return False
-    
+
   try:
-    grabacion = np.concatenate(datos_completos, axis=1)
+    if isinstance(datos_completos, list):
+      grabacion = np.concatenate(datos_completos, axis=1)
+    else:
+      grabacion = np.array(datos_completos)
   except ValueError:
     return False
-  
-  # Calibrar a microvoltios para el gráfico
-  grabacion = (grabacion / 495.0) * 1000000.0
-  
-  # Crear vector de tiempo
+
   num_muestras = grabacion.shape[1]
-  tiempo = np.arange(num_muestras) / float(sample_rate)
+  if num_muestras == 0:
+    return False
+
+  sample_rate = float(sample_rate) if sample_rate and sample_rate > 0 else 2000.0
+  tiempo = np.arange(num_muestras) / sample_rate
+  t_min = float(tiempo[0])
+  t_max = float(tiempo[-1])
+
+  # 1. Cargar metadatos desde metadata.json si existe
+  bpm = None
+  noise_seconds = 5.0
+  muscles_map = {}
+  muscles_list = []
   
-  # Crear figura (thread-safe, sin pyplot)
-  fig = Figure(figsize=(15, 3 * num_canales))
+  meta_path_ch0 = os.path.join(output_dir, "canal_0", "metadata.json")
+  meta_path_root = os.path.join(output_dir, "metadata.json")
+  meta_file = meta_path_ch0 if os.path.exists(meta_path_ch0) else (meta_path_root if os.path.exists(meta_path_root) else None)
+  
+  if meta_file:
+    try:
+      with open(meta_file, 'r', encoding='utf-8') as f:
+        md = json.load(f)
+        bpm = md.get("bpm")
+        noise_seconds = md.get("noise_seconds", 5.0)
+        muscles_map = md.get("muscles_map", {})
+        muscles_list = md.get("muscles", [])
+    except Exception as e_meta:
+      print(f"  [Aviso] Error leyendo metadatos: {e_meta}")
+
+  # 2. Cargar configuraciones de canales y colores
+  try:
+    from utils.config_manager import ConfigManager, get_unique_channel_colors
+    config_mgr = ConfigManager()
+    canales_config = config_mgr.get("canales") or {}
+  except Exception:
+    get_unique_channel_colors = None
+    canales_config = {}
+
+  ch_info_list = []
+  for i in range(num_canales):
+    nom_limpio = f"Canal {i}"
+    ch_conf = canales_config.get(nom_limpio, {})
+    musculo = ch_conf.get("musculo", nom_limpio)
+    ganancia = ch_conf.get("factor_calibracion", 495.0)
+    color_hex = ch_conf.get("color_hex")
+
+    if muscles_map and f"canal_{i}" in muscles_map:
+      musculo = muscles_map[f"canal_{i}"]
+    elif i < len(muscles_list):
+      musculo = muscles_list[i]
+      
+    ch_meta_path = os.path.join(output_dir, f"canal_{i}", "metadata.json")
+    if os.path.exists(ch_meta_path):
+      try:
+        with open(ch_meta_path, 'r', encoding='utf-8') as f_ch:
+          md_ch = json.load(f_ch)
+          if 'musculo' in md_ch and md_ch['musculo']:
+            musculo = md_ch['musculo']
+          if 'resistencia_ohm' in md_ch:
+            res_ohm = float(md_ch['resistencia_ohm'])
+            ganancia = 1.0 + (49400.0 / res_ohm)
+      except Exception:
+        pass
+
+    daq_name = canales_daq[i] if i < len(canales_daq) else nom_limpio
+    is_mic = (i == 3 or "mic" in musculo.lower() or "audio" in musculo.lower() or "mic" in daq_name.lower())
+    
+    ch_info_list.append({
+      "idx": i,
+      "col_name": nom_limpio,
+      "daq_name": daq_name,
+      "musculo": musculo,
+      "ganancia": ganancia,
+      "color_hex": color_hex,
+      "is_mic": is_mic
+    })
+
+  if get_unique_channel_colors:
+    colores_canales = get_unique_channel_colors(ch_info_list)
+  else:
+    colores_canales = ["#ff4500", "#00a896", "#ffff00", "#ff0000"]
+
+  # 3. Procesar señales 100% crudas calibradas en microvoltios
+  processed_channels = []
+  for i, ch_meta in enumerate(ch_info_list):
+    raw = grabacion[i]
+    ganancia = ch_meta["ganancia"]
+    color_hex = colores_canales[i]
+    is_mic = ch_meta["is_mic"]
+
+    # Conversión física a microvoltios (µV)
+    sig = (raw / ganancia) * 1e6
+
+    # Restar mediana basal para centrar la oscilación cruda perfectamente en 0
+    if not is_mic:
+      if noise_seconds is not None and noise_seconds > 0 and noise_seconds >= t_min:
+        n_idx = np.searchsorted(tiempo, min(noise_seconds, t_max), side='right')
+        base_med = np.median(sig[:n_idx]) if n_idx > 0 else np.median(sig)
+      else:
+        base_med = np.median(sig)
+      sig = sig - base_med
+
+    # Evaluar amplitud máxima post-ruido para escala compartida
+    if noise_seconds is not None and noise_seconds > 0:
+      mask_post = (tiempo >= noise_seconds)
+      y_eval = sig[mask_post] if np.any(mask_post) else sig
+    else:
+      y_eval = sig
+
+    max_abs = float(np.nanmax(np.abs(y_eval))) if len(y_eval) > 0 else 1.0
+    min_val = float(np.nanmin(y_eval)) if len(y_eval) > 0 else 0.0
+    max_val = float(np.nanmax(y_eval)) if len(y_eval) > 0 else 1.0
+
+    processed_channels.append({
+      "idx": i,
+      "musculo": ch_meta["musculo"],
+      "daq_name": ch_meta["daq_name"],
+      "color_hex": color_hex,
+      "sig": sig,
+      "max_abs": max_abs,
+      "min_val": min_val,
+      "max_val": max_val,
+      "is_mic": is_mic
+    })
+
+  # 4. Normalización Tricanal: Escala vertical simétrica compartida entre los canales musculares
+  muscle_channels = [ch for ch in processed_channels if not ch["is_mic"]]
+  shared_muscle_ylim = None
+  if muscle_channels:
+    m_supremo = max(ch["max_abs"] for ch in muscle_channels)
+    if m_supremo > 0:
+      margin = m_supremo * 0.08
+      shared_muscle_ylim = (-m_supremo - margin, m_supremo + margin)
+    else:
+      shared_muscle_ylim = (-50.0, 50.0)
+
+  # 5. Configurar figura Matplotlib thread-safe con tema oscuro puro
+  ancho_fig = 20
+  alto_fig = max(8.0, 3.2 * num_canales)
+  fig = Figure(figsize=(ancho_fig, alto_fig), facecolor='#000000')
   canvas = FigureCanvas(fig)
-  axs = fig.subplots(
-    num_canales, 
-    1, 
-    sharex=True
-  )
-  
-  # Si hay un solo canal, axs no es un array, hay que manejarlo
+  axs = fig.subplots(num_canales, 1, sharex=True)
   if num_canales == 1:
     axs = [axs]
-    
-  fig.suptitle(f"Grabación Completa - {base_name}", fontsize=16)
 
-  # Graficar cada canal
-  for i in range(num_canales):
-    axs[i].plot(tiempo, grabacion[i])
-    axs[i].set_ylabel("Amplitud (µV)")
-    axs[i].set_title(f"Canal {i} ({canales_daq[i]})")
-    axs[i].grid(True)
-    
-  axs[-1].set_xlabel("Tiempo (s)")
-  
-  # Definir nombre de archivo
+  # 6. Graficar canales
+  for i, ch in enumerate(processed_channels):
+    ax = axs[i]
+    ax.set_facecolor('#000000')
+    color_hex = ch["color_hex"]
+    sig = ch["sig"]
+    is_mic = ch["is_mic"]
+    musculo = ch["musculo"]
+
+    ax.plot(tiempo, sig, color=color_hex, lw=0.8)
+
+    # Asignar escala vertical (normalizada compartida para músculos, autoescala para micrófono)
+    if not is_mic and shared_muscle_ylim is not None:
+      ax.set_ylim(shared_muscle_ylim)
+    else:
+      min_v, max_v = ch["min_val"], ch["max_val"]
+      m_diff = max_v - min_v
+      m_margin = m_diff * 0.08 if m_diff > 0 else 1.0
+      ax.set_ylim(min_v - m_margin, max_v + m_margin)
+
+    # Franja y línea indicadora de Ruido Basal
+    if noise_seconds is not None and noise_seconds > 0 and noise_seconds >= t_min:
+      span_color = '#00e5ff'
+      ax.axvspan(max(0.0, t_min), min(noise_seconds, t_max), color=span_color, alpha=0.12)
+      ax.axvline(x=noise_seconds, color=span_color, ls='--', lw=1.5, alpha=0.75)
+      y_bounds = ax.get_ylim()
+      y_text = y_bounds[1] - 0.08 * (y_bounds[1] - y_bounds[0])
+      ax.text(noise_seconds / 2.0, y_text, "Ruido Basal", color=span_color,
+              fontsize=13, ha='center', va='top', fontweight='bold', alpha=0.9)
+
+    # Guías del metrónomo
+    if bpm and noise_seconds is not None and noise_seconds > 0:
+      tau = 60.0 / bpm
+      win_color = '#ffffff'
+      beat_color = '#ffaa00'
+      first_bound = noise_seconds - tau / 2.0
+      if t_min <= first_bound <= t_max:
+        ax.axvline(x=first_bound, color=win_color, ls='--', lw=1.0, alpha=0.4)
+      k = 0
+      while True:
+        t_beat = noise_seconds + k * tau
+        t_bound = t_beat + tau / 2.0
+        if t_min <= t_beat <= t_max:
+          ax.axvline(x=t_beat, color=beat_color, ls=':', lw=0.9, alpha=0.35)
+        if t_bound > t_max:
+          break
+        if t_bound >= t_min:
+          ax.axvline(x=t_bound, color=win_color, ls='--', lw=1.0, alpha=0.4)
+        k += 1
+
+    # Detección y marcado de picos de contracción en señal cruda
+    if not is_mic:
+      picos_t, picos_y = [], []
+      t_limite_ruido = float(noise_seconds) if (noise_seconds is not None and noise_seconds > 0) else 0.0
+      if bpm and noise_seconds is not None and noise_seconds > 0:
+        tau = 60.0 / bpm
+        k_p = 1
+        while True:
+          t_beat_k = noise_seconds + k_p * tau
+          t_w_start = t_beat_k - tau / 2.0
+          t_w_end = t_beat_k + tau / 2.0
+          if t_w_start > t_max:
+            break
+          t_start_val = max(t_min, max(t_limite_ruido, t_w_start))
+          t_end_val = min(t_max, t_w_end)
+          if t_start_val < t_end_val:
+            mask_win = (tiempo >= t_start_val) & (tiempo < t_end_val)
+            if np.any(mask_win):
+              sub_t = tiempo[mask_win]
+              sub_y = sig[mask_win]
+              if len(sub_y) > 0:
+                idx_max = np.argmax(sub_y)
+                p_val = sub_y[idx_max]
+                p_t = sub_t[idx_max]
+                if p_val > 0 and p_t >= t_limite_ruido:
+                  picos_t.append(p_t)
+                  picos_y.append(p_val)
+          k_p += 1
+      else:
+        try:
+          from scipy import signal
+          mask_post = (tiempo >= t_limite_ruido)
+          if np.any(mask_post):
+            y_sub = sig[mask_post]
+            t_sub = tiempo[mask_post]
+            min_dist = max(1, int(sample_rate * 0.3))
+            h_thresh = max(0.0, float(np.mean(y_sub)))
+            p_idx, _ = signal.find_peaks(y_sub, distance=min_dist, height=h_thresh)
+            if len(p_idx) > 0:
+              picos_t = t_sub[p_idx].tolist()
+              picos_y = y_sub[p_idx].tolist()
+        except Exception:
+          pass
+
+      if len(picos_y) > 0:
+        media_picos = float(np.mean(picos_y))
+        std_picos = float(np.std(picos_y))
+        if std_picos > 0:
+          ax.axhspan(max(0.0, media_picos - std_picos), media_picos + std_picos,
+                     color=color_hex, alpha=0.18, zorder=3)
+        ax.axhline(y=media_picos, color=color_hex, ls=':', lw=1.5, alpha=0.85, zorder=4)
+        ax.scatter(picos_t, picos_y, color=color_hex, s=26, alpha=0.85, zorder=5,
+                   edgecolors='white', linewidths=0.6)
+        ax.text(t_max, media_picos, f"  μ = {media_picos:.1f} ± {std_picos:.1f} µV",
+                color=color_hex, fontsize=12, va='center', ha='left',
+                fontweight='bold', alpha=0.95, zorder=6)
+
+    # Títulos y ejes
+    tit = f"{musculo} (Cruda)" if not is_mic else musculo
+    ax.set_title(tit, fontsize=21, color='white', pad=6)
+    ax.set_ylabel("Amplitud (µV)" if not is_mic else "Micrófono", fontsize=21, color='white')
+    ax.grid(False)
+    ax.tick_params(axis='both', which='major', labelsize=16, colors='white')
+    for spine in ax.spines.values():
+      spine.set_color('#333333')
+
+  for ax in axs[:-1]:
+    ax.tick_params(labelbottom=False)
+  axs[-1].set_xlabel("Tiempo (s)", fontsize=21, color='white')
+
   nombre_archivo_grafico = os.path.join(output_dir, f"{base_name}.png")
 
-  # Guardar
   try:
-    fig.tight_layout(rect=[0, 0.03, 1, 0.96]) # Ajuste para el supertítulo
-    fig.savefig(nombre_archivo_grafico, dpi=200) # dpi=200 es un buen balance
-    print(f"  Gráfico guardado como: {nombre_archivo_grafico}")
+    fig.tight_layout(rect=[0, 0.02, 1, 0.96], h_pad=1.2)
+    fig.savefig(nombre_archivo_grafico, dpi=120, facecolor=fig.get_facecolor(), edgecolor='none', bbox_inches='tight')
+    print(f"  Gráfico de señal cruda guardado como: {nombre_archivo_grafico}")
     return True
   except Exception as e:
     print(f"  Error al guardar el gráfico: {e}")
     return False
+  finally:
+    fig.clf()
+
+
+# =============================================================================
+# BLOQUE 3.4: DIÁLOGO DE VISTA PREVIA POST-GRABACIÓN
+# =============================================================================
+class PreviewPlotDialog(QtWidgets.QDialog):
+  """
+  Diálogo para mostrar la vista previa de la grabación recién finalizada (photo.png)
+  durante unos segundos (con cierre automático o manual).
+  """
+  def __init__(self, image_path, parent=None, duration_ms=5000):
+    super().__init__(parent)
+    self.setWindowTitle("Ñandú LSD - Vista Previa de Grabación")
+    self.setStyleSheet("""
+      QDialog {
+        background-color: #050505;
+        color: #ffffff;
+        border: 2px solid #00ffcc;
+      }
+      QLabel {
+        color: #00ffcc;
+        font-family: 'Consolas', 'Courier New', monospace;
+      }
+      QPushButton {
+        background-color: #111111;
+        color: #00ffcc;
+        border: 1px solid #00ffcc;
+        padding: 6px 16px;
+        border-radius: 4px;
+        font-weight: bold;
+      }
+      QPushButton:hover {
+        background-color: #00ffcc;
+        color: #000000;
+      }
+    """)
+    self.setWindowFlags(self.windowFlags() | QtCore.Qt.WindowStaysOnTopHint)
+    self.resize(1100, 720)
+    
+    layout = QtWidgets.QVBoxLayout(self)
+    layout.setContentsMargins(12, 10, 12, 10)
+    layout.setSpacing(8)
+    
+    top_layout = QtWidgets.QHBoxLayout()
+    self.lbl_info = QtWidgets.QLabel("VISTA PREVIA DE SEÑAL CRUDA (NORMALIZADA)")
+    self.lbl_info.setStyleSheet("font-size: 15px; font-weight: bold; color: #00ffcc;")
+    
+    self.segundos_restantes = max(1, int(duration_ms / 1000))
+    self.lbl_timer = QtWidgets.QLabel(f"Cerrando en {self.segundos_restantes}s...")
+    self.lbl_timer.setStyleSheet("font-size: 13px; color: #ffaa00;")
+    
+    btn_cerrar = QtWidgets.QPushButton("Cerrar (Esc)")
+    btn_cerrar.clicked.connect(self.accept)
+    
+    top_layout.addWidget(self.lbl_info)
+    top_layout.addStretch()
+    top_layout.addWidget(self.lbl_timer)
+    top_layout.addSpacing(10)
+    top_layout.addWidget(btn_cerrar)
+    layout.addLayout(top_layout)
+    
+    self.lbl_imagen = QtWidgets.QLabel()
+    self.lbl_imagen.setAlignment(QtCore.Qt.AlignCenter)
+    self.lbl_imagen.setStyleSheet("background-color: #000000; border: 1px solid #222222;")
+    layout.addWidget(self.lbl_imagen, stretch=1)
+    
+    if os.path.exists(image_path):
+      pix = QtGui.QPixmap(image_path)
+      if not pix.isNull():
+        self.lbl_imagen.setPixmap(pix.scaled(1080, 640, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
+      else:
+        self.lbl_imagen.setText("No se pudo cargar la imagen del gráfico.")
+    else:
+      self.lbl_imagen.setText("Archivo de gráfico no encontrado.")
+        
+    self.timer = QtCore.QTimer(self)
+    self.timer.setInterval(1000)
+    self.timer.timeout.connect(self._on_tick)
+    self.timer.start()
+
+  def _on_tick(self):
+    self.segundos_restantes -= 1
+    if self.segundos_restantes <= 0:
+      self.timer.stop()
+      self.accept()
+    else:
+      self.lbl_timer.setText(f"Cerrando en {self.segundos_restantes}s...")
+
+  def keyPressEvent(self, event):
+    if event.key() in (QtCore.Qt.Key_Escape, QtCore.Qt.Key_Return, QtCore.Qt.Key_Space):
+      self.timer.stop()
+      self.accept()
+    else:
+      super().keyPressEvent(event)
 
 
 # =============================================================================
@@ -1015,6 +1359,11 @@ class AutoForgeDialog(QtWidgets.QDialog):
     self.layout.addRow("Repeticiones:", self.spin_reps)
     self.layout.addRow("BPM Metrónomo:", self.spin_bpm)
     
+    self.chk_calibrar_cvm = QtWidgets.QCheckBox("Calibrar Contracción Máxima (A, I, O)")
+    self.chk_calibrar_cvm.setChecked(True)
+    self.chk_calibrar_cvm.setStyleSheet("color: #00ffcc; font-weight: bold;")
+    self.layout.addRow("Calibración CVM:", self.chk_calibrar_cvm)
+    
     self.btn_edit_words = QtWidgets.QPushButton(" Editar Palabras")
     self.btn_edit_words.setStyleSheet("background-color: #333333; color: white; font-weight: bold; font-family: 'Courier New'; font-size: 14px; padding: 5px; border: 2px solid #555555; border-radius: 4px;")
     self.btn_edit_words.clicked.connect(self.abrir_editor_palabras)
@@ -1104,6 +1453,8 @@ class RealTimePlotter(QtWidgets.QWidget):
 
   Representa y gestiona las operaciones relacionadas con RealTimePlotter.
   """
+  mostrar_preview_signal = QtCore.Signal(str)
+
   def __init__(self):
     """
     Ejecuta la funcionalidad de __init__.
@@ -1708,7 +2059,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.empty_recording_layout.addWidget(self.lbl_recording_space, stretch=4)
     
     self._setup_native_metronome()
-    self.empty_recording_layout.addWidget(self.metronome_container, stretch=1) # Añadir fijo al recuadro de arriba
+    self.empty_recording_layout.addWidget(self.right_side_panel, stretch=1) # Añadir fijo al recuadro de arriba
     
     self.empty_recording_widget.setLayout(self.empty_recording_layout)
     self.empty_recording_widget.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
@@ -1789,6 +2140,23 @@ class RealTimePlotter(QtWidgets.QWidget):
       self.colores_curvas = get_unique_channel_colors(canales_info)
     except Exception:
       self.colores_curvas = ["#ffaa00", "#39ff14", "#ffff00", "#ff0000"] + ["#00ffcc"] * 12
+
+    # Conectar señal de vista previa de gráfico
+    self.mostrar_preview_signal.connect(self.mostrar_preview_plot)
+
+  @QtCore.Slot(str)
+  def mostrar_preview_plot(self, ruta_img):
+    """
+    Muestra la ventana emergente de vista previa del gráfico durante unos segundos.
+    """
+    if not ruta_img or not os.path.exists(ruta_img):
+      return
+    try:
+      dialog = PreviewPlotDialog(ruta_img, self, duration_ms=5000)
+      dialog.show()
+      self._preview_dialog = dialog
+    except Exception as e:
+      print(f"Error al mostrar vista previa de gráfico: {e}")
 
   # --- NUEVO: Cambio de modo de conexión en tiempo real ---
   def on_terminal_mode_changed(self):
@@ -2065,6 +2433,12 @@ class RealTimePlotter(QtWidgets.QWidget):
       self.noise_status_labels.clear()
     else:
       self.noise_status_labels = []
+    if hasattr(self, 'line_noise_status_frames'):
+      self.line_noise_status_frames.clear()
+      self.line_noise_status_labels.clear()
+    else:
+      self.line_noise_status_frames = []
+      self.line_noise_status_labels = []
     self.cmb_spectrogram_chan.clear()
     self.cmb_trig_chan.clear()
     
@@ -2093,6 +2467,14 @@ class RealTimePlotter(QtWidgets.QWidget):
           sub_item = item.layout().takeAt(0)
           if sub_item.widget():
             sub_item.widget().deleteLater()
+            
+    # Limpiar layout de ruido del metronomo
+    if hasattr(self, 'metro_noise_layout'):
+      while self.metro_noise_layout.count():
+        item = self.metro_noise_layout.takeAt(0)
+        widget = item.widget()
+        if widget:
+          widget.deleteLater()
     
     title_label = QtWidgets.QLabel("<b>Mediciones (chunk):</b>")
     title_label.setStyleSheet("color: white;")
@@ -2170,6 +2552,24 @@ class RealTimePlotter(QtWidgets.QWidget):
       frame_layout.addWidget(label_ruido)
       self.noise_status_labels.append(label_ruido)
       
+      # --- NUEVO: Recuadro destacado con color para Ruido de Línea 50 Hz ---
+      frame_50hz = QtWidgets.QFrame()
+      frame_50hz.setStyleSheet("background-color: #111111; border: 1.5px solid #555555; border-radius: 3px; padding: 2px;")
+      layout_50hz = QtWidgets.QVBoxLayout(frame_50hz)
+      layout_50hz.setContentsMargins(3, 2, 3, 2)
+      label_50hz = QtWidgets.QLabel(f"50Hz ({musculo}): -- µV")
+      label_50hz.setStyleSheet("color: #AAAAAA; font-size: 11px; font-weight: bold;")
+      label_50hz.setWordWrap(True)
+      layout_50hz.addWidget(label_50hz)
+      
+      if hasattr(self, 'metro_noise_layout'):
+          self.metro_noise_layout.addWidget(frame_50hz)
+      else:
+          frame_layout.addWidget(frame_50hz)
+          
+      self.line_noise_status_frames.append(frame_50hz)
+      self.line_noise_status_labels.append(label_50hz)
+      
       self.measure_layout.addWidget(measurement_frame)
       self.measure_labels.append(label) # Guardar solo el label para actualizar su texto
     self.measure_layout.addStretch(1) # Asegurar que los recuadros se alineen a la izquierda
@@ -2244,19 +2644,21 @@ class RealTimePlotter(QtWidgets.QWidget):
 
   def _reubicar_metronomo_dinamico(self, index):
     """
-    Maneja la doble ubicación del metrónomo dependiendo del estado de la UI
+    Maneja la doble ubicación del metrónomo y panel derecho dependiendo del estado de la UI
     (Reposo vs Grabando).
     """
-    if not hasattr(self, 'metronome_container') or self.metronome_container is None:
+    if not hasattr(self, 'right_side_panel') or self.right_side_panel is None:
       return
     if index == 0:
-      # Estado Reposo/Inicial / Restauración
-      self.config_layout.addWidget(self.metronome_container, 0, 9, 4, 1)
+      self.config_layout.addWidget(self.right_side_panel, 0, 9, 4, 1)
     else:
-      # Estado Autograbado
-      self.empty_recording_layout.addWidget(self.metronome_container, stretch=1)
+      self.empty_recording_layout.addWidget(self.right_side_panel, stretch=1)
 
   def _setup_native_metronome(self):
+    self.right_side_panel = QtWidgets.QWidget()
+    self.right_side_layout = QtWidgets.QVBoxLayout(self.right_side_panel)
+    self.right_side_layout.setContentsMargins(0, 0, 0, 0)
+    
     self.metronome_container = QtWidgets.QGroupBox("Metrónomo")
     self.metronome_container.setStyleSheet("""
       QGroupBox {
@@ -2275,7 +2677,7 @@ class RealTimePlotter(QtWidgets.QWidget):
           font-weight: bold;
       }
     """)
-    self.metronome_container.setFixedSize(144, 144)
+    self.metronome_container.setMinimumWidth(144)
     metro_layout = QtWidgets.QVBoxLayout(self.metronome_container)
     
     self.metro_pulse_frame = QtWidgets.QFrame()
@@ -2293,6 +2695,14 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.metro_lbl_count.setStyleSheet("font-size: 42px; color: #00FFFF; font-weight: bold; font-family: 'Courier New', monospace;")
     metro_layout.addWidget(self.metro_lbl_count)
     metro_layout.addStretch()
+    
+    self.right_side_layout.addWidget(self.metronome_container)
+    
+    self.noise_status_group = QtWidgets.QWidget()
+    self.metro_noise_layout = QtWidgets.QVBoxLayout(self.noise_status_group)
+    self.metro_noise_layout.setContentsMargins(0, 5, 0, 0)
+    self.right_side_layout.addWidget(self.noise_status_group)
+    self.right_side_layout.addStretch()
 
     # --- TREADING PERSISTENTE PARA BEEPS (ELIMINA EL LAG) ---
     import queue
@@ -2321,6 +2731,7 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     self.metronome_container.setVisible(self.chk_use_metronome.isChecked())
     self.chk_use_metronome.toggled.connect(self.metronome_container.setVisible)
+    self.right_side_panel.show()
 
   def start_native_metronome(self, count_in=0, force_start=False):
     if not force_start and not self.chk_use_metronome.isChecked():
@@ -2393,6 +2804,55 @@ class RealTimePlotter(QtWidgets.QWidget):
             self.metro_lbl_count.setText(str(self.metro_beat_count))
             self.metro_pulse_frame.setStyleSheet(f"background-color: {self.COLOR_BEAT}; border: 2px solid #00FFFF;")
             
+            # --- NUEVO: Integración de Calibración CVM con Metrónomo ---
+            if getattr(self, 'is_cvm_active', False):
+                if self.metro_beat_count > 18:
+                    if self.is_cvm_recording_take:
+                        self.estado_cvm_procesar_toma()
+                    self.is_cvm_active = False
+                    self.stop_native_metronome()
+                    self.estado_finalizar_calibracion_cvm()
+                else:
+                    if self.metro_beat_count % 2 != 0:
+                        # IMPAR: Fase de Preparación
+                        if getattr(self, 'is_cvm_recording_take', False):
+                            self.estado_cvm_procesar_toma()
+                        
+                        self.cvm_step_idx = (self.metro_beat_count - 1) // 2
+                        vocal, toma = self.cvm_sequence[self.cvm_step_idx]
+                        instrucciones = {
+                            'A': "Abre la boca y pronuncia /A/ con fuerza",
+                            'I': "Sonríe y pronuncia /I/ con fuerza",
+                            'O': "Redondea los labios con /O/ con fuerza"
+                        }
+                        desc = instrucciones.get(vocal, "")
+                        
+                        self.autoforge_overlay.setText(
+                            f"<div align='center'>"
+                            f"<span style='color:#FFCC00; font-size:32px; font-weight:bold;'>CONTRACCIÓN MUSCULAR MÁXIMA</span><br>"
+                            f"<span style='color:#CCCCCC; font-size:18px;'>Toma {self.cvm_step_idx+1}/9</span><br><br>"
+                            f"<span style='color:#FFFF00; font-size:40px; font-weight:bold;'>¡PREPÁRATE PARA /{vocal}/!</span><br>"
+                            f"<span style='font-size:22px; color:#AAFFAA; font-weight:bold;'>{desc}</span>"
+                            f"</div>"
+                        )
+                        self.lbl_recording_space.setText("<div align='center'><span style='color:#FFFF00; font-size:40px; font-weight:bold;'>PREPARANDO...</span></div>")
+                        self.autoforge_overlay.show()
+                        
+                    else:
+                        # PAR: Fase de Grabación (Toma)
+                        vocal, toma = self.cvm_sequence[self.cvm_step_idx]
+                        self.autoforge_overlay.setText(
+                            f"<div align='center'>"
+                            f"<span style='color:#FF0000; font-size:32px; font-weight:bold;'>¡CONTRAE AHORA!</span><br>"
+                            f"<span style='color:#00FFFF; font-size:90px; font-weight:bold;'>/{vocal}/</span><br>"
+                            f"</div>"
+                        )
+                        self.lbl_recording_space.setText(f"<div align='center'><span style='color:#FF0000; font-size:70px; font-weight:bold;'>¡/{vocal}/!</span></div>")
+                        self.autoforge_overlay.show()
+                        
+                        self.cvm_current_take_chunks = []
+                        self.is_cvm_recording_take = True
+
             # --- NUEVO: Intercalar Letras dinámicamente en Secuencia Continua ---
             if getattr(self, 'is_autoforge_continuo', False) and getattr(self, 'is_recording', False):
                 total_pulsos = len(self.autoforge_words) * self.autoforge_target_reps
@@ -2619,8 +3079,12 @@ class RealTimePlotter(QtWidgets.QWidget):
       # --- EMPEZAR A GRABAR ---
       self.is_recording = True
       
-      # --- NUEVO: Resetear el zoom en Y ---
-      self.plot.setYRange(-0.01, 0.01)
+      # --- Resetear el zoom en Y a rango base calibrado (500 µV) ---
+      if hasattr(self, 'chk_rms_env') and self.chk_rms_env.isChecked():
+        self.plot.setYRange(0.0, 500.0, padding=0)
+      else:
+        self.plot.setYRange(-500.0, 500.0, padding=0)
+      self._held_plot_ymax = 500.0
       
       self.counting_started = False # Reiniciar la bandera de conteo
       self.current_recording.clear()
@@ -2791,6 +3255,9 @@ class RealTimePlotter(QtWidgets.QWidget):
     # 3. Genera el gráfico .png
     try:
       generar_grafico_grabacion(self.current_recording, self.SAMPLE_RATE, output_dir, self.NUM_CANALES, self.CANALES_DAQ)
+      ruta_photo = os.path.join(output_dir, "photo.png")
+      if os.path.exists(ruta_photo):
+        self.mostrar_preview_signal.emit(ruta_photo)
     except Exception as e:
       print(f"--- ERROR FATAL AL GUARDAR .PNG ---\n{e}")
       print("  (¿Estás seguro de que 'matplotlib' está instalado? -> pip install matplotlib)")
@@ -2841,7 +3308,21 @@ class RealTimePlotter(QtWidgets.QWidget):
         self._raw_print_done = True
 
       # Calibración a microvoltios (Ganancia = 495 con R_electrodo = 100 ohm)
-      processed_data = (all_new_data / 495.0) * 1000000.0
+      raw_uV_data = (all_new_data / 495.0) * 1000000.0
+      processed_data = raw_uV_data.copy()
+
+      # --- CVM RECORDING HOOK ---
+      if getattr(self, 'is_cvm_recording_take', False):
+        if not hasattr(self, 'cvm_current_take_chunks'):
+          self.cvm_current_take_chunks = []
+        self.cvm_current_take_chunks.append(all_new_data.copy())
+
+      # --- RUIDO FINAL HOOK ---
+      if getattr(self, 'is_recording_final_noise', False):
+        if not hasattr(self, 'final_raw_noise_accumulated'):
+          self.final_raw_noise_accumulated = [[] for _ in range(self.NUM_CANALES)]
+        for i in range(self.NUM_CANALES):
+          self.final_raw_noise_accumulated[i].append(raw_uV_data[i, :])
 
       # --- NUEVO: Matar el pico transitorio al iniciar/cambiar el filtro ---
       if getattr(self, '_init_filter_state', False):
@@ -2914,8 +3395,12 @@ class RealTimePlotter(QtWidgets.QWidget):
         # CRITICAL FIX: Verificamos si el ruido ya fue calculado para evitar re-entrar aquí
         # cuando AutoForge resetea el elapsed_time a 0 para grabar la señal.
         if not getattr(self, 'noise_calculated', False) and elapsed_time < noise_dur:
+          if not hasattr(self, 'raw_noise_accumulated') or not self.raw_noise_accumulated:
+            self.raw_noise_accumulated = [[] for _ in range(self.NUM_CANALES)]
           for i in range(self.NUM_CANALES):
             self.noise_data_accumulated[i].append(processed_data[i, :])
+            if i < len(self.raw_noise_accumulated):
+              self.raw_noise_accumulated[i].append(raw_uV_data[i, :])
             
           # --- NUEVO: Lógica de Cuenta Regresiva dentro del ruido (Solo si no es AutoForge) ---
           if not getattr(self, 'is_autoforge_running', False):
@@ -3018,26 +3503,46 @@ class RealTimePlotter(QtWidgets.QWidget):
       if self.chk_autoscroll.isChecked():
         self.plot.setXRange(-self.PLOT_DURATION_S, 0, padding=0)
         
-        # --- NUEVO: Peak-Hold Auto Scaling ---
+        # --- Auto-Escala Calibrada (Rango 500 µV - 700 µV con Envolvente RMS) ---
         if self.NUM_CANALES > 0 and self.plot_buffer_datos.size > 0:
           if is_rms:
-            current_max = np.max(self.env_buffer_datos)
-            mult = 1.4 # Dar más espacio arriba (40% de headroom)
+            current_max = float(np.max(self.env_buffer_datos))
           else:
-            current_max = np.max(np.abs(self.plot_buffer_datos))
-            mult = 1.2
-            
-          view_range = self.plot.getViewBox().viewRange()[1]
-          current_y_max = max(abs(view_range[0]), abs(view_range[1]))
+            current_max = float(np.max(np.abs(self.plot_buffer_datos)))
+
+          # Rango base mínimo: 500 uV. Rango máximo permitido: 700 uV.
+          # Si la señal supera 500 uV se expande hasta 700 uV.
+          # Si supera 700 uV, la escala NO cambia más para no confundir a la persona.
+          if current_max <= 500.0:
+            target_max = 500.0
+          elif current_max >= 700.0:
+            target_max = 700.0
+          else:
+            target_max = current_max * 1.15
+            if target_max > 700.0:
+              target_max = 700.0
+
+          # Mantener escala estable con peak-hold suave para evitar rebotes visuales
+          current_held = getattr(self, '_held_plot_ymax', 500.0)
+          if target_max > current_held:
+            current_held = target_max
+          elif target_max < current_held:
+            current_held = max(target_max, current_held * 0.995)
           
-          if current_max * 1.1 > current_y_max or current_y_max < 0.0001:
-            safe_max = max(current_max * mult, 0.001)
-            self.plot.setYRange(-safe_max, safe_max, padding=0)
+          # Clamp estricto entre 500 y 700 uV
+          current_held = max(500.0, min(700.0, current_held))
+          self._held_plot_ymax = current_held
+
+          # Aplicar rango al gráfico
+          view_range = self.plot.getViewBox().viewRange()[1]
+          if is_rms:
+            # Envolvente RMS es no-negativa: de 0 a current_held uV
+            if abs(view_range[1] - current_held) > 1.0 or view_range[0] < -5.0 or view_range[0] > 0.0:
+              self.plot.setYRange(0.0, current_held, padding=0)
           else:
-            # Auto-escala dinámica con decaimiento rápido
-            new_y_max = max(current_max * mult, current_y_max * 0.94)
-            new_y_max = max(new_y_max, 0.001)
-            self.plot.setYRange(-new_y_max, new_y_max, padding=0)
+            # Señal cruda bipolar: de -current_held a +current_held uV
+            if abs(view_range[1] - current_held) > 1.0 or abs(view_range[0] + current_held) > 1.0:
+              self.plot.setYRange(-current_held, current_held, padding=0)
       self.check_for_trigger(processed_data, total_muestras_leidas)
       # --- NUEVO: Pasar env_buffer_datos a las mediciones para que el pico visual se evalúe sobre la envolvente RMS ---
       self.actualizar_mediciones(processed_data, self.env_buffer_datos)
@@ -3525,6 +4030,29 @@ class RealTimePlotter(QtWidgets.QWidget):
           pass
         
         self.autoforge_word_idx = 0
+        # --- NUEVO: Mostrar Instrucciones del Experimento ---
+        msg_box = QtWidgets.QMessageBox(self)
+        msg_box.setWindowTitle("Instrucciones del Experimento")
+        msg_box.setIcon(QtWidgets.QMessageBox.Information)
+        msg_box.setText(
+            "<b>Bienvenido a la Sesión de Grabación (Discreta)</b><br><br>"
+            "1. Relaja el rostro y evita moverte o tragar saliva.<br>"
+            "2. Se medirán primero los niveles basales de ruido inter-pulso.<br>"
+            "3. Se calibrará la Contracción Muscular Máxima (CVM) con vocales extremas (A, I, O) usando el metrónomo.<br>"
+            "4. A continuación, el sistema te guiará palabra por palabra.<br>"
+            "5. Al finalizar se registrará nuevamente el ruido basal."
+        )
+        btn_continuar = msg_box.addButton("Continuar Grabación", QtWidgets.QMessageBox.AcceptRole)
+        btn_entrenar = msg_box.addButton("Abrir Módulo de Entrenamiento", QtWidgets.QMessageBox.ActionRole)
+        msg_box.exec()
+        
+        if msg_box.clickedButton() == btn_entrenar:
+            import subprocess, sys, os
+            mod_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "modulo_de_entrenamiento.py")
+            if os.path.exists(mod_path):
+                subprocess.Popen([sys.executable, mod_path])
+            return # Cancelar este inicio para que el usuario pueda entrenar
+
         self.is_autoforge_running = True
         self.btn_autoforge.setText(" Detener Grabación")
         self.btn_autoforge.setStyleSheet("background-color: #555555; color: white; font-weight: bold; font-family: 'Courier New'; font-size: 14px; padding: 8px; border: 2px solid #ffffff; border-radius: 4px;")
@@ -3622,6 +4150,29 @@ class RealTimePlotter(QtWidgets.QWidget):
           pass
         
         self.autoforge_word_idx = 0
+        # --- NUEVO: Mostrar Instrucciones del Experimento ---
+        msg_box = QtWidgets.QMessageBox(self)
+        msg_box.setWindowTitle("Instrucciones del Experimento")
+        msg_box.setIcon(QtWidgets.QMessageBox.Information)
+        msg_box.setText(
+            "<b>Bienvenido a la Sesión de Grabación (Secuencia Continua)</b><br><br>"
+            "1. Relaja el rostro y evita moverte o tragar saliva.<br>"
+            "2. Se medirán primero los niveles basales de ruido inter-pulso.<br>"
+            "3. Se calibrará la Contracción Muscular Máxima (CVM) con vocales extremas (A, I, O) usando el metrónomo.<br>"
+            "4. A continuación, pronuncia las vocales mostradas en pantalla al ritmo del metrónomo. Mantén la fuerza constante.<br>"
+            "5. Al finalizar se registrará nuevamente el ruido basal."
+        )
+        btn_continuar = msg_box.addButton("Continuar Grabación", QtWidgets.QMessageBox.AcceptRole)
+        btn_entrenar = msg_box.addButton("Abrir Módulo de Entrenamiento", QtWidgets.QMessageBox.ActionRole)
+        msg_box.exec()
+        
+        if msg_box.clickedButton() == btn_entrenar:
+            import subprocess, sys, os
+            mod_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "modulo_de_entrenamiento.py")
+            if os.path.exists(mod_path):
+                subprocess.Popen([sys.executable, mod_path])
+            return # Cancelar este inicio para que el usuario pueda entrenar
+
         self.is_autoforge_running = True
         self.is_autoforge_continuo = True
         self.last_continuo_beat = -1
@@ -3642,7 +4193,9 @@ class RealTimePlotter(QtWidgets.QWidget):
     bpm = self.spin_bpm.value()
     if bpm <= 0: bpm = 60
     total_words = len(self.autoforge_words) * self.autoforge_target_reps
-    tiempo_por_secuencia = self.spin_noise_duration.value() + (3 * (60.0/bpm)) + (total_words * (60.0/bpm)) + 2.0
+    noise_dur = self.spin_noise_duration.value()
+    cvm_time = (22.0 * (60.0/bpm)) if getattr(self, 'autoforge_do_cvm', True) else 0.0
+    tiempo_por_secuencia = 3.0 + noise_dur + cvm_time + (3.0 * (60.0/bpm)) + (total_words * (60.0/bpm)) + noise_dur + 2.0
     self.tiempo_restante_global = int(tiempo_por_secuencia)
     
     self.autoforge_estado_actual_str = "Iniciando Secuencia..."
@@ -3678,6 +4231,281 @@ class RealTimePlotter(QtWidgets.QWidget):
     
     QtCore.QTimer.singleShot(3000, self.estado_grabar_ruido_continuo)
 
+  def _procesar_ruido_inicial_50hz(self):
+    self.line_noise_50hz_uV = [0.0] * self.NUM_CANALES
+    for i in range(self.NUM_CANALES):
+      if hasattr(self, 'raw_noise_accumulated') and i < len(self.raw_noise_accumulated) and self.raw_noise_accumulated[i]:
+        raw_all = np.concatenate(self.raw_noise_accumulated[i])
+        self.line_noise_50hz_uV[i] = calcular_ruido_linea_50hz(raw_all, self.SAMPLE_RATE)
+        
+        val_50 = self.line_noise_50hz_uV[i]
+        if val_50 < 15.0:
+          color_txt = "#00FFCC"
+          color_bg = "#002211"
+          estado_str = "ÓPTIMO"
+        elif val_50 < 40.0:
+          color_txt = "#FFFF00"
+          color_bg = "#222200"
+          estado_str = "MODERADO"
+        else:
+          color_txt = "#FF3300"
+          color_bg = "#330000"
+          estado_str = "ALTO"
+          
+        if hasattr(self, 'line_noise_status_labels') and i < len(self.line_noise_status_labels):
+          self.line_noise_status_labels[i].setText(f"50 Hz: {val_50:.1f} µV ({estado_str})")
+          self.line_noise_status_labels[i].setStyleSheet(f"color: {color_txt}; font-size: 11px; font-weight: bold;")
+        if hasattr(self, 'line_noise_status_frames') and i < len(self.line_noise_status_frames):
+          self.line_noise_status_frames[i].setStyleSheet(f"background-color: {color_bg}; border: 1.5px solid {color_txt}; border-radius: 3px; padding: 2px;")
+
+  # ==============================================================================
+  # --- RUTINA DE CALIBRACIÓN CVM (3 TOMAS /A/, /I/, /O/ MULTIPARAMÉTRICA) ---
+  # ==============================================================================
+  def estado_iniciar_calibracion_cvm(self, target_post_cvm):
+    if not getattr(self, 'is_autoforge_running', False): return
+    self._post_cvm_target_method = target_post_cvm
+    self.is_recording = False
+    self.autoforge_estado_actual_str = "CONTRACCIÓN MUSCULAR MÁXIMA"
+    self.label_rec_time.setText("CONTRACCIÓN MUSCULAR MÁXIMA (3 TOMAS POR VOCAL EXTREMA)...")
+    self.label_rec_time.setStyleSheet("font-weight: bold; color: #FFCC00;")
+    
+    self.cvm_sequence = [
+        ('A', 1), ('A', 2), ('A', 3),
+        ('I', 1), ('I', 2), ('I', 3),
+        ('O', 1), ('O', 2), ('O', 3)
+    ]
+    self.cvm_step_idx = 0
+    self.cvm_recording_chunks = []
+    self.cvm_takes_records = []
+    self.cvm_env_max_per_channel = [0.0] * self.NUM_CANALES
+    self.cvm_env_p95_per_channel = [0.0] * self.NUM_CANALES
+    self.cvm_env_p90_per_channel = [0.0] * self.NUM_CANALES
+    self.cvm_env_rms_per_channel = [0.0] * self.NUM_CANALES
+    self.cvm_energia_per_channel = [0.0] * self.NUM_CANALES
+    self.cvm_auc_per_channel = [0.0] * self.NUM_CANALES
+    
+    self.is_cvm_active = True
+    self.is_cvm_recording_take = False
+
+    self.autoforge_overlay.setText(
+        "<div align='center'>"
+        "<span style='color:#FFCC00; font-size:36px; font-weight:bold;'>CONTRACCIÓN MUSCULAR MÁXIMA</span><br><br>"
+        "<span style='color:#FFFFFF; font-size:24px;'>Iniciando protocolo de calibración al ritmo del metrónomo.</span><br>"
+        "<span style='color:#00FFCC; font-size:20px;'>Sigue las instrucciones en pantalla.</span>"
+        "</div>"
+    )
+    self.autoforge_overlay.show()
+    self.start_native_metronome(count_in=4, force_start=True)
+
+  def estado_cvm_procesar_toma(self):
+    if not getattr(self, 'is_autoforge_running', False): return
+    self.is_cvm_recording_take = False
+    
+    vocal, toma = self.cvm_sequence[self.cvm_step_idx]
+    if hasattr(self, 'cvm_current_take_chunks') and self.cvm_current_take_chunks:
+      take_data = np.concatenate(self.cvm_current_take_chunks, axis=1)
+      self.cvm_recording_chunks.append(take_data)
+      
+      # Convertir a uV
+      take_uV = (take_data / 495.0) * 1000000.0
+      window_size_ms = self.spin_rms_window.value()
+      window_size = int((window_size_ms / 1000.0) * self.SAMPLE_RATE)
+      if window_size < 1: window_size = 1
+      
+      # Calcular envolvente RMS por canal y parámetros robustos (pico, p95, rms, energía, auc)
+      for ch in range(self.NUM_CANALES):
+        env = calculate_rms_envelope(take_uV[ch], window_size)
+        if len(env) > 0:
+          peak_env = float(np.max(env))
+          p95_env = float(np.percentile(env, 95))
+          p90_env = float(np.percentile(env, 90))
+          rms_env = float(np.sqrt(np.mean(env ** 2)))
+          mean_env = float(np.mean(env))
+          energia_env = float(np.sum(env ** 2) / float(self.SAMPLE_RATE))
+          auc_env = float(np.sum(env) / float(self.SAMPLE_RATE))
+        else:
+          peak_env = p95_env = p90_env = rms_env = mean_env = energia_env = auc_env = 0.0
+
+        if peak_env > self.cvm_env_max_per_channel[ch]: self.cvm_env_max_per_channel[ch] = peak_env
+        if p95_env > self.cvm_env_p95_per_channel[ch]: self.cvm_env_p95_per_channel[ch] = p95_env
+        if p90_env > self.cvm_env_p90_per_channel[ch]: self.cvm_env_p90_per_channel[ch] = p90_env
+        if rms_env > self.cvm_env_rms_per_channel[ch]: self.cvm_env_rms_per_channel[ch] = rms_env
+        if energia_env > self.cvm_energia_per_channel[ch]: self.cvm_energia_per_channel[ch] = energia_env
+        if auc_env > self.cvm_auc_per_channel[ch]: self.cvm_auc_per_channel[ch] = auc_env
+
+        self.cvm_takes_records.append({
+          'toma_global': self.cvm_step_idx + 1,
+          'vocal': vocal,
+          'toma_vocal': toma,
+          'canal': f"canal_{ch}",
+          'peak_env_uV': peak_env,
+          'p95_env_uV': p95_env,
+          'p90_env_uV': p90_env,
+          'rms_env_uV': rms_env,
+          'mean_env_uV': mean_env,
+          'energia_uV2_s': energia_env,
+          'auc_uV_s': auc_env
+        })
+
+    # Nota: El metrónomo maneja la progresión (self.cvm_step_idx).
+
+  def estado_finalizar_calibracion_cvm(self):
+    if not getattr(self, 'is_autoforge_running', False): return
+    self.cvm_completed = True
+    
+    n_ch_tri = min(3, self.NUM_CANALES)
+    self.supremo_global_uV = float(max(self.cvm_env_max_per_channel[:n_ch_tri])) if n_ch_tri > 0 else 0.0
+    self.supremo_global_p95_uV = float(max(self.cvm_env_p95_per_channel[:n_ch_tri])) if n_ch_tri > 0 else 0.0
+    self.supremo_global_p90_uV = float(max(self.cvm_env_p90_per_channel[:n_ch_tri])) if n_ch_tri > 0 else 0.0
+    self.supremo_global_rms_uV = float(max(self.cvm_env_rms_per_channel[:n_ch_tri])) if n_ch_tri > 0 else 0.0
+    self.supremo_global_energia = float(max(self.cvm_energia_per_channel[:n_ch_tri])) if n_ch_tri > 0 else 0.0
+    self.supremo_global_auc = float(max(self.cvm_auc_per_channel[:n_ch_tri])) if n_ch_tri > 0 else 0.0
+      
+    c0 = self.cvm_env_max_per_channel[0] if self.NUM_CANALES > 0 else 0.0
+    c1 = self.cvm_env_max_per_channel[1] if self.NUM_CANALES > 1 else 0.0
+    c2 = self.cvm_env_max_per_channel[2] if self.NUM_CANALES > 2 else 0.0
+    
+    print(f"[Calibración CVM] Picos Envolvente: C0={c0:.1f}µV, C1={c1:.1f}µV, C2={c2:.1f}µV | Supremo Pico={self.supremo_global_uV:.1f}µV | Supremo P95={self.supremo_global_p95_uV:.1f}µV")
+    
+    self.autoforge_overlay.setText(
+        f"<div align='center'>"
+        f"<span style='color:#FFCC00; font-size:32px; font-weight:bold;'>¡CONTRACCIÓN MUSCULAR MÁXIMA COMPLETADA!</span><br><br>"
+        f"<span style='font-size:22px; color:#00FFCC;'>Supremo Global (Pico): {self.supremo_global_uV:.1f} µV</span><br>"
+        f"<span style='font-size:18px; color:#AAFFAA;'>Supremo Global (P95 Robusto): {self.supremo_global_p95_uV:.1f} µV</span>"
+        f"</div>"
+    )
+    self.autoforge_overlay.show()
+    
+    self._guardar_calibracion_csv()
+    QtCore.QTimer.singleShot(2500, self._continuar_post_cvm)
+
+  def _guardar_calibracion_csv(self):
+    import threading
+    def save_cvm_async():
+      try:
+        import os, csv
+        from pathlib import Path
+        from datetime import datetime
+        fecha_str = datetime.now().strftime("%Y-%m-%d")
+        prueba_actual = getattr(self, 'autoforge_prueba', 'Prueba1')
+        sujeto_actual = getattr(self, 'autoforge_sujeto', 'Sujeto1')
+        
+        if getattr(self, 'is_autoforge_continuo', False):
+          folder_name = f"SecuenciaContinua_{prueba_actual}_{sujeto_actual}"
+        else:
+          folder_name = f"{prueba_actual}_{sujeto_actual}"
+          
+        if getattr(sys, 'frozen', False):
+          root_dir = os.path.dirname(os.path.abspath(sys.executable))
+          if os.path.basename(root_dir) == "_internal":
+            root_dir = os.path.dirname(root_dir)
+        else:
+          root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        base_dir = Path(root_dir) / "base_de_datos_electrodos" / fecha_str / folder_name
+        os.makedirs(base_dir, exist_ok=True)
+        
+        # 1. Guardar calibracion.csv con desglose multiparamétrico de cada toma y resumen final
+        calibracion_csv_path = os.path.join(base_dir, "calibracion.csv")
+        with open(calibracion_csv_path, 'w', newline='', encoding='utf-8') as f:
+          writer = csv.writer(f)
+          writer.writerow([
+            'toma_global', 'vocal', 'toma_vocal', 'canal',
+            'pico_envolvente_uV', 'percentil_95_uV', 'percentil_90_uV',
+            'rms_envolvente_uV', 'media_envolvente_uV', 'energia_uV2_s', 'auc_uV_s'
+          ])
+          for r in getattr(self, 'cvm_takes_records', []):
+            writer.writerow([
+              r['toma_global'], r['vocal'], r['toma_vocal'], r['canal'],
+              f"{r['peak_env_uV']:.2f}", f"{r['p95_env_uV']:.2f}", f"{r['p90_env_uV']:.2f}",
+              f"{r['rms_env_uV']:.2f}", f"{r['mean_env_uV']:.2f}",
+              f"{r['energia_uV2_s']:.2f}", f"{r['auc_uV_s']:.2f}"
+            ])
+          writer.writerow([])
+          writer.writerow(['RESUMEN_MAXIMOS_POR_CANAL', 'canal', 'max_pico_envolvente_uV', 'max_p95_uV', 'max_p90_uV', 'max_rms_uV', 'max_energia_uV2_s', 'max_auc_uV_s'])
+          for ch in range(self.NUM_CANALES):
+            pico = self.cvm_env_max_per_channel[ch] if ch < len(self.cvm_env_max_per_channel) else 0.0
+            p95 = self.cvm_env_p95_per_channel[ch] if ch < len(self.cvm_env_p95_per_channel) else 0.0
+            p90 = self.cvm_env_p90_per_channel[ch] if ch < len(self.cvm_env_p90_per_channel) else 0.0
+            rms = self.cvm_env_rms_per_channel[ch] if ch < len(self.cvm_env_rms_per_channel) else 0.0
+            ene = self.cvm_energia_per_channel[ch] if ch < len(self.cvm_energia_per_channel) else 0.0
+            auc = self.cvm_auc_per_channel[ch] if ch < len(self.cvm_auc_per_channel) else 0.0
+            writer.writerow(['MAXIMO_CANAL', f"canal_{ch}", f"{pico:.2f}", f"{p95:.2f}", f"{p90:.2f}", f"{rms:.2f}", f"{ene:.2f}", f"{auc:.2f}"])
+          writer.writerow([])
+          writer.writerow(['SUPREMO_GLOBAL_TRICANAL', 'parametro', 'valor_supremo', 'unidad'])
+          writer.writerow(['SUPREMO_GLOBAL', 'pico_envolvente', f"{getattr(self, 'supremo_global_uV', 0.0):.2f}", 'uV'])
+          writer.writerow(['SUPREMO_GLOBAL', 'percentil_95', f"{getattr(self, 'supremo_global_p95_uV', 0.0):.2f}", 'uV'])
+          writer.writerow(['SUPREMO_GLOBAL', 'percentil_90', f"{getattr(self, 'supremo_global_p90_uV', 0.0):.2f}", 'uV'])
+          writer.writerow(['SUPREMO_GLOBAL', 'rms_envolvente', f"{getattr(self, 'supremo_global_rms_uV', 0.0):.2f}", 'uV'])
+          writer.writerow(['SUPREMO_GLOBAL', 'energia', f"{getattr(self, 'supremo_global_energia', 0.0):.2f}", 'uV2*s'])
+          writer.writerow(['SUPREMO_GLOBAL', 'auc', f"{getattr(self, 'supremo_global_auc', 0.0):.2f}", 'uV*s'])
+
+        print(f"[Calibración CVM] Guardado exitoso de {calibracion_csv_path}")
+
+        # 2. Guardar datos raw en WAV y CSV crudo si existen bloques grabados
+        if hasattr(self, 'cvm_recording_chunks') and self.cvm_recording_chunks:
+          full_cvm = np.concatenate(self.cvm_recording_chunks, axis=1)
+          guardar_grabacion_csv([full_cvm], self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "calibracion_raw")
+          guardar_grabacion_wav([full_cvm], self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "calibracion")
+      except Exception as e:
+        print(f"[Error Guardar calibracion.csv] {e}")
+
+    threading.Thread(target=save_cvm_async, daemon=True).start()
+
+  def _continuar_post_cvm(self):
+    if not getattr(self, 'is_autoforge_running', False): return
+    self.autoforge_overlay.hide()
+    target = getattr(self, '_post_cvm_target_method', None)
+    if callable(target):
+      target()
+
+  # ==============================================================================
+  # --- RUTINA DE RUIDO FINAL (5s REPOSO AL CONCLUIR LA SESIÓN) ---
+  # ==============================================================================
+  def estado_grabar_ruido_final(self, target_post_noise):
+    if not getattr(self, 'is_autoforge_running', False): return
+    self._post_final_noise_target_method = target_post_noise
+    self.is_recording = False
+    self.label_rec_time.setText("GRABANDO RUIDO FINAL...")
+    self.lbl_recording_space.setText("<span style='color: yellow;'>GRABANDO RUIDO FINAL...</span>")
+    
+    self.autoforge_overlay.setText("<div align='center'>HAZ SILENCIO<br>GRABANDO RUIDO FINAL (5s)...</div>")
+    self.autoforge_overlay.show()
+    
+    self.final_raw_noise_accumulated = [[] for _ in range(self.NUM_CANALES)]
+    self.is_recording_final_noise = True
+    
+    noise_dur = getattr(self, 'spin_noise_duration', None)
+    dur_sec = noise_dur.value() if noise_dur is not None else 5.0
+    QtCore.QTimer.singleShot(int(dur_sec * 1000), self.estado_finalizar_ruido_final)
+
+  def estado_finalizar_ruido_final(self):
+    if not getattr(self, 'is_autoforge_running', False): return
+    self.is_recording_final_noise = False
+    self.final_noise_completed = True
+    self.autoforge_overlay.hide()
+    
+    self.final_noise_mean = [0.0] * self.NUM_CANALES
+    self.final_noise_std = [0.0] * self.NUM_CANALES
+    self.final_noise_50hz = [0.0] * self.NUM_CANALES
+    
+    for i in range(self.NUM_CANALES):
+      if hasattr(self, 'final_raw_noise_accumulated') and i < len(self.final_raw_noise_accumulated) and self.final_raw_noise_accumulated[i]:
+        all_fn = np.concatenate(self.final_raw_noise_accumulated[i])
+        self.final_noise_50hz[i] = calcular_ruido_linea_50hz(all_fn, self.SAMPLE_RATE)
+        
+        window_size_ms = self.spin_rms_window.value()
+        window_size = int((window_size_ms / 1000.0) * self.SAMPLE_RATE)
+        if window_size < 1: window_size = 1
+        fn_env = calculate_rms_envelope(all_fn, window_size)
+        self.final_noise_mean[i] = float(np.mean(fn_env))
+        self.final_noise_std[i] = float(np.std(fn_env))
+
+    print(f"[Ruido Final] Evaluación completada. 50Hz: {self.final_noise_50hz}")
+    
+    target = getattr(self, '_post_final_noise_target_method', None)
+    if callable(target):
+      target()
+
   def estado_grabar_ruido_continuo(self):
     self.autoforge_overlay.setText("") 
     self.autoforge_overlay.hide()
@@ -3703,7 +4531,12 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.recording_start_time = time.perf_counter() 
     self.is_recording = True
     
-    self.plot.setYRange(-0.01, 0.01)
+    # --- Resetear escala Y a rango base calibrado (500 µV) ---
+    if hasattr(self, 'chk_rms_env') and self.chk_rms_env.isChecked():
+      self.plot.setYRange(0.0, 500.0, padding=0)
+    else:
+      self.plot.setYRange(-500.0, 500.0, padding=0)
+    self._held_plot_ymax = 500.0
     
     noise_dur = self.spin_noise_duration.value()
     QtCore.QTimer.singleShot(int(noise_dur * 1000), self.estado_mostrar_preparate_continuo)
@@ -3749,6 +4582,12 @@ class RealTimePlotter(QtWidgets.QWidget):
         if ruido_maximo_std > 0:
           self.spin_peak_th.setValue(ruido_maximo_std * 5.0)
       self.noise_calculated = True
+      self._procesar_ruido_inicial_50hz()
+    
+    # --- CVM HOOK ---
+    if getattr(self, 'autoforge_do_cvm', True) and not getattr(self, 'cvm_completed', False):
+      self.estado_iniciar_calibracion_cvm(target_post_cvm=self.estado_mostrar_preparate_continuo)
+      return
     
     bpm = self.spin_bpm.value()
     if bpm <= 0: bpm = 60
@@ -3794,14 +4633,10 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.lbl_recording_space.setText(f"<div align='center' style='font-size: 100px; font-weight: bold;'>{self.autoforge_words[0].upper()}</div>")
 
   def estado_guardar_secuencia_continua(self):
-    """
-    Guarda la sesión de grabación de la Secuencia Continua.
-    A diferencia del modo palabra-por-palabra, esto guarda todo en un solo
-    bloque, incluyendo un metadato 'words_sequence' que contiene la lista
-    cíclica de palabras (ej. ['A', 'E', 'I', 'O', 'U']).
-    Esto permite que los scripts de análisis (ej. correlaciondeseñales.py)
-    lean este diccionario y etiqueten dinámicamente cada ventana recortada.
-    """
+    if not getattr(self, 'final_noise_completed', False):
+      self.estado_grabar_ruido_final(target_post_noise=self.estado_guardar_secuencia_continua)
+      return
+
     self.is_recording = False
     
     self.stop_native_metronome()
@@ -3844,6 +4679,28 @@ class RealTimePlotter(QtWidgets.QWidget):
       muscles_list = [self.nombres_musculos[i % len(self.nombres_musculos)] for i in range(self.NUM_CANALES)]
       muscles_map = {f"canal_{i}": self.nombres_musculos[i % len(self.nombres_musculos)] for i in range(self.NUM_CANALES)}
       
+      calib_cvm_dict = {
+          "calibrado": getattr(self, 'cvm_completed', False),
+          "metodo": "envolvente_rms_multiparametrico",
+          "tomas_por_vocal": 3,
+          "canales": {
+              f"canal_{i}": {
+                  "pico_envolvente_uV": self.cvm_env_max_per_channel[i] if hasattr(self, 'cvm_env_max_per_channel') and i < len(self.cvm_env_max_per_channel) else 0.0,
+                  "percentil_95_uV": self.cvm_env_p95_per_channel[i] if hasattr(self, 'cvm_env_p95_per_channel') and i < len(self.cvm_env_p95_per_channel) else 0.0,
+                  "percentil_90_uV": self.cvm_env_p90_per_channel[i] if hasattr(self, 'cvm_env_p90_per_channel') and i < len(self.cvm_env_p90_per_channel) else 0.0,
+                  "rms_envolvente_uV": self.cvm_env_rms_per_channel[i] if hasattr(self, 'cvm_env_rms_per_channel') and i < len(self.cvm_env_rms_per_channel) else 0.0,
+                  "energia_uV2_s": self.cvm_energia_per_channel[i] if hasattr(self, 'cvm_energia_per_channel') and i < len(self.cvm_energia_per_channel) else 0.0,
+                  "auc_uV_s": self.cvm_auc_per_channel[i] if hasattr(self, 'cvm_auc_per_channel') and i < len(self.cvm_auc_per_channel) else 0.0
+              } for i in range(self.NUM_CANALES)
+          },
+          "supremo_global_uV": getattr(self, 'supremo_global_uV', 0.0),
+          "supremo_global_p95_uV": getattr(self, 'supremo_global_p95_uV', 0.0),
+          "supremo_global_p90_uV": getattr(self, 'supremo_global_p90_uV', 0.0),
+          "supremo_global_rms_uV": getattr(self, 'supremo_global_rms_uV', 0.0),
+          "supremo_global_energia_uV2_s": getattr(self, 'supremo_global_energia', 0.0),
+          "supremo_global_auc_uV_s": getattr(self, 'supremo_global_auc', 0.0)
+      }
+
       metadata = {
         "measurement_date": now.isoformat(),
         "timestamp": int(now.timestamp()),
@@ -3859,7 +4716,20 @@ class RealTimePlotter(QtWidgets.QWidget):
         "letra": "SecuenciaContinua",
         "prueba": self.autoforge_prueba,
         "comentario": "Grabado mediante AutoForge Secuencia Continua",
-        "valid_words": full_word_sequence
+        "valid_words": full_word_sequence,
+        "ruido_basal": {
+            "inicial": {
+                "mean_uV": getattr(self, 'initial_noise_mean', [0.0]*self.NUM_CANALES),
+                "std_uV": getattr(self, 'initial_noise_std', [0.0]*self.NUM_CANALES),
+                "line_noise_50hz_uV": getattr(self, 'line_noise_50hz_uV', [0.0]*self.NUM_CANALES)
+            },
+            "final": {
+                "mean_uV": getattr(self, 'final_noise_mean', [0.0]*self.NUM_CANALES),
+                "std_uV": getattr(self, 'final_noise_std', [0.0]*self.NUM_CANALES),
+                "line_noise_50hz_uV": getattr(self, 'final_noise_50hz', [0.0]*self.NUM_CANALES)
+            }
+        },
+        "calibracion_cvm": calib_cvm_dict
       }
       
       for i in range(self.NUM_CANALES):
@@ -3881,7 +4751,11 @@ class RealTimePlotter(QtWidgets.QWidget):
       try: guardar_grabacion_wav(local_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion")
       except: pass
       
-      try: generar_grafico_grabacion(local_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, self.CANALES_DAQ)
+      try:
+        generar_grafico_grabacion(local_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, self.CANALES_DAQ)
+        ruta_photo = os.path.join(str(base_dir), "photo.png")
+        if os.path.exists(ruta_photo):
+          self.mostrar_preview_signal.emit(ruta_photo)
       except: pass
       
       try: generar_grafico_estadisticas(self.stats_time, self.stats_snr, self.stats_noise_mean, self.stats_noise_std, str(base_dir), self.NUM_CANALES, self.CANALES_DAQ)
@@ -3909,16 +4783,13 @@ class RealTimePlotter(QtWidgets.QWidget):
       self.session_timer.stop()
 
   def _iniciar_timer_global(self):
-    """
-    Ejecuta la funcionalidad de _iniciar_timer_global.
-
-    Returns:
-      Any: Resultado de la ejecución de la función.
-    """
     bpm = self.spin_bpm.value()
     if bpm <= 0: bpm = 60
-    tiempo_por_palabra = 3.0 + self.spin_noise_duration.value() + (3 * (60.0/bpm)) + (self.autoforge_target_reps * (60.0/bpm)) + 10.0
-    self.tiempo_restante_global = int(len(self.autoforge_words) * tiempo_por_palabra)
+    noise_dur = self.spin_noise_duration.value()
+    tiempo_por_palabra = 3.0 + noise_dur + (3.0 * (60.0/bpm)) + (self.autoforge_target_reps * (60.0/bpm)) + 10.0
+    cvm_time = (22.0 * (60.0/bpm)) if getattr(self, 'autoforge_do_cvm', True) else 0.0
+    tiempo_total = cvm_time + (len(self.autoforge_words) * tiempo_por_palabra) + noise_dur + 2.0
+    self.tiempo_restante_global = int(tiempo_total)
     
     # Guardar el estado base de la UI
     self.autoforge_estado_actual_str = "Iniciando..."
@@ -3966,6 +4837,10 @@ class RealTimePlotter(QtWidgets.QWidget):
       Any: Resultado de la ejecución de la función.
     """
     if self.autoforge_word_idx >= len(self.autoforge_words):
+      if not getattr(self, 'final_noise_completed', False):
+        self.estado_grabar_ruido_final(target_post_noise=self.estado_iniciar_palabra)
+        return
+
       self.autoforge_overlay.setText("<div align='center'>¡AUTOGRABADO COMPLETADO!</div>")
       self.autoforge_overlay.show()
       QtCore.QTimer.singleShot(2000, self.autoforge_overlay.hide)
@@ -4039,8 +4914,12 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.recording_start_time = time.perf_counter() 
     self.is_recording = True
     
-    # --- NUEVO: Resetear escala Y para cada nueva palabra ---
-    self.plot.setYRange(-0.01, 0.01)
+    # --- Resetear escala Y a rango base calibrado (500 µV) ---
+    if hasattr(self, 'chk_rms_env') and self.chk_rms_env.isChecked():
+      self.plot.setYRange(0.0, 500.0, padding=0)
+    else:
+      self.plot.setYRange(-500.0, 500.0, padding=0)
+    self._held_plot_ymax = 500.0
     
     # Programar la aparición de la ventana "Preparate" y el metrónomo CUANDO TERMINE EL RUIDO
     noise_dur = self.spin_noise_duration.value()
@@ -4098,6 +4977,12 @@ class RealTimePlotter(QtWidgets.QWidget):
           self.spin_peak_th.setValue(ruido_maximo_std * 5.0)
           
       self.noise_calculated = True
+      self._procesar_ruido_inicial_50hz()
+    
+    # --- CVM HOOK ---
+    if getattr(self, 'autoforge_do_cvm', True) and not getattr(self, 'cvm_completed', False):
+      self.estado_iniciar_calibracion_cvm(target_post_cvm=self.estado_mostrar_preparate)
+      return
     
     # 2. Iniciamos el Count-In acústico (3 compases) antes de saltar a la palabra.
     bpm = self.spin_bpm.value()
@@ -4243,6 +5128,28 @@ class RealTimePlotter(QtWidgets.QWidget):
       now = datetime.now()
       muscles_list = [self.nombres_musculos[i % len(self.nombres_musculos)] for i in range(self.NUM_CANALES)]
       muscles_map = {f"canal_{i}": self.nombres_musculos[i % len(self.nombres_musculos)] for i in range(self.NUM_CANALES)}
+      calib_cvm_dict = {
+          "calibrado": getattr(self, 'cvm_completed', False),
+          "metodo": "envolvente_rms_multiparametrico",
+          "tomas_por_vocal": 3,
+          "canales": {
+              f"canal_{i}": {
+                  "pico_envolvente_uV": self.cvm_env_max_per_channel[i] if hasattr(self, 'cvm_env_max_per_channel') and i < len(self.cvm_env_max_per_channel) else 0.0,
+                  "percentil_95_uV": self.cvm_env_p95_per_channel[i] if hasattr(self, 'cvm_env_p95_per_channel') and i < len(self.cvm_env_p95_per_channel) else 0.0,
+                  "percentil_90_uV": self.cvm_env_p90_per_channel[i] if hasattr(self, 'cvm_env_p90_per_channel') and i < len(self.cvm_env_p90_per_channel) else 0.0,
+                  "rms_envolvente_uV": self.cvm_env_rms_per_channel[i] if hasattr(self, 'cvm_env_rms_per_channel') and i < len(self.cvm_env_rms_per_channel) else 0.0,
+                  "energia_uV2_s": self.cvm_energia_per_channel[i] if hasattr(self, 'cvm_energia_per_channel') and i < len(self.cvm_energia_per_channel) else 0.0,
+                  "auc_uV_s": self.cvm_auc_per_channel[i] if hasattr(self, 'cvm_auc_per_channel') and i < len(self.cvm_auc_per_channel) else 0.0
+              } for i in range(self.NUM_CANALES)
+          },
+          "supremo_global_uV": getattr(self, 'supremo_global_uV', 0.0),
+          "supremo_global_p95_uV": getattr(self, 'supremo_global_p95_uV', 0.0),
+          "supremo_global_p90_uV": getattr(self, 'supremo_global_p90_uV', 0.0),
+          "supremo_global_rms_uV": getattr(self, 'supremo_global_rms_uV', 0.0),
+          "supremo_global_energia_uV2_s": getattr(self, 'supremo_global_energia', 0.0),
+          "supremo_global_auc_uV_s": getattr(self, 'supremo_global_auc', 0.0)
+      }
+
       metadata = {
         "measurement_date": now.isoformat(),
         "timestamp": int(now.timestamp()),
@@ -4257,7 +5164,20 @@ class RealTimePlotter(QtWidgets.QWidget):
         "sujeto": self.autoforge_sujeto,
         "letra": palabra,
         "prueba": prueba_actual,
-        "comentario": "Grabado mediante AutoForge"
+        "comentario": "Grabado mediante AutoForge",
+        "ruido_basal": {
+            "inicial": {
+                "mean_uV": getattr(self, 'initial_noise_mean', [0.0]*self.NUM_CANALES),
+                "std_uV": getattr(self, 'initial_noise_std', [0.0]*self.NUM_CANALES),
+                "line_noise_50hz_uV": getattr(self, 'line_noise_50hz_uV', [0.0]*self.NUM_CANALES)
+            },
+            "final": {
+                "mean_uV": getattr(self, 'final_noise_mean', [0.0]*self.NUM_CANALES),
+                "std_uV": getattr(self, 'final_noise_std', [0.0]*self.NUM_CANALES),
+                "line_noise_50hz_uV": getattr(self, 'final_noise_50hz', [0.0]*self.NUM_CANALES)
+            }
+        },
+        "calibracion_cvm": calib_cvm_dict
       }
       
       # 2. Crear carpetas de canales y guardar metadata.json en cada una
@@ -4282,7 +5202,11 @@ class RealTimePlotter(QtWidgets.QWidget):
       except: pass
       
       # 4. Generar Gráficos
-      try: generar_grafico_grabacion(self.current_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, self.CANALES_DAQ)
+      try:
+        generar_grafico_grabacion(self.current_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, self.CANALES_DAQ)
+        ruta_photo = os.path.join(str(base_dir), "photo.png")
+        if os.path.exists(ruta_photo):
+          self.mostrar_preview_signal.emit(ruta_photo)
       except: pass
       
       self.current_recording = [] 

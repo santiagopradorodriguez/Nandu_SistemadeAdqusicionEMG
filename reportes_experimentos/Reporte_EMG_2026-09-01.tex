@@ -15,7 +15,7 @@
 \addto\captionsspanish{\renewcommand{\figurename}{Figura}}
 \geometry{top=2cm, bottom=2cm, left=2.2cm, right=2.2cm}
 
-\title{\textbf{Cuaderno de Laboratorio: Mediciones del 2026-09-01}}
+\title{\textbf{Reporte de Experimento}}
 \author{Laboratorio de Sistemas Dinámicos (LSD) - Sistema Ñandú}
 \date{2026-09-01}
 
@@ -26,14 +26,14 @@
 \begin{itemize}
     \item \textbf{Fecha de las Mediciones:} 2026-09-01
     \item \textbf{Sujeto Experimental:} Candela
-    \item \textbf{Hora de Inicio:} 16:12:27
-    \item \textbf{Hora de Finalización:} 16:48:41
-    \item \textbf{Duración Total de la Sesión:} 36.2 min
-    \item \textbf{Baterías y Alimentación:} 8.34 V y 7.70 V
-    \item \textbf{Electrodo de Referencia (Tierra):} apófisis mastoides
+    \item \textbf{Hora de Inicio:} 15:52:35
+    \item \textbf{Hora de Finalización:} 16:15:24
+    \item \textbf{Duración Total de la Sesión:} 22.8 min
+    \item \textbf{Baterías y Alimentación:} No se midió
+    \item \textbf{Electrodo de Referencia (Tierra):} Mastoide
     \item \textbf{Frecuencia de Muestreo:} 2000 Hz
-    \item \textbf{Total de Registros Realizados:} 22
-    \item \textbf{Series / Pruebas Identificadas:} 5
+    \item \textbf{Total de Registros Realizados:} 20
+    \item \textbf{Series / Pruebas Identificadas:} 4
 \end{itemize}
 
 \subsection{Ubicación de los Músculos y Asignación de Canales}
@@ -45,42 +45,32 @@ En la presente sesión se midió simultáneamente en los siguientes canales y ub
 \textbf{Canal} & \textbf{Músculo Registrado} & \textbf{Ubicación / Rol Anatómico} \\
 \midrule
 Canal 0 & \textbf{Anterior Belly} & Electrodo bipolar de superficie \\
-Canal 1 & \textbf{Orbicularis Oris} & Electrodo bipolar de superficie \\
-Canal 2 & \textbf{zona media entre el músculo risorio, el cigomático y el masetero.} & Electrodo bipolar de superficie \\
+Canal 1 & \textbf{Risorio} & Electrodo bipolar de superficie \\
+Canal 2 & \textbf{Orbicularis Oris} & Electrodo bipolar de superficie \\
 Canal 3 & \textbf{Micrófono} & Canal acústico / Sincronización temporal con micrófono \\
 \bottomrule
 \end{tabularx}
 \caption{Distribución anatómica y configuración de canales musculares en el montaje experimental.}
 \end{table}
 
-\subsection{Armado y Fijación de Electrodos}
-Electrodos: Preparamos 25 electrodos chicos, cortados a una medida de 5 x 5 mm (con una tolerancia de ± 0.02 mm).
-Intento inicial: Intentamos utilizar gel líquido sobre el gel propio del electrodo, pero tuvimos problemas de adherencia (no se pegaba).
-Solución aplicada: Cambiamos la configuración y colocamos un parche de gel cuadrado directamente por encima del gel del electrodo, lo cual funcionó mejor.
-
 \subsection{Registro Fotográfico del Montaje}
 \begin{figure}[H]
 \centering
-\begin{subfigure}{0.45\textwidth}
-    \includegraphics[width=\textwidth]{/home/santiago/Descargas/WhatsApp Image 2026-09-01 at 17.22.31.jpeg}
-    \caption{Montaje 1}
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/fotos/anatomia_digastrico_lateral.png}
+    \caption{Anterior Belly}
 \end{subfigure}
 \hfill
-\begin{subfigure}{0.45\textwidth}
-    \includegraphics[width=\textwidth]{/home/santiago/Descargas/WhatsApp Image 2026-09-01 at 17.22.31 (1).jpeg}
-    \caption{Montaje 2}
-\end{subfigure}
-\vspace{0.3cm}
-\begin{subfigure}{0.45\textwidth}
-    \includegraphics[width=\textwidth]{/home/santiago/Descargas/WhatsApp Image 2026-09-01 at 17.22.31 (2).jpeg}
-    \caption{Montaje 3}
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/fotos/anatomia_risorio_kenhub.jpg}
+    \caption{Risorio}
 \end{subfigure}
 \hfill
-\begin{subfigure}{0.45\textwidth}
-    \includegraphics[width=\textwidth]{/home/santiago/Descargas/WhatsApp Image 2026-09-01 at 17.22.31 (3).jpeg}
-    \caption{Montaje 4}
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/fotos/anatomia_orbicular_labios_kenhub.jpg}
+    \caption{Orbicularis Oris}
 \end{subfigure}
-\caption{Figura: Ubicación y fijación mecánica de los electrodos en la sesión experimental.}
+\caption{Referencia anatómica de los músculos registrados en la sesión.}
 \end{figure}
 
 \newpage
@@ -141,6 +131,12 @@ Análisis detallado de las mediciones registradas en el bloque \textbf{Prueba1}.
 \centering
 \includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba1_Candela/plot_calibrado_2026-09-01_A_Prueba1_Candela.png}
 \caption{Figura: Señales calibradas de la vocal A. Se aplicó filtro Notch en 50 Hz ($Q=2.0$), filtro pasabanda Butterworth (20--500 Hz) y envolvente RMS.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/A_Prueba1_Candela/plot_paper_combined.png}
+\caption{Registro combinado de la vocal A. Señal con ruido restado entre pulsos, alineada y normalizada.}
 \end{figure}
 
 \subsection{Prueba2: Secuencia de Vocales}
@@ -235,6 +231,12 @@ Análisis detallado de las mediciones registradas en el bloque \textbf{Prueba3}.
 \centering
 \includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba3_Candela/plot_calibrado_2026-09-01_E_Prueba3_Candela.png}
 \caption{Figura: Señales calibradas de la vocal E. Se aplicó filtro Notch en 50 Hz ($Q=2.0$), filtro pasabanda Butterworth (20--500 Hz) y envolvente RMS.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-01/E_Prueba3_Candela/plot_paper_combined.png}
+\caption{Registro combinado de la vocal E. Señal con ruido restado entre pulsos, alineada y normalizada.}
 \end{figure}
 
 \subsubsection{Vocal A: A\_Prueba3\_Candela (16:31:51)}
@@ -344,13 +346,13 @@ Evaluación de la estabilidad temporal de las amplitudes pico y la consistencia 
 \centering
 \begin{tabularx}{\textwidth}{l c c X}
 \toprule
-\textbf{Vocal} & \textbf{Canal 0: Anterior Belly} & \textbf{Canal 1: Orbicularis Oris} & \textbf{Canal 2: zona media entre el músculo risorio, el cigomático y el masetero.} \\
+\textbf{Vocal} & \textbf{Canal 0: Anterior Belly} & \textbf{Canal 1: Risorio} & \textbf{Canal 2: Orbicularis Oris} \\
 \midrule
-Vocal A & $23.0 \pm 6.7\,\mu\text{V}$ & $8.6 \pm 4.3\,\mu\text{V}$ & $12.3 \pm 6.6\,\mu\text{V}$ \\
-Vocal E & $13.7 \pm 4.6\,\mu\text{V}$ & $22.5 \pm 12.9\,\mu\text{V}$ & $17.1 \pm 8.0\,\mu\text{V}$ \\
-Vocal I & $10.0 \pm 3.0\,\mu\text{V}$ & $54.1 \pm 25.5\,\mu\text{V}$ & $40.9 \pm 20.3\,\mu\text{V}$ \\
-Vocal O & $10.9 \pm 13.0\,\mu\text{V}$ & $66.1 \pm 19.0\,\mu\text{V}$ & $22.2 \pm 9.4\,\mu\text{V}$ \\
-Vocal U & $5.6 \pm 2.0\,\mu\text{V}$ & $71.8 \pm 16.5\,\mu\text{V}$ & $18.1 \pm 5.6\,\mu\text{V}$ \\
+Vocal A & $21.9 \pm 6.3\,\mu\text{V}$ & $8.0 \pm 3.9\,\mu\text{V}$ & $5.5 \pm 2.8\,\mu\text{V}$ \\
+Vocal E & $13.3 \pm 4.4\,\mu\text{V}$ & $12.2 \pm 6.1\,\mu\text{V}$ & $14.2 \pm 7.7\,\mu\text{V}$ \\
+Vocal I & $9.8 \pm 3.0\,\mu\text{V}$ & $30.9 \pm 13.7\,\mu\text{V}$ & $34.1 \pm 14.7\,\mu\text{V}$ \\
+Vocal O & $10.7 \pm 13.2\,\mu\text{V}$ & $15.7 \pm 7.0\,\mu\text{V}$ & $49.9 \pm 14.8\,\mu\text{V}$ \\
+Vocal U & $5.4 \pm 2.1\,\mu\text{V}$ & $13.0 \pm 4.2\,\mu\text{V}$ & $55.5 \pm 13.2\,\mu\text{V}$ \\
 \bottomrule
 \end{tabularx}
 \caption{Amplitudes pico máximas promedio ($\mu \pm \sigma$) registradas para cada vocal y canal muscular.}
@@ -359,28 +361,28 @@ Vocal U & $5.6 \pm 2.0\,\mu\text{V}$ & $71.8 \pm 16.5\,\mu\text{V}$ & $18.1 \pm 
 \subsection{Línea de Tiempo de Amplitud}
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/evolucion_sesion/Sesion_AMP_Timeline.png}
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/evolucion_sesion_2026-09-01/Sesion_AMP_Timeline.png}
 \caption{Figura: Evolución temporal de la amplitud pico muscular (en $\mu\text{V}$) a lo largo de la sesión con franja de dispersión promedio ($\mu \pm \sigma$).}
 \end{figure}
 
 \subsection{Cubo 3D de Proporciones de Activación Muscular}
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.85\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/evolucion_sesion/Sesion_cubo_activacion_proporciones_3d.png}
+\includegraphics[width=0.85\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/evolucion_sesion_2026-09-01/Sesion_cubo_activacion_proporciones_3d.png}
 \caption{Figura: Proyección vectorial tridimensional de activación relativa intermuscular (Cubo 3D) para las 5 vocales comparadas a lo largo de las series de la sesión. Las líneas discontinuas conectan la misma vocal entre pruebas para visualizar la repetibilidad y estabilidad biomecánica.}
 \end{figure}
 
 \subsection{Proyecciones Bidimensionales en las Caras del Cubo (Planos XY, XZ y YZ)}
 \begin{figure}[H]
 \centering
-\includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/evolucion_sesion/Sesion_cubo_proyecciones_caras_2d.png}
+\includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/evolucion_sesion_2026-09-01/Sesion_cubo_proyecciones_caras_2d.png}
 \caption{Figura: Proyecciones ortogonales sobre cada una de las tres caras del cubo de activación (Planos XY, XZ e YZ) mostrando la trayectoria relativa intermuscular entre series para cada vocal.}
 \end{figure}
 
 \subsection{Cubo 3D de la Totalidad de Pulsos Registrados}
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.85\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/evolucion_sesion/Sesion_cubo_todos_los_pulsos_3d.png}
+\includegraphics[width=0.85\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/evolucion_sesion_2026-09-01/Sesion_cubo_todos_los_pulsos_3d.png}
 \caption{Figura: Nube de dispersión tridimensional con la totalidad de pulsos individuales registrados en la sesión agrupados por vocal (excluyendo secuencias continuas).}
 \end{figure}
 
@@ -388,7 +390,7 @@ Vocal U & $5.6 \pm 2.0\,\mu\text{V}$ & $71.8 \pm 16.5\,\mu\text{V}$ & $18.1 \pm 
 Representación del atractor dinámico en el espacio tridimensional de estados intermusculares $(\tilde{x}_0(t), \tilde{x}_1(t), \tilde{x}_2(t))$. A diferencia de las representaciones discretas basadas exclusivamente en la amplitud pico, este espacio mapea la trayectoria temporal continua completa de cada pulso de habla desde el reposo fisiológico, pasando por la contracción y coactivación motora, hasta la relajación.
 \begin{figure}[H]
 \centering
-\includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/evolucion_sesion/Sesion_espacio_fases_proyecciones_caras_2d.png}
+\includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/evolucion_sesion_2026-09-01/Sesion_espacio_fases_dinamico_3d.png}
 \caption{Figura: Galería del espacio de fases dinámico continuo tridimensional para las cinco vocales registradas. En cada panel vocálico individual se grafican las trayectorias temporales continuas de la totalidad de pulsos (haz de curvas semi-transparentes) junto a su órbita promedio representativa (trazo negro continuo) y su vértice de excursión máxima (estrella dorada). El eje $X$ corresponde al Canal 0, el eje $Y$ al Canal 1 y el eje $Z$ al Canal 2, escalados mediante normalización tricanal fisiológica. El sexto panel presenta la síntesis comparativa de los lazos cerrados naciendo simultáneamente del punto de reposo basal $(0,0,0)$.}
 \end{figure}
 
@@ -396,7 +398,7 @@ Representación del atractor dinámico en el espacio tridimensional de estados i
 Descomposición ortogonal bidimensional de las órbitas promedio continuas sobre las tres caras ortogonales del cubo unitario. Esta proyección permite aislar de manera analítica la interacción y coordinación biomecánica entre cada par muscular específico.
 \begin{figure}[H]
 \centering
-\includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/evolucion_sesion/Sesion_espacio_fases_proyecciones_caras_2d.png}
+\includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/evolucion_sesion_2026-09-01/Sesion_espacio_fases_proyecciones_caras_2d.png}
 \caption{Figura: Proyecciones ortogonales bidimensionales de los lazos continuos promedio sobre las tres caras del cubo de estados: Cara Inferior (Plano XY: Canal 0 vs. Canal 1), Cara Lateral (Plano XZ: Canal 0 vs. Canal 2) y Cara Frontal (Plano YZ: Canal 1 vs. Canal 2). Cada lazo cerrado evidencia la histéresis y direccionalidad del ciclo fonatorio completo retornando al reposo $(0,0)$.}
 \end{figure}
 
@@ -566,13 +568,13 @@ A continuación se presentan las configuraciones óptimas seleccionadas por el a
 \toprule
 \textbf{Hiperparámetro} & \textbf{Óptimo PCA 2D} & \textbf{Óptimo PCA 3D} \\
 \midrule
-Ventana de Suavizado ($\tau_{\text{suavizado}}$) & 250 ms & 180 ms \\
-Puntos de Remuestreo ($W_{\text{ciclo}}$) & 60 muestras & 100 muestras \\
-Factor de Supresión de Ruido ($\alpha_{\text{ruido}}$) & 0.9 & 0.1 \\
+Ventana de Suavizado ($\tau_{\text{suavizado}}$) & 220 ms & 80 ms \\
+Puntos de Remuestreo ($W_{\text{ciclo}}$) & 100 muestras & 20 muestras \\
+Factor de Supresión de Ruido ($\alpha_{\text{ruido}}$) & 0.7 & 1.0 \\
 Factor $Q$ del Filtro Notch & 2.0 (Fijo) & 2.0 (Fijo) \\
 \midrule
-Exactitud Promedio Macro (Por Clase) & \textbf{75.83\%} & \textbf{81.88\%} \\
-Coeficiente Silhouette Global & 0.2594 & 0.1900 \\
+Exactitud Promedio Macro (Por Clase) & \textbf{75.77\%} & \textbf{81.13\%} \\
+Coeficiente Silhouette Global & 0.3137 & 0.3001 \\
 \bottomrule
 \end{tabular}
 \caption{Hiperparámetros óptimos seleccionados mediante búsqueda en grilla integral (Notch $Q=2.0$, Gate $=0.0$, Outliers $=10\%$).}
@@ -584,8 +586,8 @@ Coeficiente Silhouette Global & 0.2594 & 0.1900 \\
 \toprule
 \textbf{Modelo} & \textbf{Vocal A} & \textbf{Vocal E} & \textbf{Vocal I} & \textbf{Vocal O} & \textbf{Vocal U} \\
 \midrule
-PCA 2D & 89.47\% & 79.59\% & 94.87\% & 15.22\% & 100.0\% \\
-PCA 3D & 85.0\% & 100.0\% & 89.74\% & 93.62\% & 41.03\% \\
+PCA 2D & 90.48\% & 76.47\% & 100.0\% & 11.9\% & 100.0\% \\
+PCA 3D & 92.86\% & 80.39\% & 100.0\% & 34.88\% & 97.5\% \\
 \bottomrule
 \end{tabular}
 \caption{Desglose de exactitud de clasificación no supervisada (GMM con mapeo húngaro) por vocal.}
@@ -598,7 +600,7 @@ PCA 3D & 85.0\% & 100.0\% & 89.74\% & 93.62\% & 41.03\% \\
 \end{figure}
 
 \newpage
-\subsection{Tríada Muscular Completa: Anterior Belly (C0), Orbicularis Oris (C1) y zona media entre el músculo risorio, el cigomático y el masetero. (C2)}
+\subsection{Tríada Muscular Completa: Anterior Belly (C0), Risorio (C1) y Orbicularis Oris (C2)}
 \begin{figure}[H]
 \centering
 \begin{subfigure}{0.48\textwidth}
@@ -610,7 +612,7 @@ PCA 3D & 85.0\% & 100.0\% & 89.74\% & 93.62\% & 41.03\% \\
     \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/triada/PCA_3D.png}
     \caption{Proyección PCA 3D}
 \end{subfigure}
-\caption{Figura: Espacio de características y fronteras de decisión para Tríada Muscular Completa: Anterior Belly (C0), Orbicularis Oris (C1) y zona media entre el músculo risorio, el cigomático y el masetero. (C2).}
+\caption{Figura: Espacio de características y fronteras de decisión para Tríada Muscular Completa: Anterior Belly (C0), Risorio (C1) y Orbicularis Oris (C2).}
 \end{figure}
 
 \begin{figure}[H]
@@ -624,11 +626,11 @@ PCA 3D & 85.0\% & 100.0\% & 89.74\% & 93.62\% & 41.03\% \\
     \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/triada/heatmap_confusion_pca_3d.png}
     \caption{Matriz de Confusión 3D}
 \end{subfigure}
-\caption{Figura: Matrices de confusión y tasas de clasificación para Tríada Muscular Completa: Anterior Belly (C0), Orbicularis Oris (C1) y zona media entre el músculo risorio, el cigomático y el masetero. (C2).}
+\caption{Figura: Matrices de confusión y tasas de clasificación para Tríada Muscular Completa: Anterior Belly (C0), Risorio (C1) y Orbicularis Oris (C2).}
 \end{figure}
 
 \newpage
-\subsection{Par Muscular: Anterior Belly (Canal 0) y Orbicularis Oris (Canal 1)}
+\subsection{Par Muscular: Anterior Belly (Canal 0) y Risorio (Canal 1)}
 \begin{figure}[H]
 \centering
 \begin{subfigure}{0.48\textwidth}
@@ -640,7 +642,7 @@ PCA 3D & 85.0\% & 100.0\% & 89.74\% & 93.62\% & 41.03\% \\
     \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/par_0_1/PCA_3D.png}
     \caption{Proyección PCA 3D}
 \end{subfigure}
-\caption{Figura: Espacio de características y fronteras de decisión para Par Muscular: Anterior Belly (Canal 0) y Orbicularis Oris (Canal 1).}
+\caption{Figura: Espacio de características y fronteras de decisión para Par Muscular: Anterior Belly (Canal 0) y Risorio (Canal 1).}
 \end{figure}
 
 \begin{figure}[H]
@@ -654,11 +656,11 @@ PCA 3D & 85.0\% & 100.0\% & 89.74\% & 93.62\% & 41.03\% \\
     \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/par_0_1/heatmap_confusion_pca_3d.png}
     \caption{Matriz de Confusión 3D}
 \end{subfigure}
-\caption{Figura: Matrices de confusión y tasas de clasificación para Par Muscular: Anterior Belly (Canal 0) y Orbicularis Oris (Canal 1).}
+\caption{Figura: Matrices de confusión y tasas de clasificación para Par Muscular: Anterior Belly (Canal 0) y Risorio (Canal 1).}
 \end{figure}
 
 \newpage
-\subsection{Par Muscular: Orbicularis Oris (Canal 1) y zona media entre el músculo risorio, el cigomático y el masetero. (Canal 2)}
+\subsection{Par Muscular: Risorio (Canal 1) y Orbicularis Oris (Canal 2)}
 \begin{figure}[H]
 \centering
 \begin{subfigure}{0.48\textwidth}
@@ -670,7 +672,7 @@ PCA 3D & 85.0\% & 100.0\% & 89.74\% & 93.62\% & 41.03\% \\
     \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/par_1_2/PCA_3D.png}
     \caption{Proyección PCA 3D}
 \end{subfigure}
-\caption{Figura: Espacio de características y fronteras de decisión para Par Muscular: Orbicularis Oris (Canal 1) y zona media entre el músculo risorio, el cigomático y el masetero. (Canal 2).}
+\caption{Figura: Espacio de características y fronteras de decisión para Par Muscular: Risorio (Canal 1) y Orbicularis Oris (Canal 2).}
 \end{figure}
 
 \begin{figure}[H]
@@ -684,11 +686,11 @@ PCA 3D & 85.0\% & 100.0\% & 89.74\% & 93.62\% & 41.03\% \\
     \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/par_1_2/heatmap_confusion_pca_3d.png}
     \caption{Matriz de Confusión 3D}
 \end{subfigure}
-\caption{Figura: Matrices de confusión y tasas de clasificación para Par Muscular: Orbicularis Oris (Canal 1) y zona media entre el músculo risorio, el cigomático y el masetero. (Canal 2).}
+\caption{Figura: Matrices de confusión y tasas de clasificación para Par Muscular: Risorio (Canal 1) y Orbicularis Oris (Canal 2).}
 \end{figure}
 
 \newpage
-\subsection{Par Muscular: Anterior Belly (Canal 0) y zona media entre el músculo risorio, el cigomático y el masetero. (Canal 2)}
+\subsection{Par Muscular: Anterior Belly (Canal 0) y Orbicularis Oris (Canal 2)}
 \begin{figure}[H]
 \centering
 \begin{subfigure}{0.48\textwidth}
@@ -700,7 +702,7 @@ PCA 3D & 85.0\% & 100.0\% & 89.74\% & 93.62\% & 41.03\% \\
     \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/par_0_2/PCA_3D.png}
     \caption{Proyección PCA 3D}
 \end{subfigure}
-\caption{Figura: Espacio de características y fronteras de decisión para Par Muscular: Anterior Belly (Canal 0) y zona media entre el músculo risorio, el cigomático y el masetero. (Canal 2).}
+\caption{Figura: Espacio de características y fronteras de decisión para Par Muscular: Anterior Belly (Canal 0) y Orbicularis Oris (Canal 2).}
 \end{figure}
 
 \begin{figure}[H]
@@ -714,7 +716,7 @@ PCA 3D & 85.0\% & 100.0\% & 89.74\% & 93.62\% & 41.03\% \\
     \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/analisis_pca_generado/par_0_2/heatmap_confusion_pca_3d.png}
     \caption{Matriz de Confusión 3D}
 \end{subfigure}
-\caption{Figura: Matrices de confusión y tasas de clasificación para Par Muscular: Anterior Belly (Canal 0) y zona media entre el músculo risorio, el cigomático y el masetero. (Canal 2).}
+\caption{Figura: Matrices de confusión y tasas de clasificación para Par Muscular: Anterior Belly (Canal 0) y Orbicularis Oris (Canal 2).}
 \end{figure}
 
 \end{document}

@@ -11,7 +11,7 @@ import json
 import numpy as np
 import soundfile as sf
 import matplotlib.pyplot as plt
-from scipy.signal import hilbert, butter, filtfilt, iirnotch
+from scipy.signal import hilbert, butter, filtfilt, iirnotch, sosfiltfilt
 from scipy import interpolate
 import csv
 import pandas as pd
@@ -71,7 +71,76 @@ def _read_wav_mono(filepath):
         signal = signal[:, 0]
     return np.asarray(signal, dtype=float), sr
 
-def _compute_env_full(signal_abs, apply_envelope, smooth_ms, samplerate, tipo_env="media_movil", extreme_smooth=False):
+try:
+    from numba import njit
+    @njit(fastmath=True)
+    def _nlms_loop(signal, X_ref, mu, eps):
+        N, n_weights = X_ref.shape
+        w = np.zeros(n_weights)
+        e = np.zeros(N)
+        for n in range(N):
+            x_n = X_ref[n]
+            y_n = np.dot(w, x_n)
+            err = signal[n] - y_n
+            e[n] = err
+            norm_x = np.dot(x_n, x_n) + eps
+            w += (mu / norm_x) * err * x_n
+        return e
+except Exception:
+    def _nlms_loop(signal, X_ref, mu, eps):
+        N, n_weights = X_ref.shape
+        w = np.zeros(n_weights)
+        e = np.zeros(N)
+        for n in range(N):
+            x_n = X_ref[n, :]
+            y_n = np.dot(w, x_n)
+            err = signal[n] - y_n
+            e[n] = err
+            norm_x = np.dot(x_n, x_n) + eps
+            w += (mu / norm_x) * err * x_n
+        return e
+
+def aplicar_filtro_adaptativo_nlms(signal, samplerate, f0=50.0, armonicos=(50, 100, 150, 200), mu=0.01, eps=1e-10):
+    """
+    Filtro adaptativo de cancelacion de ruido NLMS con referencia sintetica
+    (fundamental de 50 Hz y armonicos tipicos de la red electrica).
+    """
+    sig = np.asarray(signal, dtype=np.float64)
+    N = len(sig)
+    if N < 10:
+        return sig
+    t = np.arange(N) / float(samplerate)
+    valid_harmonics = [fh for fh in armonicos if fh < (samplerate * 0.5)]
+    if not valid_harmonics:
+        return sig
+    n_weights = 2 * len(valid_harmonics)
+    X_ref = np.zeros((N, n_weights), dtype=np.float64)
+    for k, fh in enumerate(valid_harmonics):
+        omega = 2.0 * np.pi * fh * t
+        X_ref[:, 2 * k] = np.sin(omega)
+        X_ref[:, 2 * k + 1] = np.cos(omega)
+    return _nlms_loop(sig, X_ref, float(mu), float(eps))
+
+def _compute_env_full(signal_abs, apply_envelope, smooth_ms, samplerate, tipo_env="media_movil", extreme_smooth=False, raw_signal=None):
+    if tipo_env == "tkeo":
+        # Operador de Energia Teager-Kaiser discreto:
+        # Psi[x[n]] = x[n]^2 - x[n-1] * x[n+1]
+        x = np.asarray(raw_signal, dtype=float) if raw_signal is not None else np.asarray(signal_abs, dtype=float)
+        psi = np.zeros_like(x)
+        if len(x) >= 3:
+            psi[1:-1] = x[1:-1]**2 - x[:-2] * x[2:]
+            psi[0] = psi[1]
+            psi[-1] = psi[-2]
+        psi = np.maximum(psi, 0.0)
+        
+        win_len = int(max(1, round(smooth_ms * samplerate / 1000.0))) if smooth_ms else 1
+        if win_len > 1:
+            window = np.ones(win_len, dtype=float) / float(win_len)
+            tkeo_smooth = np.convolve(psi, window, mode='same')
+            return np.sqrt(np.maximum(tkeo_smooth, 0.0))
+        else:
+            return np.sqrt(psi)
+
     if tipo_env == "rms" and smooth_ms is not None and smooth_ms > 0:
         win_len = int(max(1, round(smooth_ms * samplerate / 1000.0)))
         if win_len > 1:
@@ -124,7 +193,7 @@ def _estimate_noise_window(signal_recortada, samplerate, noise_seconds, smooth_m
             
         noise_segment = signal_recortada[skip_samples:start_sample_noise]
         if len(noise_segment) > 0:
-            env_noise = _compute_env_full(np.abs(noise_segment), True, smooth_ms, samplerate, tipo_env)
+            env_noise = _compute_env_full(np.abs(noise_segment), True, smooth_ms, samplerate, tipo_env, raw_signal=noise_segment)
         else:
             env_noise = np.array([])
         
@@ -421,7 +490,7 @@ def procesar_wavs_promedio(
     peak_search_threshold=0.25,
     plot_mode='mean',
     individual_alpha=0.25,
-    lowpass_cutoff_hz=500.0,
+    lowpass_cutoff_hz=300.0,
     highpass_cutoff_hz=20.0,
     output_root="/home/santiago/Documentos/codigos/Labo 6",
     display_name_for_plot="",
@@ -429,6 +498,7 @@ def procesar_wavs_promedio(
     show_average_plot=False,
     apply_notch_filter=True,
     notch_q_factor=30.0,
+    tipo_filtro_ruido="notch",
     mostrar_senal_cruda=True,
     is_final_curation_pass=False,
     activation_percentile=90,
@@ -485,7 +555,13 @@ def procesar_wavs_promedio(
         ganancia = 1.0 + (r_fija / resistencia_ohm)
         signal = (signal_v / ganancia) * 1e6
 
-        if apply_notch_filter:
+        # Filtrado de Ruido de Linea (Notch IIR o Adaptativo NLMS)
+        modo_filtro_lower = str(tipo_filtro_ruido).lower().strip()
+        if "adapt" in modo_filtro_lower or "nlms" in modo_filtro_lower:
+            try:
+                signal = aplicar_filtro_adaptativo_nlms(signal, samplerate)
+            except Exception: pass
+        elif apply_notch_filter and "desact" not in modo_filtro_lower and modo_filtro_lower != "none":
             try:
                 b, a = iirnotch(50.0, notch_q_factor, samplerate)
                 signal = filtfilt(b, a, signal)
@@ -506,16 +582,17 @@ def procesar_wavs_promedio(
             try:
                 nyquist = 0.5 * samplerate
                 cutoff_usar = lowpass_cutoff_hz
-                if cutoff_usar >= nyquist: cutoff_usar = nyquist * 0.99
-                b, a = butter(4, cutoff_usar / nyquist, btype='low', analog=False)
-                signal = filtfilt(b, a, signal)
+                # Filtro Butterworth: orden 6 para 300 Hz (Rangayyan), orden 4 para 500 Hz (previo)
+                orden_lp = 6 if abs(cutoff_usar - 300.0) < 20.0 else 4
+                sos_lp = butter(orden_lp, cutoff_usar / nyquist, btype='low', output='sos')
+                signal = sosfiltfilt(sos_lp, signal)
             except Exception: pass
         
         duracion_total_signal = len(signal) / samplerate
         final_plot_title = plot_title_name or filename
         signal_abs = np.abs(signal)
 
-        env_full = _compute_env_full(signal_abs, apply_envelope, smooth_ms, samplerate, tipo_envolvente, extreme_smooth)
+        env_full = _compute_env_full(signal_abs, apply_envelope, smooth_ms, samplerate, tipo_envolvente, extreme_smooth, raw_signal=signal)
 
         t = np.linspace(0, len(signal)/samplerate, len(signal), endpoint=False)
         mask = (t >= tiempoinicial) & (t <= duracion_total_signal)

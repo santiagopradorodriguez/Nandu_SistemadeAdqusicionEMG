@@ -177,7 +177,9 @@ def lanzar_script(script_name, args=[]):
         (r"self\.fuente_dir\s*=\s*[\"']base_de_datos_electrodos[\"']", r"self.fuente_dir = user_data_path('base_de_datos_electrodos')"),
         (r"comp_dir\s*=\s*[\"']analisis_comparativos[\"']", r"comp_dir = user_data_path('analisis_comparativos')"),
         (r"destino_dir\s*=\s*[\"']base_de_datos_letras[\"']", r"destino_dir = user_data_path('base_de_datos_letras')"),
-        (r"self\.destino_dir\s*=\s*[\"']base_de_datos_letras[\"']", r"self.destino_dir = user_data_path('base_de_datos_letras')")
+        (r"self\.destino_dir\s*=\s*[\"']base_de_datos_letras[\"']", r"self.destino_dir = user_data_path('base_de_datos_letras')"),
+        (r"base_dir\s*=\s*os\.path\.join\(repo_root,\s*[\"']EMG_desarrollo[\"'],\s*[\"']base_de_datos_electrodos[\"']\)", r"base_dir = user_data_path('base_de_datos_electrodos')"),
+        (r"self\.output_dir\s*=\s*os\.path\.join\(repo_root,\s*[\"']reportes_experimentos[\"']\)", r"self.output_dir = user_data_path('reportes_experimentos')")
     ]
     archivos_auxiliares = [
         "acquisition/manual_daq.py",
@@ -198,6 +200,8 @@ def lanzar_script(script_name, args=[]):
         "analysis/umap_motor.py",
         "analysis/generar_graficos_y_ranking.py",
         "analysis/plot_metricas_tesis.py",
+        "analysis/report_engine.py",
+        "gui_app/views/report_dialog.py",
         "utils/actualizar_metadata.py", 
         "utils/migrar_mediciones_por_fecha.py",
         "deep_learning/binarizacion/analisis_trevisan.py",
@@ -211,11 +215,21 @@ def lanzar_script(script_name, args=[]):
         "deep_learning/experimento_grid_search_3_autoencoder.py",
         "deep_learning/dataset_tools/visor_features.py",
         "deep_learning/dataset_tools/generador_pca_tensorial.py",
+        "deep_learning/desacoplar_crosstalk_sesiones.py",
+        "deep_learning/reducir_dimensionalidad_con_encoder.py",
     ]
     for archivo in archivos_auxiliares:
         ruta = os.path.join(build_dir, archivo)
         if os.path.exists(ruta):
             parchear_archivo(ruta, reemplazos_bases, reemplazos_regex_bases)
+
+    # --- 5. PARCHES ESPECÍFICOS DE REPORTES ---
+    reemplazos_report = [
+        ("importlib.reload(r_mod)", "pass"),
+    ]
+    ruta_report = os.path.join(build_dir, "gui_app", "views", "report_dialog.py")
+    if os.path.exists(ruta_report):
+        parchear_archivo(ruta_report, reemplazos_report)
 
     print("\n[OK] Parches aplicados a toda la suite de codigos. Entorno listo para compilacion.")
 

@@ -10,133 +10,153 @@ import json
 
 CONFIG_FILE_NAME = "config_general.json"
 
-# Paleta canónica de colores por músculo (y rojo estricto para micrófono / canal 3)
+# Paleta canónica oficial de colores por músculo establecida para todo el sistema
 MUSCLE_COLORS = {
-    # Depresor del ángulo de la boca / DAO
-    "depresor anguli oris": "#8a2be2",     # Violeta / Púrpura
-    "depresor": "#8a2be2",
-    "depressor": "#8a2be2",
-    "dao": "#8a2be2",
-    
-    # Orbicular de los labios / ojos
-    "orbicularis oris": "#ffff00",         # Amarillo
+    # Anterior belly del digástrico / Digástrico: NARANJA INTENSO (#ff754b)
+    "anterior belly": "#ff754b",
+    "anterior belly of digastric": "#ff754b",
+    "vientre anterior": "#ff754b",
+    "vientre anterior del digastrico": "#ff754b",
+    "vientre anterior del digástrico": "#ff754b",
+    "digastrico": "#ff754b",
+    "digástrico": "#ff754b",
+    "digastric": "#ff754b",
+    "digastrio": "#ff754b",
+    "digastrioo": "#ff754b",
+
+    # Zigomático: VERDE AZULADO
+    "zygomaticus major": "#00a896",
+    "zygomaticus mayor": "#00a896",
+    "zygomaticus": "#00a896",
+    "zygomatic": "#00a896",
+    "cigomatico": "#00a896",
+    "cigomático": "#00a896",
+    "cigomatico mayor": "#00a896",
+    "cigomático mayor": "#00a896",
+    "zigomatico": "#00a896",
+    "zigomático": "#00a896",
+    "zigomatico mayor": "#00a896",
+    "zigomático mayor": "#00a896",
+    "cigomatico menor": "#00a896",
+    "cigomático menor": "#00a896",
+    "zigomatico menor": "#00a896",
+    "zigomático menor": "#00a896",
+
+    # Risorio: VERDE
+    "risorio": "#00cc44",
+    "risorius": "#00cc44",
+
+    # Modíolo: VERDE AMARILLENTO
+    "modiolo": "#a3e635",
+    "modíolo": "#a3e635",
+    "modiolus": "#a3e635",
+    "nudo sonrisa": "#a3e635",
+    "nudo de la sonrisa": "#a3e635",
+
+    # Orbicularis: AMARILLO
+    "orbicularis oris": "#ffff00",
     "orbicularis": "#ffff00",
     "orbicular": "#ffff00",
+    "orbicular de los labios": "#ffff00",
     "orbicularis sup": "#ffff00",
     "orbicularis inf": "#ffff00",
     "orbicularis oculi": "#ffff00",
-    
-    # Milohioideo
-    "mylohyoid": "#39ff14",                # Verde Neón
-    "milohyoid": "#39ff14",
-    "milohioideo": "#39ff14",
-    "milohioide": "#39ff14",
-    "milohiode": "#39ff14",
-    "milo": "#39ff14",
-    
-    # Digástrico / Vientre anterior
-    "digastrico": "#ffaa00",               # Naranja brillante
-    "digástrico": "#ffaa00",
-    "digastric": "#ffaa00",
-    "digastrio": "#ffaa00",
-    "digastrioo": "#ffaa00",
-    "anterior belly": "#ffaa00",
-    "vientre anterior": "#ffaa00",
-    
-    # Cigomático mayor y menor
-    "zygomaticus major": "#ff00ff",        # Magenta
-    "zygomaticus mayor": "#ff00ff",
-    "zygomaticus": "#ff00ff",
-    "cigomatico": "#ff00ff",
-    "cigomático": "#ff00ff",
-    "cigomatico mayor": "#ff00ff",
-    "cigomático mayor": "#ff00ff",
-    "cigomatico menor": "#ff00ff",
-    "cigomático menor": "#ff00ff",
-    
+
+    # Depresor: VERDE MÁS OSCURO
+    "depresor anguli oris": "#15803d",
+    "depresor": "#15803d",
+    "depressor": "#15803d",
+    "dao": "#15803d",
+    "depresor del angulo": "#15803d",
+    "depresor del ángulo": "#15803d",
+    "depresor del angulo de la boca": "#15803d",
+    "depresor del ángulo de la boca": "#15803d",
+    "depressor anguli oris": "#15803d",
+
+    # Milohioideo: NARANJA
+    "mylohyoid": "#ff7700",
+    "milohyoid": "#ff7700",
+    "milohioideo": "#ff7700",
+    "milohioide": "#ff7700",
+    "milohiode": "#ff7700",
+    "milo": "#ff7700",
+
     # Masetero
-    "masseter": "#00ffcc",                 # Cyan brillante
+    "masseter": "#00ffcc",
     "masetero": "#00ffcc",
     "masetero superficial": "#00ffcc",
     "masetero profundo": "#00ffcc",
-    
+
     # Elevador del labio superior / ángulo oral
-    "levatori oris": "#00bfff",            # Azul eléctrico / DeepSkyBlue
+    "levatori oris": "#00bfff",
     "levator anguli oris": "#00bfff",
     "levator labii superioris": "#00bfff",
     "elevador": "#00bfff",
     "elevador del labio": "#00bfff",
-    
+
     # Platisma
-    "platysma": "#00e676",                 # Verde esmeralda
+    "platysma": "#00e676",
     "platisma": "#00e676",
-    
-    # Nudo sonrisa / Modiolo
-    "nudo sonrisa": "#e040fb",             # Púrpura neón
-    "nudo de la sonrisa": "#e040fb",
-    "modiolo": "#e040fb",
-    
+
     # Temporal
-    "temporal": "#ff69b4",                 # Rosa Neón (HotPink)
+    "temporal": "#ff69b4",
     "temporalis": "#ff69b4",
-    
+
     # Buccinador
-    "buccinador": "#ff7f50",               # Coral
+    "buccinador": "#ff7f50",
     "buccinator": "#ff7f50",
-    
+
     # Mentoniano
-    "mentalis": "#adff2f",                 # Verde Lima
+    "mentalis": "#adff2f",
     "mentoniano": "#adff2f",
-    
+
     # Pterigoideo
-    "pterigoideo": "#00e5ff",              # Aqua
+    "pterigoideo": "#00e5ff",
     "pterygoid": "#00e5ff",
-    
-    # Risorio
-    "risorio": "#e040fb",                  # Púrpura neón
-    "risorius": "#e040fb",
-    
+
     # Esternocleidomastoideo / Trapecio
-    "esternocleidomastoideo": "#76ff03",    # Verde claro
+    "esternocleidomastoideo": "#76ff03",
     "scm": "#76ff03",
-    "trapecio": "#ffd600",                 # Oro
+    "trapecio": "#ffd600",
     "trapezius": "#ffd600",
-    
-    # Micrófono / Canal 3 (Estrictamente Rojo)
+
+    # Micrófono / Canal 3 (Rojo estándar)
     "micrófono": "#ff0000",
     "microfono": "#ff0000",
     "mic": "#ff0000",
     "canal 3": "#ff0000",
-    "canal_3": "#ff0000"
+    "canal_3": "#ff0000",
+    "ch3": "#ff0000"
 }
 
 # Paleta estética de 16 colores de alto contraste para resolver colisiones
 DISTINCT_PALETTE = [
-    "#8a2be2",  # Violeta
-    "#ffff00",  # Amarillo
-    "#39ff14",  # Verde neón
-    "#ffaa00",  # Naranja
-    "#00ffcc",  # Cyan brillante
-    "#ff00ff",  # Magenta
+    "#ff754b",  # Naranja intenso (Anterior Belly)
+    "#00a896",  # Verde azulado (Zigomático)
+    "#00cc44",  # Verde (Risorio)
+    "#a3e635",  # Verde amarillento (Modíolo)
+    "#ffff00",  # Amarillo (Orbicularis)
+    "#15803d",  # Verde más oscuro (Depresor)
+    "#ff7700",  # Naranja (Milohioideo)
+    "#ff0000",  # Rojo (Micrófono)
     "#00bfff",  # Azul eléctrico
+    "#ff00ff",  # Magenta
+    "#00ffcc",  # Cyan brillante
     "#ff69b4",  # Rosa neón
-    "#adff2f",  # Verde lima
+    "#8a2be2",  # Violeta
     "#ff7f50",  # Coral
     "#00e5ff",  # Aqua
-    "#e040fb",  # Púrpura neón
     "#ffd600",  # Oro
-    "#00e676",  # Verde esmeralda
-    "#ff3d00",  # Naranja rojizo
     "#651fff"   # Azul índigo
 ]
 
 def get_muscle_color(name, default=None):
     """
     Devuelve el color hex estandarizado o personalizado para un músculo dado.
-    El canal 3 / micrófono siempre se asigna estrictamente a rojo (#ff0000).
+    El canal 3 / micrófono siempre se asigna a rojo (#ff0000).
     """
     if not name:
-        return default or "#00ffcc"
+        return default or "#ff0000"
         
     name_str = str(name).strip().lower()
     
@@ -148,8 +168,14 @@ def get_muscle_color(name, default=None):
     try:
         mgr = ConfigManager()
         custom_colors = mgr.get("colores_musculos") or {}
+        # Búsqueda exacta primero
         for k, v in custom_colors.items():
             if k.strip().lower() == name_str:
+                return v
+        # Búsqueda por coincidencia parcial de sinónimos en custom_colors
+        for k, v in custom_colors.items():
+            k_clean = k.strip().lower()
+            if k_clean and (k_clean in name_str or name_str in k_clean):
                 return v
     except Exception:
         pass
@@ -164,9 +190,8 @@ def get_muscle_color(name, default=None):
 def get_unique_channel_colors(channels_info):
     """
     Recibe una lista de canales (nombres, diccionarios o tuplas) y devuelve
-    una lista de colores hexadecimales garantizando que NINGÚN canal repita color.
-    
-    El micrófono / canal 3 siempre recibe #ff0000 de forma exclusiva.
+    una lista de colores hexadecimales garantizando que cada canal reciba su color canónico
+    y que NINGÚN canal repita color innecesariamente.
     """
     used_colors = set()
     result_colors = []
@@ -187,28 +212,31 @@ def get_unique_channel_colors(channels_info):
             preferred = None
             is_mic = ("mic" in musc.lower()) or (musc.lower() in ("canal 3", "canal_3", "3"))
 
-        # El micrófono siempre es rojo
+        # El micrófono siempre recibe su color de micrófono (#ff0000)
         if is_mic:
-            result_colors.append("#ff0000")
-            used_colors.add("#ff0000")
+            mic_col = get_muscle_color("micrófono", default="#ff0000")
+            result_colors.append(mic_col)
+            used_colors.add(mic_col.lower())
             continue
 
-        # Color sugerido por preferencia del usuario o por nombre de músculo
-        color = preferred or get_muscle_color(musc, default=None)
+        # Si el usuario especificó un color_hex personalizado en el canal, usarlo prioritariamente
+        if preferred and str(preferred).startswith("#") and str(preferred).lower() not in [c.lower() for c in used_colors]:
+            color = preferred
+        else:
+            color = get_muscle_color(musc, default=None) or preferred
         
-        # Si el color ya fue usado o coincide con rojo (#ff0000), buscar el siguiente de la paleta
-        if color is None or color.lower() in [c.lower() for c in used_colors] or color.lower() == "#ff0000":
+        # Si el color ya fue usado o no está definido, buscar de la paleta
+        if color is None or color.lower() in [c.lower() for c in used_colors]:
             while palette_idx < len(DISTINCT_PALETTE):
                 candidate = DISTINCT_PALETTE[palette_idx]
                 palette_idx += 1
-                if candidate.lower() not in [c.lower() for c in used_colors] and candidate.lower() != "#ff0000":
+                if candidate.lower() not in [c.lower() for c in used_colors]:
                     color = candidate
                     break
             else:
-                # Si se agotaron los colores predefinidos, generar color contrastante determinista
-                color = f"#{abs(hash(musc + str(len(result_colors)))) % 0xFFFFFF:06x}"
+                color = f"#{abs(hash(str(musc) + str(len(result_colors)))) % 0xFFFFFF:06x}"
 
-        used_colors.add(color)
+        used_colors.add(color.lower())
         result_colors.append(color)
 
     return result_colors
@@ -233,18 +261,18 @@ DEFAULT_CONFIG = {
     "colores_musculos": {},
     "canales": {
         "Canal 0": {
-            "musculo": "Depresor Anguli Oris",
-            "color_hex": "#8a2be2",
+            "musculo": "Anterior Belly",
+            "color_hex": "#ff754b",
             "factor_calibracion": 495.0
         },
         "Canal 1": {
-            "musculo": "Orbicularis Oris",
-            "color_hex": "#ffff00",
+            "musculo": "Zygomaticus Major",
+            "color_hex": "#00a896",
             "factor_calibracion": 495.0
         },
         "Canal 2": {
-            "musculo": "Mylohyoid",
-            "color_hex": "#39ff14",
+            "musculo": "Orbicularis Oris",
+            "color_hex": "#ffff00",
             "factor_calibracion": 495.0
         },
         "Canal 3": {

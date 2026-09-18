@@ -24,13 +24,13 @@ def crear_entorno_seguro():
         'base_de_datos_electrodos', 'base_de_datos_letras', 'analisis_comparativos',
         'analisis_de_sesiones', 'resultados', 'logs', 'venv', '__pycache__', '.git',
         'EMG_Ejecutable_Build', 'herramientas_build', 'tests', 'build_linux',
-        'build_windows', 'dist', 'build', '.pytest_cache'
+        'build_windows', 'dist', 'build', '.pytest_cache', 'codigos_de_prueba'
     }
 
     def ignorar_rutas(directorio, archivos):
         ignorar = set()
         for a in archivos:
-            if a in ('__pycache__', 'resultados_pca_umap', 'resultados_umap_supervisado', 'resultados_autoencoder', '.pytest_cache', '.git'):
+            if a in ('__pycache__', 'resultados_pca_umap', 'resultados_umap_supervisado', 'resultados_autoencoder', '.pytest_cache', '.git', 'codigos_de_prueba'):
                 ignorar.add(a)
             elif a.endswith(('.pyc', '.pth', '.tar', '.zip', '.tmp')):
                 ignorar.add(a)
@@ -48,9 +48,12 @@ def crear_entorno_seguro():
                 print(f"[OK] Copiada carpeta: {item}")
         else:
             # Copiamos todos los archivos fuente y recursos (excepto scripts de build o temporales)
-            if item not in ["crear_entorno_ejecutable.py", "argv_log.txt", "multiplexer_error.log"] and not item.endswith(('.pyc', '.tmp')):
-                shutil.copy2(src_path, dest_path)
-                print(f"[OK] Copiado archivo: {item}")
+            if item in ["crear_entorno_ejecutable.py", "argv_log.txt", "multiplexer_error.log"] or item.endswith(('.pyc', '.tmp', '.log', '.docx', '.aux', '.out', '.toc')):
+                continue
+            if item.startswith(("temp_", "test_")):
+                continue
+            shutil.copy2(src_path, dest_path)
+            print(f"[OK] Copiado archivo: {item}")
 
     print("\n[OK] Copia de seguridad y entorno de trabajo listos!")
     print("A partir de ahora, haremos todos los cambios de código dentro de la nueva carpeta 'EMG_Ejecutable_Build'.")
