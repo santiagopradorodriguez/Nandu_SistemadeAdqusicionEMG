@@ -1606,6 +1606,25 @@ class AutoencoderNoSupervisadoTab(QWidget):
         g_align.setLayout(l_align)
         self.layout.addWidget(g_align)
 
+        # Canales Musculares a Procesar: Selección Bicanal o Tricanal
+        g_canales = QGroupBox("Canales Musculares a Procesar: Selección Bicanal o Tricanal")
+        l_canales = QHBoxLayout()
+        self.chk_canal_0 = QCheckBox("Canal 0 - Milohioideo / Digástrico")
+        self.chk_canal_0.setChecked(True)
+        self.chk_canal_0.setStyleSheet("color: #FF6666; font-weight: bold;")
+        self.chk_canal_1 = QCheckBox("Canal 1 - Cigomático / Modíolo / DAO")
+        self.chk_canal_1.setChecked(True)
+        self.chk_canal_1.setStyleSheet("color: #66FF66; font-weight: bold;")
+        self.chk_canal_2 = QCheckBox("Canal 2 - Orbicular")
+        self.chk_canal_2.setChecked(True)
+        self.chk_canal_2.setStyleSheet("color: #FFAA33; font-weight: bold;")
+        l_canales.addWidget(self.chk_canal_0)
+        l_canales.addWidget(self.chk_canal_1)
+        l_canales.addWidget(self.chk_canal_2)
+        l_canales.addStretch()
+        g_canales.setLayout(l_canales)
+        self.layout.addWidget(g_canales)
+
         # ----------------------------------------------------------------------
         # 6. PARÁMETROS DSP PREVIOS Y ACONDICIONAMIENTO
         # ----------------------------------------------------------------------
@@ -1706,54 +1725,88 @@ class AutoencoderNoSupervisadoTab(QWidget):
         g_par = QGroupBox("7. Parámetros de Optimización y Calibración")
         l_par = QGridLayout()
         
-        # Fila 0: Parámetros numéricos base
-        l_par.addWidget(QLabel("Épocas:"), 0, 0)
+        # Fila 0: Selección de Arquitectura Base
+        l_par.addWidget(QLabel("Tipo de Red:"), 0, 0)
+        self.cmb_tipo_red = QComboBox()
+        self.cmb_tipo_red.addItems([
+            "Autoencoder Ortogonal (Récord 87% - 91%)",
+            "Convolucional 1D Estándar (Invarianza Temporal)"
+        ])
+        self.cmb_tipo_red.setStyleSheet("background-color: #1F2833; color: #00FF88; border: 1px solid #00AA55; padding: 4px; font-weight: bold;")
+        self.cmb_tipo_red.currentIndexChanged.connect(self._on_tipo_red_changed)
+        l_par.addWidget(self.cmb_tipo_red, 0, 1, 1, 5)
+
+        # Fila 1: Parámetros numéricos base
+        l_par.addWidget(QLabel("Épocas:"), 1, 0)
         self.inp_epochs = QSpinBox()
-        self.inp_epochs.setRange(1, 1000)
-        self.inp_epochs.setValue(150)
+        self.inp_epochs.setRange(1, 2000)
+        self.inp_epochs.setValue(600)
         self.inp_epochs.setFixedWidth(65)
-        l_par.addWidget(self.inp_epochs, 0, 1)
+        l_par.addWidget(self.inp_epochs, 1, 1)
         
-        l_par.addWidget(QLabel("Batch Size:"), 0, 2)
+        l_par.addWidget(QLabel("Batch Size:"), 1, 2)
         self.inp_batch = QSpinBox()
-        self.inp_batch.setRange(1, 512)
-        self.inp_batch.setValue(32)
+        self.inp_batch.setRange(1, 2048)
+        self.inp_batch.setValue(512)
         self.inp_batch.setFixedWidth(65)
-        l_par.addWidget(self.inp_batch, 0, 3)
+        self.inp_batch.setToolTip("En el Autoencoder Ortogonal, Full-Batch asegura una estimación precisa de la matriz de covarianza Cov(Z).")
+        l_par.addWidget(self.inp_batch, 1, 3)
         
-        l_par.addWidget(QLabel("Learning Rate:"), 0, 4)
+        l_par.addWidget(QLabel("Learning Rate:"), 1, 4)
         self.inp_lr = QDoubleSpinBox()
         self.inp_lr.setRange(0.0001, 0.1)
         self.inp_lr.setSingleStep(0.001)
         self.inp_lr.setDecimals(4)
-        self.inp_lr.setValue(0.0020)
+        self.inp_lr.setValue(0.0030)
         self.inp_lr.setFixedWidth(75)
-        l_par.addWidget(self.inp_lr, 0, 5)
+        l_par.addWidget(self.inp_lr, 1, 5)
 
-        # Fila 1: Función de Pérdida (MSE vs Soft-DTW) y parámetro Gamma
-        l_par.addWidget(QLabel("Función Pérdida:"), 1, 0)
+        # Fila 2: Función de Pérdida base y parámetro Gamma
+        l_par.addWidget(QLabel("Función Pérdida:"), 2, 0)
         self.cmb_loss = QComboBox()
         self.cmb_loss.addItems([
             "MSE (Error Cuadrático Medio)",
             "Soft-DTW (Alineación Temporal Suave)",
             "Divergencia Soft-DTW (Simétrica)",
-            "Híbrida (MSE + Soft-DTW)"
+            "Híbrida (MSE + Soft-DTW)",
+            "Multiobjetivo (Relativa + Derivada)"
         ])
         self.cmb_loss.setCurrentText("MSE (Error Cuadrático Medio)")
         self.cmb_loss.setStyleSheet("background-color: #1F2833; color: #66FCF1; border: 1px solid #45A29E; padding: 3px; font-weight: bold;")
-        l_par.addWidget(self.cmb_loss, 1, 1, 1, 2)
+        l_par.addWidget(self.cmb_loss, 2, 1, 1, 2)
 
-        l_par.addWidget(QLabel("Gamma Soft-DTW:"), 1, 3)
+        l_par.addWidget(QLabel("Gamma Soft-DTW:"), 2, 3)
         self.inp_gamma_sdtw = QDoubleSpinBox()
         self.inp_gamma_sdtw.setRange(0.01, 50.0)
         self.inp_gamma_sdtw.setValue(1.00)
         self.inp_gamma_sdtw.setSingleStep(0.1)
         self.inp_gamma_sdtw.setDecimals(2)
         self.inp_gamma_sdtw.setFixedWidth(65)
-        l_par.addWidget(self.inp_gamma_sdtw, 1, 4)
+        l_par.addWidget(self.inp_gamma_sdtw, 2, 4)
 
-        # Fila 2: Algoritmo de Clustering y Regularización de Ortogonalidad Latente
-        l_par.addWidget(QLabel("Clustering:"), 2, 0)
+        # Fila 3: Regularizaciones Ortogonales Récord (Lambda W y Lambda Z)
+        l_par.addWidget(QLabel("Lambda W (Pesos):"), 3, 0)
+        self.inp_lambda_w = QDoubleSpinBox()
+        self.inp_lambda_w.setRange(0.0, 10.0)
+        self.inp_lambda_w.setValue(0.30)
+        self.inp_lambda_w.setSingleStep(0.05)
+        self.inp_lambda_w.setDecimals(2)
+        self.inp_lambda_w.setFixedWidth(65)
+        self.inp_lambda_w.setToolTip("Penaliza ||W W^T - I||_F^2 para forzar isometría estricta en cada capa lineal.")
+        l_par.addWidget(self.inp_lambda_w, 3, 1)
+
+        l_par.addWidget(QLabel("Lambda Z (Decorrelación):"), 3, 2)
+        self.inp_lambda_z = QDoubleSpinBox()
+        self.inp_lambda_z.setRange(0.0, 10.0)
+        self.inp_lambda_z.setValue(0.45)
+        self.inp_lambda_z.setSingleStep(0.05)
+        self.inp_lambda_z.setDecimals(2)
+        self.inp_lambda_z.setFixedWidth(65)
+        self.inp_lambda_z.setToolTip("Penaliza ||Cov(Z) - I||_F^2 para forzar ejes latentes incorrelados y de varianza unitaria.")
+        l_par.addWidget(self.inp_lambda_z, 3, 3)
+
+        # Clustering no supervisado de evaluación
+        l_par.addWidget(QLabel("Clustering:"), 3, 4)
         self.cmb_clustering = QComboBox()
         self.cmb_clustering.addItems([
             "GMM (Gaussian Mixture)",
@@ -1761,23 +1814,50 @@ class AutoencoderNoSupervisadoTab(QWidget):
         ])
         self.cmb_clustering.setCurrentText("GMM (Gaussian Mixture)")
         self.cmb_clustering.setStyleSheet("background-color: #1F2833; color: #66FCF1; border: 1px solid #45A29E; padding: 3px; font-weight: bold;")
-        l_par.addWidget(self.cmb_clustering, 2, 1, 1, 2)
+        l_par.addWidget(self.cmb_clustering, 3, 5)
 
-        l_par.addWidget(QLabel("Ortogonalidad Latente (\u03bb):"), 2, 3)
+        # Fila 4: Acondicionamiento Reposo Basal e Impedancia por Sesión
+        self.chk_impedancia_reposo = QCheckBox("Acondicionamiento Reposo Basal e Impedancia por Sesión (Nivel :10 y P95)")
+        self.chk_impedancia_reposo.setChecked(True)
+        self.chk_impedancia_reposo.setStyleSheet("color: #00FF88; font-weight: bold;")
+        self.chk_impedancia_reposo.setToolTip("Compensa variaciones de impedancia piel-electrodo restando el reposo pre-contracción y escalando por P95 por sesión.")
+        l_par.addWidget(self.chk_impedancia_reposo, 4, 0, 1, 6)
+
+        # Fila 5: Alineación Topológica Inter-Sesión SO(2)
+        row_so2 = QHBoxLayout()
+        self.chk_alineacion_so2 = QCheckBox("Alineación Topológica Inter-Sesión SO(2) (Algoritmo de Kabsch / 4 Vértices)")
+        self.chk_alineacion_so2.setChecked(True)
+        self.chk_alineacion_so2.setStyleSheet("color: #66FCF1; font-weight: bold;")
+        self.chk_alineacion_so2.setToolTip("Alinea rígidamente en SO(2) la nube latente de cada sesión respecto a una sesión canónica de referencia.")
+        row_so2.addWidget(self.chk_alineacion_so2)
+
+        row_so2.addWidget(QLabel("Sesión Ref:"))
+        self.cmb_ref_session = QComboBox()
+        self.cmb_ref_session.addItems(["T2", "T1", "T3", "T4", "T5", "T6", "T7", "Auto"])
+        self.cmb_ref_session.setFixedWidth(75)
+        self.cmb_ref_session.setStyleSheet("background-color: #1F2833; color: #66FCF1; border: 1px solid #45A29E; padding: 2px; font-weight: bold;")
+        row_so2.addWidget(self.cmb_ref_session)
+        row_so2.addStretch()
+        l_par.addLayout(row_so2, 5, 0, 1, 6)
+
+        # Fila 6: Calibración Intersesión por Lote P95 (Estándar PCA/UMAP)
+        self.chk_correccion_intersesion = QCheckBox("Corrección Intersesión por Lote (Calibración P95 PCA/UMAP)")
+        self.chk_correccion_intersesion.setChecked(True)
+        self.chk_correccion_intersesion.setStyleSheet("color: #45A29E;")
+        self.chk_correccion_intersesion.setToolTip("Equilibra la sensibilidad de canales por sesión mediante el percentil P95 (acotado a 5x) previo al supremo de pulso.")
+        l_par.addWidget(self.chk_correccion_intersesion, 6, 0, 1, 6)
+
+        # Fila 7: Reescalado Fisiológico Directo por Promedios
+        self.chk_p95 = QCheckBox("Reescalado Fisiológico por Promedios (Rojo en /a/ -> 1.0, Verde en /i/ -> 1.0, Amarillo en /u/ -> 1.0)")
+        self.chk_p95.setChecked(True)
+        self.chk_p95.setStyleSheet("color: #45A29E; font-size: 11px;")
+        l_par.addWidget(self.chk_p95, 7, 0, 1, 6)
+
+        # Parámetro heredado de ortogonalidad latente clásica (oculto / compatible)
         self.inp_lambda_orto = QDoubleSpinBox()
         self.inp_lambda_orto.setRange(0.0, 50.0)
         self.inp_lambda_orto.setValue(0.0)
-        self.inp_lambda_orto.setSingleStep(0.1)
-        self.inp_lambda_orto.setDecimals(2)
-        self.inp_lambda_orto.setFixedWidth(65)
-        self.inp_lambda_orto.setToolTip("Penaliza la covarianza no diagonal en el espacio latente para forzar que los ejes sean ortogonales.")
-        l_par.addWidget(self.inp_lambda_orto, 2, 4)
-
-        # Fila 3: Reescalado Fisiológico Directo por Promedios
-        self.chk_p95 = QCheckBox("Reescalado Fisiológico por Promedios (Rojo en /a/ -> 1.0, Verde en /i/ -> 1.0, Amarillo en /u/ -> 1.0)")
-        self.chk_p95.setChecked(True)
-        self.chk_p95.setStyleSheet("color: #66FCF1; font-weight: bold;")
-        l_par.addWidget(self.chk_p95, 3, 0, 1, 6)
+        self.inp_lambda_orto.setVisible(False)
         
         g_par.setLayout(l_par)
         self.layout.addWidget(g_par)
@@ -1795,6 +1875,16 @@ class AutoencoderNoSupervisadoTab(QWidget):
         self.btn_restablecer_arch = QPushButton("Restablecer Plantilla Oficial")
         self.btn_restablecer_arch.setStyleSheet("background-color: #1F2833; color: #45A29E; border: 1px solid #45A29E; font-size: 11px; padding: 4px;")
         bar_arch.addWidget(self.btn_restablecer_arch)
+
+        self.btn_cargar_convae = QPushButton("Cargar ConvAE (ConvTranspose1D)")
+        self.btn_cargar_convae.setStyleSheet("background-color: #1F2833; color: #66FCF1; border: 1px solid #66FCF1; font-size: 11px; font-weight: bold; padding: 4px;")
+        self.btn_cargar_convae.setToolTip("Carga la arquitectura ConvAE con ConvTranspose1d y función de pérdida relativa + derivada.")
+        bar_arch.addWidget(self.btn_cargar_convae)
+
+        self.btn_cargar_orto = QPushButton("Cargar OrthogonalAE (Récord 91%)")
+        self.btn_cargar_orto.setStyleSheet("background-color: #1F2833; color: #00FF88; border: 1px solid #00AA55; font-size: 11px; font-weight: bold; padding: 4px;")
+        self.btn_cargar_orto.setToolTip("Carga la arquitectura de Autoencoder Ortogonal totalmente conexo simétrico sin sesgo con regularización de pesos.")
+        bar_arch.addWidget(self.btn_cargar_orto)
 
         self.btn_verificar_arch = QPushButton("Verificar Sintaxis y Capas")
         self.btn_verificar_arch.setStyleSheet("background-color: #1F2833; color: #00FF88; border: 1px solid #00AA55; font-size: 11px; font-weight: bold; padding: 4px;")
@@ -1820,6 +1910,8 @@ class AutoencoderNoSupervisadoTab(QWidget):
 
         # Conectar eventos de la arquitectura
         self.btn_restablecer_arch.clicked.connect(self.on_restablecer_plantilla)
+        self.btn_cargar_convae.clicked.connect(self.on_cargar_convae)
+        self.btn_cargar_orto.clicked.connect(self.on_cargar_orto)
         self.btn_verificar_arch.clicked.connect(self.on_verificar_arquitectura)
         self.rb_env.toggled.connect(self.on_modalidad_toggled)
         self.rb_cruda.toggled.connect(self.on_modalidad_toggled)
@@ -1830,6 +1922,9 @@ class AutoencoderNoSupervisadoTab(QWidget):
         self.rb_dim_3d_cruda.toggled.connect(self.on_modalidad_toggled)
         self.rb_dim_2d_spec.toggled.connect(self.on_modalidad_toggled)
         self.rb_dim_3d_spec.toggled.connect(self.on_modalidad_toggled)
+        self.chk_canal_0.toggled.connect(self.on_canales_toggled)
+        self.chk_canal_1.toggled.connect(self.on_canales_toggled)
+        self.chk_canal_2.toggled.connect(self.on_canales_toggled)
 
         # 9. Acciones de Procesamiento y Entrenamiento
         g_act = QGroupBox("9. Acciones de Procesamiento y Entrenamiento")
@@ -1884,6 +1979,14 @@ class AutoencoderNoSupervisadoTab(QWidget):
                 modalidad = "envolvente"
 
         latent_dim = 3 if self.rb_dim_3d.isChecked() else 2
+        n_ch = 3
+        if hasattr(self, 'chk_canal_0') and hasattr(self, 'chk_canal_1') and hasattr(self, 'chk_canal_2'):
+            ch_list = []
+            if self.chk_canal_0.isChecked(): ch_list.append(0)
+            if self.chk_canal_1.isChecked(): ch_list.append(1)
+            if self.chk_canal_2.isChecked(): ch_list.append(2)
+            if len(ch_list) >= 2:
+                n_ch = len(ch_list)
 
         if modalidad == "cruda":
             return f'''import torch
@@ -1895,7 +1998,7 @@ class AutoencoderPersonalizado(nn.Module):
     Autoencoder Convolucional 1D para Señal Cruda con Invarianza Temporal (Línea Base Histórica 54.3%).
     Utiliza núcleos amplios con ReLU para rectificación aprendida y pooling dual (GAP + GMP).
     """
-    def __init__(self, in_channels=3, latent_dim={latent_dim}, target_len=1000):
+    def __init__(self, in_channels={n_ch}, latent_dim={latent_dim}, target_len=1000):
         super().__init__()
         self.target_len = target_len
         self.in_channels = in_channels
@@ -1946,7 +2049,7 @@ import torch.nn.functional as F
 
 class AutoencoderPersonalizado(nn.Module):
     """Autoencoder 2D para espectrogramas calibrados en dB (3x32x64)"""
-    def __init__(self, in_channels=3, latent_dim={latent_dim}):
+    def __init__(self, in_channels={n_ch}, latent_dim={latent_dim}):
         super().__init__()
         self.in_channels = in_channels
         self.latent_dim = latent_dim
@@ -1998,7 +2101,7 @@ class AutoencoderPersonalizado(nn.Module):
     Utiliza pooling dual (GAP + GMP) para capturar la integral de activación y el pico
     de contracción de forma completamente independiente de la longitud temporal.
     """
-    def __init__(self, in_channels=3, latent_dim={latent_dim}, target_len=100):
+    def __init__(self, in_channels={n_ch}, latent_dim={latent_dim}, target_len=100):
         super().__init__()
         self.in_channels = in_channels
         self.target_len = target_len
@@ -2075,24 +2178,247 @@ class AutoencoderPersonalizado(nn.Module):
             return self.inp_pts_cruda
         return self.inp_pts_env
 
+    def on_canales_toggled(self):
+        canales = []
+        if self.chk_canal_0.isChecked(): canales.append("canal_0")
+        if self.chk_canal_1.isChecked(): canales.append("canal_1")
+        if self.chk_canal_2.isChecked(): canales.append("canal_2")
+        if len(canales) < 2:
+            sender = self.sender()
+            if sender:
+                sender.blockSignals(True)
+                sender.setChecked(True)
+                sender.blockSignals(False)
+            self.lbl_arch_status.setText("[AVISO]: Se requieren al menos 2 canales musculares (selección bicanal o tricanal).")
+            self.lbl_arch_status.setStyleSheet("background-color: #221100; color: #FFAA00; border: 1px solid #FFAA00; padding: 5px; font-family: monospace; font-size: 10px; border-radius: 4px;")
+            return
+        if not self.chk_usar_custom.isChecked():
+            self.txt_codigo_arch.setPlainText(self.get_plantilla_codigo())
+            self.lbl_arch_status.setText(f"[INFO]: Plantilla actualizada para {len(canales)} canales musculares ({', '.join(canales)}).")
+            self.lbl_arch_status.setStyleSheet("background-color: #111111; color: #45A29E; border: 1px solid #333333; padding: 5px; font-family: monospace; font-size: 10px; border-radius: 4px;")
+
     def on_modalidad_toggled(self):
         if not self.chk_usar_custom.isChecked():
             self.txt_codigo_arch.setPlainText(self.get_plantilla_codigo())
             self.lbl_arch_status.setText("[INFO]: Plantilla actualizada para la modalidad seleccionada.")
             self.lbl_arch_status.setStyleSheet("background-color: #111111; color: #45A29E; border: 1px solid #333333; padding: 5px; font-family: monospace; font-size: 10px; border-radius: 4px;")
 
-    def on_restablecer_plantilla(self):
-        self.txt_codigo_arch.setPlainText(self.get_plantilla_codigo())
-        self.lbl_arch_status.setText("[INFO]: Plantilla oficial restablecida.")
-        self.lbl_arch_status.setStyleSheet("background-color: #111111; color: #45A29E; border: 1px solid #333333; padding: 5px; font-family: monospace; font-size: 10px; border-radius: 4px;")
+    def _on_tipo_red_changed(self, idx):
+        if "ortogonal" in self.cmb_tipo_red.currentText().lower():
+            self.inp_epochs.setValue(600)
+            self.inp_batch.setValue(512)
+            self.inp_lr.setValue(0.0030)
+            self.inp_lambda_w.setValue(0.30)
+            self.inp_lambda_z.setValue(0.45)
+            self.chk_impedancia_reposo.setChecked(True)
+            self.chk_alineacion_so2.setChecked(True)
+            self.cmb_loss.setCurrentText("MSE (Error Cuadrático Medio)")
+        else:
+            self.inp_epochs.setValue(150)
+            self.inp_batch.setValue(32)
+            self.inp_lr.setValue(0.0020)
+            self.inp_lambda_w.setValue(0.0)
+            self.inp_lambda_z.setValue(0.0)
+
+    def on_cargar_orto(self):
+        latent_dim = 3 if self.rb_dim_3d.isChecked() else 2
+        n_ch = 3
+        if hasattr(self, 'chk_canal_0') and hasattr(self, 'chk_canal_1') and hasattr(self, 'chk_canal_2'):
+            ch_list = []
+            if self.chk_canal_0.isChecked(): ch_list.append(0)
+            if self.chk_canal_1.isChecked(): ch_list.append(1)
+            if self.chk_canal_2.isChecked(): ch_list.append(2)
+            if len(ch_list) >= 2:
+                n_ch = len(ch_list)
+
+        t_len = self.inp_pts_env.value() if hasattr(self, 'inp_pts_env') else 20
+        codigo_orto = self.get_plantilla_codigo_ortogonal(n_ch=n_ch, latent_dim=latent_dim, target_len=t_len)
+        self.txt_codigo_arch.setPlainText(codigo_orto)
+        self.chk_usar_custom.setChecked(True)
+        self.lbl_arch_status.setText(f"[OK]: Arquitectura OrthogonalAE cargada ({n_ch}ch x {t_len}pts = {n_ch*t_len}D).")
+        self.lbl_arch_status.setStyleSheet("background-color: #002211; color: #00FF88; border: 1px solid #00AA55; padding: 5px; font-family: monospace; font-size: 10px; border-radius: 4px;")
+
+    def get_plantilla_codigo_ortogonal(self, n_ch=3, latent_dim=2, target_len=20):
+        input_dim = n_ch * target_len
+        return f'''import torch
+import torch.nn as nn
+
+class OrthogonalAutoencoder2D(nn.Module):
+    """
+    Autoencoder Ortogonal 2D (Configuración Récord 87% - 91%).
+    Topología totalmente conexa simétrica sin sesgo (bias=False) con regularización ortogonal:
+    Entrada: {n_ch} canales x {target_len} puntos = {input_dim} dimensiones.
+    """
+    def __init__(self, input_dim={input_dim}, hidden_dim=32, latent_dim={latent_dim}):
+        super().__init__()
+        self.fc1 = nn.Linear(input_dim, hidden_dim, bias=False)
+        self.fc2 = nn.Linear(hidden_dim, 16, bias=False)
+        self.fc3 = nn.Linear(16, latent_dim, bias=False)
+        self.act = nn.Tanh()
+        self.dfc1 = nn.Linear(latent_dim, 16, bias=False)
+        self.dfc2 = nn.Linear(16, hidden_dim, bias=False)
+        self.dfc3 = nn.Linear(hidden_dim, input_dim, bias=False)
+
+    def encode(self, x):
+        h1 = self.act(self.fc1(x))
+        h2 = self.act(self.fc2(h1))
+        return self.fc3(h2)
+
+    def decode(self, z):
+        dh1 = self.act(self.dfc1(z))
+        dh2 = self.act(self.dfc2(dh1))
+        return self.dfc3(dh2)
+
+    def forward(self, x):
+        orig_shape = x.shape
+        x_flat = x.view(x.shape[0], -1) if x.dim() == 3 else x
+        z = self.encode(x_flat)
+        recon = self.decode(z)
+        if len(orig_shape) == 3:
+            recon = recon.view(orig_shape)
+        return recon, z
+
+    def weight_orthogonality_loss(self):
+        loss = 0.0
+        for layer in [self.fc1, self.fc2, self.fc3, self.dfc1, self.dfc2, self.dfc3]:
+            W = layer.weight
+            if W.shape[0] < W.shape[1]:
+                gram = torch.mm(W, W.t())
+                I = torch.eye(W.shape[0], device=W.device)
+            else:
+                gram = torch.mm(W.t(), W)
+                I = torch.eye(W.shape[1], device=W.device)
+            loss += torch.norm(gram - I, p='fro')**2
+        return loss
+'''
+
+    def on_cargar_convae(self):
+        latent_dim = 3 if self.rb_dim_3d.isChecked() else 2
+        n_ch = 3
+        if hasattr(self, 'chk_canal_0') and hasattr(self, 'chk_canal_1') and hasattr(self, 'chk_canal_2'):
+            ch_list = []
+            if self.chk_canal_0.isChecked(): ch_list.append(0)
+            if self.chk_canal_1.isChecked(): ch_list.append(1)
+            if self.chk_canal_2.isChecked(): ch_list.append(2)
+            if len(ch_list) >= 2:
+                n_ch = len(ch_list)
+
+        codigo_convae = f'''import random
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader, TensorDataset
+
+SEED = 42
+LATENT_DIM = {latent_dim}
+LAMBDA_RELATIVE = 1.0
+LAMBDA_DERIV = 1.0
+LOSS_EPS = 1e-8
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+def set_seed(seed=42):
+    random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+set_seed(SEED)
+
+class ConvAE(nn.Module):
+    def __init__(self, in_channels={n_ch}, latent_dim={latent_dim}):
+        super().__init__()
+        self.in_channels = in_channels
+        self.target_len = 100
+
+        self.encoder_conv = nn.Sequential(
+            nn.Conv1d(in_channels, 32, kernel_size=5, stride=2, padding=2),   # 100 -> 50
+            nn.LeakyReLU(0.1),
+            nn.Conv1d(32, 64, kernel_size=5, stride=2, padding=2), # 50 -> 25
+            nn.LeakyReLU(0.1),
+            nn.Conv1d(64, 128, kernel_size=5, stride=2, padding=2),# 25 -> 13
+            nn.LeakyReLU(0.1),
+        )
+
+        self.to_latent = nn.Linear(128 * 13, latent_dim)
+        self.from_latent = nn.Linear(latent_dim, 128 * 13)
+
+        self.decoder = nn.Sequential(
+            nn.ConvTranspose1d(
+                128, 64, kernel_size=5, stride=2,
+                padding=2, output_padding=0
+            ),  # 13 -> 25
+            nn.LeakyReLU(0.1),
+            nn.ConvTranspose1d(
+                64, 32, kernel_size=5, stride=2,
+                padding=2, output_padding=1
+            ),  # 25 -> 50
+            nn.LeakyReLU(0.1),
+            nn.ConvTranspose1d(
+                32, in_channels, kernel_size=5, stride=2,
+                padding=2, output_padding=1
+            ),  # 50 -> 100
+        )
+
+    def encode(self, x):
+        h = self.encoder_conv(x)
+        h = h.flatten(start_dim=1)
+        return self.to_latent(h)
+
+    def decode(self, z):
+        h = self.from_latent(z)
+        h = h.view(-1, 128, 13)
+        return self.decoder(h)
+
+    def forward(self, x):
+        z = self.encode(x)
+        xhat = self.decode(z)
+        return xhat, z
+
+def reconstruction_loss(
+    xhat, x,
+    lambda_relative=LAMBDA_RELATIVE,
+    lambda_deriv=LAMBDA_DERIV,
+    eps=LOSS_EPS
+):
+    # 1) Error absoluto
+    mse_abs = torch.mean((xhat - x) ** 2)
+
+    # 2) Error relativo por canal
+    signal_energy = torch.mean(x ** 2, dim=2).clamp_min(eps)
+    error_energy = torch.mean((xhat - x) ** 2, dim=2)
+    mse_relative = torch.mean(error_energy / signal_energy)
+
+    # 3) Error de forma temporal
+    dx = x[:, :, 1:] - x[:, :, :-1]
+    dxhat = xhat[:, :, 1:] - xhat[:, :, :-1]
+    deriv_energy = torch.mean(dx ** 2, dim=2).clamp_min(eps)
+    deriv_error = torch.mean((dxhat - dx) ** 2, dim=2)
+    mse_deriv = torch.mean(deriv_error / deriv_energy)
+
+    return mse_abs + lambda_relative * mse_relative + lambda_deriv * mse_deriv
+'''
+        self.chk_usar_custom.setChecked(True)
+        self.cmb_loss.setCurrentText("Multiobjetivo (Relativa + Derivada)")
+        self.rb_env.setChecked(True)
+        self.inp_pts_env.setValue(100)
+        self.txt_codigo_arch.setPlainText(codigo_convae)
+        self.on_verificar_arquitectura()
+        self.lbl_arch_status.setText(f"[INFO]: Arquitectura ConvAE ({n_ch} canales) y reconstruction_loss cargadas (Puntos Envolvente ajustado a 100).")
+        self.lbl_arch_status.setStyleSheet("background-color: #002211; color: #00FF88; border: 1px solid #00AA55; padding: 6px; font-family: monospace; font-size: 10px; border-radius: 4px; font-weight: bold;")
 
     def on_verificar_arquitectura(self):
         codigo = self.txt_codigo_arch.toPlainText()
         modalidad = "cruda" if self.rb_cruda.isChecked() else ("espectrograma" if self.rb_spec.isChecked() else "envolvente")
-        latent_dim = 3 if self.rb_dim_3d.isChecked() else 2
+        latent_dim = 3 if (self.rb_dim_3d.isChecked() if hasattr(self, 'rb_dim_3d') else self.rb_dim_3d_env.isChecked()) else 2
+        t_len = self.inp_pts_env.value() if modalidad == "envolvente" else (1000 if modalidad == "cruda" else None)
+        canales = []
+        if hasattr(self, 'chk_canal_0') and self.chk_canal_0.isChecked(): canales.append("canal_0")
+        if hasattr(self, 'chk_canal_1') and self.chk_canal_1.isChecked(): canales.append("canal_1")
+        if hasattr(self, 'chk_canal_2') and self.chk_canal_2.isChecked(): canales.append("canal_2")
+        in_ch = len(canales) if len(canales) >= 2 else 3
         try:
             import deep_learning.motor_autoencoder_unificado as motor
-            ok, msg = motor.verificar_arquitectura_codigo(codigo, modalidad=modalidad, latent_dim=latent_dim)
+            ok, msg = motor.verificar_arquitectura_codigo(codigo, modalidad=modalidad, latent_dim=latent_dim, target_len=t_len, in_channels=in_ch)
             if ok:
                 self.lbl_arch_status.setText(f"[VALIDACION OK]: {msg}")
                 self.lbl_arch_status.setStyleSheet("background-color: #002211; color: #00FF88; border: 1px solid #00AA55; padding: 6px; font-family: monospace; font-size: 10px; border-radius: 4px;")
@@ -2167,7 +2493,9 @@ class AutoencoderPersonalizado(nn.Module):
             tipo_env = "rms"
 
         loss_text = self.cmb_loss.currentText().lower()
-        if "divergencia" in loss_text:
+        if "multiobjetivo" in loss_text or "derivada" in loss_text:
+            tipo_perdida = "multiobjetivo"
+        elif "divergencia" in loss_text:
             tipo_perdida = "soft_dtw_divergence"
         elif "híbrida" in loss_text or "hibrida" in loss_text:
             tipo_perdida = "hibrida"
@@ -2183,9 +2511,32 @@ class AutoencoderPersonalizado(nn.Module):
         filtro_linea_text = self.cmb_filtro_linea.currentText().lower()
         tipo_filtro_linea = "notch" if "notch" in filtro_linea_text else "adaptativo"
             
+        canales_features = []
+        if self.chk_canal_0.isChecked(): canales_features.append("canal_0")
+        if self.chk_canal_1.isChecked(): canales_features.append("canal_1")
+        if self.chk_canal_2.isChecked(): canales_features.append("canal_2")
+        if len(canales_features) < 2:
+            canales_features = ["canal_0", "canal_1", "canal_2"]
+
+        tipo_arq = "ortogonal" if "ortogonal" in self.cmb_tipo_red.currentText().lower() else "convolucional"
+        lambda_w = float(self.inp_lambda_w.value())
+        lambda_z = float(self.inp_lambda_z.value())
+        usar_imp = self.chk_impedancia_reposo.isChecked()
+        usar_so2 = self.chk_alineacion_so2.isChecked()
+        ref_sess = self.cmb_ref_session.currentText()
+        if "auto" in ref_sess.lower():
+            ref_sess = "T2"
+
         return {
             'modalidad': modalidad,
             'latent_dim': latent_dim,
+            'canales_features': canales_features,
+            'tipo_arquitectura': tipo_arq,
+            'lambda_w': lambda_w,
+            'lambda_z': lambda_z,
+            'usar_impedancia_reposo': usar_imp,
+            'usar_alineacion_so2': usar_so2,
+            'ref_session': ref_sess,
             'epochs': self.inp_epochs.value(),
             'batch_size': self.inp_batch.value(),
             'lr': float(self.inp_lr.value()),
@@ -2194,6 +2545,7 @@ class AutoencoderPersonalizado(nn.Module):
             'algoritmo_clustering': algoritmo_clustering,
             'lambda_orto': lambda_orto,
             'tipo_filtro_linea': tipo_filtro_linea,
+            'aplicar_correccion_intersesion': self.chk_correccion_intersesion.isChecked(),
             'usar_calibracion_p95': self.chk_p95.isChecked(),
             'usar_custom_arch': self.chk_usar_custom.isChecked(),
             'codigo_custom_arch': self.txt_codigo_arch.toPlainText(),

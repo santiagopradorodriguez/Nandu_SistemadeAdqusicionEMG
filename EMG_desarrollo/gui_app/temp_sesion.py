@@ -16,7 +16,7 @@ matplotlib.use('TkAgg')
 sys.path.append("/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo")
 import analysis.analisis_por_track_integrado as api
 
-mediciones_a_comparar = ['2026-09-08/A_Prueba1_Sujeto1', '2026-09-08/U_Prueba1_Sujeto1', '2026-09-08/a_Prueba2_Sujeto1', '2026-09-08/a_Prueba3_Sujeto1', '2026-09-08/a_Prueba4_Sujeto1', '2026-09-08/a_Prueba5_Sujeto1', '2026-09-08/u_Prueba2_Sujeto1', '2026-09-08/u_Prueba3_Sujeto1', '2026-09-08/u_Prueba4_Sujeto1']
+mediciones_a_comparar = ['2026-09-22/A_Prueba2_Sujeto1', '2026-09-22/A_Pruebat1_Sujeto1', '2026-09-22/E_Prueba2_Sujeto1', '2026-09-22/E_Pruebat1_Sujeto1', '2026-09-22/I_Prueba2_Sujeto1', '2026-09-22/O_Prueba2_Sujeto1', '2026-09-22/O_Pruebat1_Sujeto1', '2026-09-22/U_Prueba2_Sujeto1', '2026-09-22/a_Prueba3_Sujeto1', '2026-09-22/e_Prueba3_Sujeto1', '2026-09-22/i_Prueba3_Sujeto1', '2026-09-22/i_Pruebat1_Sujeto1', '2026-09-22/o_Prueba3_Sujeto1', '2026-09-22/o_Prueba4_Sujeto1', '2026-09-22/o_Prueba5_Sujeto1', '2026-09-22/u_Prueba3_Sujeto1', '2026-09-22/u_Prueba4_Sujeto1', '2026-09-22/u_Prueba5_Sujeto1']
 base_dir = "/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos"
 nombre_custom = ""
 

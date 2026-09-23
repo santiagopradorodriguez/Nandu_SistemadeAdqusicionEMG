@@ -295,15 +295,21 @@ def calcular_psd_welch(signal_pulse, fs=2000, nperseg=512, noverlap=256, f_max=6
     return f_band, Pxx_band, mdf, mnf
 
 
-def ejecutar_analisis_completo():
+def ejecutar_analisis_completo(session_paths=None, salida_base_dir=None, logger=print):
     """Ejecuta el flujo completo de análisis espectral sobre las 20 tomas de Candela del 2026-09-16."""
     fijar_semilla(seed=42)
     tiempo_inicio = time.time()
 
-    base_sesiones_dir = os.path.join(emg_desarrollo_dir, "base_de_datos_electrodos", "2026-09-16")
-    salida_base_dir = os.path.join(emg_desarrollo_dir, "resultados", "analisis_espectral_candela_2026-09-16")
+    if session_paths is None:
+        base_sesiones_dir = os.path.join(emg_desarrollo_dir, "base_de_datos_electrodos", "2026-09-16")
+        session_paths = sorted([
+            os.path.join(base_sesiones_dir, d) for d in os.listdir(base_sesiones_dir)
+            if os.path.isdir(os.path.join(base_sesiones_dir, d)) and any(d.startswith(f"{v}_") for v in ['A', 'E', 'I', 'O', 'U'])
+        ])
+    if salida_base_dir is None:
+        salida_base_dir = os.path.join(emg_desarrollo_dir, "resultados", "analisis_espectral_candela_2026-09-16")
     if os.path.exists(salida_base_dir):
-        print(f"Limpiando directorio previo para eliminar figuras y espectrogramas viejos: {salida_base_dir}")
+        logger(f"Limpiando directorio previo para eliminar figuras y espectrogramas viejos: {salida_base_dir}")
         shutil.rmtree(salida_base_dir)
 
     subdirs = {
@@ -311,7 +317,8 @@ def ejecutar_analisis_completo():
         'separados': os.path.join(salida_base_dir, "espectros_separados"),
         'rgb': os.path.join(salida_base_dir, "espectros_rgb"),
         'fft': os.path.join(salida_base_dir, "espectros_frecuencia_fft"),
-        'psd': os.path.join(salida_base_dir, "espectros_potencia_psd")
+        'psd': os.path.join(salida_base_dir, "espectros_potencia_psd"),
+        'correlacion': os.path.join(salida_base_dir, "correlacion_emg_audio")
     }
     for d in subdirs.values():
         os.makedirs(d, exist_ok=True)
@@ -320,13 +327,14 @@ def ejecutar_analisis_completo():
         os.makedirs(os.path.join(subdirs['rgb'], f"vocal_{v}"), exist_ok=True)
         os.makedirs(os.path.join(subdirs['fft'], f"vocal_{v}"), exist_ok=True)
         os.makedirs(os.path.join(subdirs['psd'], f"vocal_{v}"), exist_ok=True)
+        os.makedirs(os.path.join(subdirs['correlacion'], f"vocal_{v}"), exist_ok=True)
 
-    print("=" * 80)
-    print("ANALISIS ESPECTRAL MULTIMODAL CANDELA (2026-09-16)")
-    print("Acondicionamiento: Filtro Adaptativo NLMS (50 a 400 Hz) + Pasa-Altos 20 Hz (Trevisan)")
-    print("Visualización: Eje X Lineal (20-600 Hz) | Amplitud FFT fijada en [0.0, 4.0] µV")
-    print("Canales: Ch0 Rojo (Digástrico), Ch1 Verde (Zigo), Ch2 Amarillo (Orbicular)")
-    print("=" * 80)
+    logger("=" * 80)
+    logger("ANALISIS ESPECTRAL MULTIMODAL CANDELA (2026-09-16)")
+    logger("Acondicionamiento: Filtro Adaptativo NLMS (50 a 400 Hz) + Pasa-Altos 20 Hz (Trevisan)")
+    logger("Visualización: Eje X Lineal (20-600 Hz) | Amplitud FFT fijada en [0.0, 4.0] µV")
+    logger("Canales: Ch0 Rojo (Digástrico), Ch1 Verde (Zigo), Ch2 Amarillo (Orbicular)")
+    logger("=" * 80)
 
     todas_tomas = sorted([
         d for d in os.listdir(base_sesiones_dir)
@@ -342,7 +350,7 @@ def ejecutar_analisis_completo():
         vocal = nombre_toma.split('_')[0].upper()
 
         pct = ((idx_toma + 1) / total_tomas) * 100.0
-        print(f"[Carga] Toma {idx_toma + 1}/{total_tomas} ({pct:.1f}%) - {nombre_toma}")
+        logger(f"[Carga] Toma {idx_toma + 1}/{total_tomas} ({pct:.1f}%) - {nombre_toma}")
 
         meta_file = os.path.join(toma_path, "canal_0", "metadata.json")
         with open(meta_file, 'r', encoding='utf-8') as f:
@@ -459,6 +467,8 @@ def ejecutar_analisis_completo():
 
                 segs_lineales.append(seg_lin)
                 segs_envolvente.append(env_depurada)
+                
+            seg_audio = mic_sig[p_start:p_end]
 
             todos_los_pulsos.append({
                 'toma': nombre_toma,
@@ -466,6 +476,7 @@ def ejecutar_analisis_completo():
                 'vocal': vocal,
                 'segs_lineales': np.array(segs_lineales),      # (3, 4000) en uV
                 'segs_envolvente': np.array(segs_envolvente),  # (3, 4000)
+                'seg_audio': seg_audio,
                 'fs': fs,
                 'ruidos': ruidos_c
             })
@@ -511,8 +522,8 @@ def ejecutar_analisis_completo():
 
     n_outliers = len(lista_outliers)
     n_validos = np.sum(mascara_inliers)
-    print(f"Outliers detectados y excluidos: {n_outliers} ({n_outliers / total_contracciones * 100:.1f}%)")
-    print(f"Pulsos válidos consolidados para análisis espectral: {n_validos}")
+    logger(f"Outliers detectados y excluidos: {n_outliers} ({n_outliers / total_contracciones * 100:.1f}%)")
+    logger(f"Pulsos válidos consolidados para análisis espectral: {n_validos}")
 
     with open(os.path.join(salida_base_dir, "lista_outliers.json"), 'w', encoding='utf-8') as f:
         json.dump(lista_outliers, f, indent=4, ensure_ascii=False)
@@ -531,9 +542,9 @@ def ejecutar_analisis_completo():
 
     # Filtrado por Isolation Forest confirmado por el usuario (N=10 válido cuando hay 2 outliers)
     pulsos_validos = [p for i, p in enumerate(todos_los_pulsos) if mascara_inliers[i]]
-    print(f"Pulsos válidos consolidados para análisis espectral: {len(pulsos_validos)} (excluidos {n_outliers} outliers)")
+    logger(f"Pulsos válidos consolidados para análisis espectral: {len(pulsos_validos)} (excluidos {n_outliers} outliers)")
 
-    print("\nCalculando matrices espectrales (20-600 Hz: STFT, Compuesto, FFT y PSD)...")
+    logger("\nCalculando matrices espectrales (20-600 Hz: STFT, Compuesto, FFT y PSD)...")
 
     datos_por_vocal = {v: [] for v in ['A', 'E', 'I', 'O', 'U']}
     f_stft, t_stft = None, None
@@ -549,6 +560,9 @@ def ejecutar_analisis_completo():
             f_stft, t_stft, Sxx = calcular_espectrograma(segs[ch_i], fs=fs, nperseg=256, noverlap=230, f_max=600.0)
             stft_res.append(Sxx)
         stft_res = np.array(stft_res)
+        
+        # Audio Spectrogram (up to Nyquist since fs=2000, max=1000)
+        f_audio, t_audio, Sxx_audio = calcular_espectrograma(p['seg_audio'], fs=fs, nperseg=128, noverlap=100, f_max=1000.0)
 
         # Espectrograma coloreado según la paleta solicitada (Rojo, Verde, Amarillo)
         color_img = construir_espectrograma_coloreado(stft_res[0], stft_res[1], stft_res[2])
@@ -579,10 +593,11 @@ def ejecutar_analisis_completo():
             'fft': fft_res,
             'psd': psd_res,
             'mdf': mdf_list,
-            'mnf': mnf_list
+            'mnf': mnf_list,
+            'audio_stft': Sxx_audio
         })
 
-    print("Guardando datos espectrales consolidados en formato NPZ...")
+    logger("Guardando datos espectrales consolidados en formato NPZ...")
     npz_data = {
         'vocales': np.array([p['info']['vocal'] for v_list in datos_por_vocal.values() for p in v_list]),
         'tomas': np.array([p['info']['toma'] for v_list in datos_por_vocal.values() for p in v_list]),
@@ -594,7 +609,7 @@ def ejecutar_analisis_completo():
     }
     np.savez_compressed(os.path.join(salida_base_dir, "datos_espectrales_consolidados.npz"), **npz_data)
 
-    print("\nGenerando figuras de evaluación visual (DPI 300)...")
+    logger("\nGenerando figuras de evaluación visual (DPI 300)...")
 
     # Parámetros unificados de visualización en banda fisiológica EMG (20 a 600 Hz) en escala lineal
     F_MIN_LOG = 20.0
@@ -614,17 +629,17 @@ def ejecutar_analisis_completo():
     # 1. Escala unificada para FFT fijada estrictamente en 0.0 a 4.0 µV según solicitud directa
     y_lim_fft_unificado = 6.0
     y_lim_fft_por_vocal = {v: 6.0 for v in datos_por_vocal.keys()}
-    print(f"  [Escala FFT Unificada Global] Rango fijado estrictamente a: 0.0 - {y_lim_fft_unificado:.1f} µV")
+    logger(f"  [Escala FFT Unificada Global] Rango fijado estrictamente a: 0.0 - {y_lim_fft_unificado:.1f} µV")
 
     # 2. Escala unificada para PSD Welch (dB/Hz)
     all_psd_db = 10.0 * np.log10(np.maximum(all_psds, 1e-6))
     p_min_db = float(np.floor(np.percentile(all_psd_db, 0.5) / 5.0) * 5.0)
     p_max_db = float(np.ceil(np.percentile(all_psd_db, 99.8) / 5.0) * 5.0)
     y_lim_psd_unificado = (min(p_min_db, -25.0), max(p_max_db, 10.0))
-    print(f"  [Escala PSD Unificada] Rango fijado a: {y_lim_psd_unificado[0]:.1f} a {y_lim_psd_unificado[1]:.1f} dB/Hz")
+    logger(f"  [Escala PSD Unificada] Rango fijado a: {y_lim_psd_unificado[0]:.1f} a {y_lim_psd_unificado[1]:.1f} dB/Hz")
 
     # 5.1 Espectrogramas Separados
-    print("  -> Generando espectrogramas separados por músculo...")
+    logger("  -> Generando espectrogramas separados por músculo...")
     for v, lista_v in datos_por_vocal.items():
         if not lista_v:
             continue
@@ -671,7 +686,7 @@ def ejecutar_analisis_completo():
             plt.close(fig_sep_p)
 
     # 5.2 Espectrogramas Compuestos Coloreados
-    print("  -> Generando espectrogramas compuestos con código cromático (Rojo/Verde/Amarillo)...")
+    logger("  -> Generando espectrogramas compuestos con código cromático (Rojo/Verde/Amarillo)...")
     for v, lista_v in datos_por_vocal.items():
         if not lista_v:
             continue
@@ -714,7 +729,7 @@ def ejecutar_analisis_completo():
             plt.close(fig_ind)
 
     # 5.3 FFT (por toma individual, comparativa inter-series y promedio general)
-    print("  -> Generando espectros de frecuencias FFT (por toma y promedios)...")
+    logger("  -> Generando espectros de frecuencias FFT (por toma y promedios)...")
     colores_series = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd']
     for v, lista_v in datos_por_vocal.items():
         if not lista_v:
@@ -835,7 +850,7 @@ def ejecutar_analisis_completo():
             plt.close(fig_p)
 
     # 5.4 PSD (por toma individual, comparativa inter-series y promedio general)
-    print("  -> Generando análisis de potencia PSD (Welch, por toma y promedios)...")
+    logger("  -> Generando análisis de potencia PSD (Welch, por toma y promedios)...")
     for v, lista_v in datos_por_vocal.items():
         if not lista_v:
             continue
@@ -970,7 +985,7 @@ def ejecutar_analisis_completo():
 
 
     # 5.5 Comparativas Globales
-    print("  -> Generando paneles comparativos globales de las 5 vocales...")
+    logger("  -> Generando paneles comparativos globales de las 5 vocales...")
     vocales_orden = ['A', 'E', 'I', 'O', 'U']
 
     # A) Espectrogramas
@@ -1022,6 +1037,41 @@ def ejecutar_analisis_completo():
     plt.tight_layout()
     plt.savefig(os.path.join(subdirs['resumen'], "comparativa_rgb_5vocales.png"), dpi=300)
     plt.close(fig_glob_rgb)
+
+    # B.2) Correlación EMG-Audio (Promedios Globales por Vocal)
+    fig_glob_corr, axes_corr = plt.subplots(2, 5, figsize=(20, 8), sharex=True)
+    fig_glob_corr.suptitle("Correlación EMG vs Audio (Promedio por Vocal)\nFila Superior: EMG RGB (Rojo=Dig, Verde=Zig, Amar=Orb) | Fila Inferior: Audio Micrófono", fontsize=14, fontweight='bold')
+    
+    for col_i, v in enumerate(vocales_orden):
+        lista_v = datos_por_vocal[v]
+        ax_rgb = axes_corr[0, col_i]
+        ax_aud = axes_corr[1, col_i]
+        
+        if not lista_v:
+            continue
+            
+        stft_medio = np.mean([item['stft'] for item in lista_v], axis=0)
+        comp_medio = construir_espectrograma_coloreado(stft_medio[0], stft_medio[1], stft_medio[2])
+        
+        avg_audio = np.mean([item['audio_stft'] for item in lista_v], axis=0)
+        fs = lista_v[0]['info']['fs']
+        f_audio, t_audio, _ = calcular_espectrograma(lista_v[0]['info']['seg_audio'], fs=fs, nperseg=128, noverlap=100, f_max=1000.0)
+        
+        ax_rgb.imshow(comp_medio, origin='lower', aspect='auto', extent=extent_stft)
+        ax_rgb.set_title(f"EMG Vocal /{v}/ (N={len(lista_v)})", fontsize=12, fontweight='bold', color=COLORES_VOCALES[v])
+        ax_rgb.set_ylim(F_MIN_LOG, F_MAX_LOG)
+        if col_i == 0:
+            ax_rgb.set_ylabel("Frec. EMG [Hz]", fontsize=11, fontweight='bold')
+            
+        im = ax_aud.imshow(10.0 * np.log10(np.maximum(avg_audio, 1e-12)), origin='lower', aspect='auto', extent=[t_audio[0], t_audio[-1], f_audio[0], f_audio[-1]], cmap='magma')
+        ax_aud.set_xlabel("Tiempo relativo [s]", fontsize=10)
+        if col_i == 0:
+            ax_aud.set_ylabel("Frec. Audio [Hz]", fontsize=11, fontweight='bold')
+            
+    plt.tight_layout()
+    plt.savefig(os.path.join(subdirs['resumen'], "comparativa_correlacion_audio_5vocales.png"), dpi=300)
+    plt.close(fig_glob_corr)
+
 
     # C) FFT
     fig_glob_fft, axes_fft = plt.subplots(3, 1, figsize=(12, 10), sharex=True, sharey=True)
@@ -1082,10 +1132,10 @@ def ejecutar_analisis_completo():
     plt.close(fig_glob_psd)
 
     duracion_total = time.time() - tiempo_inicio
-    print("\n" + "=" * 80)
-    print(f"PROCESAMIENTO ESPECTRAL CULMINADO CON EXITO EN {duracion_total:.2f} s")
-    print(f"Resultados guardados en: {salida_base_dir}")
-    print("=" * 80)
+    logger("\n" + "=" * 80)
+    logger(f"PROCESAMIENTO ESPECTRAL CULMINADO CON EXITO EN {duracion_total:.2f} s")
+    logger(f"Resultados guardados en: {salida_base_dir}")
+    logger("=" * 80)
 
 
 if __name__ == '__main__':

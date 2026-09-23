@@ -15,10 +15,12 @@
 import os
 import sys
 import json
+import re
 import time
 import random
 from datetime import datetime
 import numpy as np
+import pandas as pd
 import scipy.io.wavfile as wavfile
 from scipy.signal import butter, filtfilt, find_peaks, spectrogram, iirnotch
 from scipy.ndimage import grey_closing
@@ -337,11 +339,12 @@ def calcular_envolvente(s_raw, s_bp, fs=2000, tipo_envolvente="rms", smooth_ms=1
             return np.sqrt(np.maximum(np.convolve(sig_sq, w, mode='same'), 0.0)).astype(np.float32)
         return np.abs(s_bp).astype(np.float32)
 
-def procesar_stft_calibrada(pulso_3ch, fs=2000, nperseg=128, noverlap=120, umbral_db=-22.0, target_size=(32, 64)):
+def procesar_stft_calibrada(pulso_nch, fs=2000, nperseg=128, noverlap=120, umbral_db=-22.0, target_size=(32, 64)):
+    n_canales = pulso_nch.shape[0]
     canales_raw = []
-    for c in range(3):
+    for c in range(n_canales):
         f, t, Sxx = spectrogram(
-            pulso_3ch[c], fs=fs, window='hann', nperseg=nperseg, noverlap=noverlap, scaling='density'
+            pulso_nch[c], fs=fs, window='hann', nperseg=nperseg, noverlap=noverlap, scaling='density'
         )
         mask_f = (f >= 20.0) & (f <= 450.0)
         canales_raw.append(Sxx[mask_f, :])
@@ -351,7 +354,7 @@ def procesar_stft_calibrada(pulso_3ch, fs=2000, nperseg=128, noverlap=120, umbra
     mat_db = 10.0 * np.log10(np.maximum(mat_power / supremo_pulso, 1e-6))
 
     canales_cerrados = []
-    for c in range(3):
+    for c in range(n_canales):
         ch_c = grey_closing(mat_db[c], size=(3, 3))
         ch_norm = np.clip((ch_c - umbral_db) / (0.0 - umbral_db), 0.0, 1.0)
         canales_cerrados.append(ch_norm)
@@ -367,6 +370,7 @@ def procesar_stft_calibrada(pulso_3ch, fs=2000, nperseg=128, noverlap=120, umbra
 
 def extraer_dataset_unificado(
     rutas_tomas,
+    aplicar_correccion_intersesion=True,
     usar_calibracion_p95=True,
     modo_alineacion="Pico Volumen Micrófono",
     carpeta_salida=None,
@@ -377,8 +381,16 @@ def extraer_dataset_unificado(
     outlier_contamination=0.10,
     w_canales=(1.0, 1.0, 1.0),
     callback_log=None,
+    canales_features=("canal_0", "canal_1", "canal_2"),
     **kwargs
 ):
+    aplicar_correccion_intersesion = kwargs.get('aplicar_correccion_intersesion', aplicar_correccion_intersesion)
+    canales_features = list(kwargs.get('canales_features', canales_features))
+    if not canales_features or len(canales_features) < 2:
+        canales_features = ["canal_0", "canal_1", "canal_2"]
+
+    indices_canales = [int(c.split('_')[1]) for c in canales_features]
+    n_canales = len(canales_features)
     fijar_semilla(seed=42)
     def _log(msg):
         if callback_log:
@@ -387,11 +399,12 @@ def extraer_dataset_unificado(
             print(msg, flush=True)
 
     _log("Iniciando extracción unificada de señales sEMG (Estándar Trevisan / PCA-UMAP)...")
+    _log(f"Canales seleccionados ({n_canales}): {', '.join(canales_features)}")
     _log(f"Modo de alineación seleccionado: '{modo_alineacion}'")
     t0 = time.time()
 
     mediciones_datos = []
-    musculos_canales_global = ["Canal 0", "Canal 1", "Canal 2"]
+    musculos_canales_global = [f"Canal {idx}" for idx in indices_canales]
     fs_global = 2000
     bpm_global = 40
     total_tomas = len(rutas_tomas)
@@ -445,7 +458,7 @@ def extraer_dataset_unificado(
                 m_map = {f"canal_{j}": m_list[j] for j in range(len(m_list))}
             else:
                 m_map = {"canal_0": "Canal 0", "canal_1": "Canal 1", "canal_2": "Canal 2"}
-        musculos_canales_global = [m_map.get("canal_0", "Ch0"), m_map.get("canal_1", "Ch1"), m_map.get("canal_2", "Ch2")]
+        musculos_canales_global = [m_map.get(ch, f"Ch{idx}") for idx, ch in zip(indices_canales, canales_features)]
 
         # 2. Lectura de excluded_windows.json si existe
         excluded_windows = []
@@ -460,7 +473,7 @@ def extraer_dataset_unificado(
             except Exception:
                 pass
 
-        # 3. Carga de canales sEMG 0, 1, 2 y canal 3 (micrófono)
+        # 3. Carga de canales sEMG seleccionados y canal 3 (micrófono)
         canales_ok = True
         sigs_raw = []
         sigs_bp = []
@@ -473,7 +486,7 @@ def extraer_dataset_unificado(
         tipo_filtro_linea = kwargs.get('tipo_filtro_linea', 'adaptativo')
         notch_q = float(kwargs.get('notch_q', 2.0))
 
-        for ch in ["canal_0", "canal_1", "canal_2"]:
+        for ch in canales_features:
             wav_path = os.path.join(toma_dir, ch, "grabacion.wav")
             if not os.path.exists(wav_path):
                 canales_ok = False
@@ -520,14 +533,16 @@ def extraer_dataset_unificado(
         elif modo_alineacion.startswith("Pico Volumen Micrófono") and mic_sig is not None:
             win_mic = max(5, int(0.05 * fs))
             sig_ref_align = np.convolve(np.abs(mic_sig), np.ones(win_mic)/win_mic, mode='same')
-        elif modo_alineacion == "Pico Canal 0":
-            sig_ref_align = sigs_env[0]
-        elif modo_alineacion == "Pico Canal 1":
-            sig_ref_align = sigs_env[1]
-        elif modo_alineacion == "Pico Canal 2":
-            sig_ref_align = sigs_env[2]
+        elif modo_alineacion == "Pico Canal 0" and "canal_0" in canales_features:
+            sig_ref_align = sigs_env[canales_features.index("canal_0")]
+        elif modo_alineacion == "Pico Canal 1" and "canal_1" in canales_features:
+            sig_ref_align = sigs_env[canales_features.index("canal_1")]
+        elif modo_alineacion == "Pico Canal 2" and "canal_2" in canales_features:
+            sig_ref_align = sigs_env[canales_features.index("canal_2")]
         else: # Pico Envolvente Muscular (Supremo)
-            sig_ref_align = np.maximum(sigs_env[0], np.maximum(sigs_env[1], sigs_env[2]))
+            sig_ref_align = sigs_env[0]
+            for c in range(1, n_canales):
+                sig_ref_align = np.maximum(sig_ref_align, sigs_env[c])
 
         # Iterar exactamente por cada ranura de pulso (inmune a desfasaje y colapso en t=0)
         for win_idx in range(n_pulsos_total):
@@ -554,7 +569,7 @@ def extraer_dataset_unificado(
 
             # Estimación dinámica de ruido interpulso
             ruidos_c = []
-            for c_idx in range(3):
+            for c_idx in range(n_canales):
                 env_ch = sigs_env[c_idx]
                 init_n = inits_noise[c_idx]
                 n_start_pre = max(0, int(p_idx - 0.5 * muestras_pulso - noise_win_samples))
@@ -569,8 +584,15 @@ def extraer_dataset_unificado(
             rect_segs = []
             env_segs = []
             es_valido = True
-            w_c = np.array(w_canales, dtype=np.float32) if (w_canales is not None and len(w_canales) >= 3) else np.ones(3, dtype=np.float32)
-            for c_idx in range(3):
+            w_c = []
+            for ch_idx in indices_canales:
+                if w_canales is not None and ch_idx < len(w_canales):
+                    w_c.append(float(w_canales[ch_idx]))
+                else:
+                    w_c.append(1.0)
+            w_c = np.array(w_c, dtype=np.float32)
+
+            for c_idx in range(n_canales):
                 raw_seg = sigs_bp[c_idx][pulse_start:pulse_end]
                 env_seg = sigs_env[c_idx][pulse_start:pulse_end]
                 if len(raw_seg) < 50:
@@ -595,10 +617,10 @@ def extraer_dataset_unificado(
                 rect_segs.append(rect_clean)
                 env_segs.append(env_clean)
 
-            if not es_valido or len(rect_segs) != 3:
+            if not es_valido or len(rect_segs) != n_canales:
                 continue
 
-            # Interpolar a longitud fija y normalizar por Supremo Tricanal del pulso individual
+            # Interpolar a longitud fija y normalizar por Supremo del pulso individual
             target_cruda_len = 1000
             target_env_len = int(target_len) if target_len and target_len > 0 else 100
 
@@ -606,23 +628,16 @@ def extraer_dataset_unificado(
             x_tgt_e = np.linspace(0.0, 1.0, target_env_len)
             x_tgt_c = np.linspace(0.0, 1.0, target_cruda_len)
 
-            env_i = np.array([np.interp(x_tgt_e, x_orig_w, env_segs[c]) for c in range(3)], dtype=np.float32)
-            raw_i = np.array([np.interp(x_tgt_c, x_orig_w, rect_segs[c]) for c in range(3)], dtype=np.float32)
+            env_i = np.array([np.interp(x_tgt_e, x_orig_w, env_segs[c]) for c in range(n_canales)], dtype=np.float32)
+            raw_i = np.array([np.interp(x_tgt_c, x_orig_w, rect_segs[c]) for c in range(n_canales)], dtype=np.float32)
 
-            supremo_pulso = max(float(np.max(env_i)), 1e-9)
-            if supremo_pulso <= 1e-6:
+            if float(np.max(env_i)) <= 1e-6:
                 continue
-
-            env_norm = env_i / supremo_pulso
-            raw_norm = raw_i / supremo_pulso
-            max_raw = float(np.max(raw_norm))
-            if max_raw > 1.0:
-                raw_norm = raw_norm / max_raw
 
             mediciones_datos.append({
                 'win_idx': win_idx,
-                'env_norm': env_norm,
-                'raw_norm': raw_norm,
+                'env_i': env_i,
+                'raw_i': raw_i,
                 'vocal': vocal,
                 'toma': f"{toma_name}_W{win_idx}",
                 'fecha': fecha_toma,
@@ -630,67 +645,129 @@ def extraer_dataset_unificado(
             })
 
     N_total = len(mediciones_datos)
-    _log(f"Extracción y normalización tricanal completada. Total de contracciones: {N_total}")
+    _log(f"Extracción de ventanas completada. Total de contracciones: {N_total}")
     if N_total == 0:
         raise RuntimeError("No se pudieron extraer contracciones válidas de las tomas seleccionadas.")
 
-    # 6. Re-escalado Fisiológico por Promedio de Pulsos hacia 1.0 (Directiva del Usuario)
-    # Todos los pulsos ya están normalizados por su supremo tricanal individual.
-    # Ahora se promedian todos los pulsos por vocal y se re-escalan los canales para que:
-    #   - En la /i/: el Verde (Canal 1 - Depresor) alcance el 1.0 y sea el máximo estricto frente a Rojo y Naranja.
-    #   - En la /a/: el Rojo (Canal 0 - Milohioideo) alcance el 1.0 y sea el máximo estricto frente al Verde.
-    #   - En la /u/: el Naranja (Canal 2 - Orbicular) alcance el 1.0 y sea el máximo estricto frente al Rojo.
+    # ------------------------------------------------------------------
+    # 5. CALIBRACIÓN INTERSESIÓN POR LOTE P95 (ESTÁNDAR PCA-UMAP)
+    # ------------------------------------------------------------------
+    session_factors = {}
+    if aplicar_correccion_intersesion:
+        _log("Calculando calibración intersesión por lote P95 (Estándar PCA/UMAP)...")
+        sessions_dict = {}
+        for w in mediciones_datos:
+            s_key = (w['fecha'], w['session_key'])
+            sessions_dict.setdefault(s_key, []).append(w)
+
+        for s_key, wins_sesion in sessions_dict.items():
+            s_fecha, s_tag = s_key
+            V = []
+            for c_idx in range(n_canales):
+                picos_ch = [float(np.max(w['env_i'][c_idx])) for w in wins_sesion]
+                p95 = float(np.percentile(picos_ch, 95)) if picos_ch else 1.0
+                V.append(p95)
+            V = np.array(V, dtype=np.float32)
+            V_ref = float(np.max(V))
+            if V_ref > 1e-9:
+                alpha = V / V_ref
+                # alpha_piso = 0.20 garantiza acotar la amplificación a un máximo de 5.0x
+                C = 1.0 / np.maximum(alpha, 0.20)
+            else:
+                C = np.ones(n_canales, dtype=np.float32)
+            session_factors[s_key] = C
+            ch_str = ", ".join([f"Ch{indices_canales[c]}: C={C[c]:.2f} (P95={V[c]:.4f})" for c in range(n_canales)])
+            _log(f"  [Intersesión] Sesión '{s_tag}' ({s_fecha}) -> {ch_str}")
+    else:
+        c_ones_str = ", ".join(["1.0" for _ in range(n_canales)])
+        _log(f"[Intersesión] Calibración intersesión desactivada (factores C = [{c_ones_str}]).")
+
+    # ------------------------------------------------------------------
+    # 6. ESCALADO Y NORMALIZACIÓN POR SUPREMO POR PULSO INDIVIDUAL
+    # ------------------------------------------------------------------
+    for w in mediciones_datos:
+        s_key = (w['fecha'], w['session_key'])
+        C = session_factors.get(s_key, np.ones(n_canales, dtype=np.float32)) if aplicar_correccion_intersesion else np.ones(n_canales, dtype=np.float32)
+        C_col = C.reshape(n_canales, 1)
+
+        env_scaled = w['env_i'] * C_col
+        raw_scaled = w['raw_i'] * C_col
+
+        supremo_pulso = max(float(np.max(env_scaled)), 1e-9)
+        if supremo_pulso <= 1e-6:
+            w['env_norm'] = np.zeros_like(env_scaled)
+            w['raw_norm'] = np.zeros_like(raw_scaled)
+        else:
+            w['env_norm'] = env_scaled / supremo_pulso
+            raw_norm = raw_scaled / supremo_pulso
+            max_raw = float(np.max(raw_norm))
+            if max_raw > 1.0:
+                raw_norm = raw_norm / max_raw
+            w['raw_norm'] = raw_norm
+
+    # 7. Re-escalado Fisiológico por Promedio de Pulsos hacia 1.0 (Directiva del Usuario)
+    # Todos los pulsos ya están normalizados por su supremo individual.
     if usar_calibracion_p95:
-        _log("Calculando reescalado fisiológico sobre los pulsos normalizados (Verde en 1.0 en /i/)...")
+        _log("Calculando reescalado fisiológico sobre los pulsos normalizados...")
         promedios = {}
         for v in ['A', 'E', 'I', 'O', 'U']:
             wins_v = [w['env_norm'] for w in mediciones_datos if w['vocal'] == v]
             if wins_v:
                 promedios[v] = np.mean(wins_v, axis=0)
 
-        # Picos de los promedios de cada canal en su vocal diana
-        p_rojo_a = float(np.max(promedios['A'][0])) if 'A' in promedios else 1.0
-        p_verde_i = float(np.max(promedios['I'][1])) if 'I' in promedios else (
-            float(np.max(promedios['E'][1])) if 'E' in promedios else 1.0
-        )
-        p_naranja_u = float(np.max(promedios['U'][2])) if 'U' in promedios else (
-            float(np.max(promedios['O'][2])) if 'O' in promedios else 1.0
-        )
+        k_factors = np.ones(n_canales, dtype=np.float32)
+        for i_pos, ch_idx in enumerate(indices_canales):
+            if ch_idx == 0:
+                # Canal 0: Milohioideo / Digástrico (diana: /a/)
+                p_a = float(np.max(promedios['A'][i_pos])) if 'A' in promedios else 1.0
+                k_factors[i_pos] = 1.0 / max(p_a, 1e-6)
+            elif ch_idx == 1:
+                # Canal 1: Depresor / Modiolo / Cigomático (diana: /i/ o /e/)
+                p_i = float(np.max(promedios['I'][i_pos])) if 'I' in promedios else (
+                    float(np.max(promedios['E'][i_pos])) if 'E' in promedios else 1.0
+                )
+                k_factors[i_pos] = 1.0 / max(p_i, 1e-6)
+            elif ch_idx == 2:
+                # Canal 2: Orbicular (diana: /u/ o /o/)
+                p_u = float(np.max(promedios['U'][i_pos])) if 'U' in promedios else (
+                    float(np.max(promedios['O'][i_pos])) if 'O' in promedios else 1.0
+                )
+                k_factors[i_pos] = 1.0 / max(p_u, 1e-6)
 
-        # Factores base para llevar el agonista a 1.0 exacto en el promedio de su vocal (Directiva del Usuario):
-        # - En la vocal /a/: el Rojo (Canal 0 - Milohioideo) alcanza exactamente 1.0
-        # - En la vocal /i/: el Verde (Canal 1 - Depresor Anguli Oris) alcanza exactamente 1.0
-        # - En la vocal /u/: la curva amarilla/naranja (Canal 2 - Orbicularis Oris) alcanza exactamente 1.0
-        k0 = 1.0 / max(p_rojo_a, 1e-6)
-        k1 = 1.0 / max(p_verde_i, 1e-6)
-        k2 = 1.0 / max(p_naranja_u, 1e-6)
+        # Salvaguardas de dominancia motora si los pares están presentes
+        if 0 in indices_canales and 1 in indices_canales:
+            i0 = indices_canales.index(0)
+            i1 = indices_canales.index(1)
+            if 'A' in promedios:
+                p_1_a = float(np.max(promedios['A'][i1]))
+                if (p_1_a * k_factors[i1]) >= 0.95:
+                    k_factors[i1] = min(k_factors[i1], 0.85 / max(p_1_a, 1e-6))
+            if 'I' in promedios:
+                p_0_i = float(np.max(promedios['I'][i0]))
+                if (p_0_i * k_factors[i0]) >= 0.95:
+                    k_factors[i0] = min(k_factors[i0], 0.85 / max(p_0_i, 1e-6))
 
-        # Salvaguarda de dominancia motora fisiológica por vocal:
-        # En la vocal /a/: el Rojo (Ch0) debe ser el máximo absoluto (1.0) y el Verde (Ch1) no debe superarlo
-        if 'A' in promedios:
-            p_verde_a = float(np.max(promedios['A'][1]))
-            if (p_verde_a * k1) >= 0.95:
-                k1 = min(k1, 0.85 / max(p_verde_a, 1e-6))
+        if 0 in indices_canales and 2 in indices_canales:
+            i0 = indices_canales.index(0)
+            i2 = indices_canales.index(2)
+            if 'U' in promedios:
+                p_0_u = float(np.max(promedios['U'][i0]))
+                if (p_0_u * k_factors[i0]) >= 0.95:
+                    k_factors[i0] = min(k_factors[i0], 0.85 / max(p_0_u, 1e-6))
 
-        # En la vocal /u/: el Naranja (Ch2) debe ser el máximo absoluto (1.0) y el Rojo (Ch0) no debe superarlo
-        if 'U' in promedios:
-            p_rojo_u = float(np.max(promedios['U'][0]))
-            if (p_rojo_u * k0) >= 0.95:
-                k0 = min(k0, 0.85 / max(p_rojo_u, 1e-6))
+        if 1 in indices_canales and 2 in indices_canales:
+            i1 = indices_canales.index(1)
+            i2 = indices_canales.index(2)
+            if 'I' in promedios:
+                p_2_i = float(np.max(promedios['I'][i2]))
+                if (p_2_i * k_factors[i2]) >= 0.95:
+                    k_factors[i2] = min(k_factors[i2], 0.85 / max(p_2_i, 1e-6))
 
-        # En la vocal /i/: el Verde (Ch1) debe ser el máximo absoluto (1.0) y el Rojo/Naranja no deben superarlo
-        if 'I' in promedios:
-            p_rojo_i = float(np.max(promedios['I'][0]))
-            p_naranja_i = float(np.max(promedios['I'][2]))
-            if (p_rojo_i * k0) >= 0.95:
-                k0 = min(k0, 0.85 / max(p_rojo_i, 1e-6))
-            if (p_naranja_i * k2) >= 0.95:
-                k2 = min(k2, 0.85 / max(p_naranja_i, 1e-6))
+        k_vec = k_factors.reshape(n_canales, 1)
+        k_str = ", ".join([f"Ch{indices_canales[c]}={k_factors[c]:.4f}" for c in range(n_canales)])
+        _log(f"  [Reescalado Fisiológico Directo por Promedios] Factores: {k_str}")
 
-        k_vec = np.array([k0, k1, k2], dtype=np.float32).reshape(3, 1)
-        _log(f"  [Reescalado Fisiológico Directo por Promedios] Factores: Ch0 (Rojo en /a/ -> 1.0)={k0:.4f}, Ch1 (Verde en /i/ -> 1.0)={k1:.4f}, Ch2 (Naranja en /u/ -> 1.0)={k2:.4f}")
-
-        # Aplicar reescalado lineal directo sobre todos los pulsos normalizados (sin clipping a 1.0 en pulsos individuales para preservar la media exacta en 1.0)
+        # Aplicar reescalado lineal directo sobre todos los pulsos normalizados
         for w in mediciones_datos:
             w['env_norm'] = np.maximum(0.0, w['env_norm'] * k_vec)
             w['raw_norm'] = np.maximum(0.0, w['raw_norm'] * k_vec)
@@ -755,11 +832,12 @@ def extraer_dataset_unificado(
         bpm=bpm_global,
         fs=fs_global,
         tipo_envolvente=tipo_envolvente,
-        smooth_ms=smooth_ms
+        smooth_ms=smooth_ms,
+        canales_features=np.array(canales_features)
     )
     try:
         cache_npz = os.path.join(cache_dir, "dataset_autoencoder_unificado.npz")
-        np.savez_compressed(cache_npz, X_cruda=X_cruda_clean, X_env=X_env_clean, X_spec=X_spec_clean, Y=Y_clean, Tomas=Tomas_clean, Fechas=Fechas_clean, Musculos_Canales=np.array(musculos_canales_global), bpm=bpm_global, fs=fs_global, tipo_envolvente=tipo_envolvente, smooth_ms=smooth_ms)
+        np.savez_compressed(cache_npz, X_cruda=X_cruda_clean, X_env=X_env_clean, X_spec=X_spec_clean, Y=Y_clean, Tomas=Tomas_clean, Fechas=Fechas_clean, Musculos_Canales=np.array(musculos_canales_global), bpm=bpm_global, fs=fs_global, tipo_envolvente=tipo_envolvente, smooth_ms=smooth_ms, canales_features=np.array(canales_features))
         legacy_npz = os.path.join(legacy_cache_dir, "dataset_autoencoder_unificado.npz")
         np.savez_compressed(
             legacy_npz,
@@ -773,7 +851,8 @@ def extraer_dataset_unificado(
             bpm=bpm_global,
             fs=fs_global,
             tipo_envolvente=tipo_envolvente,
-            smooth_ms=smooth_ms
+            smooth_ms=smooth_ms,
+            canales_features=np.array(canales_features)
         )
     except Exception:
         pass
@@ -931,7 +1010,168 @@ class AutoencoderEspectrograma2D(nn.Module):
         rec = self.out_conv(d)
         return rec, z
 
-def compilar_modelo_desde_codigo(codigo_str, modalidad="envolvente", latent_dim=2, target_len=None):
+class OrthogonalAutoencoder2D(nn.Module):
+    """
+    Autoencoder Ortogonal 2D para descubrimiento no supervisado de variedades latentes sEMG.
+    Arquitectura totalmente conexa simétrica sin sesgo (bias=False) con regularización ortogonal:
+    D -> hidden_dim (32) -> 16 -> latent_dim (2) -> 16 -> hidden_dim (32) -> D
+    Admite entrada aplanada (N, D) o tridimensional (N, n_canales, target_len).
+    """
+    def __init__(self, input_dim=60, hidden_dim=32, latent_dim=2):
+        super(OrthogonalAutoencoder2D, self).__init__()
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.latent_dim = latent_dim
+        self.fc1 = nn.Linear(input_dim, hidden_dim, bias=False)
+        self.fc2 = nn.Linear(hidden_dim, 16, bias=False)
+        self.fc3 = nn.Linear(16, latent_dim, bias=False)
+        self.act = nn.Tanh()
+        self.dfc1 = nn.Linear(latent_dim, 16, bias=False)
+        self.dfc2 = nn.Linear(16, hidden_dim, bias=False)
+        self.dfc3 = nn.Linear(hidden_dim, input_dim, bias=False)
+
+    def encode(self, x):
+        h1 = self.act(self.fc1(x))
+        h2 = self.act(self.fc2(h1))
+        z = self.fc3(h2)
+        return z
+
+    def decode(self, z):
+        dh1 = self.act(self.dfc1(z))
+        dh2 = self.act(self.dfc2(dh1))
+        recon = self.dfc3(dh2)
+        return recon
+
+    def forward(self, x):
+        orig_shape = x.shape
+        if x.dim() == 3:
+            x_flat = x.contiguous().view(x.shape[0], -1)
+        else:
+            x_flat = x
+        z = self.encode(x_flat)
+        recon_flat = self.decode(z)
+        if len(orig_shape) == 3:
+            recon = recon_flat.view(orig_shape)
+        else:
+            recon = recon_flat
+        return recon, z
+
+    def weight_orthogonality_loss(self):
+        loss = 0.0
+        for layer in [self.fc1, self.fc2, self.fc3, self.dfc1, self.dfc2, self.dfc3]:
+            W = layer.weight
+            if W.shape[0] < W.shape[1]:
+                gram = torch.mm(W, W.t())
+                I = torch.eye(W.shape[0], device=W.device)
+            else:
+                gram = torch.mm(W.t(), W)
+                I = torch.eye(W.shape[1], device=W.device)
+            loss += torch.norm(gram - I, p='fro')**2
+        return loss
+
+def extraer_sesion_agnostica(toma_str):
+    """Extrae el identificador de sesión (ej. 'T1', 'T2', 'S1', 'PRUEBA1') de una cadena de toma."""
+    s = str(toma_str)
+    m = re.search(r'(Prueba\d+|Sesion\d+|Session\d+|T\d+|S\d+)', s, re.IGNORECASE)
+    if m:
+        return m.group(0).upper()
+    parts = s.split('_')
+    for p in parts:
+        p_clean = p.strip()
+        if p_clean.lower().startswith('win'):
+            continue
+        if any(char.isdigit() for char in p_clean) and len(p_clean) <= 10:
+            return p_clean.upper()
+    return 'S1'
+
+def acondicionar_reposo_impedancia(X_array, sesiones, n_canales=3, n_pts_reposo=10):
+    """
+    Acondicionamiento por reposo basal pre-contracción y rango dinámico P95 por sesión y canal.
+    Normaliza cada canal muscular para que el silencio basal sea 0.0 y el pico de activación sea ~1.0.
+    """
+    orig_shape = X_array.shape
+    if X_array.ndim == 2:
+        N, D = X_array.shape
+        n_pts = D // n_canales
+        X_reshaped = X_array.reshape(N, n_canales, n_pts).copy()
+    else:
+        N, n_canales, n_pts = X_array.shape
+        X_reshaped = X_array.copy()
+
+    X_filt = np.zeros_like(X_reshaped)
+    if n_pts >= 12:
+        try:
+            b, a = butter(N=3, Wn=0.3, btype='low')
+            for i in range(N):
+                for c in range(n_canales):
+                    X_filt[i, c, :] = filtfilt(b, a, X_reshaped[i, c, :])
+        except Exception:
+            X_filt = X_reshaped.copy()
+    else:
+        X_filt = X_reshaped.copy()
+
+    unique_ses = np.unique(sesiones)
+    X_norm = np.zeros_like(X_filt)
+    pts_base = max(1, min(n_pts_reposo, n_pts // 4))
+
+    for s in unique_ses:
+        mask = (sesiones == s)
+        for c in range(n_canales):
+            base_mean = np.mean(X_filt[mask, c, :pts_base])
+            base_max = np.percentile(X_filt[mask, c, :], 95) - base_mean + 1e-6
+            X_norm[mask, c, :] = (X_filt[mask, c, :] - base_mean) / base_max
+
+    if len(orig_shape) == 2:
+        return X_norm.reshape(N, -1)
+    return X_norm
+
+def extraer_4_vertices(z_ses):
+    """Extrae 4 vértices extremos no supervisados de la variedad latente para alineación topológica."""
+    gmm_b = GaussianMixture(n_components=2, covariance_type='full', random_state=42, n_init=5)
+    labels = gmm_b.fit_predict(z_ses)
+    idx_up = 0 if np.mean(z_ses[labels == 0, 1]) > np.mean(z_ses[labels == 1, 1]) else 1
+    z_up = z_ses[labels == idx_up]
+    z_low = z_ses[labels == (1 - idx_up)]
+    vert_U = z_up[np.argmin(z_up[:, 0])]
+    vert_O = z_up[np.argmax(z_up[:, 0])]
+    vert_I = z_low[np.argmin(z_low[:, 0])]
+    vert_A = z_low[np.argmax(z_low[:, 0])]
+    return np.array([vert_A, vert_I, vert_O, vert_U])
+
+def alinear_topologia_sesiones_so2(Z, sesiones, ref_session='T2'):
+    """
+    Alinea rígidamente en SO(2) los planos latentes inter-sesión mediante el algoritmo de Kabsch.
+    Garantiza det(R) = +1 evitando reflexiones espurias.
+    """
+    unique_ses = np.unique(sesiones)
+    if len(unique_ses) <= 1:
+        return Z.copy()
+    if ref_session not in unique_ses:
+        ref_session = unique_ses[0]
+
+    mask_ref = (sesiones == ref_session)
+    L_ref = extraer_4_vertices(Z[mask_ref])
+    mu_ref = np.mean(L_ref, axis=0)
+    L_ref_c = L_ref - mu_ref
+
+    Z_aligned = np.zeros_like(Z)
+    for ses in unique_ses:
+        mask_s = (sesiones == ses)
+        z_s = Z[mask_s]
+        L_s = extraer_4_vertices(z_s)
+        mu_s = np.mean(L_s, axis=0)
+        L_s_c = L_s - mu_s
+        M = np.dot(L_s_c.T, L_ref_c)
+        U, S, Vt = np.linalg.svd(M)
+        R = np.dot(U, Vt)
+        if np.linalg.det(R) < 0:
+            Vt[-1, :] *= -1
+            R = np.dot(U, Vt)
+        Z_aligned[mask_s] = np.dot(z_s - mu_s, R) + mu_ref
+    return Z_aligned
+
+
+def compilar_modelo_desde_codigo(codigo_str, modalidad="envolvente", latent_dim=2, target_len=None, in_channels=3):
     """
     Compila dinámicamente una arquitectura PyTorch desde una cadena de código,
     localizando la clase que hereda de nn.Module e instanciándola con los parámetros adecuados.
@@ -939,12 +1179,24 @@ def compilar_modelo_desde_codigo(codigo_str, modalidad="envolvente", latent_dim=
     if not codigo_str or not codigo_str.strip():
         raise ValueError("El código de la arquitectura no puede estar vacío.")
 
+    import random
+    from torch.utils.data import DataLoader, TensorDataset
+
     espacio_local = {
         'torch': torch,
         'nn': nn,
         'F': torch.nn.functional,
         'optim': optim,
-        'np': np
+        'np': np,
+        'random': random,
+        'DataLoader': DataLoader,
+        'TensorDataset': TensorDataset,
+        'SEED': 42,
+        'LATENT_DIM': latent_dim,
+        'LAMBDA_RELATIVE': 1.0,
+        'LAMBDA_DERIV': 1.0,
+        'LOSS_EPS': 1e-8,
+        'device': torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     }
 
     try:
@@ -975,7 +1227,7 @@ def compilar_modelo_desde_codigo(codigo_str, modalidad="envolvente", latent_dim=
     sig = inspect.signature(cls_modelo.__init__)
     kwargs_init = {}
     if 'in_channels' in sig.parameters:
-        kwargs_init['in_channels'] = 3
+        kwargs_init['in_channels'] = in_channels
     if 'latent_dim' in sig.parameters:
         kwargs_init['latent_dim'] = latent_dim
     if 'target_len' in sig.parameters:
@@ -991,13 +1243,19 @@ def compilar_modelo_desde_codigo(codigo_str, modalidad="envolvente", latent_dim=
     except TypeError:
         # Fallback intentando instanciar sin parámetros o con parámetros posicionales
         try:
-            modelo = cls_modelo(in_channels=3, latent_dim=latent_dim)
+            modelo = cls_modelo(in_channels=in_channels, latent_dim=latent_dim)
         except Exception:
             modelo = cls_modelo()
 
+    # Detección de función de pérdida personalizada definida en el código del usuario
+    for fn_name in ('reconstruction_loss', 'custom_loss', 'loss_fn', 'criterio_loss'):
+        if fn_name in espacio_local and callable(espacio_local[fn_name]):
+            modelo.custom_loss_fn = espacio_local[fn_name]
+            break
+
     return modelo
 
-def verificar_arquitectura_codigo(codigo_str, modalidad="envolvente", latent_dim=2, target_len=None):
+def verificar_arquitectura_codigo(codigo_str, modalidad="envolvente", latent_dim=2, target_len=None, in_channels=3):
     """
     Verifica si una cadena de código PyTorch compila y puede ejecutar un paso hacia adelante
     con un tensor sintético acorde a la modalidad seleccionada.
@@ -1005,16 +1263,16 @@ def verificar_arquitectura_codigo(codigo_str, modalidad="envolvente", latent_dim
     """
     try:
         t_len = target_len if target_len is not None else (1000 if modalidad == "cruda" else 100)
-        modelo = compilar_modelo_desde_codigo(codigo_str, modalidad=modalidad, latent_dim=latent_dim, target_len=t_len)
+        modelo = compilar_modelo_desde_codigo(codigo_str, modalidad=modalidad, latent_dim=latent_dim, target_len=t_len, in_channels=in_channels)
         modelo.eval()
 
         if hasattr(modelo, 'target_len') and modelo.target_len is not None and isinstance(modelo.target_len, int) and modelo.target_len > 0:
             t_len = modelo.target_len
 
         if modalidad.startswith("espectrograma"):
-            dummy_x = torch.zeros(2, 3, 32, 64, dtype=torch.float32)
+            dummy_x = torch.zeros(2, in_channels, 32, 64, dtype=torch.float32)
         else:
-            dummy_x = torch.zeros(2, 3, t_len, dtype=torch.float32)
+            dummy_x = torch.zeros(2, in_channels, t_len, dtype=torch.float32)
 
         with torch.no_grad():
             res = modelo(dummy_x)
@@ -1043,25 +1301,26 @@ def verificar_arquitectura_codigo(codigo_str, modalidad="envolvente", latent_dim
                 b, in_feat, exp_feat, out_feat = m.groups()
                 return False, (
                     f"Desajuste de dimensiones lineales: mat1 ({b}x{in_feat}) y mat2 ({exp_feat}x{out_feat}). "
-                    f"La etapa anterior produce {in_feat} características, pero la capa lineal espera {exp_feat}. "
-                    f"Si comentaste o agregaste capas convolucionales, ajusta nn.Linear({in_feat}, ...) o usa "
-                    f"'num_features = self.conv(torch.zeros(1, in_channels, ...)).shape[1]' con 'nn.Linear(num_features * 2, ...)'."
+                    f"La etapa convolucional produce {in_feat} características para una longitud temporal de entrada de {t_len} muestras, "
+                    f"pero la capa lineal espera {exp_feat}. "
+                    f"La arquitectura ConvAE requiere que 'Puntos Envolvente' en la Sección 4 esté configurado exactamente en 100 muestras "
+                    f"(o ajustar nn.Linear({in_feat}, ...) en la arquitectura)."
                 )
         return False, f"Error al validar arquitectura: {e}"
 
-def crear_modelo_autoencoder(modalidad="envolvente", latent_dim=2, codigo_custom=None, target_len=None):
+def crear_modelo_autoencoder(modalidad="envolvente", latent_dim=2, codigo_custom=None, target_len=None, in_channels=3):
     """Instancia la arquitectura de autoencoder correspondiente según la modalidad fisiológica, dimensión o código personalizado."""
     if codigo_custom and codigo_custom.strip():
-        return compilar_modelo_desde_codigo(codigo_custom, modalidad=modalidad, latent_dim=latent_dim, target_len=target_len)
+        return compilar_modelo_desde_codigo(codigo_custom, modalidad=modalidad, latent_dim=latent_dim, target_len=target_len, in_channels=in_channels)
 
     if modalidad == "envolvente":
         t_len = target_len if target_len is not None else 100
-        return AutoencoderEnvolvente1D(in_channels=3, latent_dim=latent_dim, target_len=t_len)
+        return AutoencoderEnvolvente1D(in_channels=in_channels, latent_dim=latent_dim, target_len=t_len)
     elif modalidad == "cruda":
         t_len = target_len if target_len is not None else 1000
-        return AutoencoderCruda1D(in_channels=3, latent_dim=latent_dim, target_len=t_len)
+        return AutoencoderCruda1D(in_channels=in_channels, latent_dim=latent_dim, target_len=t_len)
     elif modalidad.startswith("espectrograma"):
-        return AutoencoderEspectrograma2D(in_channels=3, latent_dim=latent_dim)
+        return AutoencoderEspectrograma2D(in_channels=in_channels, latent_dim=latent_dim)
     else:
         raise ValueError(f"Modalidad desconocida: {modalidad}")
 
@@ -1071,7 +1330,7 @@ AutoencoderGenerico = crear_modelo_autoencoder
 # 5. ENTRENAMIENTO NO SUPERVISADO (ZERO-LABELS)
 # ==============================================================================
 
-def entrenar_autoencoder(archivo_npz=None, modalidad="envolvente", latent_dim=2, epochs=150, batch_size=32, lr=0.002, carpeta_salida=None, callback_log=None, npz_path=None, usar_custom_arch=False, codigo_custom_arch=None, tipo_perdida="mse", gamma_sdtw=1.0, alpha_hibrida=1.0, lambda_orto=0.0):
+def entrenar_autoencoder(archivo_npz=None, modalidad="envolvente", latent_dim=2, epochs=150, batch_size=32, lr=0.002, carpeta_salida=None, callback_log=None, npz_path=None, usar_custom_arch=False, codigo_custom_arch=None, tipo_perdida="mse", gamma_sdtw=1.0, alpha_hibrida=1.0, lambda_orto=0.0, tipo_arquitectura="ortogonal", lambda_w=0.30, lambda_z=0.45, usar_impedancia_reposo=True, usar_alineacion_so2=True, ref_session='T2'):
     fijar_semilla(seed=42)
     archivo_npz = archivo_npz or npz_path
     if not archivo_npz:
@@ -1082,28 +1341,74 @@ def entrenar_autoencoder(archivo_npz=None, modalidad="envolvente", latent_dim=2,
         else:
             print(msg, flush=True)
 
-    datos = np.load(archivo_npz)
+    if str(archivo_npz).lower().endswith('.csv'):
+        df_csv = pd.read_csv(archivo_npz)
+        y = df_csv['Vocal'].values if 'Vocal' in df_csv.columns else np.array(['A'] * len(df_csv))
+        tomas = df_csv['Toma'].values if 'Toma' in df_csv.columns else np.array([f"T1_p{i}" for i in range(len(df_csv))])
+        cols_feat = [c for c in df_csv.columns if c not in ['Vocal', 'Toma', 'Sesion', 'Sujeto', 'Fecha']]
+        X_raw = df_csv[cols_feat].values
+        n_ch = 3
+        n_pts = X_raw.shape[1] // n_ch
+        X_env_csv = X_raw.reshape(len(df_csv), n_ch, n_pts)
+        datos = {
+            'X_env': X_env_csv,
+            'X_cruda': X_env_csv,
+            'X_spec': X_env_csv,
+            'Y': y,
+            'Tomas': tomas,
+            'Fechas': np.array(['2026-07-10'] * len(df_csv)),
+            'Musculos_Canales': np.array(["Canal 0", "Canal 1", "Canal 2"])
+        }
+    else:
+        datos = np.load(archivo_npz)
+    tipo_arq = str(tipo_arquitectura).lower().strip()
+    es_ortogonal = (tipo_arq in ("ortogonal", "orthogonal", "record", "record_91", "optimo"))
+
     if modalidad == "envolvente":
         X = datos['X_env']
-        t_len = X.shape[-1] if len(X.shape) > 2 else 100
+        in_ch = X.shape[1] if X.ndim > 2 else 3
+        t_len = X.shape[-1] if X.ndim > 2 else (X.shape[1] // in_ch)
         if usar_custom_arch and codigo_custom_arch and codigo_custom_arch.strip():
             _log("  [Arquitectura Personalizada] Compilando modelo desde editor de código...")
-            modelo = compilar_modelo_desde_codigo(codigo_custom_arch, modalidad=modalidad, latent_dim=latent_dim, target_len=t_len)
+            modelo = compilar_modelo_desde_codigo(codigo_custom_arch, modalidad=modalidad, latent_dim=latent_dim, target_len=t_len, in_channels=in_ch)
             _log(f"  [Arquitectura Personalizada] Modelo instanciado: {modelo.__class__.__name__}")
+        elif es_ortogonal:
+            if usar_impedancia_reposo:
+                tomas = datos['Tomas'] if 'Tomas' in datos else np.array([f"T1_p{i}" for i in range(len(X))])
+                sesiones = np.array([extraer_sesion_agnostica(t) for t in tomas])
+                _log(f"  [Reposo Basal e Impedancia] Acondicionando {len(X)} ventanas para {len(np.unique(sesiones))} sesiones...")
+                X = acondicionar_reposo_impedancia(X, sesiones, n_canales=in_ch, n_pts_reposo=10)
+            input_dim_total = in_ch * t_len
+            modelo = OrthogonalAutoencoder2D(input_dim=input_dim_total, hidden_dim=32, latent_dim=latent_dim)
+            _log(f"  [Autoencoder Ortogonal Récord] Instanciado: {input_dim_total} -> 32 -> 16 -> {latent_dim} (Tanh, bias=False)")
+            if batch_size == 32 or batch_size < len(X):
+                batch_size = len(X)
+                _log(f"  [Régimen Ortogonal] Batch size ajustado a Full-Batch ({batch_size} muestras) para estabilidad de Cov(Z).")
         else:
-            modelo = AutoencoderEnvolvente1D(in_channels=3, latent_dim=latent_dim, target_len=t_len)
+            modelo = AutoencoderEnvolvente1D(in_channels=in_ch, latent_dim=latent_dim, target_len=t_len)
     elif modalidad == "cruda":
         X = datos['X_cruda']
-        t_len = X.shape[-1] if len(X.shape) > 2 else 1000
+        in_ch = X.shape[1] if X.ndim > 2 else 3
+        t_len = X.shape[-1] if X.ndim > 2 else 1000
         if usar_custom_arch and codigo_custom_arch and codigo_custom_arch.strip():
             _log("  [Arquitectura Personalizada] Compilando modelo desde editor de código...")
-            modelo = compilar_modelo_desde_codigo(codigo_custom_arch, modalidad=modalidad, latent_dim=latent_dim, target_len=t_len)
+            modelo = compilar_modelo_desde_codigo(codigo_custom_arch, modalidad=modalidad, latent_dim=latent_dim, target_len=t_len, in_channels=in_ch)
             _log(f"  [Arquitectura Personalizada] Modelo instanciado: {modelo.__class__.__name__}")
+        elif es_ortogonal:
+            if usar_impedancia_reposo:
+                tomas = datos['Tomas'] if 'Tomas' in datos else np.array([f"T1_p{i}" for i in range(len(X))])
+                sesiones = np.array([extraer_sesion_agnostica(t) for t in tomas])
+                _log(f"  [Reposo Basal e Impedancia] Acondicionando {len(X)} ventanas para {len(np.unique(sesiones))} sesiones...")
+                X = acondicionar_reposo_impedancia(X, sesiones, n_canales=in_ch, n_pts_reposo=10)
+            input_dim_total = in_ch * t_len
+            modelo = OrthogonalAutoencoder2D(input_dim=input_dim_total, hidden_dim=32, latent_dim=latent_dim)
+            _log(f"  [Autoencoder Ortogonal Récord] Instanciado: {input_dim_total} -> 32 -> 16 -> {latent_dim} (Tanh, bias=False)")
+            if batch_size == 32 or batch_size < len(X):
+                batch_size = len(X)
+                _log(f"  [Régimen Ortogonal] Batch size ajustado a Full-Batch ({batch_size} muestras).")
         else:
-            modelo = AutoencoderCruda1D(in_channels=3, latent_dim=latent_dim, target_len=t_len)
-        # Régimen estricto de la línea base histórica MSE (test_autoencoder_crudo_07.py):
-        # Full-Batch, lr=0.008, epochs=250 para evitar colapso por gradientes estocásticos ruidosos en MUAPs bajo MSE
-        if tipo_perdida == "mse":
+            modelo = AutoencoderCruda1D(in_channels=in_ch, latent_dim=latent_dim, target_len=t_len)
+        if tipo_perdida == "mse" and not es_ortogonal:
             if batch_size == 32:
                 batch_size = len(X)
                 _log(f"  [Régimen Cruda MSE] Batch size ajustado a Full-Batch ({batch_size} muestras) según línea base.")
@@ -1115,12 +1420,13 @@ def entrenar_autoencoder(archivo_npz=None, modalidad="envolvente", latent_dim=2,
                 _log(f"  [Régimen Cruda MSE] Épocas ajustadas a {epochs} según línea base.")
     elif modalidad.startswith("espectrograma"):
         X = datos['X_spec']
+        in_ch = X.shape[1]
         if usar_custom_arch and codigo_custom_arch and codigo_custom_arch.strip():
             _log("  [Arquitectura Personalizada] Compilando modelo desde editor de código...")
-            modelo = compilar_modelo_desde_codigo(codigo_custom_arch, modalidad=modalidad, latent_dim=latent_dim)
+            modelo = compilar_modelo_desde_codigo(codigo_custom_arch, modalidad=modalidad, latent_dim=latent_dim, in_channels=in_ch)
             _log(f"  [Arquitectura Personalizada] Modelo instanciado: {modelo.__class__.__name__}")
         else:
-            modelo = AutoencoderEspectrograma2D(in_channels=3, latent_dim=latent_dim)
+            modelo = AutoencoderEspectrograma2D(in_channels=in_ch, latent_dim=latent_dim)
     else:
         raise ValueError(f"Modalidad desconocida: {modalidad}")
 
@@ -1129,9 +1435,14 @@ def entrenar_autoencoder(archivo_npz=None, modalidad="envolvente", latent_dim=2,
 
     optimizador = optim.Adam(modelo.parameters(), lr=lr, weight_decay=1e-5)
 
-    # Configuración de función de pérdida (MSE, Soft-DTW, Divergencia Soft-DTW o Híbrida)
+    # Configuración de función de pérdida (MSE, Soft-DTW, Divergencia Soft-DTW, Híbrida o Personalizada)
     tipo_perdida = (tipo_perdida or "mse").lower().strip()
-    if modalidad.startswith("espectrograma") and tipo_perdida != "mse":
+    if hasattr(modelo, 'custom_loss_fn') and modelo.custom_loss_fn is not None:
+        criterio = modelo.custom_loss_fn
+        fn_name = getattr(modelo.custom_loss_fn, '__name__', 'custom_loss')
+        nombre_loss = f"Personalizada del Editor ({fn_name})"
+        _log(f"  [Pérdida del Editor] Utilizando directamente la función '{fn_name}' definida en el código.")
+    elif modalidad.startswith("espectrograma") and tipo_perdida != "mse":
         _log("  [Aviso] La modalidad espectrograma es 2D; se utiliza MSE como función de pérdida estándar.")
         criterio = nn.MSELoss()
         nombre_loss = "MSE"
@@ -1159,12 +1470,34 @@ def entrenar_autoencoder(archivo_npz=None, modalidad="envolvente", latent_dim=2,
             _log("  [Aviso] Módulo SoftDTW no disponible; utilizando MSE.")
             criterio = nn.MSELoss()
             nombre_loss = "MSE"
+    elif tipo_perdida in ("multiobjetivo", "convae", "relativa_derivada"):
+        def criterio_multiobjetivo(xhat, x, lambda_rel=1.0, lambda_deriv=1.0, eps=1e-8):
+            mse_abs = torch.mean((xhat - x) ** 2)
+            signal_energy = torch.mean(x ** 2, dim=2).clamp_min(eps)
+            error_energy = torch.mean((xhat - x) ** 2, dim=2)
+            mse_relative = torch.mean(error_energy / signal_energy)
+            dx = x[:, :, 1:] - x[:, :, :-1]
+            dxhat = xhat[:, :, 1:] - xhat[:, :, :-1]
+            deriv_energy = torch.mean(dx ** 2, dim=2).clamp_min(eps)
+            deriv_error = torch.mean((dxhat - dx) ** 2, dim=2)
+            mse_deriv = torch.mean(deriv_error / deriv_energy)
+            return mse_abs + lambda_rel * mse_relative + lambda_deriv * mse_deriv
+        criterio = criterio_multiobjetivo
+        nombre_loss = "Multiobjetivo (Absoluta + Relativa + Derivada)"
     else:
         criterio = nn.MSELoss()
         nombre_loss = "MSE"
 
-    orto_info = f" + Orto(lambda={lambda_orto})" if lambda_orto > 0 else ""
-    _log(f"Iniciando entrenamiento ({modalidad.upper()}, Latent: {latent_dim}D, Pérdida: {nombre_loss}{orto_info}, Épocas: {epochs})...")
+    orto_info = []
+    if lambda_w > 0 and hasattr(modelo, 'weight_orthogonality_loss'):
+        orto_info.append(f"Orto-W(\u03bb={lambda_w})")
+    if lambda_z > 0:
+        orto_info.append(f"Orto-Z(\u03bb={lambda_z})")
+    elif lambda_orto > 0:
+        orto_info.append(f"Orto-Lat(\u03bb={lambda_orto})")
+    orto_txt = f" + {' + '.join(orto_info)}" if orto_info else ""
+
+    _log(f"Iniciando entrenamiento ({modalidad.upper()}, Latent: {latent_dim}D, Pérdida: {nombre_loss}{orto_txt}, Épocas: {epochs})...")
     t0 = time.time()
 
     for ep in range(epochs):
@@ -1176,23 +1509,29 @@ def entrenar_autoencoder(archivo_npz=None, modalidad="envolvente", latent_dim=2,
             rec, z = modelo(batch)
             loss_rec = criterio(rec, batch)
             
-            # Regularización de ortogonalidad en el espacio latente (decorrelación de ejes)
-            if lambda_orto > 0 and z.shape[0] > 1:
+            # 1. Regularización de ortogonalidad de pesos (W W^T - I)
+            if hasattr(modelo, 'weight_orthogonality_loss') and lambda_w > 0:
+                loss_w = modelo.weight_orthogonality_loss()
+            else:
+                loss_w = torch.tensor(0.0, device=batch.device)
+
+            # 2. Regularización de decorrelación y esfericidad latente Cov(Z) - I
+            if lambda_z > 0 and z.shape[0] > 1:
+                z_centered = z - torch.mean(z, dim=0, keepdim=True)
+                cov_z = torch.matmul(z_centered.t(), z_centered) / max(1, (z.shape[0] - 1))
+                eye_lat = torch.eye(z.shape[1], device=z.device)
+                loss_z = torch.norm(cov_z - eye_lat, p='fro') ** 2
+            elif lambda_orto > 0 and z.shape[0] > 1:
                 z_centered = z - torch.mean(z, dim=0, keepdim=True)
                 cov_z = torch.matmul(z_centered.t(), z_centered) / (z.shape[0] - 1)
-                
-                # Normalizar por la traza (varianza total) para ser invariante a la escala latente natural del autoencoder
                 traza = torch.trace(cov_z) + 1e-8
                 cov_norm = cov_z / traza
-                
-                # Penalizar únicamente las correlaciones cruzadas fuera de la diagonal principal
                 eye = torch.eye(cov_norm.shape[0], device=cov_norm.device)
-                loss_orto = torch.sum((cov_norm * (1.0 - eye)) ** 2)
-                
-                loss_total = loss_rec + float(lambda_orto) * loss_orto
+                loss_z = torch.sum((cov_norm * (1.0 - eye)) ** 2) * float(lambda_orto)
             else:
-                loss_total = loss_rec
+                loss_z = torch.tensor(0.0, device=batch.device)
 
+            loss_total = loss_rec + float(lambda_w) * loss_w + float(lambda_z) * loss_z
             loss_total.backward()
             optimizador.step()
             loss_ep += loss_total.item() * batch.size(0)
@@ -1202,7 +1541,7 @@ def entrenar_autoencoder(archivo_npz=None, modalidad="envolvente", latent_dim=2,
         if ep == 0 or (ep + 1) % 10 == 0 or ep == epochs - 1:
             pct = ((ep + 1) / epochs) * 100.0
             eta_s = (epochs - (ep + 1)) * dt_ep
-            _log(f"  Época [{ep+1:3d}/{epochs}] ({pct:5.1f}%) - Pérdida ({nombre_loss.split()[0]}): {loss_ep/len(tensor_x):.5f} | ETA: {eta_s:.1f}s")
+            _log(f"  Época [{ep+1:3d}/{epochs}] ({pct:5.1f}%) - Pérdida: {loss_ep/len(tensor_x):.5f} | ETA: {eta_s:.1f}s")
 
     _log(f"Entrenamiento completado en {time.time()-t0:.1f} s.")
     
@@ -1226,7 +1565,25 @@ def entrenar_autoencoder(archivo_npz=None, modalidad="envolvente", latent_dim=2,
         torch.save(modelo.state_dict(), os.path.join(resultados_dir, f"autoencoder_unificado_{modalidad}_{latent_dim}d.pth"))
     except Exception:
         pass
-    _log(f"Modelo guardado en: {modelo_pth}")
+    info_config = {
+        'tipo_arquitectura': tipo_arquitectura,
+        'modalidad': modalidad,
+        'latent_dim': latent_dim,
+        'epochs': epochs,
+        'lr': lr,
+        'batch_size': batch_size,
+        'lambda_w': float(lambda_w),
+        'lambda_z': float(lambda_z),
+        'usar_impedancia_reposo': bool(usar_impedancia_reposo),
+        'usar_alineacion_so2': bool(usar_alineacion_so2),
+        'ref_session': str(ref_session)
+    }
+    try:
+        cfg_path = os.path.join(dir_salida_mod, "config_autoencoder.json")
+        with open(cfg_path, 'w', encoding='utf-8') as f_cfg:
+            json.dump(info_config, f_cfg, indent=4)
+    except Exception:
+        pass
 
     return modelo, modelo_pth
 
@@ -1251,7 +1608,7 @@ def alinear_canonicamente(z, y_labels):
         z_rot[:, 0] = -z_rot[:, 0]
     return z_rot
 
-def evaluar_espacio_latente(archivo_npz=None, modelo=None, modalidad="envolvente", latent_dim=2, carpeta_salida=None, callback_log=None, npz_path=None, usar_custom_arch=False, codigo_custom_arch=None, mostrar_grafico=True, algoritmo_clustering="gmm"):
+def evaluar_espacio_latente(archivo_npz=None, modelo=None, modalidad="envolvente", latent_dim=2, carpeta_salida=None, callback_log=None, npz_path=None, usar_custom_arch=False, codigo_custom_arch=None, mostrar_grafico=True, algoritmo_clustering="gmm", usar_alineacion_so2=None, ref_session=None):
     fijar_semilla(seed=42)
     archivo_npz = archivo_npz or npz_path
     if not archivo_npz:
@@ -1262,7 +1619,26 @@ def evaluar_espacio_latente(archivo_npz=None, modelo=None, modalidad="envolvente
         else:
             print(msg, flush=True)
 
-    datos = np.load(archivo_npz)
+    if str(archivo_npz).lower().endswith('.csv'):
+        df_csv = pd.read_csv(archivo_npz)
+        y = df_csv['Vocal'].values if 'Vocal' in df_csv.columns else np.array(['A'] * len(df_csv))
+        tomas = df_csv['Toma'].values if 'Toma' in df_csv.columns else np.array([f"T1_p{i}" for i in range(len(df_csv))])
+        cols_feat = [c for c in df_csv.columns if c not in ['Vocal', 'Toma', 'Sesion', 'Sujeto', 'Fecha']]
+        X_raw = df_csv[cols_feat].values
+        n_ch = 3
+        n_pts = X_raw.shape[1] // n_ch
+        X_env_csv = X_raw.reshape(len(df_csv), n_ch, n_pts)
+        datos = {
+            'X_env': X_env_csv,
+            'X_cruda': X_env_csv,
+            'X_spec': X_env_csv,
+            'Y': y,
+            'Tomas': tomas,
+            'Fechas': np.array(['2026-07-10'] * len(df_csv)),
+            'Musculos_Canales': np.array(["Canal 0", "Canal 1", "Canal 2"])
+        }
+    else:
+        datos = np.load(archivo_npz)
     if modalidad == "envolvente":
         X = datos['X_env']
     elif modalidad == "cruda":
@@ -1272,12 +1648,40 @@ def evaluar_espacio_latente(archivo_npz=None, modelo=None, modalidad="envolvente
     Y_labels = datos['Y']
 
     dir_salida_mod = carpeta_salida if carpeta_salida is not None else modelos_dir
+    cfg_auto = {}
+    cfg_path = os.path.join(dir_salida_mod, "config_autoencoder.json")
+    if os.path.exists(cfg_path):
+        try:
+            with open(cfg_path, 'r', encoding='utf-8') as f_cfg:
+                cfg_auto = json.load(f_cfg)
+        except Exception:
+            pass
+
+    tipo_arq = cfg_auto.get('tipo_arquitectura', 'ortogonal').lower().strip()
+    es_orto = (tipo_arq in ("ortogonal", "orthogonal", "record", "record_91", "optimo"))
+    imp_reposo = cfg_auto.get('usar_impedancia_reposo', True)
+    if usar_alineacion_so2 is None:
+        usar_alineacion_so2 = cfg_auto.get('usar_alineacion_so2', True)
+    if ref_session is None:
+        ref_session = cfg_auto.get('ref_session', 'T2')
+
+    in_ch = X.shape[1] if X.ndim > 2 else 3
+    t_len = X.shape[-1] if X.ndim > 2 else (X.shape[1] // in_ch)
+
+    if imp_reposo and es_orto:
+        tomas_raw = datos['Tomas'] if 'Tomas' in datos else np.array([f"T1_p{i}" for i in range(len(X))])
+        sesiones_raw = np.array([extraer_sesion_agnostica(t) for t in tomas_raw])
+        _log(f"  [Acondicionamiento Reposo/Impedancia] Acondicionando {len(X)} ventanas para evaluación...")
+        X = acondicionar_reposo_impedancia(X, sesiones_raw, n_canales=in_ch, n_pts_reposo=10)
+
     if modelo is None:
         arch_guardada = os.path.join(dir_salida_mod, "arquitectura_autoencoder.py")
-        t_len = X.shape[-1] if len(X.shape) > 2 else 100
         if usar_custom_arch and codigo_custom_arch and codigo_custom_arch.strip():
             _log("  Cargando arquitectura personalizada desde parámetros...")
-            modelo = compilar_modelo_desde_codigo(codigo_custom_arch, modalidad=modalidad, latent_dim=latent_dim, target_len=t_len)
+            modelo = compilar_modelo_desde_codigo(codigo_custom_arch, modalidad=modalidad, latent_dim=latent_dim, target_len=t_len, in_channels=in_ch)
+        elif es_orto:
+            modelo = OrthogonalAutoencoder2D(input_dim=in_ch * t_len, hidden_dim=32, latent_dim=latent_dim)
+            _log(f"  [Autoencoder Ortogonal Récord] Instanciado para inferencia ({in_ch * t_len} -> 32 -> 16 -> {latent_dim})")
         elif os.path.exists(arch_guardada):
             try:
                 with open(arch_guardada, 'r', encoding='utf-8') as f_a:
@@ -1311,8 +1715,32 @@ def evaluar_espacio_latente(archivo_npz=None, modelo=None, modalidad="envolvente
         z = z_tensor.numpy()
         x_rec = rec_tensor.numpy()
 
-    # 1. Alineación Canónica obligatoria (/a/ en +Y, sonrisa en +X)
-    z_align = alinear_canonicamente(z, Y_labels)
+    tomas = datos['Tomas'] if 'Tomas' in datos else np.array([f"T1_p{i}" for i in range(len(X))])
+    sesiones = np.array([extraer_sesion_agnostica(t) for t in tomas])
+
+    # Guardar proyecciones latentes crudas
+    try:
+        df_crudo = pd.DataFrame({'Vocal': Y_labels, 'Toma': tomas, 'Sesion': sesiones, 'Z1': z[:, 0], 'Z2': z[:, 1]})
+        df_crudo.to_csv(os.path.join(dir_salida_mod, "proyecciones_latentes_2d_crudo.csv"), index=False)
+    except Exception:
+        pass
+
+    # 1. Alineación Topológica Determinística SO(2) o Canónica
+    if usar_alineacion_so2 and latent_dim == 2 and len(np.unique(sesiones)) > 1:
+        _log(f"  [Alineación Topológica SO(2)] Alineando sesiones respecto a referencia '{ref_session}'...")
+        z_align = alinear_topologia_sesiones_so2(z, sesiones, ref_session=ref_session)
+        try:
+            df_alin = pd.DataFrame({'Vocal': Y_labels, 'Toma': tomas, 'Sesion': sesiones, 'Z1': z_align[:, 0], 'Z2': z_align[:, 1]})
+            df_alin.to_csv(os.path.join(dir_salida_mod, "proyecciones_latentes_2d_alineado.csv"), index=False)
+            df_alin.to_csv(os.path.join(dir_salida_mod, "proyecciones_latentes_2d.csv"), index=False)
+        except Exception:
+            pass
+    else:
+        z_align = alinear_canonicamente(z, Y_labels)
+        try:
+            df_crudo.to_csv(os.path.join(dir_salida_mod, "proyecciones_latentes_2d.csv"), index=False)
+        except Exception:
+            pass
 
     # 2. Purga Robusta de Outliers en Espacio Latente (Regla 9 de Memoria)
     # Descarta puntos atípicos aislados para que no distorsionen la escala ni las elipses GMM
@@ -1474,7 +1902,8 @@ def evaluar_espacio_latente(archivo_npz=None, modelo=None, modalidad="envolvente
         ax_bar.grid(True, alpha=0.3)
 
         # Fila de Reconstrucciones de Prueba con nombres de músculos
-        cols_ch = ['#d62728', '#2ca02c', '#ff7f0e']
+        cols_ch = ['#d62728', '#2ca02c', '#ff7f0e', '#1f77b4', '#9467bd']
+        n_canales_eval = X_eval.shape[1]
 
         # Cálculo dinámico de escala vertical para no comprimir señales de baja amplitud promedio (ej. señal cruda)
         max_promedio_global = 0.0
@@ -1500,6 +1929,9 @@ def evaluar_espacio_latente(archivo_npz=None, modelo=None, modalidad="envolvente
                 if modalidad == "espectrograma":
                     img_in = np.clip(np.mean(X_eval[idx_v], axis=0).transpose(1, 2, 0), 0, 1)
                     img_rec = np.clip(np.mean(x_rec_eval[idx_v], axis=0).transpose(1, 2, 0), 0, 1)
+                    if img_in.shape[2] == 2:
+                        img_in = np.dstack([img_in, np.zeros_like(img_in[:, :, :1])])
+                        img_rec = np.dstack([img_rec, np.zeros_like(img_rec[:, :, :1])])
                     sep = np.ones((32, 2, 3), dtype=np.float32)
                     comp = np.concatenate([img_in, sep, img_rec], axis=1)
                     ax_v.imshow(comp, origin='lower', aspect='auto')
@@ -1510,12 +1942,12 @@ def evaluar_espacio_latente(archivo_npz=None, modelo=None, modalidad="envolvente
                     mean_in = np.mean(X_eval[idx_v], axis=0)
                     mean_rec = np.clip(np.mean(x_rec_eval[idx_v], axis=0), 0.0, 1.05)
                     t_axis = np.linspace(0, 1, mean_in.shape[1])
-                    for c in range(3):
-                        m_name = Musculos_Canales[c]
+                    for c in range(n_canales_eval):
+                        m_name = Musculos_Canales[c] if c < len(Musculos_Canales) else f"Ch{c}"
                         lbl_in = f"Ch{c}: {m_name} (Entr.)" if i == 0 else None
                         lbl_rec = f"Ch{c}: {m_name} (Rec.)" if i == 0 else None
-                        ax_v.plot(t_axis, mean_in[c], color=cols_ch[c], alpha=0.50, linestyle=':', label=lbl_in)
-                        ax_v.plot(t_axis, mean_rec[c], color=cols_ch[c], linewidth=1.8, label=lbl_rec)
+                        ax_v.plot(t_axis, mean_in[c], color=cols_ch[c % len(cols_ch)], alpha=0.50, linestyle=':', label=lbl_in)
+                        ax_v.plot(t_axis, mean_rec[c], color=cols_ch[c % len(cols_ch)], linewidth=1.8, label=lbl_rec)
                     ax_v.set_ylim(y_min_plot, y_max_plot)
                     ax_v.grid(True, alpha=0.2)
                     if i == 0:
@@ -1523,9 +1955,10 @@ def evaluar_espacio_latente(archivo_npz=None, modelo=None, modalidad="envolvente
                 ax_v.set_title(f"Promedio /{v.lower()}/ (N={len(idx_v)})", fontsize=10, fontweight='bold')
                 
         fechas_txt = ", ".join(fechas_unicas) if fechas_unicas else "N/A"
+        musc_txt = " | ".join([f"Ch{c}: {Musculos_Canales[c]}" for c in range(len(Musculos_Canales))])
         plt.suptitle(
             f"Evaluación No Supervisada del Autoencoder ({modalidad.upper()}) | Fechas: {fechas_txt}\n"
-            f"Músculos: Ch0: {Musculos_Canales[0]} | Ch1: {Musculos_Canales[1]} | Ch2: {Musculos_Canales[2]}",
+            f"Músculos: {musc_txt}",
             fontsize=13, fontweight='bold', y=0.98
         )
         plt.tight_layout(rect=[0, 0, 1, 0.94])
@@ -1575,9 +2008,10 @@ def evaluar_espacio_latente(archivo_npz=None, modelo=None, modalidad="envolvente
         ax_bar.grid(True, alpha=0.3)
 
         fechas_txt = ", ".join(fechas_unicas) if fechas_unicas else "N/A"
+        musc_txt = " | ".join([f"Ch{c}: {Musculos_Canales[c]}" for c in range(len(Musculos_Canales))])
         plt.suptitle(
             f"Evaluación No Supervisada en Tres Dimensiones ({modalidad.upper()}) | Fechas: {fechas_txt}\n"
-            f"Músculos: Ch0: {Musculos_Canales[0]} | Ch1: {Musculos_Canales[1]} | Ch2: {Musculos_Canales[2]}",
+            f"Músculos: {musc_txt}",
             fontsize=13, fontweight='bold', y=0.98
         )
         plt.tight_layout()

@@ -2948,6 +2948,7 @@ print("="*70 + "\\n")
 
 npz_path, n_pulsos = motor.extraer_dataset_unificado(
     rutas,
+    aplicar_correccion_intersesion=kwargs.get('aplicar_correccion_intersesion', True),
     usar_calibracion_p95=kwargs.get('usar_calibracion_p95', True),
     modo_alineacion=kwargs.get('modo_alineacion', 'Pico Volumen Micrófono'),
     carpeta_salida=carpeta_exp,
@@ -2959,6 +2960,7 @@ npz_path, n_pulsos = motor.extraer_dataset_unificado(
     w_canales=kwargs.get('w_canales', [1.0, 1.0, 1.0]),
     tipo_filtro_linea=kwargs.get('tipo_filtro_linea', 'adaptativo'),
     notch_q=kwargs.get('notch_q', 2.0),
+    canales_features=kwargs.get('canales_features', ['canal_0', 'canal_1', 'canal_2']),
     callback_log=print
 )
 print(f"\\nExtraccion culminada con exito: {n_pulsos} pulsos extraidos.")
@@ -2972,8 +2974,11 @@ print(f"Dataset guardado en: {npz_path}")
       cod = kwargs.get('codigo_custom_arch', '')
       mod = kwargs.get('modalidad', 'envolvente')
       lat = kwargs.get('latent_dim', 2)
+      t_len = kwargs.get('target_len', 100)
+      canales_feat = kwargs.get('canales_features', ['canal_0', 'canal_1', 'canal_2'])
+      in_ch = len(canales_feat) if len(canales_feat) >= 2 else 3
       import deep_learning.motor_autoencoder_unificado as motor
-      ok_v, msg_v = motor.verificar_arquitectura_codigo(cod, modalidad=mod, latent_dim=lat)
+      ok_v, msg_v = motor.verificar_arquitectura_codigo(cod, modalidad=mod, latent_dim=lat, target_len=t_len, in_channels=in_ch)
       if not ok_v:
         self.log_console.append(f"> [ERROR ARQUITECTURA]: {msg_v}\n")
         from PySide6.QtWidgets import QMessageBox
@@ -3003,6 +3008,13 @@ tipo_perdida = kwargs.get('tipo_perdida', 'mse')
 gamma_sdtw = kwargs.get('gamma_sdtw', 1.0)
 lambda_orto = kwargs.get('lambda_orto', 0.0)
 
+tipo_arquitectura = kwargs.get('tipo_arquitectura', 'ortogonal')
+lambda_w = kwargs.get('lambda_w', 0.30)
+lambda_z = kwargs.get('lambda_z', 0.45)
+usar_imp = kwargs.get('usar_impedancia_reposo', True)
+usar_so2 = kwargs.get('usar_alineacion_so2', True)
+ref_session = kwargs.get('ref_session', 'T2')
+
 proc_dirs = sorted(glob.glob(os.path.join(project_root, "resultados", "resultados_autoencoder", "procesamiento_*")))
 target_folder = proc_dirs[-1] if proc_dirs else os.path.join(project_root, "resultados", "resultados_autoencoder")
 
@@ -3013,10 +3025,10 @@ if not os.path.exists(npz_path):
     print(f"ERROR: No se encontro el dataset en {npz_path}. Ejecuta la extraccion primero.")
     sys.exit(1)
 
-orto_txt = f" | Ortogonalidad Latente: {lambda_orto}" if lambda_orto > 0 else ""
+orto_txt = f" | Orto-W: {lambda_w} | Orto-Z: {lambda_z}" if (lambda_w > 0 or lambda_z > 0) else ""
 print("\\n" + "="*70)
 print(f"  ENTRENAMIENTO AUTOENCODER NO SUPERVISADO ({modalidad.upper()} - {latent_dim}D)")
-print(f"  Zero-Labels: 100% No Supervisado | Pérdida: {tipo_perdida.upper()} (gamma: {gamma_sdtw}){orto_txt}")
+print(f"  Arquitectura: {tipo_arquitectura.upper()} | Pérdida: {tipo_perdida.upper()}{orto_txt}")
 print(f"  Carpeta de procesamiento: {target_folder}")
 print("="*70 + "\\n")
 
@@ -3030,6 +3042,12 @@ modelo, pth = motor.entrenar_autoencoder(
     tipo_perdida=tipo_perdida,
     gamma_sdtw=gamma_sdtw,
     lambda_orto=lambda_orto,
+    tipo_arquitectura=tipo_arquitectura,
+    lambda_w=lambda_w,
+    lambda_z=lambda_z,
+    usar_impedancia_reposo=usar_imp,
+    usar_alineacion_so2=usar_so2,
+    ref_session=ref_session,
     carpeta_salida=target_folder,
     usar_custom_arch=kwargs.get('usar_custom_arch', False),
     codigo_custom_arch=kwargs.get('codigo_custom_arch', None),
@@ -3060,6 +3078,8 @@ import deep_learning.motor_autoencoder_unificado as motor
 modalidad = kwargs.get('modalidad', 'envolvente')
 latent_dim = kwargs.get('latent_dim', 2)
 algoritmo_clustering = kwargs.get('algoritmo_clustering', 'gmm')
+usar_so2 = kwargs.get('usar_alineacion_so2', True)
+ref_session = kwargs.get('ref_session', 'T2')
 
 proc_dirs = sorted(glob.glob(os.path.join(project_root, "resultados", "resultados_autoencoder", "procesamiento_*")))
 target_folder = proc_dirs[-1] if proc_dirs else os.path.join(project_root, "resultados", "resultados_autoencoder")
@@ -3072,9 +3092,10 @@ if not os.path.exists(npz_path):
     print(f"ERROR: No existe el dataset {npz_path}. Ejecuta la extracción primero (Paso 1).")
     sys.exit(1)
 
+so2_txt = f" | Alineación SO(2) (Ref: {ref_session})" if usar_so2 else ""
 print("\\n" + "="*70)
 print(f"  EVALUACION DEL ESPACIO LATENTE ({modalidad.upper()} - {latent_dim}D)")
-print(f"  Alineacion Canonica (/a/ en +Y, sonrisa en +X) | Metricas y Fronteras: {algoritmo_clustering.upper()}")
+print(f"  Alineacion Canónica{so2_txt} | Clustering: {algoritmo_clustering.upper()}")
 print(f"  Carpeta de salida: {target_folder}")
 print("="*70 + "\\n")
 
@@ -3088,6 +3109,8 @@ metricas = motor.evaluar_espacio_latente(
     codigo_custom_arch=kwargs.get('codigo_custom_arch', None),
     mostrar_grafico=True,
     algoritmo_clustering=algoritmo_clustering,
+    usar_alineacion_so2=usar_so2,
+    ref_session=ref_session,
     callback_log=print
 )
 print(f"\\nEvaluacion completada. Exactitud {metricas.get('algoritmo_clustering', 'Clustering')}: {metricas['cluster_acc']:.2f}%")
@@ -3108,8 +3131,11 @@ if metricas and metricas.get('fig_path') and os.path.exists(metricas['fig_path']
       cod = kwargs.get('codigo_custom_arch', '')
       mod = kwargs.get('modalidad', 'envolvente')
       lat = kwargs.get('latent_dim', 2)
+      t_len = kwargs.get('target_len', 100)
+      canales_feat = kwargs.get('canales_features', ['canal_0', 'canal_1', 'canal_2'])
+      in_ch = len(canales_feat) if len(canales_feat) >= 2 else 3
       import deep_learning.motor_autoencoder_unificado as motor
-      ok_v, msg_v = motor.verificar_arquitectura_codigo(cod, modalidad=mod, latent_dim=lat)
+      ok_v, msg_v = motor.verificar_arquitectura_codigo(cod, modalidad=mod, latent_dim=lat, target_len=t_len, in_channels=in_ch)
       if not ok_v:
         self.log_console.append(f"> [ERROR ARQUITECTURA]: {msg_v}\n")
         from PySide6.QtWidgets import QMessageBox
@@ -3146,14 +3172,22 @@ algoritmo_clustering = kwargs.get('algoritmo_clustering', 'gmm')
 p95 = kwargs.get('usar_calibracion_p95', True)
 modo_align = kwargs.get('modo_alineacion', 'Pico Volumen Micrófono')
 
+tipo_arquitectura = kwargs.get('tipo_arquitectura', 'ortogonal')
+lambda_w = kwargs.get('lambda_w', 0.30)
+lambda_z = kwargs.get('lambda_z', 0.45)
+usar_imp = kwargs.get('usar_impedancia_reposo', True)
+usar_so2 = kwargs.get('usar_alineacion_so2', True)
+ref_session = kwargs.get('ref_session', 'T2')
+
 ts_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 carpeta_exp = os.path.join(project_root, "resultados", "resultados_autoencoder", f"procesamiento_{ts_str}_{modalidad}_{latent_dim}d")
 os.makedirs(carpeta_exp, exist_ok=True)
 
-orto_txt = f" | Ortogonalidad Latente: {lambda_orto}" if lambda_orto > 0 else ""
+orto_txt = f" | Orto-W: {lambda_w} | Orto-Z: {lambda_z}" if (lambda_w > 0 or lambda_z > 0) else ""
+so2_txt = f" | SO(2) Ref: {ref_session}" if usar_so2 else ""
 print("\\n" + "="*70)
 print(f"  FLUJO COMPLETO: AUTOENCODER NO SUPERVISADO ({modalidad.upper()} - {latent_dim}D)")
-print(f"  Pérdida: {tipo_perdida.upper()} (gamma: {gamma_sdtw}){orto_txt} | Clustering: {algoritmo_clustering.upper()}")
+print(f"  Arquitectura: {tipo_arquitectura.upper()} | Pérdida: {tipo_perdida.upper()}{orto_txt}{so2_txt} | Clustering: {algoritmo_clustering.upper()}")
 print(f"  Carpeta de procesamiento dedicada: {carpeta_exp}")
 print("="*70 + "\\n")
 
@@ -3162,6 +3196,7 @@ smooth_ms = kwargs.get('smooth_ms', 100)
 
 npz_path, n_pulsos = motor.extraer_dataset_unificado(
     rutas,
+    aplicar_correccion_intersesion=kwargs.get('aplicar_correccion_intersesion', True),
     usar_calibracion_p95=p95,
     modo_alineacion=modo_align,
     carpeta_salida=carpeta_exp,
@@ -3175,6 +3210,7 @@ npz_path, n_pulsos = motor.extraer_dataset_unificado(
     outlier_contamination=kwargs.get('outlier_contamination', 0.10),
     w_canales=kwargs.get('w_canales', [1.0, 1.0, 1.0]),
     tipo_filtro_linea=kwargs.get('tipo_filtro_linea', 'adaptativo'),
+    canales_features=kwargs.get('canales_features', ['canal_0', 'canal_1', 'canal_2']),
     callback_log=print
 )
 
@@ -3188,6 +3224,12 @@ modelo, pth = motor.entrenar_autoencoder(
     tipo_perdida=tipo_perdida,
     gamma_sdtw=gamma_sdtw,
     lambda_orto=lambda_orto,
+    tipo_arquitectura=tipo_arquitectura,
+    lambda_w=lambda_w,
+    lambda_z=lambda_z,
+    usar_impedancia_reposo=usar_imp,
+    usar_alineacion_so2=usar_so2,
+    ref_session=ref_session,
     carpeta_salida=carpeta_exp,
     usar_custom_arch=kwargs.get('usar_custom_arch', False),
     codigo_custom_arch=kwargs.get('codigo_custom_arch', None),
@@ -3204,6 +3246,8 @@ metricas = motor.evaluar_espacio_latente(
     codigo_custom_arch=kwargs.get('codigo_custom_arch', None),
     mostrar_grafico=True,
     algoritmo_clustering=algoritmo_clustering,
+    usar_alineacion_so2=usar_so2,
+    ref_session=ref_session,
     callback_log=print
 )
 print(f"\\nFlujo completo culminado con exito!")

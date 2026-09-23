@@ -725,7 +725,7 @@ El autoencoder convolucional 1D entrenado sin supervisión con regularización p
       - **Canal 0:** `Anterior Belly` (Apertura Mandibular / $+Y$).
       - **Canal 2:** `Orbicularis Oris` (Constricción Labial / $-Y < 0$).
       - (Canal 1 permanece libre/sin asignar al no haberse registrado electrodo de sonrisa en esta fecha).
-    - **Script de Migración Implementado:** `estandarizar_canales_2026_09_15.py` reubica los directorios de canales, actualiza `metadata.json`, los archivos de análisis JSON y reordena las columnas de `grabacion.csv` para garantizar paridad física y computacional total.
+    - **Script de Migración Ejecutado con Éxito:** `estandarizar_canales_2026_09_15.py` reubicó las subcarpetas de canales y sus archivos `grabacion.wav`, actualizó `metadata.json` en `canal_0` y `canal_2`, los archivos de análisis JSON y reordenó las columnas de `grabacion.csv` (`Tiempo (s), Canal 0, Canal 2`), garantizando paridad física y computacional total en las 20 sesiones.
 
 52. **Planificación y Diseño del Análisis Espectral Completo de Candela (2026-09-16):**
     - **Objetivo:** Análisis espectral exhaustivo (0 a 500 Hz) sobre las 20 sesiones tetracanales de Candela del día `2026-09-16` (series 1 a 4 para las 5 vocales, 240 contracciones totales).
@@ -1180,7 +1180,54 @@ El autoencoder convolucional 1D entrenado sin supervisión con regularización p
   - Eje Y FFT: rango fijo **[0.0, 6.0] µV** con ticks en `[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0]`.
   - Filtro adaptativo NLMS activo (50 a 400 Hz) + Butterworth pasa-altos 20 Hz (Trevisan).
   - Tiempo total de ejecucion: 414.33 s.
-- **Proximo Paso:** A definir por el usuario.
+- **Proximo Paso:** El usuario solicitó integrar el análisis espectral en la interfaz para generar el reporte de forma automática.
+
+---
+
+### Hito 87 - 2026-09-23: Integración de Reporte Espectral en la Interfaz Gráfica (GUI)
+
+- **Acción:** Refactorización de scripts de análisis e integración en el motor de reportes de la GUI.
+- **Detalles Técnicos:**
+  1. Se modularizó `analisis_espectral_candela.py` (`ejecutar_analisis_completo`) para aceptar rutas dinámicas (`session_paths` y `salida_base_dir`), permitiendo analizar cualquier conjunto de sesiones seleccionadas en la interfaz.
+  2. Se incorporó el método `generate_spectral_report` en `analysis/report_engine.py`. Este método invoca el pipeline de procesamiento espectral completo (Filtro NLMS + 20Hz HPF, FFT, PSD) y compila dinámicamente un documento LaTeX (`Reporte_Espectral_<fecha>.pdf`) que incluye las comparativas globales en escala lineal y límites estandarizados.
+  3. Se añadió un nuevo botón **"4. Reporte Espectral y PSD"** en `ReportDialog` (`gui_app/views/report_dialog.py`), el cual dispara el análisis espectral en segundo plano (vía `ReportWorker`) mostrando el progreso sin bloquear la interfaz.
+- **Estado:** Implementado, integrado y probado sintácticamente.
+
+---
+
+### Hito 88 - 2026-09-23: Implementación de Correlación Espectral EMG-Audio (Canal 3)
+
+- **Acción:** Integración de la señal del micrófono (Canal 3) para visualización conjunta y análisis de correlación fisiológico-fonética.
+- **Detalles Técnicos:**
+  1. **Segmentación Paralela:** La señal de audio pura (`mic_sig`) se segmenta usando las mismas ventanas exactas ($p_{\text{inicio}}$ a $p_{\text{fin}}$) calculadas a partir de la envolvente electromiográfica maestra, garantizando sincronía total.
+  2. **Análisis STFT Acústico:** Se calcula el espectrograma (STFT) del segmento de audio ($f_s = 2000\,\text{Hz}$, $f_{\text{max}} = 1000\,\text{Hz}$) almacenándolo en las estructuras de características junto al EMG.
+  3. **Visualización de Correlación:** Se agregó una nueva figura global (`comparativa_correlacion_audio_5vocales.png`) dispuesta en 2 filas por 5 columnas.
+     - **Fila Superior:** Espectrograma compuesto RGB del músculo (Rojo: Digástrico, Verde: Zigo, Amarillo: Orbicular).
+     - **Fila Inferior:** Espectrograma del audio alineado, utilizando mapa de calor `magma` para resaltar los formantes vocálicos.
+  4. **Reporte LaTeX:** Se inyectó esta nueva figura automáticamente bajo la sección "Correlación de Patrones EMG vs Audio" en el reporte de la interfaz GUI.
+- **Próximo Paso:** Generación de figura para publicación (23 de septiembre).
+
+---
+
+### Hito 89 - 2026-09-23: Generación de Figuras de Publicación (Mediciones 09-23)
+
+- **Acción:** Creación de un script dedicado (`generar_figura_paper_0923.py`) para renderizar un gráfico trimodal publicable sincronizado a 6000 Hz, usando exclusivamente los canales activos Masetero y Orbicular.
+- **Detalles Técnicos:**
+  1. **Análisis de Metadatos:** Se verificó que las tomas del 23 de septiembre (ej. `A_Prueba2_Sujeto1`) cuentan con $f_s = 6000\,\text{Hz}$ y mapeo de canales: Canal 0 (Masetero), Canal 2 (Orbicularis), Canal 3 (Micrófono).
+  2. **Estructura del Gráfico de Publicación:**
+     - **Panel Superior (Espectrograma Acústico):** STFT del micrófono (0 a 3000 Hz, colormap `magma`) mostrando los formantes vocálicos con alta resolución de frecuencia.
+     - **Panel Medio (Forma de Onda Acústica):** Señal cruda del micrófono (Oscilograma) en función del tiempo (en segundos).
+     - **Panel Inferior (Activación Muscular Normalizada):** Envolventes EMG filtradas (Pasa-altos 20Hz + suavizado de 50ms) del Masetero y el Orbicularis, superpuestas y normalizadas para mostrar el reclutamiento simultáneo.
+  3. **Alineación:** Todos los ejes temporales (`sharex`) están estrictamente alineados, extrayendo un pulso central representativo de cada vocal (A, E, I, O, U) y centrando el evento mediante la envolvente máxima acústica.
+  4. **Refinamientos Finales (Estándar LSD / Fisiología Acústica):**
+     - **Tipografía y Jerarquía Visual sin Colisiones:** Se eliminaron las etiquetas numéricas intermedias del eje $X$ en los 3 paneles superiores (`labelbottom=False`), dejando el eje temporal exclusivamente al pie de la figura, y se ajustó el espaciado vertical inter-panel (`hspace=0.28`), erradicando cualquier superposición entre títulos de subplots, leyendas y escalas numéricas.
+     - **Alineación Geométrica Estricta en Pixeles (GridSpec):** Se identificó y resolvió el desalineado horizontal de 50 píxeles provocado por el comando `colorbar` en Matplotlib (que estrechaba únicamente el primer subplot). Se implementó una grilla de dos columnas (`GridSpec(4, 2)`) asignando un eje dedicado `cax` para la colorbar, garantizando que el ancho y la coordenada horizontal $X$ de la línea $t = 0.0\,\text{s}$ sean 100% idénticos en los 4 paneles a nivel de subpíxel.
+     - **Alineación Causal Estricta con Compensación de Semiventana:** Para erradicar el pre-eco y desfasaje temporal inherente a las ventanas simétricas de la STFT, se aplicó la corrección analítica por retardo de grupo ($\Delta t = +\frac{N}{2 \cdot f_s}$) tanto al espectrograma de audio como al RGB de EMG. La emergencia del color coincide ahora de forma milimétrica con la primera deflexión del oscilograma y con la línea discontinua de $t = 0.0\,\text{s}$.
+     - **Pre-énfasis Acústico y Muscular:** Se aplica filtro digital de pre-énfasis tanto al micrófono ($y[n] = x[n] - 0.97 x[n-1]$) para ecualizar formantes altas frente a la caída de -6 dB/oct, como a los canales EMG ($y[n] = x[n] - 0.95 x[n-1]$) para realzar descargas motoras rápidas en el espectrograma RGB.
+     - **Oscilograma Rectificado con Envolvente Superpuesta:** Señal de micrófono en valor absoluto (rectificada completa $|x[n]|$) en gris claro, con su envolvente de amplitud rápida en trazo negro continuo (ambas normalizadas al rango $[0.0, 1.0]$), maximizando la resolución vertical del perfil de intensidad fonatoria.
+     - **Normalización Estricta:** Supremo Tricanal por pulso respetado integralmente.
+- **Estado:** Implementado y generado para las 5 vocales en `/EMG_desarrollo/resultados/figuras_paper_09_23/figura_paper_<Vocal>.png`.
+- **Próximo Paso:** A definir por el usuario (posibles refinamientos estéticos o uso en otros reportes).
 
 ---
 
@@ -1318,3 +1365,465 @@ El autoencoder convolucional 1D entrenado sin supervisión con regularización p
   5. **Verificación de Entorno:**
      - Se ejecutaron secuencialmente `crear_entorno_ejecutable.py`, `aplicar_parches_ejecutable.py` y `crear_spec_ejecutable.py`, validando que `EMG_Ejecutable_Build` y `EMG_Studio.spec` quedan listos y sin errores.
 - **Estado Actual:** Infraestructura de compilación lista para ejecutarse directamente en Windows con `build.bat` o en Linux con `./build_linux.sh`.
+
+53. **Auditoría Integral del Generador de Patrones Musculares y Catálogo de 143 Sesiones (2026-09-17):**
+    - **Localización del Generador Oficial:** `EMG_desarrollo/analysis/correlaciondeseñales.py` (función de patrones sincronizados, líneas 820 a 950).
+    - **Mecanismo de Procesamiento y Sincronización:**
+      1. Alineación temporal al pico de la señal acústica de referencia (`canal_3: Micrófono`, fijado rígidamente en $t = 0\,\text{s}$).
+      2. Cálculo de la envolvente media por pulso y banda de dispersión ($\mu(t) \pm \sigma(t)$).
+      3. Estimación cuantitativa de latencias relativas: tiempo al pico ($t_{\text{pico}}$ en ms respecto al micrófono) y amplitud normalizada.
+    - **Hallazgo Biomecánico Confirmado:** En la vocal **/i/** de Candela (`2026-08-30`, toma `I_Prueba4_Cande`), el electrodo sobre el Modíolo / Nudo Sonrisa registra un disparo marcadamente anticipado ($t < 0$), precediendo a la emisión sonora y a los demás canales.
+    - **Catálogo de 143 Patrones Existentes:**
+      - `2026-06-22` (Santi): 18 patrones (Milohioideo, DAO, Orbicular).
+      - `2026-07-10` (Lucas): 35 patrones (Digástrico / Milohioideo, DAO, Orbicular).
+      - `2026-08-21` (Petra): 10 patrones (Anterior Belly, LAO, Zigomático).
+      - `2026-08-27` (Petra med3): 5 patrones (Platisma en Canal 1).
+      - `2026-08-28` (Petra): 10 patrones (Anterior Belly, LAO, Zigomático).
+      - `2026-08-29` (Candela): 10 patrones (Comparativa Anterior Belly vs Milohioideo).
+      - `2026-08-30` (Candela): 10 patrones (Anterior Belly, Modíolo / Nudo Sonrisa, Orbicular).
+      - `2026-09-01` (Candela): 25 patrones (Anterior Belly, Risorio, Orbicular).
+      - `2026-09-16` (Candela): 20 patrones (Anterior Belly, Zigomático Mayor, Orbicular).
+
+54. **Matriz Científica Unificada de Activación sEMG: 10 Zonas Funcionales × 5 Vocales (2026-09-17):**
+    - **Ubicación del Artefacto:** `EMG_desarrollo/resultados/matriz_activacion_10zonas_5vocales.png` (250 DPI, 10 filas × 5 columnas, 50 celdas temporales).
+    - **Metodología de Extracción y Alineación:**
+      - Procesamiento directo de las señales acústicas y mioeléctricas (`grabacion.wav`) con filtrado pasa banda (20-450 Hz), Notch (50 Hz, $Q=2.0$) y envolvente cuadrática RMS ($\tau = 80\,\text{ms}$).
+      - Sincronización rígidamente anclada al inicio/pico del micrófono ($t = 0\,\text{ms}$) en ventana estándar de $[-150\,\text{ms}, +250\,\text{ms}]$.
+      - Normalización por el pico de activación inter-vocálico de cada fila, preservando las relaciones de reclutamiento fisiológico agonista/antagonista.
+    - **Zonas y Configuraciones Representadas:**
+      1. Digástrico Anterior (Candela 09-01) -> Pico máximo en /a/.
+      2. Milohioideo / Piso bucal (Candela 08-29) -> Reclutamiento co-activado en apertura.
+      3. Orbicular de la Boca (Candela 09-01) -> Pico máximo y exclusivo en /o/, /u/.
+      4. Modíolo / Nudo Sonrisa (Candela 08-30) -> Disparo anticipado explosivo en /i/ ($t_{\text{pico}} < -100\,\text{ms}$).
+      5. Risorio / Tracción lateral (Candela 09-01) -> Disparo lateral en /i/, /e/.
+      6. Cigomático Mayor - Ag/AgCl (Candela 09-16) -> Tracción oblicua superficial.
+      7. Cigomático Mayor - Silicona/IED amplia (Petra 08-28) -> Volumen de conducción profundo.
+      8. Depresor del Ángulo / DAO (Lucas 07-10) -> Estabilización inferior en /a/, /o/.
+      9. Elevador del Ángulo / LAO (Petra 08-28) -> Tracción superomedial profunda.
+      10. Platisma / Cervical (Petra 08-27, med3) -> Tensión de cuello.
+
+55. **Corrección de Inversión Fisiológica en Cigomático de Candela y Ventana Extendida de Campana Completa (2026-09-17):**
+    - **Diagnóstico y Corrección en Candela 2026-09-16:**
+      - Auditoría RMS en señales crudas reveló que en la sesión `2026-09-16`, los canales físicos estaban intercambiados respecto a la etiqueta del metadato: `canal_1` correspondía biomecánicamente al Orbicular (activación en /u/ = 5410 RMS) y `canal_2` correspondía al Cigomático Mayor (activación máxima en /i/ = 5169 RMS).
+      - Se corrigió la extracción direccionando la Zona Cigomática de Candela a `canal_2`, eliminando la falsa activación en /o/ y /u/.
+    - **Ampliación de Ventana a Campana Completa ([-600 ms a +800 ms]):**
+      - Se expandió la ventana temporal a $1400\,\text{ms}$ para visualizar la envolvente fisiológica íntegra: reposo basal, flanco ascendente de reclutamiento, pico de máxima contracción y fase de relajación elástica.
+    - **Atlas Inter-Sujeto Consolidado de 16 Registros × 5 Vocales:**
+      - `EMG_desarrollo/resultados/matriz_activacion_campana_completa.png` (220 DPI, alta definición).
+      - Desglose por sujeto: Candela, Petra, Lucas y Santi para Digástrico, Milohioideo, Orbicular, Modíolo, Risorio, Cigomático (Ag/AgCl y Silicona), DAO, LAO y Platisma.
+
+56. **Resolución Definitiva del Cigomático de Candela e Integración Exhaustiva de Tomas de Orbicular (2026-09-17):**
+    - **Diagnóstico de Doble Inversión en Cigomático de Candela (`2026-09-16`):**
+      - Auditoría en los gráficos precomputados oficiales (`patron_muscular_grabacion.png`) confirmó que el script previo `corregir_canales_2026_09_16.py` ya había intercambiado atómicamente en disco las subcarpetas físicas.
+      - En consecuencia, en el disco:
+        * `canal_1`: es estrictamente el *Zygomaticus Major* (traza turquesa/verde). Exhibe una activación dominante exclusiva en la vocal **/i/** ($46.65\,\mu\text{V}$ con anticipación motora de $-239.5\,\text{ms}$ respecto al micrófono), mientras que en las restantes vocales permanece en reposo basal ($10.37\,\mu\text{V}$ en /a/, $7.22\,\mu\text{V}$ en /e/, $18.18\,\mu\text{V}$ en /o/ y $15.61\,\mu\text{V}$ en /u/).
+        * `canal_2`: es estrictamente el *Orbicularis Oris* (traza amarilla), con picos masivos en /o/ ($120.21\,\mu\text{V}$) y /u/ ($95.40\,\mu\text{V}$).
+      - En la versión previa de la matriz, al haberse asignado `canal_2` al Cigomático, se graficaba el Orbicular. Se corrigió definitivamente asignando **`canal_1`**.
+    - **Desglose Exhaustivo de Tomas de Candela en Orbicular de la Boca:**
+      - Se relevaron e integraron las 11 tomas registradas a través de todas las sesiones de Candela:
+        1. `2026-08-25` (Prueba 1): `canal_0` (primer registro formal).
+        2. `2026-08-29` (Prueba 1): `canal_2`.
+        3. `2026-08-29` (Prueba 2): `canal_2`.
+        4. `2026-08-30` (Prueba 4): `canal_2`.
+        5. `2026-08-30` (Prueba 5): `canal_2`.
+        6. `2026-09-01` (Prueba 1): `canal_2`.
+        7. `2026-09-01` (Prueba 2): `canal_2`.
+        8. `2026-09-01` (Prueba 3): `canal_2`.
+        9. `2026-09-01` (Prueba 4): `canal_2`.
+        10. `2026-09-16` (Serie 1 a 4): `canal_2`.
+    - **Generador Unificado:** Script modular implementado en `EMG_desarrollo/analysis/generar_matriz_activacion_completa.py`.
+
+57. **Atlas Integral de Activación Muscular: 30 Registros × 5 Vocales con Campana Completa (2026-09-17):**
+    - **Desglose de los 3 Días de Lucas en Orbicular (`2026-07-10`):**
+      - Se auditó el metadato temporal de las tomas de Lucas dentro de la carpeta `2026-07-10`, confirmando que provienen de 3 jornadas experimentales independientes:
+        * **Día 1 (`2026-06-01`, T1):** Metrónomo a 40 BPM, pico en /o/ a $-133\,\text{ms}$ y /u/ a $-190\,\text{ms}$.
+        * **Día 2 (`2026-06-03`, T2):** Metrónomo a 30 BPM, pico en /o/ a $-124\,\text{ms}$ y /u/ a $-83\,\text{ms}$.
+        * **Día 3 (`2026-06-10`, T4):** Metrónomo a 30 BPM, pico en /o/ a $-176\,\text{ms}$ y /u/ a $-278\,\text{ms}$.
+    - **Inclusión Exhaustiva de Candela (13 Tomas de Orbicular):**
+      - Representación temporal completa de todas las tomas a lo largo de 5 fechas (`2026-08-25`, `2026-08-29` P1-P2, `2026-08-30` P4-P5, `2026-09-01` P1-P4 y `2026-09-16` S1-S4).
+    - **Validación Visual Definitiva del Cigomático de Candela:**
+      - En la fila 25, con `canal_1` asignado, el *Zygomaticus Major* exhibe un pico dominante nítido en la vocal **/i/** ($-226\,\text{ms}$) y permanece completamente silencioso/basal en /a/, /o/ y /u/, cumpliendo con rigor la observación biomecánica del usuario.
+    - **Artefacto Consolidado:**
+      - `EMG_desarrollo/resultados/matriz_activacion_campana_completa.png` (30 filas × 5 columnas = 150 celdas temporales sincronizadas con micrófono, 220 DPI).
+      - Copia sincronizada en el scratch de artefactos para revisión visual del usuario.
+
+58. **Acuerdo de Arquitectura Visual: Atlas Agrupado por Sujetos y Normalización Tricanal por Pulso Individual (2026-09-17):**
+    - **Normalización Obligatoria por Supremo Tricanal por Pulso Individual:**
+      - Se ratifica la directiva inmutable de normalizar cada pulso bioeléctrico por el divisor maestro instantáneo:
+        $$M_{\text{supremo, pulso}} = \max_{c \in \{0, 1, 2\}} \left( \max_{t \in \text{ventana}} |x_c(t)| \right)$$
+        $$\tilde{x}_c(t) = \frac{|x_c(t)|}{M_{\text{supremo, pulso}}}$$
+      - Esto garantiza que las amplitudes relativas representen fielmente el balance intermuscular motor primario vs secundario (agonista = 1.0, sinergistas en su porcentaje real), evitando la distorsión del autoescalado unicanal independiente.
+    - **Estructura Agrupada por Sujetos (1 Fila por Día/Sesión Global):**
+      - **Candela:** Digástrico (09-01), Digástrico (09-16), Milohioideo (08-29), Cigomático (09-16), Risorio (09-01), Modíolo (08-30), y 5 filas de Orbicular (una por cada fecha de medición: 08-25, 08-29, 08-30, 09-01, 09-16).
+      - **Lucas:** Submentoniano (07-10), DAO (07-10) y 3 filas de Orbicular (Día 1: 06-01, Día 2: 06-03, Día 3: 06-10).
+      - **Santi:** Milohioideo (06-22), DAO (06-22), Orbicular (06-22).
+      - **Petra:** Digástrico (08-28), Platisma (08-27), Cigomático Silicona (08-27).
+
+59. **Consolidación del Atlas Comparativo sEMG por Sujeto y Supremo Tricanal (2026-09-18):**
+    - **Procesamiento Exitoso:** Se ejecutó `EMG_desarrollo/analysis/generar_matriz_activacion_completa.py` procesando 22 filas consolidadas sin redundancias de series intrasesión.
+    - **Preservación Estricta de la Sinergia Intermuscular:**
+      - Cada pulso individual se normalizó por $M_{\text{supremo, pulso}}$ evaluando concurrentemente los canales 0, 1 y 2.
+      - En el Cigomático Mayor de Candela (`canal_1`), la vocal /i/ alcanza el $40\text{--}50\%$ del supremo local, mientras que en /a/, /o/, /u/ permanece basal (< $0.15$), confirmando la correcta corrección en disco de los archivos de audio.
+      - En el Orbicular de todos los sujetos, la respuesta en /o/ y /u/ satura cerca del 1.0 (motor primario esfinteriano), mientras que en /a/ la activación cae a niveles secundarios fisiológicos congruentes.
+    - **Salida:** Imagen en `EMG_desarrollo/resultados/matriz_activacion_campana_completa.png`.
+
+60. **Corrección Fisiológica Definitiva de Archivos WAV en 2026-09-16 (Canal 1 = Zygomaticus Major, Canal 2 = Orbicularis Oris):**
+    - **Diagnóstico Confirmado por Auditoría de Pulsos:** Tras verificar empíricamente los archivos de audio `grabacion.wav` pulso por pulso con filtro pasa-banda (20 a 450 Hz), se constató que los WAVs de Canal 1 y Canal 2 habían quedado invertidos físicamente: el esfínter labial (`Orbicularis Oris`) alcanzaba $0.150\,\text{V}$ en la vocal /u/ dentro de `canal_1/grabacion.wav`, mientras que la sonrisa (`Zygomaticus Major`) alcanzaba $0.071\,\text{V}$ en la vocal /i/ dentro de `canal_2/grabacion.wav`.
+    - **Operación Ejecutada:** Se ejecutó con éxito `corregir_wavs_2026_09_16.py` sobre las 20 tomas de `2026-09-16/`, intercambiando atómicamente `grabacion.wav` e intercambiando las columnas `Canal 1` y `Canal 2` en `grabacion.csv`.
+    - **Validación Fisiológica Post-Corrección (19/20 Tomas Coherentes):**
+      - En todas las tomas de **/o/** y **/u/** (`O_Serie1` a `O_Serie4`, `U_Serie1` a `U_Serie4`), el **Canal 2 (`Orbicularis Oris`)** domina inequívocamente en amplitud ($0.09\text{--}0.15\,\text{V}$ vs $0.06\text{--}0.08\,\text{V}$ en Ch1).
+      - En las tomas de **/i/** (`I_Serie1` a `I_Serie3`), el **Canal 1 (`Zygomaticus Major`)** lidera la activación de sonrisa ($0.06\text{--}0.07\,\text{V}$ vs $0.03\text{--}0.05\,\text{V}$ en Ch2).
+      - Se garantizó coherencia total y absoluta entre señales de audio, matrices CSV y metadatos en la totalidad de la sesión.
+
+62. **Consolidación Definitiva del Atlas sEMG Basado en CSV con Promedios por Día (2026-09-18):**
+    - **Reescritura Completa sobre grabacion.csv:** `generar_matriz_activacion_completa.py` procesa directamente los archivos tabulares de texto `grabacion.csv` mediante pandas, extrayendo tiempo y los 4 canales a su frecuencia nativa calculada dinámicamente por pulso.
+    - **Promedio Multiserie por Fila:** Se consolidaron todas las tomas del mismo día en exactamente una curva promedio $\pm$ error estándar (SEM). En Candela 09-16 se integraron las series 1, 2, 3 y 4 en un único promedio armónico.
+    - **Normalización Estricta por Supremo Tricanal del Pulso Individual ($M_{\text{supremo, pulso}}$):** Se preservó rígidamente la sinergia intermuscular tricanal sin autoescalados independientes.
+    - **Corrección Definitiva de Canales para 2026-09-16:** En `grabacion.csv`, el Canal 2 corresponde anatómicamente al Cigomático Mayor (pico nítido en /I/ a $-229\,\text{ms}$) y el Canal 1 al Orbicular de los Labios (picos dominantes en /O/ a $-196\,\text{ms}$ y /U/ a $-206\,\text{ms}$).
+    - **Colorimetría Completa sin Zonas Apagadas:** Se eliminó cualquier atenuación artificial o desaturación en gris, trazando todas las curvas con su tinte muscular representativo al 100% de color y transparencia de sombreado del 18%.
+    - **Salida Oficial:** Matriz consolidada de 22 filas por 5 vocales renderizada en `EMG_desarrollo/resultados/matriz_activacion_campana_completa.png`.
+
+63. **Integración de Arquitectura ConvAE con Decodificador Transpuesto y Pérdida Multiobjetivo (2026-09-18):**
+    - **Botón de Carga Inmediata en la GUI:** Se incorporó el botón `Cargar ConvAE (ConvTranspose1D)` en la Sección 8 del panel de análisis (`ui_analysis.py`). Al pulsarlo, inyecta la clase `ConvAE` en el editor, activa la casilla de arquitectura personalizada y valida dimensiones de inmediato.
+    - **Diferencias Estructurales de ConvAE vs Autoencoder Oficial:**
+      * *Codificador:* 3 etapas de reducción con paso (`stride=2`, núcleos de 5, canales 3 -> 32 -> 64 -> 128) que comprimen de 100 a 13 muestras. Aplana $128 \times 13 = 1664$ hacia el espacio latente (`Linear(1664, latent_dim)`).
+      * *Decodificador:* Reconstrucción inversa progresiva mediante convoluciones transpuestas (`ConvTranspose1d`), en contraste con el decodificador lineal denso del modelo oficial.
+      * *Sensibilidad Temporal:* La ausencia de agrupamiento global adaptativo (GAP/GMP) hace que esta arquitectura sea sensible a desalineaciones temporales finas, pero capaz de reconstruir detalles de forma de onda y derivadas locales.
+    - **Función de Pérdida Multiobjetivo:**
+      * Implementada en `motor_autoencoder_unificado.py` con soporte para error absoluto cuadrático, error relativo por canal y error de la primera derivada temporal:
+        $$\mathcal{L} = \text{MSE}_{\text{abs}} + \lambda_{\text{rel}} \frac{\|x - \hat{x}\|^2}{\|x\|^2 + \epsilon} + \lambda_{\text{deriv}} \frac{\|\Delta x - \Delta \hat{x}\|^2}{\|\Delta x\|^2 + \epsilon}$$
+      * Seleccionable desde el menú desplegable de función de pérdida (`ui_analysis.py`).
+    - **Corrección de Ortogonalidad en 3D por Normalización de Traza:**
+      * Se reemplazó la penalización rígida de varianza que colapsaba el espacio latente tridimensional por una normalización invariante a la escala latente natural del autoencoder:
+        $$\tilde{C} = \frac{C}{\text{tr}(C) + \epsilon}, \quad \mathcal{L}_{\text{orto}} = \sum_{i \neq j} \tilde{C}_{i, j}^2$$
+      * Permite decorrelacionar los ejes latentes sin comprimir la dispersión bioeléctrica.
+
+64. **Integración de Calibración Intersesión por Lote P95 (Estándar PCA/UMAP) al Autoencoder (2026-09-18):**
+    - **Algoritmo de Calibración por Sesión:**
+      * Las contracciones se agrupan por tupla $(\text{Fecha}, \text{Sesión})$.
+      * Para cada sesión $s$, se calcula el percentil P95 del pico de cada canal:
+        $$V_{s, c} = \text{percentil}_{95} \left( \left\{ \max_{t} |s_c(t)| \right\}_{\text{pulsos de } s} \right)$$
+      * Se calcula la referencia máxima de la sesión $V_{s, \text{ref}} = \max_c V_{s, c}$ y los factores de corrección acotados a $5\times$:
+        $$\alpha_{s, c} = \frac{V_{s, c}}{V_{s, \text{ref}}}, \quad C_{s, c} = \frac{1}{\max(\alpha_{s, c}, 0.20)}$$
+      * Trazabilidad en logs: `_log(f"  [Intersesión] Sesión '{s_tag}' ({s_fecha}) -> Ch0: C={C[0]:.2f}, Ch1: C={C[1]:.2f}, Ch2: C={C[2]:.2f}")`.
+    - **Preservación Estricta del Supremo Tricanal:**
+      * Cada canal se escala por $C_{s, c}$ y de inmediato se normaliza por el divisor maestro instantáneo del pulso individual:
+        $$M_{\text{supremo, pulso}} = \max_{c \in \{0, 1, 2\}} \left( \max_{t \in \text{ventana}} |\tilde{s}_c(t)| \right), \quad \hat{s}_c(t) = \frac{\tilde{s}_c(t)}{M_{\text{supremo, pulso}}}$$
+      * Garantiza la preservación de las relaciones de sinergia intermuscular intramuestra, neutralizando al mismo tiempo las derivas de impedancia piel-electrodo entre días o sujetos.
+    - **Control en la Interfaz Gráfica (`ui_analysis.py`):**
+      * Casilla interactiva `Corrección Intersesión por Lote (Calibración P95 PCA/UMAP)` en Sección 7 de la GUI (`self.chk_correccion_intersesion`), activa por defecto.
+      * Propagada a través de `get_kwargs()` y los lanzadores de `main_app.py` (`run_autoencoder_no_sup_extraer` y `run_autoencoder_no_sup_flujo_completo`).
+
+65. **Fidelidad Literal de ConvAE y Detección Dinámica de reconstruction_loss (2026-09-18):**
+    - **Inyección Completa del Script del Usuario:** Al presionar `Cargar ConvAE (ConvTranspose1D)`, se inyecta el script íntegro con imports (`torch`, `nn`, `DataLoader`, `TensorDataset`, `random`), fijación de semilla determinista (`SEED=42`), definición de clase `ConvAE` y la función `reconstruction_loss`.
+    - **Detección Automática de Pérdida en el Motor (`compilar_modelo_desde_codigo`):**
+      * Si el código define `reconstruction_loss`, el compilador la vincula directamente como `modelo.custom_loss_fn`.
+      * Durante el entrenamiento, `entrenar_autoencoder` detecta la función y la ejecuta con prioridad absoluta, logueando `[Pérdida del Editor] Utilizando directamente la función 'reconstruction_loss' definida en el código`.
+    - **Preconfiguración Automática en la GUI:** Al cargar la arquitectura, se activa la casilla personalizada y se selecciona de forma automática `Multiobjetivo (Relativa + Derivada)` en el selector de funciones de pérdida.
+
+66. **Estandarización Canónica de Canales y Sujeto en Sesión 2026-09-18 (Canal 0 = Belly, Canal 1 = Modiolo, Canal 2 = Orbicularis Oris):**
+    - **Diagnóstico del Registro Original:** En las 11 tomas del `2026-09-18` (10 tomas por vocal `*_cande` y 1 secuencia continua `SecuenciaContinua_Prueba1_Sujeto1`), los electrodos se adquirieron físicamente en orden desplazado: `canal_0: modiolo`, `canal_1: orbi`, `canal_2: belly`, `canal_3: mic`.
+    - **Operación Ejecutada:** Se ejecutó con éxito `estandarizar_canales_2026_09_18.py` aplicando:
+      1. *Renombrado de Directorios y Sujeto:* Se renombraron las carpetas a `*_Candela` y se fijó `"sujeto": "Candela"` en todos los `metadata.json`.
+      2. *Permutación Atómica de Subcarpetas y Bioseñales:*
+         - `belly` (antiguo Canal 2) trasladado a **`canal_0/`** (`Anterior Belly`).
+         - `modiolo` (antiguo Canal 0) trasladado a **`canal_1/`** (`Modiolo`).
+         - `orbi` (antiguo Canal 1) trasladado a **`canal_2/`** (`Orbicularis Oris`).
+         - `mic` permanece en **`canal_3/`** (`Micrófono`).
+      3. *Reordenamiento de `grabacion.csv`:* Columnas sincronizadas con la permutación física (`Canal 0: Belly`, `Canal 1: Modiolo`, `Canal 2: Orbicularis Oris`, `Canal 3: Micrófono`).
+      4. *Sincronización de Metadatos:* Actualizados `muscles`, `muscles_map`, campos `canal`, `musculo` y canales físicos (`physical_channel`) en los 4 canales de cada sesión.
+    - **Resultado:** Las 11 tomas del 18 de septiembre quedaron consolidadas bajo la arquitectura canónica universal del proyecto.
+
+67. **Resolución de Desajuste Dimensional en ConvAE (Puntos Envolvente = 100) (2026-09-18):**
+    - **Diagnóstico del Error `mat1 (32x384) and mat2 (1664x2)`:**
+      * La interfaz gráfica tenía configurado `target_len = 20` (Puntos Envolvente: 20) en lugar del valor base 100.
+      * La reducción con paso 2 sobre 20 muestras produce $20 \to 10 \to 5 \to 3$ muestras temporales, resultando en $128 \times 3 = 384$ características aplanadas.
+      * La capa lineal de `ConvAE` está dimensionada fijamente para $128 \times 13 = 1664$ (asumiendo 100 muestras: $100 \to 50 \to 25 \to 13$), provocando el desajuste dimensional en la multiplicación matricial.
+    - **Ajuste Preventivo en la GUI (`ui_analysis.py`):**
+      * Al pulsar `Cargar ConvAE (ConvTranspose1D)`, el spinbox `self.inp_pts_env` se fija automáticamente en **`100`**.
+      * La verificación de arquitectura ahora valida contra el valor real de `target_len` seleccionado en la interfaz en lugar del valor por defecto, emitiendo una advertencia explícita si hay discordancia con `nn.Linear(1664, ...)`.
+
+68. **Migración Exitosa de Sujeto a Candela en 2026-09-08 y 2026-09-11 (2026-09-18):**
+    - **Diagnóstico del Registro en Base de Datos:**
+      * Las fechas `2026-09-08` (9 tomas) y `2026-09-11` (16 tomas) figuraban asignadas a "Santi" / "Sujeto1" tanto en metadatos como en nomenclatura de carpetas.
+      * En el explorador de sesiones de la interfaz gráfica (`session_explorer.py`), se agrupaban erróneamente bajo el nodo "Santi".
+    - **Operación Ejecutada (`migrar_sujeto_cande_09_08_09_11.py`):**
+      * Se reasignó `"sujeto": "Candela"` y se normalizó `"letra"` a mayúscula en la totalidad de los archivos `metadata.json` de cada subcanal (`canal_0` y `canal_1`).
+      * Se renombraron las 25 carpetas de tomas al estándar canónico: prefijo de vocal en mayúscula (`A_...`, `U_...`) y sufijo `_Candela`.
+      * Se conservaron al 100% las señales biológicas `grabacion.wav`, las matrices numéricas `grabacion.csv` y los mapeos musculares originales.
+    - **Resultado:** En el árbol de la aplicación gráfica, las 9 tomas del 8 de septiembre y las 16 tomas del 11 de septiembre quedan agrupadas bajo el sujeto **Candela**.
+
+69. **Soporte de Arquitectura Bicanal (2 Músculos) y Tricanal Dinámico en el Autoencoder No Supervisado (2026-09-18):**
+    - **Requerimiento e Hipótesis Científica:**
+      * Permitir entrenar y evaluar el Autoencoder No Supervisado seleccionando cualquier par de 2 músculos (Ch0+Ch1, Ch0+Ch2, Ch1+Ch2) o la tríada completa (Ch0+Ch1+Ch2) para aislar sinergias musculares independientes (ej. apertura vs sonrisa, apertura vs protrusión labial).
+    - **Selector Interactivo en la GUI (`ui_analysis.py`):**
+      * Incorporado el grupo `Canales Musculares a Procesar: Selección Bicanal o Tricanal` con casillas interactivas para Canal 0, Canal 1 y Canal 2.
+      * Regla de selección mínima: bloquea el desmarcado si la selección es menor a 2 canales, emitiendo una notificación informativa.
+      * Adaptación automática de plantillas: `get_plantilla_codigo`, `on_cargar_convae` y `on_verificar_arquitectura` configuran `in_channels` dinámicamente según las casillas marcadas.
+    - **Generalización del Motor Matemático (`motor_autoencoder_unificado.py`):**
+      * Parámetro `canales_features` integrado en `extraer_dataset_unificado`.
+      * Carga de audio WAV, cálculo de piso de ruido dinámico interpulso y corte guiado adaptados a $N \in \{2, 3\}$ canales.
+      * Calibración intersesión P95 por lote calculada sobre los $N$ canales seleccionados:
+        $$V_{s, c} = \text{percentil}_{95} \left( \left\{ \max_{t} |s_c(t)| \right\}_{\text{pulsos de } s} \right), \quad C_{s, c} = \frac{1}{\max(V_{s, c} / V_{s, \text{ref}}, 0.20)}$$
+      * Preservación estricta de la regla obligatoria de normalización por el Supremo del Pulso Individual:
+        $$M_{\text{supremo, pulso}} = \max_{c \in \text{canales seleccionados}} \left( \max_{t \in \text{ventana}} |x_c(t)| \right)$$
+      * Reescalado fisiológico por promedios generalizado para detectar qué agonistas primarios están presentes en la combinación seleccionada.
+      * Parámetro `in_channels` en `compilar_modelo_desde_codigo`, `verificar_arquitectura_codigo` y `crear_modelo_autoencoder`.
+      * En `entrenar_autoencoder`: detecta `in_ch = X.shape[1]` del dataset `.npz` e instancia el modelo con el número exacto de canales.
+      * En `evaluar_espacio_latente`: renderizado de curvas promedio de entrada y reconstrucción para cada uno de los canales activos.
+    - **Propagación en la Aplicación Principal (`main_app.py`):**
+      * `run_autoencoder_no_sup_extraer` y `run_autoencoder_no_sup_completo` transmiten `canales_features` al script de fondo y validan la red con `in_channels = len(canales_features)`.
+
+70. **Estandarización Canónica Exitosa de Canales en 2026-09-08 y 2026-09-11 (2026-09-18):**
+    - **Requerimiento del Usuario:** Configurar Canal 0 = Anterior Belly y Canal 2 = Orbicularis Oris para todas las tomas de `2026-09-08` (9 tomas) y `2026-09-11` (16 tomas), sincronizando archivos de audio WAV, matrices CSV y metadatos JSON.
+    - **Operación Ejecutada (`estandarizar_canales_2026_09_08_09_11.py`):**
+      * Las 25 tomas fueron procesadas y clasificadas atómicamente:
+        - 8 tomas del Caso 1 (Ch0=Belly, Ch1=Orbi): subcarpeta `canal_1` trasladada a `canal_2`, columna `Canal 1` renombrada a `Canal 2` en `grabacion.csv`.
+        - 17 tomas del Caso 2 (Ch0=Orbi, Ch1=Belly): permutación de subcarpetas (`canal_1` -> `canal_0`, `canal_0` -> `canal_2`), reordenamiento de columnas en `grabacion.csv` (`Canal 0` = datos de Belly, `Canal 2` = datos de Orbicularis).
+      * Metadatos sincronizados en `canal_0/metadata.json` (`musculo: "Anterior Belly"`) y `canal_2/metadata.json` (`musculo: "Orbicularis Oris"`), con `muscles_map: {"canal_0": "Anterior Belly", "canal_2": "Orbicularis Oris"}`.
+      * Archivos de audio `grabacion.wav` reubicados en sus canales anatómicos correspondientes.
+    - **Resultado:** Las sesiones bicanales del 8 y 11 de septiembre quedan completamente normalizadas bajo la arquitectura canónica universal del proyecto (Ch0 = Digástrico / Belly, Ch2 = Orbicular).
+
+71. **Auditoría Forense y Visualización Canónica de PCA 2D Multisesión (Set kkk - Candela 3 Bloques) (2026-09-18):**
+    - **Reconstrucción Forense del Set kkk:**
+      * A partir de `proyecciones_pca_2d.csv` (509 pulsos), se determinó que integra tres sesiones de Candela:
+        1. *Bloque 1:* `2026-09-18` (Prueba 1-2, 106 contracciones).
+        2. *Bloque 2:* `2026-09-16` / 15 Sep (Series 1-4, 214 contracciones).
+        3. *Bloque 3:* `2026-09-01` (Prueba 1-5, 188 contracciones).
+    - **Visualización Canónica con Estética Oficial de `generador_pca_umap`:**
+      * Script `EMG_desarrollo/analysis/graficar_pca_3bloques.py`:
+        - Paleta `Set1` idéntica a la herramienta oficial (/a/ rojo `#e41a1c`, /e/ azul `#377eb8`, /i/ verde `#4daf4a`, /o/ violeta `#984ea3`, /u/ naranja `#ff7f00`).
+        - Eliminación estricta de centroides y líneas artificiales según directiva del usuario.
+        - Diferenciación de sesiones mediante geometrías de marcador: Círculos (18/09), Cuadrados (15/09) y Triángulos (01/09).
+        - Generación de panel facetado 1x3 (`pca_2d_3bloques_facetado.png`) demostrando la coincidencia topológica entre el 18/09 y el 15/09 en el semiplano izquierdo, y el desplazamiento rígido de la sesión del 01/09 al semiplano derecho.
+    - **Reporte en LaTeX:** Redactado `reportes_experimentos/Reporte_PCA_2D_3Bloques_Candela.tex` con formulación matemática completa de la normalización por el Supremo del Pulso Individual ($M_{\text{supremo, pulso}}$) y la calibración intersesión P95 por lote ($C_{s, c}$).
+
+72. **Diseño e Implementación de Alineación de Procrustes Ortogonal en Espacio PCA 2D - 2026-09-18:**
+    - **Hipótesis del Usuario y Fundamento Físico:**
+      * El desplazamiento sistemático de la sesión del 01/09 frente al 15/09 y 18/09 responde al cambio del segundo electrodo (Risorio con tracción posterior pura vs Cigomático Mayor y Modíolo con tracción oblicua superior).
+      * En el espacio de fases PCA 2D, esta variación lineal del plano de observación biomecánico se modela matemáticamente como una rotación ortogonal rígida $\mathbf{R} \in \text{SO}(2)$, una traslación $\vec{t} \in \mathbb{R}^2$ y una escala uniforme $s \in \mathbb{R}^+$.
+    - **Formulación Matemática de Procrustes:**
+      * Dados los centroides de las 5 vocales en la sesión de referencia $\bar{\mathbf{X}}_{\text{ref}} \in \mathbb{R}^{5 \times 2}$ (15/09 + 18/09, $n=320$) y en la sesión objetivo $\bar{\mathbf{X}}_{\text{tgt}} \in \mathbb{R}^{5 \times 2}$ (01/09, $n=188$):
+        $$\vec{\mu}_{\text{ref}} = \frac{1}{5}\sum_{v} \bar{\mathbf{x}}_{\text{ref}}^{(v)}, \quad \vec{\mu}_{\text{tgt}} = \frac{1}{5}\sum_{v} \bar{\mathbf{x}}_{\text{tgt}}^{(v)}$$
+        $$\tilde{\mathbf{X}}_{\text{ref}} = \bar{\mathbf{X}}_{\text{ref}} - \mathbf{1}\vec{\mu}_{\text{ref}}^T, \quad \tilde{\mathbf{X}}_{\text{tgt}} = \bar{\mathbf{X}}_{\text{tgt}} - \mathbf{1}\vec{\mu}_{\text{tgt}}^T$$
+      * Descomposición en Valores Singulares (SVD) sobre la covarianza cruzada:
+        $$\mathbf{M} = \tilde{\mathbf{X}}_{\text{tgt}}^T \tilde{\mathbf{X}}_{\text{ref}} = \mathbf{U} \mathbf{\Sigma} \mathbf{V}^T \implies \mathbf{R} = \mathbf{U} \operatorname{diag}(1, \det(\mathbf{U}\mathbf{V}^T)) \mathbf{V}^T$$
+      * Factor de escala uniforme y traslación baricéntrica:
+        $$s = \frac{\operatorname{tr}(\mathbf{\Sigma})}{\operatorname{tr}(\tilde{\mathbf{X}}_{\text{tgt}}^T \tilde{\mathbf{X}}_{\text{tgt}})}, \quad \vec{t} = \vec{\mu}_{\text{ref}} - s \, \vec{\mu}_{\text{tgt}} \mathbf{R}$$
+      * Transformación de cada contracción individual $\vec{p} \in \mathbb{R}^2$ de la sesión objetivo:
+        $$\vec{p}_{\text{alineado}} = s (\vec{p} - \vec{\mu}_{\text{tgt}}) \mathbf{R} + \vec{\mu}_{\text{ref}}$$
+    - **Resultados Empíricos Obtenidos (`alinear_procrustes_pca.py`):**
+      * **Parámetros del Ajuste en $\text{SO}(2)$:**
+        - Determinante: $\det(\mathbf{R}) = 1.0000$ (Rotación pura sin reflexiones, preservando la quiralidad anatómica).
+        - Ángulo de rotación: $\theta = 0.15^\circ$ (orientación de ejes idéntica entre sesiones).
+        - Factor de escala: $s = 0.8400$.
+        - Vector de traslación: $\vec{t} = [-1.2992, +0.6183]$ (el desfase intersesión era esencialmente una traslación rígida en el plano PCA).
+        - Error RMS residual de centroides: $0.4307$.
+      * **Evaluación Cuantitativa GMM (Antes vs Después de Procrustes):**
+        - Exactitud Global GMM: **$42.13\% \to 60.83\%$** (+18.7 puntos porcentuales).
+        - /a/: **$63.37\% \to 91.09\%$** (+27.7 puntos).
+        - /u/: **$63.27\% \to 84.69\%$** (+21.4 puntos).
+        - /i/: **$25.51\% \to 53.06\%$** (+27.6 puntos, más del doble).
+        - /e/: **$38.74\% \to 45.05\%$** (+6.3 puntos).
+        - /o/: **$20.00\% \to 32.00\%$** (+12.0 puntos).
+        - El modelo cumple de forma estricta la regla del proyecto de ganancia armónica y balanceada en todas las 5 vocales sin canibalización.
+      * **Artefactos Guardados en `resultados_pca_umap/kkk/`:**
+        - `proyecciones_pca_2d_alineado_procrustes.csv`: Coordenadas transformadas de las 509 contracciones.
+        - `procrustes_metricas_clustering.json`: Métricas de evaluación pre y post alineación.
+        - `pca_2d_antes_despues_procrustes.png`: Panel comparativo 1x2 demostrando el colapso del patrón bimodal en una constelación unificada.
+        - `pca_2d_facetado_post_procrustes.png`: Comparativa 1x3 facetada en escala idéntica confirmando la coincidencia de los tres bloques.
+
+73. **Corrección de Dimensionalidad Dinámica de Canales en Procesamiento STFT y Espectrogramas - 2026-09-18:**
+    - **Diagnóstico del Error `IndexError: index 2 is out of bounds for axis 0 with size 2`:**
+      * Al ejecutar la extracción de dataset con selección bicanal (Canal 0 = Belly y Canal 2 = Orbicular, $N=2$ canales), la función `procesar_stft_calibrada` en `motor_autoencoder_unificado.py` mantenía bucles rígidos sobre `range(3)`.
+      * Al iterar sobre el índice $c=2$ en una matriz de entrada con dimensión $2 \times N_{\text{muestras}}$, se producía la excepción de desborde de índice.
+    - **Modificación Implementada:**
+      * Se parametrizó `n_canales = pulso_nch.shape[0]` en `procesar_stft_calibrada`, iterando dinámicamente sobre `range(n_canales)` tanto para el cálculo de la STFT con ventana Hann como para el cierre morfológico en decibeles.
+      * En la visualización de reconstrucción (`evaluar_espacio_latente`), se incorporó el relleno dinámico con ceros para el tercer canal si la entrada es bicanal (`shape[2] == 2`), evitando errores en la concatenación con el separador de imagen RGB (`32, 2, 3`) en `imshow`.
+74. **Diseño de Alineación de Procrustes Multisujeto en Espacio PCA 2D Hipergigante xd - 2026-09-18:**
+    - **Contexto del Dataset Hipergigante (`resultados_pca_umap/xd/`):**
+      * Conjunto masivo de 1716 contracciones bicanales válidas (Canal 0 = Vientre Anterior / Milohioideo, Canal 2 = Orbicular de la Boca).
+      * Integra 31 sesiones a lo largo de 4 sujetos (Candela, Lucas, Petra, Santi) y fechas desde el 2026-06-22 hasta el 2026-09-18.
+    - **Estrategia Metodológica de Procrustes en $\text{SO}(2)$:**
+      * Referencia Canónica: Candela 2026-09-16 (`Serie1` a `Serie4`, $n=204$ contracciones, ruido de línea mínimo).
+      * Agrupamiento de contracciones por tupla $(\text{Sujeto}, \text{Fecha})$.
+      * Para cada grupo con las 5 vocales presentes, cálculo de la rotación ortogonal pura en $\text{SO}(2)$ ($\det(\mathbf{R}) = 1$), factor de escala $s$ y traslación baricéntrica $\vec{t}$.
+    - **Resultados Empíricos Obtenidos (`alinear_procrustes_hipergigante.py`):**
+      * **Parámetros Cinemáticos por Sujeto:**
+        - `Lucas_2026-07-10` ($n=505$): $\theta = -64.10^\circ$, $s = 0.224$, $\vec{t} = [0.53, -0.36]$, $\text{RMS} = 0.353$.
+        - `Santi_2026-06-22` ($n=188$): $\theta = -55.03^\circ$, $s = 0.251$, $\vec{t} = [0.75, -0.47]$, $\text{RMS} = 0.390$.
+        - `Candela_2026-09-18` ($n=108$): $\theta = -47.19^\circ$, $s = 0.264$, $\vec{t} = [0.40, -0.36]$, $\text{RMS} = 0.350$.
+        - `Candela_2026-09-01` ($n=231$): $\theta = -30.58^\circ$, $s = 0.296$, $\vec{t} = [0.55, -0.29]$, $\text{RMS} = 0.322$.
+        - `Petra_2026-08-28` ($n=181$): $\theta = +122.48^\circ$, $s = 0.499$, $\vec{t} = [0.91, -0.42]$, $\text{RMS} = 0.368$.
+        - Se observa una cuasi-invarianza angular en $\theta \approx -50^\circ\text{ a }-64^\circ$ entre Lucas, Santi y Candela, con escalas altamente consistentes ($s \approx 0.22\text{--}0.26$).
+      * **Desempeño GMM y Diagnóstico Biofísico Bicanal:**
+        - /u/ (polo orbicular puro): salta de **$48.39\% \to 75.95\%$** (+27.56 pp).
+        - /i/ (polo comisural cerrado): salta de **$27.17\% \to 80.35\%$** (+53.18 pp, casi se triplica).
+        - Exactitud global: **$38.87\% \to 37.82\%$**. En una configuración bicanal estricta (sin Canal 1 comisural), las vocales intermedias (/e/ y /o/) carecen del grado de libertad para desacoplarse del eje apertura-constricción (/a/ y /u/), siendo absorbidas por las clases vecinas en el GMM global.
+      * **Artefactos Guardados en `resultados_pca_umap/xd/`:**
+        - `pca_2d_antes_despues_procrustes_hipergigante.png`: Panel comparativo 1x2 demostrando el colapso espacial de los 4 sujetos en un rango acotado idéntico.
+        - `pca_2d_facetado_por_sujeto_hipergigante.png`: Panel 1x4 por sujeto confirmando que /u/ y /i/ se alinean exactamente en las mismas coordenadas espaciales inter-sujeto.
+        - `proyecciones_pca_2d_alineado_procrustes_hipergigante.csv` y `procrustes_hipergigante_metricas.json`.
+
+75. **Auditoría de Metadatos de Lucas y Evaluación Individual con Procrustes SO(2) - 2026-09-18:**
+    - **Auditoría Profunda de Metadatos (`base_de_datos_electrodos/2026-07-10/`):**
+      * La carpeta `2026-07-10` compila 7 tomas de Lucas (T1 a T7) correspondientes a 3 fechas de registro reales distintas:
+        - **T1:** 2026-06-01 (Prueba 1, 40 BPM, tarjeta Dev2, 20 pulsos).
+        - **T2 y T3:** 2026-06-03 (Prueba 1 y Prueba 3, 30 BPM, tarjeta Dev2, 25 pulsos).
+        - **T4 a T7:** 2026-06-10 (Prueba 1 a Prueba 4, 30 BPM, tarjeta Dev1, 12 pulsos).
+      * Músculos registrados: Canal 0 = Milohioideo (`Mylohyoid`), Canal 1 = Depresor del Ángulo de la Boca (`Depresor Anguli Oris`), Canal 2 = Orbicular de la Boca (`Orbicularis Oris`), Canal 3 = Micrófono.
+    - **Evaluación Visual y Cuantitativa de Lucas (`graficar_lucas_alineado.py`, $n=505$):**
+      * Exactitud Global GMM en Lucas: **$62.38\%$**.
+      * Desglose por Vocal:
+        - /u/: **$94.29\%$** (confinamiento labial nítido en el cuadrante inferior).
+        - /e/: **$63.54\%$**.
+        - /a/: **$59.62\%$**.
+        - /i/: **$50.52\%$**.
+        - /o/: **$42.72\%$**.
+      * Coeficiente de Silueta: $+0.0415$, Índice Davies-Bouldin: $1.765$.
+      * Figura generada en alta resolución: `pca_2d_lucas_antes_despues.png` en `resultados_pca_umap/xd/`.
+    - **Diagnóstico y Propuesta Metodológica:**
+      * Al haber sido rotado Lucas como un único bloque global ($\theta = -64.1^\circ$), las distancias relativas inter-tomas permanecieron intactas (62.38% idéntico).
+      * Dado que cada una de las 7 tomas contiene las 5 vocales y representa una sesión física independiente con deriva de electrodo, la alineación sesión por sesión (toma por toma individual) compensará la variabilidad entre el 01/06, 03/06 y 10/06.
+
+76. **Alineación de Tomas Ti en Espacio PCA Tricanual de Lucas (`lucas_pca_clasic`) - 2026-09-18:**
+    - **Definición del Problema:**
+      * En lugar del dataset hipergigante inter-sujeto (`xd`), el objetivo es optimizar la separación intra-sujeto en el espacio PCA clásico tricanal de Lucas (`lucas_pca_clasic`, 501 contracciones válidas con Canales 0, 1 y 2).
+      * El gráfico original `lucas_pca_clasic/PCA_2D.png` exhibe solapamiento entre /e/ y /i/, y dispersión en /a/ debido a la combinación de 7 tomas ($T_1$ a $T_7$) registradas en 3 días distintos (01/06, 03/06 y 10/06).
+    - **Estrategia de Alineación por Toma Ti:**
+      * Identificar a qué toma $T_i \in \{T_1, \dots, T_7\}$ pertenece cada una de las 501 contracciones.
+      * Extraer los 5 centroides vocálicos de cada toma individualmente: $\mathbf{X}_{T_i} \in \mathbb{R}^{5 \times 2}$.
+      * Ajustar la transformación de Procrustes en $\text{SO}(2)$ ($\mathbf{R}_{T_i}$, $s_{T_i}$, $\vec{t}_{T_i}$) llevando los centroides de cada toma al blanco de referencia canónico GMM de Lucas.
+      * Generar un panel de 4 cuadrantes (2x2):
+        1. Gráfico original con símbolos diferenciados para cada toma $T_i$.
+        2. Gráfico coloreado por toma $T_i$ para visualizar la segregación de tomas nativas.
+        3. Gráfico post-alineación de tomas $T_1 \dots T_7$ con Procrustes $\text{SO}(2)$.
+        4. Mapa de vectores de desplazamiento de los centroides de cada toma hacia el blanco de referencia.
+      * Script implementado: `EMG_desarrollo/analysis/alinear_tomas_lucas_pca_clasic.py`.
+
+77. **Resultados Empíricos de Alineación Procrustes por Toma Ti en `lucas_pca_clasic` - 2026-09-19:**
+    - **Ejecución del Script `alinear_tomas_lucas_pca_clasic.py`** sobre 500 contracciones válidas (7 tomas: T1=72, T2=112, T3=106, T4=55, T5=55, T6=48, T7=52).
+    - **Parámetros Cinemáticos por Toma (Procrustes SO(2) con escala libre):**
+      * T1: $\theta = +0.4^\circ$, $s = 0.974$, $\vec{t} = [-0.02, -0.19]$, RMS = 0.040.
+      * T2: $\theta = -3.2^\circ$, $s = 1.081$, $\vec{t} = [+0.08, +0.07]$, RMS = 0.107.
+      * T3: $\theta = -1.8^\circ$, $s = 1.006$, $\vec{t} = [+0.03, -0.03]$, RMS = 0.091.
+      * T4: $\theta = +2.1^\circ$, $s = 0.885$, $\vec{t} = [-0.04, +0.04]$, RMS = 0.070.
+      * T5: $\theta = +7.2^\circ$, $s = 0.923$, $\vec{t} = [-0.03, +0.16]$, RMS = 0.119.
+      * T6: $\theta = +5.6^\circ$, $s = 0.929$, $\vec{t} = [-0.05, +0.16]$, RMS = 0.197.
+      * T7: $\theta = +10.3^\circ$, $s = 0.987$, $\vec{t} = [-0.00, +0.22]$, RMS = 0.221.
+    - **Métricas GMM:**
+      * Exactitud Global: **73.2% (original) -> 62.6% (alineado)** -- degradación de 10.6 pp.
+      * /u/ salta de 74.0% a 100.0% absorbiendo toda /o/ (que cae de 58.6% a 0.0%).
+      * Silueta: **0.4426 -> 0.5814** (+0.14, mejora geométrica).
+      * Davies-Bouldin: **0.8551 -> 0.6571** (mejora, clusters más compactos).
+    - **Diagnóstico:** La escala libre ($s \approx 0.88\text{--}0.92$ en T4-T7) comprime el eje PC1 colapsando /o/ y /u/. Las rotaciones son menores ($<10^\circ$) y las traslaciones verticales dominan en T5-T7.
+    - **Propuesta:** Evaluar Procrustes sin escala ($s = 1.0$ fijo, solo rotación y traslación) para preservar las distancias relativas originales y evitar el colapso /o/-/u/.
+    - **Artefactos Generados:**
+      * `PCA_2D_analisis_tomas_ti_alineacion_procrustes.png`: Panel 2x2 comparativo.
+      * `proyecciones_pca_2d_alineado_por_toma.csv`: Coordenadas alineadas.
+      * `metricas_alineacion_tomas_ti.json`: Métricas completas.
+
+78. **Estandarización Canónica Exitosa en 2026-09-22 (2026-09-23):**
+    - **Requerimiento del Usuario:**
+      * Capitalizar todas las vocales en los nombres de tomas y en los metadatos de la sesión `2026-09-22` (47 tomas).
+      * En las tomas de la serie "S" (`PruebaS1` a `PruebaS4`, 20 tomas), permutar los canales para fijar:
+        - Canal 0: Masetero (ex Canal 2, `Dev1/ai2`)
+        - Canal 1: Orbi vertical (ex Canal 0, `Dev1/ai0`)
+        - Canal 2: Orbi Horizontal (ex Canal 1, `Dev1/ai1`)
+        - Canal 3: mic (`Dev1/ai3`)
+      * Sincronizar subcarpetas físicas (audios `grabacion.wav`), matrices tabulares `grabacion.csv` y archivos `metadata.json`.
+    - **Operación Ejecutada (`estandarizar_2026_09_22.py`):**
+      * Las 47 tomas fueron normalizadas con vocal inicial en mayúscula (`A_...`, `E_...`, `I_...`, `O_...`, `U_...`) tanto a nivel de carpetas como en el campo `"letra"` de `metadata.json`.
+      * En las 20 tomas de la serie S, se aplicó la permutación atómica de carpetas y archivos de audio WAV:
+        - `canal_0` (Masetero), `canal_1` (Orbi vertical), `canal_2` (Orbi Horizontal), `canal_3` (mic).
+      * Reordenamiento de columnas en `grabacion.csv` preservando la correspondencia matemática de las señales a 6000 Hz.
+      * Metadatos actualizados en los 4 canales con `muscles: ["Masetero", "Orbi vertical", "Orbi Horizontal", "mic"]` y sus canales físicos correspondientes (`Dev1/ai2`, `Dev1/ai0`, `Dev1/ai1`, `Dev1/ai3`).
+    - **Resultado:** Las 47 tomas del 22 de septiembre quedaron 100% estandarizadas en su nomenclatura y en la distribución anatómica de canales.
+
+79. **Estandarización Canónica Exitosa de Canales en Tomas No-S de 2026-09-22 (2026-09-23):**
+    - **Requerimiento del Usuario:** En las tomas restantes de `2026-09-22` (`Prueba2`, `Prueba3`, `Prueba4` ... `Prueba9`, `Pruebat1`, 27 tomas en total), trasladar `orbi` del Canal 1 al Canal 2. El usuario aclaró que en el canal secundario no se medía nada en ese momento, por lo que el Canal 1 se fija unificadamente como `"-"` (sin medición).
+    - **Operación Ejecutada (`estandarizar_resto_2026_09_22.py`):**
+      * Las 27 tomas no-S fueron procesadas atómicamente:
+        - Subcarpetas `canal_1` y `canal_2` permutadas en disco junto a sus audios `grabacion.wav`.
+        - Columnas `Canal 1` y `Canal 2` intercambiadas en `grabacion.csv` manteniendo la integridad de las señales bioeléctricas a 6000 Hz.
+        - Metadatos `metadata.json` sincronizados en los 4 canales:
+          - Canal 0: Masetero (`Dev1/ai0`)
+          - Canal 1: Sin medición (`"-"`, `Dev1/ai2`)
+          - Canal 2: Orbi (`"orbi"`, `Dev1/ai1`)
+          - Canal 3: mic (`"mic"`, `Dev1/ai3`)
+    - **Resultado:** La totalidad de las 47 tomas del 22 de septiembre posee ahora el orbicular estandarizado en el Canal 2 (`canal_2`), el masetero en el Canal 0 (`canal_0`) y el micrófono en el Canal 3 (`canal_3`).
+
+80. **Segregación Exitosa de Tomas en 2026-09-21, 2026-09-22 y 2026-09-23 (2026-09-23):**
+    - **Requerimiento del Usuario:**
+      * Mover a `2026-09-21`: Las 20 tomas de la serie "S" (`PruebaS1` a `PruebaS4` de A, E, I, O, U).
+      * Mover a `2026-09-23`: Las tomas de la 1 a la 5 (`Pruebat1`, `Prueba2`, `Prueba3`, `Prueba4`, `Prueba5`, 19 tomas).
+      * Permanecen en `2026-09-22`: Las tomas de la 6 a la 9 (`Prueba6`, `Prueba7`, `Prueba8`, `Prueba9`, 8 tomas).
+    - **Operación Ejecutada (`segregar_sesiones_21_22_23.py`):**
+      * Creados los directorios oficiales `base_de_datos_electrodos/2026-09-21/` y `base_de_datos_electrodos/2026-09-23/`.
+      * Se trasladaron físicamente las 20 tomas de la serie S a `2026-09-21/`, actualizando su campo `"measurement_date"` a `2026-09-21`.
+      * Se trasladaron físicamente las 19 tomas (Pruebas 1 a 5) a `2026-09-23/`, actualizando su campo `"measurement_date"` a `2026-09-23`.
+      * Se conservaron las 8 tomas de la 6 a la 9 en `2026-09-22/`.
+    - **Resultado:**
+      - `2026-09-21`: 20 tomas (Serie S con Masetero en Ch0, Orbi vert en Ch1, Orbi horiz en Ch2).
+      - `2026-09-22`: 8 tomas (Pruebas 6 a 9 con Masetero en Ch0, Ch1 sin medición y Orbi en Ch2).
+      - `2026-09-23`: 19 tomas (Pruebas 1 a 5 con Masetero en Ch0, Ch1 sin medición y Orbi en Ch2).
+
+81. **Estandarización Canónica Exitosa de Canales en Petra (`2026-08-21` y `2026-08-28`) (2026-09-23):**
+    - **Requerimiento del Usuario:**
+      * En las grabaciones de Petra de los días `2026-08-21` y `2026-08-28`, trasladar el Cigomático Mayor (`Zygomaticus Major` / Zigo) al Canal 1 y el Elevador del Ángulo de la Boca (`Levator Anguli Oris` / Levator) al Canal 2.
+      * Sincronizar subcarpetas físicas (audios `grabacion.wav`), matrices numéricas `grabacion.csv` y metadatos `metadata.json`.
+    - **Operación Ejecutada (`estandarizar_petra_2026_08_21_28.py`):**
+      * Las 20 tomas (10 tomas de `2026-08-21` y 10 tomas de `2026-08-28`) fueron procesadas de forma atómica:
+        - Subcarpetas `canal_1` y `canal_2` permutadas en disco con sus audios `grabacion.wav` e imágenes mediante carpeta temporal segura.
+        - Columnas `Canal 1` y `Canal 2` intercambiadas en `grabacion.csv` manteniendo intacta la frecuencia de muestreo y las muestras temporales.
+        - Metadatos `metadata.json` sincronizados en los 4 canales:
+          - Canal 0: Anterior Belly (`Dev1/ai1`)
+          - Canal 1: Zygomaticus Major (`Dev1/ai2`, ex Canal 2)
+          - Canal 2: Levator Anguli Oris (`Dev1/ai0`, ex Canal 1)
+          - Canal 3: Micrófono (`Dev1/ai3`)
+        - `muscles` y `muscles_map` actualizados de forma homogénea en toda la jerarquía de cada toma.
+    - **Resultado:**
+      - Las 20 tomas de Petra poseen ahora el Cigomático Mayor en `canal_1`, el Elevador en `canal_2`, el Vientre Anterior en `canal_0` y el Micrófono en `canal_3`.
+
+82. **Integración de la Arquitectura de Autoencoder Ortogonal 2D (Récord 91.43%) en el Motor y la Interfaz Gráfica (2026-09-23):**
+    - **Contexto del Récord:** El usuario descubrió una configuración basada en un Autoencoder 2D denso ($D \to 32 \to 16 \to 2$) con activación `Tanh`, sin sesgo (`bias=False`), que alcanzó **$91.43\%$ de exactitud no supervisada** en la sesión de referencia de Lucas (`lucas_viejo_para_probar`):
+      * Desglose por vocal: /a/: 93.9%, /e/: 79.2%, /i/: 92.2%, /o/: 93.0%, /u/: 99.0%.
+      * Exactitud promedio inter-vocal armónica y balanceada.
+    - **Componentes Matemáticos Fundamentales:**
+      1. **Acondicionamiento de Reposo e Impedancia Basal:** Resta de la media de los primeros 10 puntos de la envolvente ($x_c(t) - \mu_{c, :10}$) y división por el rango dinámico del percentil 95 ($P_{95, c} - \mu_{c, :10}$) por sesión y canal.
+      2. **Pérdida de Ortogonalidad en Pesos ($\mathcal{L}_W$):** Isometría entre capas para evitar colapso de rango:
+         $$\mathcal{L}_W = \sum_{l} \|W_l W_l^T - I\|_F^2 \quad \text{o} \quad \|W_l^T W_l - I\|_F^2 \quad (\lambda_W = 0.30)$$
+      3. **Pérdida de Decorrelación e Isotropía Latente ($\mathcal{L}_Z$):** Penaliza la covarianza cruzada en el cuello de botella latente $Z \in \mathbb{R}^{B \times 2}$:
+         $$\mathcal{L}_Z = \|\text{Cov}(Z) - I\|_F^2 \quad (\lambda_Z = 0.45)$$
+      4. **Alineación Rígida $SO(2)$ con Kabsch SVD:** Alinea rotacionalmente cada sesión respecto a una sesión de referencia ($T2$) mediante los 4 vértices polares extremos, restringiendo la matriz a $\det(R) = +1$.
+    - **Integración en el Código del Proyecto:**
+      * `EMG_desarrollo/deep_learning/motor_autoencoder_unificado.py`:
+        - Clase `OrthogonalAutoencoder2D` implementada con pesos ortogonales y penalizaciones $\mathcal{L}_W$ y $\mathcal{L}_Z$.
+        - Funciones `extraer_sesion_agnostica`, `acondicionar_reposo_impedancia`, `extraer_4_vertices`, `alinear_topologia_sesiones_so2`.
+        - Soporte para `tipo_arquitectura="ortogonal"` en `entrenar_autoencoder` y persistencia de configuración en `config_autoencoder.json`.
+        - Evaluación y exportación de CSVs en `evaluar_espacio_latente` con opción de alineación $SO(2)$ (`espacio_latente_crudo.csv` y `espacio_latente_alineado_so2.csv`).
+      * `EMG_desarrollo/gui_app/views/ui_analysis.py`:
+        - Selector de arquitectura en Pestaña 7: "Autoencoder Ortogonal (Récord 87% - 91%)" junto a "Autoencoder Convolucional 1D".
+        - Campos numéricos para $\lambda_W$ (0.30) y $\lambda_Z$ (0.45), casillas de verificación para reposo basal y alineación $SO(2)$, y selector de sesión de referencia ($T2$).
+        - Botón "Cargar Plantilla Ortogonal (Récord)" para inyectar la arquitectura en el editor de código PyTorch.
+      * `EMG_desarrollo/gui_app/main_app.py`:
+        - Propagación de parámetros en `run_autoencoder_no_sup_entrenar`, `run_autoencoder_no_sup_plotear` y `run_autoencoder_no_sup_completo`.
+
+
+
+### Hito 89 - 2026-09-23: Limpieza y Reorganización Pre-Lanzamiento (Depuración de Scripts Auxiliares, Reorganización de Resultados y Configuración Git)
+
+- **Respaldo Integral de Seguridad:**
+  - Se creó la carpeta `respaldo_pre_release_2026-09-23/` conteniendo copias exactas de todos los scripts auxiliares de la raíz (más de 20 parches y pruebas), documentos externos, carpetas de barridos remotos y los 6.2 GB íntegros de resultados previos de PCA/UMAP y Autoencoders antes de cualquier modificación.
+- **Depuración de Scripts de Raíz y Análisis:**
+  - Se eliminaron del árbol de trabajo del repositorio todos los archivos temporales no vinculados a `main_app.py` (`patch_*.py`, `revert_to_onset.py`, `modelorecord*.py`, `autoencoderdios.py`, `analisisbarrido.py`, scripts auxiliares de alineación en `analysis/`, etc.).
+- **Reorganización y Normalización de Resultados por Fecha y Sujeto:**
+  - Se implementó y ejecutó `EMG_desarrollo/utils/organizar_resultados_experimentos.py`.
+  - **Resultados PCA/UMAP:** Se trasladaron y normalizaron las 109 carpetas dispersas hacia `EMG_desarrollo/resultados/resultados_pca_umap/`, organizándolas bajo subdirectorios por fecha (`YYYY-MM-DD/`) con nombres formales y limpios (`<Sujeto>_<Descripcion>` o `<Sujeto>_ensayo_<timestamp>`), eliminando toda denominación informal o defectuosa.
+  - **Resultados Autoencoders:** En `EMG_desarrollo/resultados/resultados_autoencoder/` se renombraron las sesiones con nomenclatura canónica (`YYYY-MM-DD_<Sujeto>`), los 252 procesamientos con marca temporal se agruparon en `procesamientos_temporales/<YYYY-MM-DD>/`, los pesos en `modelos_entrenados/` y los gráficos en `figuras_evaluacion/`.
+  - **Imágenes Sueltas:** Se concentraron en `figuras_anatomicas_y_mapas/` y `figuras_comparativas_diarias/`.
+- **Ajustes en .gitignore y Desindexación de Temporales:**
+  - Se desindexaron del control de versiones los scripts de puente generados dinámicamente (`temp_*.py`).
+  - Se añadieron reglas en `.gitignore` para bloquear carpetas de respaldo (`respaldo_*/`), paquetes remotos, archivos temporales y ejecutores dinámicos.
+- **Validación del Sistema:**
+  - Se comprobó que `main_app.py` compila y se inicializa sin errores de importación en el entorno virtual (`venv/bin/python`).

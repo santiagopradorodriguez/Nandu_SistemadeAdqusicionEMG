@@ -2218,3 +2218,115 @@ class ReportEngine:
         except Exception as e:
             return {'status': 'error', 'tex_path': tex_path, 'pdf_path': None, 'error': str(e)}
         return {'status': 'success', 'tex_path': tex_path, 'pdf_path': pdf_path, 'error': None}
+
+    def generate_spectral_report(self, session_paths, notes_dict=None, logger=print):
+        """Genera un documento LaTeX y compila a PDF enfocado exclusivamente en el análisis espectral (FFT, PSD)."""
+        if not session_paths:
+            return {'status': 'error', 'error': 'No se seleccionaron mediciones.'}
+            
+        session_paths = [
+            p for p in session_paths 
+            if os.path.isdir(p) and "secuencia" not in os.path.basename(p).lower()
+        ]
+            
+        notes = notes_dict or {}
+        info = self.extract_session_metadata(session_paths)
+        fecha = notes.get('fecha', info['fecha'] or datetime.now().strftime("%Y-%m-%d"))
+        sujeto = notes.get('sujeto', info['sujeto'] or "Desconocido")
+        
+        # Ejecutar análisis espectral pesado
+        logger("Ejecutando pipeline de análisis espectral (NLMS + 20Hz HPF + FFT + PSD)...")
+        from analysis.analisis_espectral_candela import ejecutar_analisis_completo
+        
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        salida_base_dir = os.path.join(repo_root, "resultados", f"reporte_espectral_{fecha}_{sujeto}")
+        
+        try:
+            ejecutar_analisis_completo(session_paths=session_paths, salida_base_dir=salida_base_dir, logger=logger)
+        except Exception as e:
+            return {'status': 'error', 'error': f'Error en procesamiento espectral: {str(e)}'}
+            
+        doc = []
+        doc.append(r"\documentclass[11pt,a4paper]{article}")
+        doc.append(r"\usepackage[utf8]{inputenc}")
+        doc.append(r"\usepackage[spanish]{babel}")
+        doc.append(r"\usepackage{amsmath}")
+        doc.append(r"\usepackage{amssymb}")
+        doc.append(r"\usepackage{graphicx}")
+        doc.append(r"\usepackage[left=2cm,right=2cm,top=2cm,bottom=2cm]{geometry}")
+        doc.append(r"\usepackage{fancyhdr}")
+        doc.append(r"\usepackage{hyperref}")
+        doc.append(r"\usepackage{float}")
+        doc.append(r"\usepackage{booktabs}")
+        
+        doc.append(r"\title{\vspace{-2cm}\textbf{Reporte Integral de Análisis Espectral Multimodal}}")
+        doc.append(f"\\author{{Sujeto: {sujeto}}}")
+        doc.append(f"\\date{{Fecha: {fecha}}}")
+        doc.append(r"\begin{document}")
+        doc.append(r"\maketitle")
+        
+        doc.append(r"\section*{Metadatos del Análisis}")
+        doc.append(r"\begin{itemize}")
+        doc.append(r"\item \textbf{Filtro Adaptativo:} Cancelador NLMS (50 Hz a 400 Hz).")
+        doc.append(r"\item \textbf{Filtro de Corte:} Pasa-Altos Butterworth a 20 Hz.")
+        doc.append(r"\item \textbf{Rango de Análisis Espectral:} 20 Hz a 600 Hz (Escala Lineal).")
+        doc.append(r"\item \textbf{Amplitud FFT Máxima Fija:} 6.0 $\mu$V.")
+        doc.append(r"\end{itemize}")
+        
+        # Insertar Figuras Generadas
+        resumen_dir = os.path.join(salida_base_dir, "resumen_comparativo_global")
+        
+        def safe_path(p):
+            return p.replace('\\', '/')
+            
+        img_fft = os.path.join(resumen_dir, "comparativa_fft_5vocales.png")
+        if os.path.exists(img_fft):
+            doc.append(r"\section{Análisis de Frecuencias (FFT)}")
+            doc.append(r"\begin{figure}[H]")
+            doc.append(r"\centering")
+            doc.append(f"\\includegraphics[width=\textwidth]{{{safe_path(img_fft)}}}")
+            doc.append(r"\caption{Comparativa global de espectro de frecuencias FFT para las 5 vocales, normalizada a 6.0 $\mu$V.}")
+            doc.append(r"\end{figure}")
+            
+        img_psd = os.path.join(resumen_dir, "comparativa_psd_5vocales.png")
+        if os.path.exists(img_psd):
+            doc.append(r"\section{Densidad Espectral de Potencia (PSD)}")
+            doc.append(r"\begin{figure}[H]")
+            doc.append(r"\centering")
+            doc.append(f"\\includegraphics[width=\textwidth]{{{safe_path(img_psd)}}}")
+            doc.append(r"\caption{Densidad espectral de potencia (PSD) estimada mediante el método de Welch, en escala logarítmica (dB/Hz).}")
+            doc.append(r"\end{figure}")
+            
+        img_spec = os.path.join(resumen_dir, "comparativa_espectrogramas_5vocales.png")
+        if os.path.exists(img_spec):
+            doc.append(r"\section{Espectrogramas STFT Compuestos}")
+            doc.append(r"\begin{figure}[H]")
+            doc.append(r"\centering")
+            doc.append(f"\\includegraphics[width=\textwidth]{{{safe_path(img_spec)}}}")
+            doc.append(r"\caption{Espectrogramas promedio con código cromático por músculo (Rojo: Digástrico, Verde: Cigomático, Amarillo: Orbicular).}")
+            doc.append(r"\end{figure}")
+
+        img_corr = os.path.join(resumen_dir, "comparativa_correlacion_audio_5vocales.png")
+        if os.path.exists(img_corr):
+            doc.append(r"\section{Correlación de Patrones EMG vs Audio}")
+            doc.append(r"\begin{figure}[H]")
+            doc.append(r"\centering")
+            doc.append(f"\\includegraphics[width=\textwidth]{{{safe_path(img_corr)}}}")
+            doc.append(r"\caption{Comparativa entre el espectrograma RGB muscular (superior) y el espectrograma del sonido registrado por el micrófono en el Canal 3 (inferior). Se observa la co-ocurrencia temporal de la activación fisiológica y la emisión fonética.}")
+            doc.append(r"\end{figure}")
+            
+        doc.append(r"\end{document}")
+        
+        tex_path = os.path.join(salida_base_dir, f"Reporte_Espectral_{fecha}.tex")
+        with open(tex_path, 'w', encoding='utf-8') as f:
+            f.write("\n".join(doc))
+            
+        logger("Compilando PDF con pdflatex...")
+        success = self.compile_latex(tex_path)
+        
+        if success:
+            pdf_path = tex_path.replace('.tex', '.pdf')
+            logger(f"PDF generado correctamente en: {pdf_path}")
+            return {'status': 'success', 'pdf_path': pdf_path}
+        else:
+            return {'status': 'error', 'error': 'Fallo al compilar con pdflatex. Revise el archivo .tex.', 'tex_path': tex_path}

@@ -306,6 +306,19 @@ class ReportDialog(QDialog):
         """)
         self.btn_snr.clicked.connect(self.lanzar_generacion_snr)
         btn_layout.addWidget(self.btn_snr)
+        
+        # Botón 4: Generar Reporte Espectral (FFT/PSD)
+        self.btn_espectral = QPushButton("4. Reporte Espectral y PSD")
+        self.btn_espectral.setToolTip("Genera un documento PDF enfocado en análisis de frecuencias (FFT) y PSD de Welch.")
+        self.btn_espectral.setStyleSheet("""
+            QPushButton {
+                background-color: #3b004a; color: #d666ff; border: 1px solid #d666ff;
+                padding: 8px 14px; font-size: 12px;
+            }
+            QPushButton:hover { background-color: #55006a; }
+        """)
+        self.btn_espectral.clicked.connect(self.lanzar_generacion_espectral)
+        btn_layout.addWidget(self.btn_espectral)
 
         main_layout.addLayout(btn_layout)
         self.generated_pdf_path = None
@@ -351,6 +364,7 @@ class ReportDialog(QDialog):
         self.btn_pca.setEnabled(False)
         self.btn_cancel.setEnabled(False)
         if hasattr(self, 'btn_snr'): self.btn_snr.setEnabled(False)
+        if hasattr(self, 'btn_espectral'): self.btn_espectral.setEnabled(False)
         
         tipo_str = "Reporte Completo con PCA (Grid Search)" if incluir_pca else "Reporte Base (Señales y Evolución)"
         self.lbl_status.setText(f"Iniciando compilación: {tipo_str}...")
@@ -376,10 +390,37 @@ class ReportDialog(QDialog):
         self.btn_pca.setEnabled(False)
         self.btn_cancel.setEnabled(False)
         if hasattr(self, 'btn_snr'): self.btn_snr.setEnabled(False)
+        if hasattr(self, 'btn_espectral'): self.btn_espectral.setEnabled(False)
 
         self.lbl_status.setText("Iniciando compilación: Reporte de SNR y Calidad...")
 
         self.worker = ReportWorker(self.engine, self.session_paths, notes_dict, mode='snr')
+        self.worker.progress_signal.connect(self.on_progress)
+        self.worker.finished_signal.connect(self.on_generation_finished)
+        self.worker.start()
+
+    def lanzar_generacion_espectral(self):
+        notes_dict = {
+            'fecha': self.inp_fecha.text().strip(),
+            'sujeto': self.inp_sujeto.text().strip(),
+            'canales': {
+                0: self.inp_ch0.text().strip(),
+                1: self.inp_ch1.text().strip(),
+                2: self.inp_ch2.text().strip(),
+                3: self.inp_ch3.text().strip()
+            }
+        }
+
+        self.btn_base.setEnabled(False)
+        self.btn_pca.setEnabled(False)
+        self.btn_cancel.setEnabled(False)
+        if hasattr(self, 'btn_snr'): self.btn_snr.setEnabled(False)
+        if hasattr(self, 'btn_espectral'): self.btn_espectral.setEnabled(False)
+        if hasattr(self, 'btn_espectral'): self.btn_espectral.setEnabled(False)
+
+        self.lbl_status.setText("Iniciando compilación: Reporte Espectral y PSD...")
+
+        self.worker = ReportWorker(self.engine, self.session_paths, notes_dict, mode='espectral')
         self.worker.progress_signal.connect(self.on_progress)
         self.worker.finished_signal.connect(self.on_generation_finished)
         self.worker.start()
@@ -392,6 +433,7 @@ class ReportDialog(QDialog):
         self.btn_pca.setEnabled(True)
         self.btn_cancel.setEnabled(True)
         if hasattr(self, 'btn_snr'): self.btn_snr.setEnabled(True)
+        if hasattr(self, 'btn_espectral'): self.btn_espectral.setEnabled(True)
 
         if result['status'] == 'success':
             self.generated_pdf_path = result['pdf_path']

@@ -41,6 +41,18 @@ build_windows/*
 **/archivo_historico/
 *.npz
 EMG_desarrollo/resultados/
+resultados_barrido_ortogonal/
+resultados_transferencia_nuevo_sujeto/
+paquete_remoto_barrido/
+archivos_temporales/
+
+# Carpetas de respaldo y seguridad
+respaldo_*/
+**/respaldo_*/
+
+# Scripts temporales de ejecucion de interfaz
+EMG_desarrollo/temp_*.py
+temp_*.py
 
 # Logs y depuracion temporal
 *.log
@@ -61,4 +73,5 @@ codigos_de_prueba/
 # Excepciones para figuras anatomicas y esquemas de documentacion
 !EMG_desarrollo/fotos/*.png
 !EMG_desarrollo/documentacion_hardware/imagenes/*.png
+
 
