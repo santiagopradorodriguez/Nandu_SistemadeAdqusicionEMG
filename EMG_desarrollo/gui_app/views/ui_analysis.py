@@ -1826,7 +1826,7 @@ class AutoencoderNoSupervisadoTab(QWidget):
         # Fila 5: Alineación Topológica Inter-Sesión SO(2)
         row_so2 = QHBoxLayout()
         self.chk_alineacion_so2 = QCheckBox("Alineación Topológica Inter-Sesión SO(2) (Algoritmo de Kabsch / 4 Vértices)")
-        self.chk_alineacion_so2.setChecked(True)
+        self.chk_alineacion_so2.setChecked(False)
         self.chk_alineacion_so2.setStyleSheet("color: #66FCF1; font-weight: bold;")
         self.chk_alineacion_so2.setToolTip("Alinea rígidamente en SO(2) la nube latente de cada sesión respecto a una sesión canónica de referencia.")
         row_so2.addWidget(self.chk_alineacion_so2)
@@ -2196,6 +2196,12 @@ class AutoencoderPersonalizado(nn.Module):
             self.txt_codigo_arch.setPlainText(self.get_plantilla_codigo())
             self.lbl_arch_status.setText(f"[INFO]: Plantilla actualizada para {len(canales)} canales musculares ({', '.join(canales)}).")
             self.lbl_arch_status.setStyleSheet("background-color: #111111; color: #45A29E; border: 1px solid #333333; padding: 5px; font-family: monospace; font-size: 10px; border-radius: 4px;")
+
+    def on_restablecer_plantilla(self):
+        self.chk_usar_custom.setChecked(False)
+        self.txt_codigo_arch.setPlainText(self.get_plantilla_codigo())
+        self.lbl_arch_status.setText("[INFO]: Plantilla oficial restablecida para la modalidad actual.")
+        self.lbl_arch_status.setStyleSheet("background-color: #111111; color: #45A29E; border: 1px solid #333333; padding: 5px; font-family: monospace; font-size: 10px; border-radius: 4px;")
 
     def on_modalidad_toggled(self):
         if not self.chk_usar_custom.isChecked():

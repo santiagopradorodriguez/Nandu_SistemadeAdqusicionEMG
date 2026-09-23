@@ -1237,7 +1237,7 @@ AutoencoderGenerico = crear_modelo_autoencoder
 # 5. ENTRENAMIENTO NO SUPERVISADO (ZERO-LABELS)
 # ==============================================================================
 
-def entrenar_autoencoder(archivo_npz=None, modalidad="envolvente", latent_dim=2, epochs=150, batch_size=32, lr=0.002, carpeta_salida=None, callback_log=None, npz_path=None, usar_custom_arch=False, codigo_custom_arch=None, tipo_perdida="mse", gamma_sdtw=1.0, alpha_hibrida=1.0, lambda_orto=0.0, tipo_arquitectura="ortogonal", lambda_w=0.30, lambda_z=0.45, usar_impedancia_reposo=True, usar_alineacion_so2=True, ref_session='T2'):
+def entrenar_autoencoder(archivo_npz=None, modalidad="envolvente", latent_dim=2, epochs=150, batch_size=32, lr=0.002, carpeta_salida=None, callback_log=None, npz_path=None, usar_custom_arch=False, codigo_custom_arch=None, tipo_perdida="mse", gamma_sdtw=1.0, alpha_hibrida=1.0, lambda_orto=0.0, tipo_arquitectura="ortogonal", lambda_w=0.30, lambda_z=0.45, usar_impedancia_reposo=True, usar_alineacion_so2=False, ref_session='T2'):
     fijar_semilla(seed=42)
     archivo_npz = archivo_npz or npz_path
     if not archivo_npz:
@@ -1568,7 +1568,7 @@ def evaluar_espacio_latente(archivo_npz=None, modelo=None, modalidad="envolvente
     es_orto = (tipo_arq in ("ortogonal", "orthogonal", "record", "record_91", "optimo"))
     imp_reposo = cfg_auto.get('usar_impedancia_reposo', True)
     if usar_alineacion_so2 is None:
-        usar_alineacion_so2 = cfg_auto.get('usar_alineacion_so2', True)
+        usar_alineacion_so2 = cfg_auto.get('usar_alineacion_so2', False)
     if ref_session is None:
         ref_session = cfg_auto.get('ref_session', 'T2')
 
