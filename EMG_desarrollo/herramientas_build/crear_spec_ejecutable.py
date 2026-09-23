@@ -115,6 +115,7 @@ additional_modules = [
     'utils.logger',
     'utils.limpiar_cache_analisis',
     'utils.curar_dataset_exportacion',
+    'utils.metadata_auditor',
     'instrucciones_uso',
     'views.config_dialog',
     'gui_app.core.threads',

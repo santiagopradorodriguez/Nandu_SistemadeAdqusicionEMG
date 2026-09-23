@@ -2451,8 +2451,8 @@ def reconstruction_loss(
         self.btn_flujo_completo.setEnabled(True)
 
         try:
-            import deep_learning.motor_autoencoder_unificado as motor
-            res = motor.auditar_metadatos_sesiones(self.rutas_actuales)
+            from utils.metadata_auditor import auditar_metadatos_sesiones
+            res = auditar_metadatos_sesiones(self.rutas_actuales)
             if not res['compatible']:
                 adv_txt = " | ".join(res['advertencias'][:2])
                 self.lbl_alerta_audit.setText(f"[ALERTA ANATOMICA INTER-DIA]: {adv_txt}")

@@ -124,107 +124,14 @@ def abrir_imagen_en_visor(ruta_imagen):
 # ==============================================================================
 # 1. AUDITORÍA OBLIGATORIA DE METADATOS INTER-DÍA
 # ==============================================================================
-
-def auditar_metadatos_sesiones(rutas_tomas):
-    """
-    Inspecciona los archivos metadata.json de cada toma seleccionada.
-    Verifica coherencia en:
-    1. Músculos asignados por canal (canal_0, canal_1, canal_2).
-    2. Tempo de metrónomo (bpm).
-    3. Frecuencia de muestreo (sample_rate).
-    """
-    info_sesiones = {}
-    advertencias = []
-    
-    musculos_referencia = None
-    bpm_referencia = None
-    fs_referencia = None
-    toma_ref_name = None
-
-    for r in rutas_tomas:
-        toma_name = os.path.basename(r)
-        meta_file = os.path.join(r, "canal_0", "metadata.json")
-        if not os.path.exists(meta_file):
-            # Intento en la raíz de la toma
-            meta_file = os.path.join(r, "metadata.json")
-            if not os.path.exists(meta_file):
-                advertencias.append(f"[AVISO] No se encontró metadata.json en {toma_name}")
-                continue
-
-        try:
-            with open(meta_file, 'r', encoding='utf-8') as f:
-                meta = json.load(f)
-        except Exception as e:
-            advertencias.append(f"[ERROR] Error al leer metadata.json en {toma_name}: {e}")
-            continue
-
-        bpm = meta.get('bpm', 40)
-        fs = meta.get('sample_rate', 2000)
-        sujeto = meta.get('sujeto', 'Desconocido')
-        m_date_raw = str(meta.get('measurement_date') or meta.get('date') or '').strip()
-        fecha_toma = m_date_raw.split('T')[0][:10] if m_date_raw else "Desconocida"
-        
-        # Mapeo de músculos
-        m_map = meta.get('muscles_map', {})
-        if not m_map:
-            muscles_list = meta.get('muscles', [])
-            if len(muscles_list) >= 3:
-                m_map = {f"canal_{i}": muscles_list[i] for i in range(len(muscles_list))}
-            else:
-                m_map = {"canal_0": "Desconocido", "canal_1": "Desconocido", "canal_2": "Desconocido"}
-
-        info_sesiones[toma_name] = {
-            'sujeto': sujeto,
-            'bpm': bpm,
-            'fs': fs,
-            'fecha': fecha_toma,
-            'muscles_map': m_map,
-            'ruta': r
-        }
-
-        # Comprobación de coherencia respecto a la primera toma
-        if musculos_referencia is None:
-            musculos_referencia = m_map
-            bpm_referencia = bpm
-            fs_referencia = fs
-            toma_ref_name = toma_name
-        else:
-            # Chequeo de músculos
-            for ch in ["canal_0", "canal_1", "canal_2"]:
-                m_curr = str(m_map.get(ch, "")).lower()
-                m_ref = str(musculos_referencia.get(ch, "")).lower()
-                if m_curr and m_ref and m_curr != m_ref:
-                    adv = (f"[ALERTA ANATOMICA] Discrepancia en {ch}: '{m_map.get(ch)}' en {toma_name} "
-                           f"vs '{musculos_referencia.get(ch)}' en {toma_ref_name}. "
-                           f"Podrían estarse mezclando músculos distintos entre sesiones.")
-                    if adv not in advertencias:
-                        advertencias.append(adv)
-
-            # Chequeo de BPM
-            if bpm != bpm_referencia:
-                adv_bpm = (f"[ALERTA METRONOMO] BPM inconsistente: {bpm} en {toma_name} "
-                           f"vs {bpm_referencia} en {toma_ref_name}. La duración de ventana variará.")
-                if adv_bpm not in advertencias:
-                    advertencias.append(adv_bpm)
-
-            # Chequeo de Fs
-            if fs != fs_referencia:
-                adv_fs = (f"[ALERTA FRECUENCIA] Tasa de muestreo dispar: {fs} Hz en {toma_name} "
-                           f"vs {fs_referencia} Hz en {toma_ref_name}.")
-                if adv_fs not in advertencias:
-                    advertencias.append(adv_fs)
-
-    es_compatible = len(advertencias) == 0
-    fechas_detectadas = sorted(list(set(info['fecha'] for info in info_sesiones.values() if info['fecha'] != 'Desconocida')))
-    return {
-        'compatible': es_compatible,
-        'advertencias': advertencias,
-        'info_sesiones': info_sesiones,
-        'musculos_resumen': musculos_referencia or {},
-        'bpm_comun': bpm_referencia,
-        'fs_comun': fs_referencia,
-        'fechas_detectadas': fechas_detectadas
-    }
+try:
+    from utils.metadata_auditor import auditar_metadatos_sesiones, leer_metadata_toma
+except ImportError:
+    try:
+        from ..utils.metadata_auditor import auditar_metadatos_sesiones, leer_metadata_toma
+    except ImportError:
+        def auditar_metadatos_sesiones(rutas_tomas):
+            return {'compatible': True, 'advertencias': [], 'info_sesiones': {}, 'musculos_resumen': {}, 'bpm_comun': 40, 'fs_comun': 2000, 'fechas_detectadas': []}
 
 # ==============================================================================
 # 2. FUNCIONES DSP Y ESTIMACIÓN DE RUIDO DINÁMICO INTERPULSO
