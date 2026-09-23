@@ -1,0 +1,145 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{graphicx}
+\usepackage{geometry}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{hyperref}
+\geometry{top=2cm, bottom=2cm, left=2.5cm, right=2.5cm}
+
+\title{Reporte de Experimento EMG}
+\author{Ñandú - Sistema de Adquisición EMG}
+\date{2026-09-23}
+
+\begin{document}
+
+\maketitle
+
+\section{Configuración y Hardware}
+\textbf{Baterías:} Alimentación por baterías de 9V (bajo ruido) \\
+\textbf{Tierra:} Referencia GND en apófisis mastoides
+
+\section{Armado y Electrodos}
+Registro de superficie sEMG submáximal (Sujeto1)
+
+\section{Ubicación de los Músculos}
+\begin{itemize}
+    \item \textbf{Canal 0:} masetero
+    \item \textbf{Canal 1:} -
+    \item \textbf{Canal 2:} orbi
+\end{itemize}
+Canal 0: masetero, Canal 1: -, Canal 2: orbi
+
+\section{Protocolo y Secuencia}
+Secuencia periódica de fonación vocálica guiada por metrónomo a 30 BPM
+
+\section{Notas y Observaciones}
+Reporte técnico integral compilado de forma automatizada por el sistema.
+
+\newpage
+\section{Análisis de Señales}
+
+\subsection{Patrones Musculares (Comparativa de Vocales)}
+\begin{figure}[h!]
+    \centering
+    \begin{subfigure}{0.32\textwidth}
+        \includegraphics[width=\textwidth]{example-image}
+        \caption{Vocal A}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.32\textwidth}
+        \includegraphics[width=\textwidth]{example-image}
+        \caption{Vocal E}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.32\textwidth}
+        \includegraphics[width=\textwidth]{example-image}
+        \caption{Vocal I}
+    \end{subfigure}
+    
+    \vspace{0.5cm}
+    \begin{subfigure}{0.32\textwidth}
+        \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/O_Prueba5_Sujeto1/patron_muscular_grabacion.png}
+        \caption{Vocal O}
+    \end{subfigure}
+    \hspace{1cm}
+    \begin{subfigure}{0.32\textwidth}
+        \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/U_Prueba5_Sujeto1/patron_muscular_grabacion.png}
+        \caption{Vocal U}
+    \end{subfigure}
+    \caption{Comparativa de los patrones musculares promedio suavizados para las 5 vocales.}
+\end{figure}
+
+\newpage
+\subsection{Vocal A}
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.8\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/A_Pruebat1_Sujeto1/plot_paper_combined.png}
+    \caption{Registro combinado de la vocal A. Señal con ruido restado, alineada y normalizada.}
+\end{figure}
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.8\textwidth]{example-image}
+    \caption{Señales calibradas de la vocal A (filtro notch, pasabanda 20-500 Hz, envolvente RMS 75 ms).}
+\end{figure}
+
+\newpage
+\subsection{Vocales E e I}
+\begin{figure}[h!]
+    \centering
+    \begin{subfigure}{0.48\textwidth}
+        \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/E_Prueba3_Sujeto1/plot_paper_combined.png}
+        \caption{Registro E}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.48\textwidth}
+        \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/I_Prueba3_Sujeto1/plot_paper_combined.png}
+        \caption{Registro I}
+    \end{subfigure}
+    \caption{Registro combinado de las vocales E e I.}
+\end{figure}
+\begin{figure}[h!]
+    \centering
+    \begin{subfigure}{0.48\textwidth}
+        \includegraphics[width=\textwidth]{example-image}
+        \caption{Calibrado E}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.48\textwidth}
+        \includegraphics[width=\textwidth]{example-image}
+        \caption{Calibrado I}
+    \end{subfigure}
+    \caption{Señales calibradas comparativas de las vocales E e I.}
+\end{figure}
+
+\newpage
+\subsection{Vocales O y U}
+\begin{figure}[h!]
+    \centering
+    \begin{subfigure}{0.48\textwidth}
+        \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/O_Prueba5_Sujeto1/plot_paper_combined.png}
+        \caption{Registro O}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.48\textwidth}
+        \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/U_Prueba5_Sujeto1/plot_paper_combined.png}
+        \caption{Registro U}
+    \end{subfigure}
+    \caption{Registro combinado de las vocales O y U.}
+\end{figure}
+\begin{figure}[h!]
+    \centering
+    \begin{subfigure}{0.48\textwidth}
+        \includegraphics[width=\textwidth]{example-image}
+        \caption{Calibrado O}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.48\textwidth}
+        \includegraphics[width=\textwidth]{example-image}
+        \caption{Calibrado U}
+    \end{subfigure}
+    \caption{Señales calibradas comparativas de las vocales O y U.}
+\end{figure}
+
+\end{document}

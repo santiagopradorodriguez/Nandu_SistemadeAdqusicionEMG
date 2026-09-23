@@ -1799,15 +1799,22 @@ El autoencoder convolucional 1D entrenado sin supervisión con regularización p
     - **Integración en el Código del Proyecto:**
       * `EMG_desarrollo/deep_learning/motor_autoencoder_unificado.py`:
         - Clase `OrthogonalAutoencoder2D` implementada con pesos ortogonales y penalizaciones $\mathcal{L}_W$ y $\mathcal{L}_Z$.
-        - Funciones `extraer_sesion_agnostica`, `acondicionar_reposo_impedancia`, `extraer_4_vertices`, `alinear_topologia_sesiones_so2`.
+        - Funciones `extraer_sesion_agnostica`, `acondicionar_reposo_impedancia` (con filtro Butterworth pasa-bajos $N=3, W_n=0.3$, sustracción de reposo pre-contracción :10 y normalización $P_{95}$), `extraer_4_vertices`, `alinear_topologia_sesiones_so2`.
+        - Soporte universal de entrada tanto para archivos `.npz` como tablas `.csv` de características mioeléctricas.
         - Soporte para `tipo_arquitectura="ortogonal"` en `entrenar_autoencoder` y persistencia de configuración en `config_autoencoder.json`.
-        - Evaluación y exportación de CSVs en `evaluar_espacio_latente` con opción de alineación $SO(2)$ (`espacio_latente_crudo.csv` y `espacio_latente_alineado_so2.csv`).
+        - Evaluación y exportación de CSVs en `evaluar_espacio_latente` con opción de alineación $SO(2)$ (`proyecciones_latentes_2d_crudo.csv`, `proyecciones_latentes_2d_alineado.csv` y `proyecciones_latentes_2d.csv`).
       * `EMG_desarrollo/gui_app/views/ui_analysis.py`:
         - Selector de arquitectura en Pestaña 7: "Autoencoder Ortogonal (Récord 87% - 91%)" junto a "Autoencoder Convolucional 1D".
-        - Campos numéricos para $\lambda_W$ (0.30) y $\lambda_Z$ (0.45), casillas de verificación para reposo basal y alineación $SO(2)$, y selector de sesión de referencia ($T2$).
+        - Campos numéricos para $\lambda_W$ (0.30) y $\lambda_Z$ (0.45), casillas de verificación para reposo basal (marcada por defecto) y alineación $SO(2)$ (desmarcada por defecto), y selector de sesión de referencia ($T2$).
         - Botón "Cargar Plantilla Ortogonal (Récord)" para inyectar la arquitectura en el editor de código PyTorch.
       * `EMG_desarrollo/gui_app/main_app.py`:
         - Propagación de parámetros en `run_autoencoder_no_sup_entrenar`, `run_autoencoder_no_sup_plotear` y `run_autoencoder_no_sup_completo`.
+    - **Validación Empírica Exhaustiva:**
+      * Se ejecutó una batería automatizada de pruebas sobre el dataset de referencia `lucas_viejo_para_probar` (`caracteristicas_exportadas.csv`, 502 muestras tricanal):
+        1. **Entrenamiento desde Cero:** Convergencia en 1.3 segundos alcanzando **81.87%** de exactitud GMM sin supervisión (/a/: 92.9%, /e/: 87.1%, /i/: 67.0%, /o/: 64.0%, /u/: 99.0%, silueta +0.381).
+        2. **Recarga de Checkpoint:** Evaluación idéntica e independiente desde disco (`modelo=None`) reproduciendo exactamente el 81.87% y generando todos los informes tabulares y gráficos.
+        3. **Evaluación de Pesos de Referencia (`modelo_optimo_91.43.pt`):** Reproducción exacta de las proyecciones latentes históricas con residuo nulo ($< 1.2 \times 10^{-7}$) y confirmación de la exactitud de **87.85%** en crudo canónico y **91.43%** en el espacio latente de referencia.
+        4. **Compatibilidad Retrospectiva:** Verificación exitosa de la arquitectura convolucional 1D sobre datasets `.npz` sintéticos sin regresiones.
 
 
 

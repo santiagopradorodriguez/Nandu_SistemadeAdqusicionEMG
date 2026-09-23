@@ -154,9 +154,10 @@ LATEX_TEMPLATE = r"""\documentclass[11pt,a4paper]{article}
 
 def find_image(base_dir, vocal, img_type):
     """Busca dinámicamente la ruta de la imagen según la vocal y el tipo de gráfico."""
-    # Buscar la subcarpeta de la vocal (ej: a_Prueba1_Candela, a_*, etc.)
-    search_path = os.path.join(base_dir, f"{vocal}_*")
-    folders = glob.glob(search_path)
+    # Buscar la subcarpeta de la vocal (soporta minúsculas 'a_*' y mayúsculas 'A_*')
+    folders = glob.glob(os.path.join(base_dir, f"{vocal.lower()}_*"))
+    if not folders:
+        folders = glob.glob(os.path.join(base_dir, f"{vocal.upper()}_*"))
     if not folders:
         return "example-image" # Fallback de LaTeX si no existe
     
@@ -172,17 +173,75 @@ def find_image(base_dir, vocal, img_type):
     img_search = os.path.join(vocal_folder, pattern)
     imgs = glob.glob(img_search)
     
+    # Auto-generación de la figura multimodal paper si no existe
+    if not imgs and img_type == "paper":
+        try:
+            repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            sys_path_target = os.path.join(repo_root, "EMG_desarrollo")
+            if sys_path_target not in sys.path:
+                sys.path.insert(0, sys_path_target)
+            from analysis.generador_figura_multimodal import generar_figura_paper_multimodal
+            print(f"[Reporte Lab] Generando figura multimodal paper para {os.path.basename(vocal_folder)}...")
+            gen_path = generar_figura_paper_multimodal(vocal_folder)
+            if os.path.exists(gen_path):
+                imgs = [gen_path]
+        except Exception as err:
+            print(f"[Aviso] No se pudo autogenerar figura paper para {vocal_folder}: {err}")
+    
     if imgs:
         # Reemplazar barras invertidas por normales para LaTeX
         return imgs[0].replace('\\', '/')
     return "example-image"
 
-def generar_reporte(config_file):
-    with open(config_file, 'r', encoding='utf-8') as f:
-        config = json.load(f)
+def generar_reporte(config_input):
+    config = {}
+    config_input_str = str(config_input)
+    
+    if os.path.isfile(config_input_str) and config_input_str.endswith('.json'):
+        with open(config_input_str, 'r', encoding='utf-8') as f:
+            config = json.load(f)
+        fecha = config.get("fecha", datetime.now().strftime("%Y-%m-%d"))
+        base_dir = config.get("directorio_base", f"../EMG_desarrollo/base_de_datos_electrodos/{fecha}")
+    else:
+        # Se ingresó una fecha o una ruta directa a una sesión
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if os.path.isdir(config_input_str):
+            base_dir = config_input_str
+            fecha = os.path.basename(base_dir)
+        else:
+            fecha = config_input_str
+            base_dir = os.path.join(repo_root, "EMG_desarrollo", "base_de_datos_electrodos", fecha)
+            
+        # Extraer metadatos automáticos desde la primera toma encontrada
+        canales = {"0": "Canal 0", "1": "Canal 1", "2": "Canal 2"}
+        sujeto = "Sujeto"
+        for d in os.listdir(base_dir) if os.path.isdir(base_dir) else []:
+            m_file = os.path.join(base_dir, d, "canal_0", "metadata.json")
+            if os.path.exists(m_file):
+                try:
+                    with open(m_file, 'r', encoding='utf-8') as mf:
+                        m_data = json.load(mf)
+                        sujeto = m_data.get('sujeto', sujeto)
+                        m_map = m_data.get('muscles_map', {})
+                        if m_map:
+                            canales["0"] = m_map.get("canal_0", canales["0"])
+                            canales["1"] = m_map.get("canal_1", canales["1"])
+                            canales["2"] = m_map.get("canal_2", canales["2"])
+                        break
+                except Exception:
+                    pass
+                    
+        config = {
+            "fecha": fecha,
+            "baterias": "Alimentación por baterías de 9V (bajo ruido)",
+            "tierra": "Referencia GND en apófisis mastoides",
+            "electrodos_nota": f"Registro de superficie sEMG submáximal ({sujeto})",
+            "canales": canales,
+            "musculos_nota": f"Canal 0: {canales['0']}, Canal 1: {canales['1']}, Canal 2: {canales['2']}",
+            "secuencia": "Secuencia periódica de fonación vocálica guiada por metrónomo a 30 BPM",
+            "notas": "Reporte técnico integral compilado de forma automatizada por el sistema."
+        }
         
-    fecha = config.get("fecha", datetime.now().strftime("%Y-%m-%d"))
-    base_dir = config.get("directorio_base", f"../EMG_desarrollo/base_de_datos_electrodos/{fecha}")
     base_dir = os.path.abspath(base_dir)
     
     tex_content = LATEX_TEMPLATE
@@ -230,7 +289,9 @@ def generar_reporte(config_file):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generador de reportes en LaTeX para experimentos EMG")
-    parser.add_argument("config", help="Ruta al archivo JSON de configuración del experimento")
+    parser.add_argument("config", nargs="?", default="2026-09-23", help="Ruta al archivo JSON de configuración o fecha de sesión (ej. 2026-09-23)")
+    parser.add_argument("--sesion", "--fecha", dest="sesion", help="Fecha o carpeta de la sesión (ej. 2026-09-23)")
     args = parser.parse_args()
     
-    generar_reporte(args.config)
+    target = args.sesion if args.sesion else args.config
+    generar_reporte(target)

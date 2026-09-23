@@ -48,6 +48,12 @@ class ReportWorker(QThread):
                     self.notes_dict,
                     logger=lambda msg: self.progress_signal.emit(str(msg))
                 )
+            elif self.mode == 'multimodal':
+                gen_list = engine.generate_multimodal_paper_figures(
+                    self.session_paths,
+                    logger=lambda msg: self.progress_signal.emit(str(msg))
+                )
+                result = {'status': 'ok', 'generadas': gen_list, 'error': None}
             else:
                 result = engine.generate_report(
                     self.session_paths, 
@@ -320,6 +326,19 @@ class ReportDialog(QDialog):
         self.btn_espectral.clicked.connect(self.lanzar_generacion_espectral)
         btn_layout.addWidget(self.btn_espectral)
 
+        # Botón 5: Generar Figuras Multimodales Paper (4 Paneles)
+        self.btn_multimodal = QPushButton("5. Figuras Multimodales Paper")
+        self.btn_multimodal.setToolTip("Genera o actualiza las figuras multimodales de 4 paneles (STFT audio, oscilograma, activación EMG y espectrograma RGB) en cada toma seleccionada.")
+        self.btn_multimodal.setStyleSheet("""
+            QPushButton {
+                background-color: #1a4a40; color: #55ffcc; border: 1px solid #55ffcc;
+                padding: 8px 14px; font-size: 12px;
+            }
+            QPushButton:hover { background-color: #256655; }
+        """)
+        self.btn_multimodal.clicked.connect(self.lanzar_generacion_multimodal)
+        btn_layout.addWidget(self.btn_multimodal)
+
         main_layout.addLayout(btn_layout)
         self.generated_pdf_path = None
 
@@ -425,6 +444,47 @@ class ReportDialog(QDialog):
         self.worker.finished_signal.connect(self.on_generation_finished)
         self.worker.start()
 
+    def lanzar_generacion_multimodal(self):
+        notes_dict = self.recopilar_notas()
+        self.btn_base.setEnabled(False)
+        self.btn_pca.setEnabled(False)
+        self.btn_cancel.setEnabled(False)
+        if hasattr(self, 'btn_snr'): self.btn_snr.setEnabled(False)
+        if hasattr(self, 'btn_espectral'): self.btn_espectral.setEnabled(False)
+        if hasattr(self, 'btn_multimodal'): self.btn_multimodal.setEnabled(False)
+
+        self.lbl_status.setText("Generando figuras multimodales paper (4 paneles)...")
+
+        self.worker = ReportWorker(self.engine, self.session_paths, notes_dict, mode='multimodal')
+        self.worker.progress_signal.connect(self.on_progress)
+        self.worker.finished_signal.connect(self.on_multimodal_finished)
+        self.worker.start()
+
+    def on_multimodal_finished(self, result):
+        self.btn_base.setEnabled(True)
+        self.btn_pca.setEnabled(True)
+        self.btn_cancel.setEnabled(True)
+        if hasattr(self, 'btn_snr'): self.btn_snr.setEnabled(True)
+        if hasattr(self, 'btn_espectral'): self.btn_espectral.setEnabled(True)
+        if hasattr(self, 'btn_multimodal'): self.btn_multimodal.setEnabled(True)
+
+        if result.get('status') == 'ok':
+            n = len(result.get('generadas', []))
+            self.lbl_status.setText(f"Figuras multimodales generadas exitosamente ({n} tomas).")
+            QMessageBox.information(
+                self, 
+                "Figuras Multimodales Generadas", 
+                f"Se generaron exitosamente {n} figuras multimodales de 4 paneles ('plot_paper_combined.png') en las carpetas de las tomas."
+            )
+        else:
+            self.lbl_status.setText("Error en la generación de figuras.")
+            err_msg = result.get('error', 'Error desconocido.')
+            QMessageBox.critical(
+                self, 
+                "Error al Generar Figuras", 
+                f"Ocurrió un error al generar las figuras multimodales:\n\n{err_msg}"
+            )
+
     def on_progress(self, msg):
         self.lbl_status.setText(msg[:95] + ("..." if len(msg) > 95 else ""))
 
@@ -434,6 +494,7 @@ class ReportDialog(QDialog):
         self.btn_cancel.setEnabled(True)
         if hasattr(self, 'btn_snr'): self.btn_snr.setEnabled(True)
         if hasattr(self, 'btn_espectral'): self.btn_espectral.setEnabled(True)
+        if hasattr(self, 'btn_multimodal'): self.btn_multimodal.setEnabled(True)
 
         if result['status'] == 'success':
             self.generated_pdf_path = result['pdf_path']

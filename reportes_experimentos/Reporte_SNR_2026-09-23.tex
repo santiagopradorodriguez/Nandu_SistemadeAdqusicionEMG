@@ -1,0 +1,310 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{geometry}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{hyperref}
+\usepackage{float}
+\addto\captionsspanish{\renewcommand{\tablename}{Tabla}}
+\addto\captionsspanish{\renewcommand{\figurename}{Figura}}
+\geometry{top=2cm, bottom=2cm, left=2.2cm, right=2.2cm}
+
+\title{\textbf{Reporte Técnico: Análisis de SNR y Calidad de Señal (2026-09-23)}}
+\author{Laboratorio de Sistemas Dinámicos (LSD) - Sistema Ñandú}
+\date{2026-09-23}
+
+\begin{document}
+\maketitle
+
+\tableofcontents
+\newpage
+\section{Condiciones Experimentales}
+\begin{itemize}
+    \item \textbf{Fecha:} 2026-09-23
+    \item \textbf{Sujeto:} Sujeto1
+    \item \textbf{Frecuencia de Muestreo:} 2000 Hz
+    \item \textbf{Total de Registros Analizados:} 19
+\end{itemize}
+
+\section{Tabla de Relación Señal-Ruido (SNR) de Todas las Mediciones}
+A continuación se presentan los valores de Relación Señal-Ruido promedio por pulso con su correspondiente dispersión ($	ext{SNR} \pm \sigma$) obtenidos para cada una de las pruebas registradas en la sesión:
+\begin{table}[H]
+\centering
+\small
+\setlength{\tabcolsep}{4.5pt}
+\begin{tabular}{c l c c c c c}
+\toprule
+\textbf{Nº} & \textbf{Identificador} & \textbf{Vocal} & \textbf{Serie} & \multicolumn{3}{c}{\textbf{Relación Señal-Ruido ($\text{SNR} \pm \sigma$)}} \\
+\cmidrule(lr){5-7}
+& & & & \textbf{Ch0: masetero} & \textbf{Ch1: -} & \textbf{Ch2: orbi} \\
+\midrule
+1 & O\_Pruebat1\_Sujeto1 & O & Pruebat1 & $1.9 \pm 0.0$ & $20.7 \pm 9.6$ & $18.8 \pm 8.7$ \\
+2 & A\_Pruebat1\_Sujeto1 & A & Pruebat1 & $2.2 \pm 0.2$ & $3.8 \pm 1.6$ & $3.8 \pm 1.5$ \\
+3 & U\_Pruebat1\_Sujeto1 & U & Pruebat1 & $2.1 \pm 0.0$ & $12.5 \pm 6.5$ & $12.2 \pm 6.2$ \\
+4 & E\_Pruebat1\_Sujeto1 & E & Pruebat1 & $1.9 \pm 0.0$ & $8.7 \pm 2.1$ & $8.1 \pm 2.0$ \\
+5 & I\_Pruebat1\_Sujeto1 & I & Pruebat1 & $2.1 \pm 0.2$ & $9.5 \pm 4.5$ & $8.9 \pm 4.2$ \\
+6 & E\_Prueba2\_Sujeto1 & E & Prueba2 & $2.0 \pm 0.1$ & $6.2 \pm 2.0$ & $5.4 \pm 1.6$ \\
+7 & U\_Prueba2\_Sujeto1 & U & Prueba2 & $1.6 \pm 0.0$ & $16.0 \pm 7.3$ & $14.4 \pm 6.4$ \\
+8 & I\_Prueba2\_Sujeto1 & I & Prueba2 & $1.5 \pm 0.2$ & $11.2 \pm 4.9$ & $9.4 \pm 4.0$ \\
+9 & A\_Prueba2\_Sujeto1 & A & Prueba2 & $2.2 \pm 0.3$ & $5.2 \pm 1.6$ & $4.5 \pm 1.2$ \\
+10 & O\_Prueba2\_Sujeto1 & O & Prueba2 & $1.8 \pm 0.0$ & $18.0 \pm 6.2$ & $16.0 \pm 5.6$ \\
+11 & A\_Prueba3\_Sujeto1 & A & Prueba3 & $2.5 \pm 0.2$ & $4.9 \pm 1.1$ & $4.4 \pm 0.9$ \\
+12 & I\_Prueba3\_Sujeto1 & I & Prueba3 & $2.0 \pm 0.2$ & $8.9 \pm 2.6$ & $8.0 \pm 2.3$ \\
+13 & O\_Prueba3\_Sujeto1 & O & Prueba3 & $1.7 \pm 0.0$ & $12.8 \pm 3.9$ & $12.4 \pm 3.8$ \\
+14 & U\_Prueba3\_Sujeto1 & U & Prueba3 & $1.4 \pm 0.0$ & $16.1 \pm 3.3$ & $14.4 \pm 2.9$ \\
+15 & E\_Prueba3\_Sujeto1 & E & Prueba3 & $1.9 \pm 0.1$ & $5.5 \pm 1.5$ & $4.9 \pm 1.2$ \\
+16 & O\_Prueba4\_Sujeto1 & O & Prueba4 & $1.9 \pm 0.1$ & $16.1 \pm 6.5$ & $26.0 \pm 9.8$ \\
+17 & U\_Prueba4\_Sujeto1 & U & Prueba4 & $1.7 \pm 0.1$ & $14.4 \pm 6.4$ & $30.6 \pm 14.1$ \\
+18 & O\_Prueba5\_Sujeto1 & O & Prueba5 & $1.7 \pm 0.0$ & $16.4 \pm 7.4$ & $34.0 \pm 16.1$ \\
+19 & U\_Prueba5\_Sujeto1 & U & Prueba5 & $1.6 \pm 0.1$ & $20.0 \pm 9.7$ & $29.1 \pm 13.9$ \\
+\bottomrule
+\end{tabular}
+\caption{Relación Señal-Ruido ($\text{SNR} \pm \sigma$) calculada por pulso para la totalidad de registros adquiridos en la sesión.}
+\end{table}
+
+\section{Resumen Estadístico de Relación Señal-Ruido (SNR)}
+\begin{table}[H]
+\centering
+\begin{tabular}{lccc}
+\toprule
+\textbf{Vocal} & \textbf{Canal 0: masetero} & \textbf{Canal 1: -} & \textbf{Canal 2: orbi} \\
+\midrule
+Vocal A & $2.4 \pm 0.3$ & $4.7 \pm 1.5$ & $4.3 \pm 1.2$ \\
+Vocal E & $1.9 \pm 0.1$ & $6.4 \pm 2.2$ & $5.7 \pm 2.0$ \\
+Vocal I & $1.9 \pm 0.3$ & $9.5 \pm 3.8$ & $8.5 \pm 3.3$ \\
+Vocal O & $1.8 \pm 0.1$ & $15.9 \pm 7.0$ & $19.5 \pm 11.8$ \\
+Vocal U & $1.6 \pm 0.2$ & $15.9 \pm 6.7$ & $18.9 \pm 11.5$ \\
+\bottomrule
+\end{tabular}
+\caption{Relación Señal-Ruido promedio ($\text{SNR} \pm \sigma$) registrada por vocal y canal.}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/evolucion_sesion/Sesion_SNR_Timeline.png}
+\caption{Evolución temporal del SNR a lo largo de la sesión.}
+\end{figure}
+
+\newpage
+\section{Desglose de Calidad de Señal, Recortes y Ruido Interpulso}
+\subsection{Pruebat1}
+\subsubsection{Vocal O: O\_Pruebat1\_Sujeto1}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/O_Pruebat1_Sujeto1/plot_paper_combined.png}
+\caption{Análisis multimodal de la vocal O (O\_Pruebat1\_Sujeto1): Espectrograma de audio con pre-énfasis, oscilograma acústico, activación EMG (Supremo Tricanal) y espectrograma muscular RGB.}
+\end{figure}
+
+\subsubsection{Vocal A: A\_Pruebat1\_Sujeto1}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/A_Pruebat1_Sujeto1/plot_paper_combined.png}
+\caption{Análisis multimodal de la vocal A (A\_Pruebat1\_Sujeto1): Espectrograma de audio con pre-énfasis, oscilograma acústico, activación EMG (Supremo Tricanal) y espectrograma muscular RGB.}
+\end{figure}
+
+\subsubsection{Vocal U: U\_Pruebat1\_Sujeto1}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/U_Pruebat1_Sujeto1/plot_paper_combined.png}
+\caption{Análisis multimodal de la vocal U (U\_Pruebat1\_Sujeto1): Espectrograma de audio con pre-énfasis, oscilograma acústico, activación EMG (Supremo Tricanal) y espectrograma muscular RGB.}
+\end{figure}
+
+\subsubsection{Vocal E: E\_Pruebat1\_Sujeto1}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/E_Pruebat1_Sujeto1/plot_paper_combined.png}
+\caption{Análisis multimodal de la vocal E (E\_Pruebat1\_Sujeto1): Espectrograma de audio con pre-énfasis, oscilograma acústico, activación EMG (Supremo Tricanal) y espectrograma muscular RGB.}
+\end{figure}
+
+\subsubsection{Vocal I: I\_Pruebat1\_Sujeto1}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/I_Pruebat1_Sujeto1/plot_paper_combined.png}
+\caption{Análisis multimodal de la vocal I (I\_Pruebat1\_Sujeto1): Espectrograma de audio con pre-énfasis, oscilograma acústico, activación EMG (Supremo Tricanal) y espectrograma muscular RGB.}
+\end{figure}
+
+\subsection{Prueba2}
+\subsubsection{Vocal E: E\_Prueba2\_Sujeto1}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/E_Prueba2_Sujeto1/plot_paper_combined.png}
+\caption{Análisis multimodal de la vocal E (E\_Prueba2\_Sujeto1): Espectrograma de audio con pre-énfasis, oscilograma acústico, activación EMG (Supremo Tricanal) y espectrograma muscular RGB.}
+\end{figure}
+
+\subsubsection{Vocal U: U\_Prueba2\_Sujeto1}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/U_Prueba2_Sujeto1/plot_paper_combined.png}
+\caption{Análisis multimodal de la vocal U (U\_Prueba2\_Sujeto1): Espectrograma de audio con pre-énfasis, oscilograma acústico, activación EMG (Supremo Tricanal) y espectrograma muscular RGB.}
+\end{figure}
+
+\subsubsection{Vocal I: I\_Prueba2\_Sujeto1}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/I_Prueba2_Sujeto1/plot_paper_combined.png}
+\caption{Análisis multimodal de la vocal I (I\_Prueba2\_Sujeto1): Espectrograma de audio con pre-énfasis, oscilograma acústico, activación EMG (Supremo Tricanal) y espectrograma muscular RGB.}
+\end{figure}
+
+\subsubsection{Vocal A: A\_Prueba2\_Sujeto1}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/A_Prueba2_Sujeto1/plot_paper_combined.png}
+\caption{Análisis multimodal de la vocal A (A\_Prueba2\_Sujeto1): Espectrograma de audio con pre-énfasis, oscilograma acústico, activación EMG (Supremo Tricanal) y espectrograma muscular RGB.}
+\end{figure}
+
+\subsubsection{Vocal O: O\_Prueba2\_Sujeto1}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/O_Prueba2_Sujeto1/plot_paper_combined.png}
+\caption{Análisis multimodal de la vocal O (O\_Prueba2\_Sujeto1): Espectrograma de audio con pre-énfasis, oscilograma acústico, activación EMG (Supremo Tricanal) y espectrograma muscular RGB.}
+\end{figure}
+
+\subsection{Prueba3}
+\subsubsection{Vocal A: A\_Prueba3\_Sujeto1}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/A_Prueba3_Sujeto1/plot_paper_combined.png}
+\caption{Análisis multimodal de la vocal A (A\_Prueba3\_Sujeto1): Espectrograma de audio con pre-énfasis, oscilograma acústico, activación EMG (Supremo Tricanal) y espectrograma muscular RGB.}
+\end{figure}
+
+\subsubsection{Vocal I: I\_Prueba3\_Sujeto1}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/I_Prueba3_Sujeto1/plot_paper_combined.png}
+\caption{Análisis multimodal de la vocal I (I\_Prueba3\_Sujeto1): Espectrograma de audio con pre-énfasis, oscilograma acústico, activación EMG (Supremo Tricanal) y espectrograma muscular RGB.}
+\end{figure}
+
+\subsubsection{Vocal O: O\_Prueba3\_Sujeto1}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/O_Prueba3_Sujeto1/plot_paper_combined.png}
+\caption{Análisis multimodal de la vocal O (O\_Prueba3\_Sujeto1): Espectrograma de audio con pre-énfasis, oscilograma acústico, activación EMG (Supremo Tricanal) y espectrograma muscular RGB.}
+\end{figure}
+
+\subsubsection{Vocal U: U\_Prueba3\_Sujeto1}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/U_Prueba3_Sujeto1/plot_paper_combined.png}
+\caption{Análisis multimodal de la vocal U (U\_Prueba3\_Sujeto1): Espectrograma de audio con pre-énfasis, oscilograma acústico, activación EMG (Supremo Tricanal) y espectrograma muscular RGB.}
+\end{figure}
+
+\subsubsection{Vocal E: E\_Prueba3\_Sujeto1}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/E_Prueba3_Sujeto1/plot_paper_combined.png}
+\caption{Análisis multimodal de la vocal E (E\_Prueba3\_Sujeto1): Espectrograma de audio con pre-énfasis, oscilograma acústico, activación EMG (Supremo Tricanal) y espectrograma muscular RGB.}
+\end{figure}
+
+\subsection{Prueba4}
+\subsubsection{Vocal O: O\_Prueba4\_Sujeto1}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/O_Prueba4_Sujeto1/plot_paper_combined.png}
+\caption{Análisis multimodal de la vocal O (O\_Prueba4\_Sujeto1): Espectrograma de audio con pre-énfasis, oscilograma acústico, activación EMG (Supremo Tricanal) y espectrograma muscular RGB.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/O_Prueba4_Sujeto1/canal_0/avg_lider.png}
+    \caption{Canal 0: masetero}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/O_Prueba4_Sujeto1/canal_1/avg_lider.png}
+    \caption{Canal 1: -}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/O_Prueba4_Sujeto1/canal_2/avg_lider.png}
+    \caption{Canal 2: orbi}
+\end{subfigure}
+\caption{Forma de onda promedio con su intervalo de dispersión ($\mu \pm \sigma$) y envolvente RMS media para O\_Prueba4\_Sujeto1.}
+\end{figure}
+
+\subsubsection{Vocal U: U\_Prueba4\_Sujeto1}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/U_Prueba4_Sujeto1/plot_paper_combined.png}
+\caption{Análisis multimodal de la vocal U (U\_Prueba4\_Sujeto1): Espectrograma de audio con pre-énfasis, oscilograma acústico, activación EMG (Supremo Tricanal) y espectrograma muscular RGB.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/U_Prueba4_Sujeto1/canal_0/avg_lider.png}
+    \caption{Canal 0: masetero}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/U_Prueba4_Sujeto1/canal_1/avg_lider.png}
+    \caption{Canal 1: -}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/U_Prueba4_Sujeto1/canal_2/avg_lider.png}
+    \caption{Canal 2: orbi}
+\end{subfigure}
+\caption{Forma de onda promedio con su intervalo de dispersión ($\mu \pm \sigma$) y envolvente RMS media para U\_Prueba4\_Sujeto1.}
+\end{figure}
+
+\subsection{Prueba5}
+\subsubsection{Vocal O: O\_Prueba5\_Sujeto1}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/O_Prueba5_Sujeto1/plot_paper_combined.png}
+\caption{Análisis multimodal de la vocal O (O\_Prueba5\_Sujeto1): Espectrograma de audio con pre-énfasis, oscilograma acústico, activación EMG (Supremo Tricanal) y espectrograma muscular RGB.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/O_Prueba5_Sujeto1/canal_0/avg_lider.png}
+    \caption{Canal 0: masetero}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/O_Prueba5_Sujeto1/canal_1/avg_lider.png}
+    \caption{Canal 1: -}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/O_Prueba5_Sujeto1/canal_2/avg_lider.png}
+    \caption{Canal 2: orbi}
+\end{subfigure}
+\caption{Forma de onda promedio con su intervalo de dispersión ($\mu \pm \sigma$) y envolvente RMS media para O\_Prueba5\_Sujeto1.}
+\end{figure}
+
+\subsubsection{Vocal U: U\_Prueba5\_Sujeto1}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/U_Prueba5_Sujeto1/plot_paper_combined.png}
+\caption{Análisis multimodal de la vocal U (U\_Prueba5\_Sujeto1): Espectrograma de audio con pre-énfasis, oscilograma acústico, activación EMG (Supremo Tricanal) y espectrograma muscular RGB.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/U_Prueba5_Sujeto1/canal_0/avg_lider.png}
+    \caption{Canal 0: masetero}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/U_Prueba5_Sujeto1/canal_1/avg_lider.png}
+    \caption{Canal 1: -}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.32\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-23/U_Prueba5_Sujeto1/canal_2/avg_lider.png}
+    \caption{Canal 2: orbi}
+\end{subfigure}
+\caption{Forma de onda promedio con su intervalo de dispersión ($\mu \pm \sigma$) y envolvente RMS media para U\_Prueba5\_Sujeto1.}
+\end{figure}
+
+\end{document}

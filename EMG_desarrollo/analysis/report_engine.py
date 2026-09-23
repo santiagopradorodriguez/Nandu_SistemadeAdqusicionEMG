@@ -52,7 +52,7 @@ def find_first_existing(patterns):
     for p in patterns:
         matches = glob.glob(p)
         if matches and os.path.exists(matches[0]):
-            return matches[0].replace('\\', '/')
+            return os.path.abspath(matches[0]).replace('\\', '/')
     return None
 
 class ReportEngine:
@@ -96,6 +96,7 @@ class ReportEngine:
         
         raw_meds = []
         for path in session_paths:
+            path = os.path.abspath(path)
             if not os.path.isdir(path):
                 continue
                 
@@ -1527,6 +1528,15 @@ class ReportEngine:
                 calib_img = find_first_existing([os.path.join(m_path, "plot_calibrado_*.png")])
                 paper_img = find_first_existing([os.path.join(m_path, "plot_paper_combined.png")])
                 
+                # Auto-generación dinámica de la figura paper multimodal si no existe
+                if not paper_img:
+                    try:
+                        from analysis.generador_figura_multimodal import generar_figura_paper_multimodal
+                        logger(f"Auto-generando figura multimodal paper para {os.path.basename(m_path)}...")
+                        paper_img = generar_figura_paper_multimodal(m_path, logger=logger)
+                    except Exception as e:
+                        logger(f"Aviso: No se pudo auto-generar figura paper para {m_path}: {e}")
+                
                 if calib_img:
                     doc.append(r"\begin{figure}[H]")
                     doc.append(r"\centering")
@@ -1539,7 +1549,7 @@ class ReportEngine:
                     doc.append(r"\begin{figure}[H]")
                     doc.append(r"\centering")
                     doc.append(f"\\includegraphics[width=0.88\\textwidth]{{{paper_img}}}")
-                    doc.append(f"\\caption{{Registro combinado de la vocal {escape_latex(letra)}. Señal con ruido restado entre pulsos, alineada y normalizada.}}")
+                    doc.append(f"\\caption{{Registro combinado multimodal de la vocal {escape_latex(letra)}. Espectrograma acústico STFT con pre-énfasis, señal de micrófono rectificada con envolvente acústica, activación EMG normalizada por Supremo Tricanal y espectrograma RGB muscular.}}")
                     doc.append(r"\end{figure}")
                     doc.append("")
 
@@ -2142,11 +2152,28 @@ class ReportEngine:
                         ])
                     }
                 
-                has_any = any(imgs_ch[c]['promedio'] or imgs_ch[c]['recortes'] or imgs_ch[c]['evolucion'] for c in range(3))
+                paper_img = find_first_existing([os.path.join(m_path, "plot_paper_combined.png")])
+                if not paper_img:
+                    try:
+                        from analysis.generador_figura_multimodal import generar_figura_paper_multimodal
+                        paper_img = generar_figura_paper_multimodal(m_path, logger=logger)
+                    except Exception:
+                        pass
+                
+                has_any = (paper_img is not None) or any(imgs_ch[c]['promedio'] or imgs_ch[c]['recortes'] or imgs_ch[c]['evolucion'] for c in range(3))
                 if not has_any:
                     continue
 
                 doc.append(f"\\subsubsection{{Vocal {escape_latex(letra)}: {escape_latex(m_name)}}}")
+                
+                # Figura multimodal paper (4 paneles)
+                if paper_img:
+                    doc.append(r"\begin{figure}[H]")
+                    doc.append(r"\centering")
+                    doc.append(f"\\includegraphics[width=0.88\\textwidth]{{{paper_img}}}")
+                    doc.append(f"\\caption{{Análisis multimodal de la vocal {escape_latex(letra)} ({escape_latex(m_name)}): Espectrograma de audio con pre-énfasis, oscilograma acústico, activación EMG (Supremo Tricanal) y espectrograma muscular RGB.}}")
+                    doc.append(r"\end{figure}")
+                    doc.append("")
 
                 # 1. Pulso Promedio (Traza promedio, intervalo de confianza/desvío estándar y envolvente RMS media)
                 chs_prom = [c for c in range(3) if imgs_ch[c]['promedio']]
@@ -2218,6 +2245,25 @@ class ReportEngine:
         except Exception as e:
             return {'status': 'error', 'tex_path': tex_path, 'pdf_path': None, 'error': str(e)}
         return {'status': 'success', 'tex_path': tex_path, 'pdf_path': pdf_path, 'error': None}
+
+    def generate_multimodal_paper_figures(self, session_paths, logger=print):
+        """Genera o actualiza las figuras multimodales paper (4 paneles) para todas las mediciones provistas."""
+        from analysis.generador_figura_multimodal import generar_figura_paper_multimodal
+        session_paths = [p for p in session_paths if os.path.isdir(p) and "secuencia" not in os.path.basename(p).lower()]
+        if not session_paths:
+            return []
+            
+        logger(f"Iniciando generación de figuras multimodales para {len(session_paths)} tomas...")
+        generadas = []
+        for i, m_path in enumerate(session_paths):
+            logger(f"[{i+1}/{len(session_paths)} - {((i+1)/len(session_paths))*100:.1f}%] Procesando {os.path.basename(m_path)}...")
+            try:
+                img_p = generar_figura_paper_multimodal(m_path, logger=logger)
+                generadas.append(img_p)
+            except Exception as e:
+                logger(f"Aviso: Error generando figura multimodal en {os.path.basename(m_path)}: {e}")
+        logger(f"Finalizado: {len(generadas)}/{len(session_paths)} figuras multimodales generadas exitosamente.")
+        return generadas
 
     def generate_spectral_report(self, session_paths, notes_dict=None, logger=print):
         """Genera un documento LaTeX y compila a PDF enfocado exclusivamente en el análisis espectral (FFT, PSD)."""
