@@ -51,6 +51,7 @@ def generar_spec():
 
     spec_content = f"""# -*- mode: python ; coding: utf-8 -*-
 
+import os
 from PyInstaller.utils.hooks import collect_all, copy_metadata
 
 def _safe_collect(pkg):
@@ -106,6 +107,9 @@ additional_modules = [
     'analysis.generar_graficos_y_ranking',
     'analysis.plot_metricas_tesis',
     'analysis.report_engine',
+    'analysis.generador_figura_multimodal',
+    'analysis.generador_atlas_pdf',
+    'analysis.batch_actualizar_figuras_reporte',
     'utils.editor_mediciones',
     'utils.actualizar_metadata',
     'utils.migrar_mediciones_por_fecha',
@@ -127,6 +131,8 @@ additional_modules = [
     'gui_app.views.session_explorer',
     'gui_app.views.ui_analysis',
     'gui_app.views.report_dialog',
+    'gui_app.views.atlas_dialog',
+    'gui_app.views.selector_otro_sujeto_dialog',
     'gui_app.temp_comparativo',
     'gui_app.temp_procesar',
     'gui_app.temp_sesion',

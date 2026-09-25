@@ -1,0 +1,121 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{geometry}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{hyperref}
+\usepackage{float}
+\addto\captionsspanish{\renewcommand{\tablename}{Tabla}}
+\addto\captionsspanish{\renewcommand{\figurename}{Figura}}
+\geometry{top=2cm, bottom=2cm, left=2.2cm, right=2.2cm}
+
+\title{\textbf{Reporte de Experimento}}
+\author{Laboratorio de Sistemas Dinámicos (LSD) - Sistema Ñandú}
+\date{2026-09-24}
+
+\begin{document}
+\maketitle
+
+\section{Datos de la Sesión y Montaje Experimental}
+\begin{itemize}
+    \item \textbf{Fecha de las Mediciones:} 2026-09-24
+    \item \textbf{Sujeto Experimental:} No especificado
+    \item \textbf{Hora de Inicio:} No especificada
+    \item \textbf{Hora de Finalización:} No especificada
+    \item \textbf{Duración Total de la Sesión:} No especificada
+    \item \textbf{Baterías y Alimentación:} No especificadas
+    \item \textbf{Electrodo de Referencia (Tierra):} Frente
+    \item \textbf{Total de Registros Realizados:} 0
+    \item \textbf{Series / Pruebas Identificadas:} 0
+\end{itemize}
+
+\subsection{Ubicación de los Músculos y Asignación de Canales}
+En la presente sesión se midió simultáneamente en los siguientes canales y ubicaciones musculares:
+\begin{table}[H]
+\centering
+\begin{tabularx}{\textwidth}{c p{6.5cm} X}
+\toprule
+\textbf{Canal} & \textbf{Músculo Registrado} & \textbf{Ubicación / Rol Anatómico} \\
+\midrule
+Canal 0 & \textbf{Canal 0} & Electrodo bipolar de superficie \\
+Canal 1 & \textbf{Canal 1} & Electrodo bipolar de superficie \\
+Canal 2 & \textbf{Canal 2} & Electrodo bipolar de superficie \\
+Canal 3 & \textbf{Canal 3} & Canal acústico / Sincronización temporal con micrófono \\
+\bottomrule
+\end{tabularx}
+\caption{Distribución anatómica y configuración de canales musculares en el montaje experimental.}
+\end{table}
+
+\newpage
+\tableofcontents
+\newpage
+\section{Resultados y Análisis de Señales por Vocal}
+A continuación se presentan las señales bioeléctricas calibradas y los registros de 3 músculos agrupados vocal por vocal para toda la sesión:
+
+\newpage
+\section{Evolución Temporal de la Sesión}
+Evaluación de la estabilidad temporal de las amplitudes pico y la consistencia biomecánica muscular a lo largo de toda la sesión.
+
+\subsection{Amplitudes Pico Promedio por Vocal y Músculo}
+\begin{table}[H]
+\centering
+\begin{tabularx}{\textwidth}{l c c X}
+\toprule
+\textbf{Vocal} & \textbf{Canal 0: Canal 0} & \textbf{Canal 1: Canal 1} & \textbf{Canal 2: Canal 2} \\
+\midrule
+\bottomrule
+\end{tabularx}
+\caption{Amplitudes pico máximas promedio ($\mu \pm \sigma$) registradas para cada vocal y canal muscular.}
+\end{table}
+
+\subsection{Línea de Tiempo de Amplitud}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/analisis_de_sesiones/2026-09-24/Sesion_130312/Sesion_AMP_Timeline.png}
+\caption{Figura: Evolución temporal de la amplitud pico muscular (en $\mu\text{V}$) a lo largo de la sesión con franja de dispersión promedio ($\mu \pm \sigma$).}
+\end{figure}
+
+\subsection{Cubo 3D de Proporciones de Activación Muscular}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/evolucion_sesion_2026-09-24/Sesion_cubo_activacion_proporciones_3d.png}
+\caption{Figura: Proyección vectorial tridimensional de activación relativa intermuscular (Cubo 3D) para las 5 vocales comparadas a lo largo de las series de la sesión. Las líneas discontinuas conectan la misma vocal entre pruebas para visualizar la repetibilidad y estabilidad biomecánica.}
+\end{figure}
+
+\subsection{Proyecciones Bidimensionales en las Caras del Cubo: Planos XY, XZ y YZ}
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/evolucion_sesion_2026-09-24/Sesion_cubo_proyecciones_caras_2d.png}
+\caption{Figura: Proyecciones ortogonales sobre cada una de las tres caras del cubo de activación (Planos XY, XZ e YZ) mostrando la trayectoria relativa intermuscular entre series para cada vocal.}
+\end{figure}
+
+\subsection{Cubo 3D de la Totalidad de Pulsos Registrados}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/evolucion_sesion_2026-09-24/Sesion_cubo_todos_los_pulsos_3d.png}
+\caption{Figura: Nube de dispersión tridimensional con la totalidad de pulsos individuales registrados en la sesión agrupados por vocal (excluyendo secuencias continuas).}
+\end{figure}
+
+\subsection{Espacio de Fases Dinámico Tridimensional Continuo}
+Representación del atractor dinámico en el espacio tridimensional de estados intermusculares $(\tilde{x}_0(t), \tilde{x}_1(t), \tilde{x}_2(t))$. A diferencia de las representaciones discretas basadas exclusivamente en la amplitud pico, este espacio mapea la trayectoria temporal continua completa de cada pulso de habla desde el reposo fisiológico, pasando por la contracción y coactivación motora, hasta la relajación.
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/evolucion_sesion_2026-09-24/Sesion_espacio_fases_dinamico_3d.png}
+\caption{Figura: Galería del espacio de fases dinámico continuo tridimensional para las cinco vocales registradas. En cada panel vocálico individual se grafican las trayectorias temporales continuas de la totalidad de pulsos (haz de curvas semi-transparentes) junto a su órbita promedio representativa (trazo negro continuo) y su vértice de excursión máxima (estrella dorada). El eje $X$ corresponde al Canal 0, el eje $Y$ al Canal 1 y el eje $Z$ al Canal 2, escalados mediante normalización tricanal fisiológica. El sexto panel presenta la síntesis comparativa de los lazos cerrados naciendo simultáneamente del punto de reposo basal $(0,0,0)$.}
+\end{figure}
+
+\newpage
+\section{Patrones Musculares Promedio}
+Comparación conjunta de los perfiles de activación muscular envolvente promedio normalizados entre las diferentes series registradas en la sesión.
+
+\newpage
+\section{Análisis Multimodal de Señales y Espectrogramas}
+A continuación se presentan los registros multimodales de 4 paneles para las vocales registradas en la sesión. Para cada medición se visualiza el espectrograma acústico STFT con pre-énfasis, el oscilograma del micrófono rectificado con su envolvente acústica, la activación muscular sEMG normalizada por el Supremo Tricanal del pulso y el espectrograma muscular RGB:
+
+\end{document}

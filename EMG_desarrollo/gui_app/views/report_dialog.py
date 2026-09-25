@@ -474,7 +474,7 @@ class ReportDialog(QDialog):
             QMessageBox.information(
                 self, 
                 "Figuras Multimodales Generadas", 
-                f"Se generaron exitosamente {n} figuras multimodales de 4 paneles ('plot_paper_combined.png') en las carpetas de las tomas."
+                f"Se generaron exitosamente {n} figuras multimodales de 4 paneles ('plot_espectrograma_multimodal.png') en las carpetas de las tomas."
             )
         else:
             self.lbl_status.setText("Error en la generación de figuras.")

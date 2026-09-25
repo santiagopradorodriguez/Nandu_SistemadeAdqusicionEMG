@@ -291,6 +291,20 @@ class ComparativeTab(QWidget):
         """)
         self.layout.addWidget(self.btn_generar_reporte)
 
+        self.btn_generar_atlas = QPushButton("GENERAR ATLAS DE ACTIVACIÓN sEMG (PDF)")
+        self.btn_generar_atlas.setFixedHeight(45)
+        self.btn_generar_atlas.setCursor(Qt.PointingHandCursor)
+        self.btn_generar_atlas.setStyleSheet("""
+            QPushButton {
+                font-weight: bold; font-size: 13px;
+                background-color: transparent; color: #00e5ff; border: 2px solid #00e5ff; border-radius: 5px;
+                margin-top: 5px;
+            }
+            QPushButton:hover { background-color: #00e5ff; color: #000; }
+            QPushButton:disabled { border: 2px solid #555; color: #555; }
+        """)
+        self.layout.addWidget(self.btn_generar_atlas)
+
         self.btn_limpiar_analisis_results = QPushButton("BORRAR ARCHIVOS DE ANÁLISIS RESULTS (LIBERAR ESPACIO)")
         self.btn_limpiar_analisis_results.setFixedHeight(40)
         self.btn_limpiar_analisis_results.setCursor(Qt.PointingHandCursor)
@@ -647,8 +661,15 @@ class PcaTab(QWidget):
         l_adv.addWidget(self.chk_ignorar_cero, 0, 2, 1, 2)
         
         self.chk_correccion_intersesion = QCheckBox("Corrección Intersesión por Lote (Calibración de Ganancia)")
-        self.chk_correccion_intersesion.setChecked(True)
-        l_adv.addWidget(self.chk_correccion_intersesion, 1, 0, 1, 4)
+        self.chk_correccion_intersesion.setChecked(False)
+        l_adv.addWidget(self.chk_correccion_intersesion, 1, 0, 1, 2)
+
+        self.chk_correccion_impedancia = QCheckBox("Corrección por Impedancia (Reposo Basal y P95)")
+        self.chk_correccion_impedancia.setChecked(True)
+        self.chk_correccion_impedancia.setStyleSheet("color: #00FF88; font-weight: bold;")
+        self.chk_correccion_impedancia.setToolTip("Normaliza cada canal muscular por sesión sustrayendo el reposo basal pre-fonatorio y escalando por el rango dinámico del percentil 95 (P95).")
+        l_adv.addWidget(self.chk_correccion_impedancia, 1, 2, 1, 2)
+
         
         l_adv.addWidget(QLabel("Pre-Ventana (%):"), 2, 0)
         self.inp_pre_pct = QDoubleSpinBox()
@@ -729,7 +750,7 @@ class PcaTab(QWidget):
         l_align = QHBoxLayout()
         l_align.addWidget(QLabel("Centrar ventana en:"))
         self.cmb_align = QComboBox()
-        self.cmb_align.addItems(["Pico Volumen Micrófono", "Pico Derivada Micrófono (Onset)", "Pico Canal 0", "Pico Canal 1", "Pico Canal 2"])
+        self.cmb_align.addItems(["Pico Volumen Micrófono", "Pico Derivada Micrófono (Onset)", "Gate Doble (sEMG Puro)", "Pico Canal 0", "Pico Canal 1", "Pico Canal 2"])
         l_align.addWidget(self.cmb_align)
         g_align.setLayout(l_align)
         lay.addWidget(g_align)
@@ -907,8 +928,14 @@ class UmapTab(QWidget):
         self.chk_ignorar_cero.setChecked(False)
         l_adv.addWidget(self.chk_ignorar_cero, 0, 2, 1, 2)
         self.chk_correccion_intersesion = QCheckBox("Corrección Intersesión por Lote (Calibración de Ganancia)")
-        self.chk_correccion_intersesion.setChecked(True)
-        l_adv.addWidget(self.chk_correccion_intersesion, 1, 0, 1, 4)
+        self.chk_correccion_intersesion.setChecked(False)
+        l_adv.addWidget(self.chk_correccion_intersesion, 1, 0, 1, 2)
+
+        self.chk_correccion_impedancia = QCheckBox("Corrección por Impedancia (Reposo Basal y P95)")
+        self.chk_correccion_impedancia.setChecked(True)
+        self.chk_correccion_impedancia.setStyleSheet("color: #00FF88; font-weight: bold;")
+        self.chk_correccion_impedancia.setToolTip("Normaliza cada canal muscular por sesión sustrayendo el reposo basal pre-fonatorio y escalando por el rango dinámico del percentil 95 (P95).")
+        l_adv.addWidget(self.chk_correccion_impedancia, 1, 2, 1, 2)
         l_adv.addWidget(QLabel("Pre-Ventana (%):"), 2, 0)
         self.inp_pre_pct = QDoubleSpinBox()
         self.inp_pre_pct.setRange(0.0, 1.0)
@@ -982,7 +1009,7 @@ class UmapTab(QWidget):
         l_align = QHBoxLayout()
         l_align.addWidget(QLabel("Centrar ventana en:"))
         self.cmb_align = QComboBox()
-        self.cmb_align.addItems(["Pico Volumen Micrófono", "Pico Derivada Micrófono (Onset)", "Pico Canal 0", "Pico Canal 1", "Pico Canal 2"])
+        self.cmb_align.addItems(["Pico Volumen Micrófono", "Pico Derivada Micrófono (Onset)", "Gate Doble (sEMG Puro)", "Pico Canal 0", "Pico Canal 1", "Pico Canal 2"])
         l_align.addWidget(self.cmb_align)
         g_align.setLayout(l_align)
         lay.addWidget(g_align)
@@ -1045,6 +1072,12 @@ class UmapSupervisadoTab(QWidget):
         self.inp_notch.setSingleStep(0.5)
         self.inp_notch.setValue(2.0)
         l_dsp.addWidget(self.inp_notch, 1, 5)
+
+        self.chk_correccion_impedancia = QCheckBox("Corrección por Impedancia (Reposo Basal y P95)")
+        self.chk_correccion_impedancia.setChecked(True)
+        self.chk_correccion_impedancia.setStyleSheet("color: #00FF88; font-weight: bold;")
+        self.chk_correccion_impedancia.setToolTip("Normaliza cada canal muscular por sesión sustrayendo el reposo basal pre-fonatorio y escalando por el rango dinámico del percentil 95 (P95).")
+        l_dsp.addWidget(self.chk_correccion_impedancia, 2, 0, 1, 6)
 
         g_dsp.setLayout(l_dsp)
         lay.addWidget(g_dsp)
@@ -1212,6 +1245,12 @@ class AutoencodersTab(QWidget):
         self.chk_force_epochs = QCheckBox("Forzar Épocas (Ignorar Checkpoint)")
         self.chk_force_epochs.setChecked(False)
         l_opt.addWidget(self.chk_force_epochs)
+
+        self.chk_correccion_impedancia = QCheckBox("Corrección por Impedancia (Reposo Basal y P95)")
+        self.chk_correccion_impedancia.setChecked(True)
+        self.chk_correccion_impedancia.setStyleSheet("color: #00FF88; font-weight: bold;")
+        self.chk_correccion_impedancia.setToolTip("Acondiciona el dataset tensorial normalizando cada canal muscular por sesión con reposo basal pre-fonatorio y rango dinámico P95.")
+        l_opt.addWidget(self.chk_correccion_impedancia)
         g_opt.setLayout(l_opt)
         lay.addWidget(g_opt)
 
@@ -1584,9 +1623,9 @@ class AutoencoderNoSupervisadoTab(QWidget):
         self.grp_dim_spec.addButton(self.rb_dim_3d_spec)
 
         # ----------------------------------------------------------------------
-        # 5. ALINEACIÓN DE PULSO FISIOLÓGICO
+        # 5. ALINEACIÓN DE PULSO FISIOLÓGICO Y VENTANA DE CORTE
         # ----------------------------------------------------------------------
-        g_align = QGroupBox("5. Alineación de Pulso Fisiológico")
+        g_align = QGroupBox("5. Alineación de Pulso Fisiológico y Ventana de Corte")
         l_align = QHBoxLayout()
         l_align.setContentsMargins(6, 6, 6, 6)
         l_align.addWidget(QLabel("Método de Alineación:"))
@@ -1594,14 +1633,36 @@ class AutoencoderNoSupervisadoTab(QWidget):
         self.cmb_align.addItems([
             "Pico Volumen Micrófono",
             "Pico Derivada Micrófono (Onset)",
+            "Gate Doble (sEMG Puro)",
             "Pico Canal 0",
             "Pico Canal 1",
             "Pico Canal 2",
             "Pico Envolvente Muscular (Supremo)"
         ])
-        self.cmb_align.setCurrentText("Pico Derivada Micrófono (Onset)")
+        self.cmb_align.setCurrentText("Pico Volumen Micrófono")
         self.cmb_align.setStyleSheet("background-color: #1F2833; color: #66FCF1; border: 1px solid #45A29E; padding: 4px; font-weight: bold;")
         l_align.addWidget(self.cmb_align)
+
+        l_align.addWidget(QLabel("Pre %:"))
+        self.inp_pre_pct = QDoubleSpinBox()
+        self.inp_pre_pct.setRange(0.05, 0.95)
+        self.inp_pre_pct.setSingleStep(0.05)
+        self.inp_pre_pct.setValue(0.40)
+        self.inp_pre_pct.setDecimals(2)
+        self.inp_pre_pct.setFixedWidth(65)
+        self.inp_pre_pct.setToolTip("Porcentaje del ciclo previo al pico de alineación (ej. 0.40 para 40%).")
+        l_align.addWidget(self.inp_pre_pct)
+
+        l_align.addWidget(QLabel("Post %:"))
+        self.inp_post_pct = QDoubleSpinBox()
+        self.inp_post_pct.setRange(0.05, 0.95)
+        self.inp_post_pct.setSingleStep(0.05)
+        self.inp_post_pct.setValue(0.60)
+        self.inp_post_pct.setDecimals(2)
+        self.inp_post_pct.setFixedWidth(65)
+        self.inp_post_pct.setToolTip("Porcentaje del ciclo posterior al pico de alineación (ej. 0.60 para 60%).")
+        l_align.addWidget(self.inp_post_pct)
+
         l_align.addStretch()
         g_align.setLayout(l_align)
         self.layout.addWidget(g_align)
@@ -1645,7 +1706,7 @@ class AutoencoderNoSupervisadoTab(QWidget):
         l_dsp.addWidget(QLabel("LP Cutoff:"), 0, 2)
         self.inp_lp = QDoubleSpinBox()
         self.inp_lp.setRange(100.0, 950.0)
-        self.inp_lp.setValue(450.0)
+        self.inp_lp.setValue(500.0)
         self.inp_lp.setSuffix(" Hz")
         self.inp_lp.setFixedWidth(70)
         l_dsp.addWidget(self.inp_lp, 0, 3)
@@ -1729,8 +1790,9 @@ class AutoencoderNoSupervisadoTab(QWidget):
         l_par.addWidget(QLabel("Tipo de Red:"), 0, 0)
         self.cmb_tipo_red = QComboBox()
         self.cmb_tipo_red.addItems([
-            "Autoencoder Ortogonal (Récord 87% - 91%)",
-            "Convolucional 1D Estándar (Invarianza Temporal)"
+            "Autoencoder Ortogonal: Récord 87% - 91%",
+            "Autoencoder Ortogonal Convolucional: Récord 89% Lucas - 81% P5",
+            "Convolucional 1D Estándar: Invarianza Temporal"
         ])
         self.cmb_tipo_red.setStyleSheet("background-color: #1F2833; color: #00FF88; border: 1px solid #00AA55; padding: 4px; font-weight: bold;")
         self.cmb_tipo_red.currentIndexChanged.connect(self._on_tipo_red_changed)
@@ -1757,7 +1819,7 @@ class AutoencoderNoSupervisadoTab(QWidget):
         self.inp_lr.setRange(0.0001, 0.1)
         self.inp_lr.setSingleStep(0.001)
         self.inp_lr.setDecimals(4)
-        self.inp_lr.setValue(0.0030)
+        self.inp_lr.setValue(0.0040)
         self.inp_lr.setFixedWidth(75)
         l_par.addWidget(self.inp_lr, 1, 5)
 
@@ -1788,7 +1850,7 @@ class AutoencoderNoSupervisadoTab(QWidget):
         l_par.addWidget(QLabel("Lambda W (Pesos):"), 3, 0)
         self.inp_lambda_w = QDoubleSpinBox()
         self.inp_lambda_w.setRange(0.0, 10.0)
-        self.inp_lambda_w.setValue(0.30)
+        self.inp_lambda_w.setValue(0.60)
         self.inp_lambda_w.setSingleStep(0.05)
         self.inp_lambda_w.setDecimals(2)
         self.inp_lambda_w.setFixedWidth(65)
@@ -1798,7 +1860,7 @@ class AutoencoderNoSupervisadoTab(QWidget):
         l_par.addWidget(QLabel("Lambda Z (Decorrelación):"), 3, 2)
         self.inp_lambda_z = QDoubleSpinBox()
         self.inp_lambda_z.setRange(0.0, 10.0)
-        self.inp_lambda_z.setValue(0.45)
+        self.inp_lambda_z.setValue(0.15)
         self.inp_lambda_z.setSingleStep(0.05)
         self.inp_lambda_z.setDecimals(2)
         self.inp_lambda_z.setFixedWidth(65)
@@ -1810,7 +1872,8 @@ class AutoencoderNoSupervisadoTab(QWidget):
         self.cmb_clustering = QComboBox()
         self.cmb_clustering.addItems([
             "GMM (Gaussian Mixture)",
-            "K-Means (k-medias)"
+            "K-Means (k-medias)",
+            "Supervisado (LDA: Fronteras Lineales)"
         ])
         self.cmb_clustering.setCurrentText("GMM (Gaussian Mixture)")
         self.cmb_clustering.setStyleSheet("background-color: #1F2833; color: #66FCF1; border: 1px solid #45A29E; padding: 3px; font-weight: bold;")
@@ -1842,7 +1905,7 @@ class AutoencoderNoSupervisadoTab(QWidget):
 
         # Fila 6: Calibración Intersesión por Lote P95 (Estándar PCA/UMAP)
         self.chk_correccion_intersesion = QCheckBox("Corrección Intersesión por Lote (Calibración P95 PCA/UMAP)")
-        self.chk_correccion_intersesion.setChecked(True)
+        self.chk_correccion_intersesion.setChecked(False)
         self.chk_correccion_intersesion.setStyleSheet("color: #45A29E;")
         self.chk_correccion_intersesion.setToolTip("Equilibra la sensibilidad de canales por sesión mediante el percentil P95 (acotado a 5x) previo al supremo de pulso.")
         l_par.addWidget(self.chk_correccion_intersesion, 6, 0, 1, 6)
@@ -1881,10 +1944,15 @@ class AutoencoderNoSupervisadoTab(QWidget):
         self.btn_cargar_convae.setToolTip("Carga la arquitectura ConvAE con ConvTranspose1d y función de pérdida relativa + derivada.")
         bar_arch.addWidget(self.btn_cargar_convae)
 
-        self.btn_cargar_orto = QPushButton("Cargar OrthogonalAE (Récord 91%)")
+        self.btn_cargar_orto = QPushButton("Cargar OrthogonalAE: Récord 91%")
         self.btn_cargar_orto.setStyleSheet("background-color: #1F2833; color: #00FF88; border: 1px solid #00AA55; font-size: 11px; font-weight: bold; padding: 4px;")
         self.btn_cargar_orto.setToolTip("Carga la arquitectura de Autoencoder Ortogonal totalmente conexo simétrico sin sesgo con regularización de pesos.")
         bar_arch.addWidget(self.btn_cargar_orto)
+
+        self.btn_cargar_conv_orto = QPushButton("Cargar Conv-Ortogonal: Récord 85%")
+        self.btn_cargar_conv_orto.setStyleSheet("background-color: #1F2833; color: #FFE600; border: 1px solid #FFE600; font-size: 11px; font-weight: bold; padding: 4px;")
+        self.btn_cargar_conv_orto.setToolTip("Carga la arquitectura de Autoencoder Convolucional Ortogonal (K=5, Ch=(6, 12), Tanh, lw=2.0, lz=0.5).")
+        bar_arch.addWidget(self.btn_cargar_conv_orto)
 
         self.btn_verificar_arch = QPushButton("Verificar Sintaxis y Capas")
         self.btn_verificar_arch.setStyleSheet("background-color: #1F2833; color: #00FF88; border: 1px solid #00AA55; font-size: 11px; font-weight: bold; padding: 4px;")
@@ -1912,6 +1980,7 @@ class AutoencoderNoSupervisadoTab(QWidget):
         self.btn_restablecer_arch.clicked.connect(self.on_restablecer_plantilla)
         self.btn_cargar_convae.clicked.connect(self.on_cargar_convae)
         self.btn_cargar_orto.clicked.connect(self.on_cargar_orto)
+        self.btn_cargar_conv_orto.clicked.connect(self.on_cargar_conv_orto)
         self.btn_verificar_arch.clicked.connect(self.on_verificar_arquitectura)
         self.rb_env.toggled.connect(self.on_modalidad_toggled)
         self.rb_cruda.toggled.connect(self.on_modalidad_toggled)
@@ -1925,6 +1994,8 @@ class AutoencoderNoSupervisadoTab(QWidget):
         self.chk_canal_0.toggled.connect(self.on_canales_toggled)
         self.chk_canal_1.toggled.connect(self.on_canales_toggled)
         self.chk_canal_2.toggled.connect(self.on_canales_toggled)
+        self.chk_alineacion_so2.toggled.connect(self._on_so2_toggled)
+        self.inp_pts_env.valueChanged.connect(self.on_pts_env_changed)
 
         # 9. Acciones de Procesamiento y Entrenamiento
         g_act = QGroupBox("9. Acciones de Procesamiento y Entrenamiento")
@@ -1944,16 +2015,28 @@ class AutoencoderNoSupervisadoTab(QWidget):
         row_steps.addWidget(self.btn_plotear)
         l_act.addLayout(row_steps)
         
-        self.btn_flujo_completo = QPushButton("FLUJO COMPLETO: EXTRACCION -> ENTRENAMIENTO -> EVALUACION (1-CLICK)")
+        self.btn_flujo_completo = QPushButton("FLUJO COMPLETO: EXTRACCIÓN - ENTRENAMIENTO - EVALUACIÓN: UN CLIC")
         self.btn_flujo_completo.setStyleSheet("background-color: #004d33; color: #00FF88; font-weight: bold; font-size: 12px; padding: 12px; border: 2px solid #00FF88; border-radius: 4px;")
         l_act.addWidget(self.btn_flujo_completo)
+
+        row_eval_ext = QHBoxLayout()
+        self.btn_decodificar_continua = QPushButton("4. Decodificar Secuencia Continua")
+        self.btn_decodificar_continua.setStyleSheet("background-color: #1F2833; color: #66FCF1; font-weight: bold; padding: 8px; border: 1px solid #45A29E;")
+        self.btn_decodificar_continua.setToolTip("Carga una grabación de secuencia continua y decodifica los fonemas en el espacio latente del autoencoder.")
+        row_eval_ext.addWidget(self.btn_decodificar_continua)
+
+        self.btn_probar_otro_dataset = QPushButton("5. Probar en Otro Conjunto de Mediciones")
+        self.btn_probar_otro_dataset.setStyleSheet("background-color: #1F2833; color: #FFE600; font-weight: bold; padding: 8px; border: 1px solid #FFE600;")
+        self.btn_probar_otro_dataset.setToolTip("Evalúa el modelo entrenado sobre un dataset o CSV externo (como en modelorecord.py) sin reentrenar.")
+        row_eval_ext.addWidget(self.btn_probar_otro_dataset)
+        l_act.addLayout(row_eval_ext)
         
         row_aux = QHBoxLayout()
-        self.btn_lanzar_estudio = QPushButton("Abrir Estudio Gráfico Completo (GUI Externa)")
+        self.btn_lanzar_estudio = QPushButton("Abrir Estudio Gráfico Completo: GUI Externa")
         self.btn_lanzar_estudio.setStyleSheet("background-color: #1F2833; color: #66FCF1; font-weight: bold; padding: 7px; border: 1px solid #45A29E;")
         row_aux.addWidget(self.btn_lanzar_estudio)
 
-        self.btn_ver_ultimo_grafico = QPushButton("Visualizar Último Gráfico (PNG)")
+        self.btn_ver_ultimo_grafico = QPushButton("Visualizar Último Gráfico: PNG")
         self.btn_ver_ultimo_grafico.setStyleSheet("background-color: #1F2833; color: #00FF88; font-weight: bold; padding: 7px; border: 1px solid #00AA55;")
         row_aux.addWidget(self.btn_ver_ultimo_grafico)
         
@@ -1968,6 +2051,10 @@ class AutoencoderNoSupervisadoTab(QWidget):
         self.layout.addStretch()
         scroll.setWidget(content)
         main_layout.addWidget(scroll)
+
+        # Configurar por defecto la arquitectura ortogonal récord (87.85% nativo / ~91% SO(2))
+        self._on_tipo_red_changed(0)
+        self.chk_alineacion_so2.toggled.connect(lambda: self._on_tipo_red_changed(0))
 
     def get_plantilla_codigo(self, modalidad=None):
         if modalidad is None:
@@ -2204,27 +2291,263 @@ class AutoencoderPersonalizado(nn.Module):
         self.lbl_arch_status.setStyleSheet("background-color: #111111; color: #45A29E; border: 1px solid #333333; padding: 5px; font-family: monospace; font-size: 10px; border-radius: 4px;")
 
     def on_modalidad_toggled(self):
+        latent_dim = 3 if (self.rb_dim_3d.isChecked() if hasattr(self, 'rb_dim_3d') else self.rb_dim_3d_env.isChecked()) else 2
+        if "ortogonal" in self.cmb_tipo_red.currentText().lower():
+            if latent_dim == 3:
+                # Configuración Récord 88.45% en 3D
+                self.inp_epochs.setValue(800)
+                self.inp_batch.setValue(512)
+                self.inp_lr.setValue(0.0020)
+                self.inp_lambda_w.setValue(1.20)
+                self.inp_lambda_z.setValue(0.15)
+            elif self.chk_alineacion_so2.isChecked():
+                # Configuración Récord 91.43% con rotación rígida SO(2)
+                self.inp_epochs.setValue(600)
+                self.inp_batch.setValue(512)
+                self.inp_lr.setValue(0.0020)
+                self.inp_lambda_w.setValue(0.30)
+                self.inp_lambda_z.setValue(0.45)
+            else:
+                # Configuración Récord 87.85% nativo crudo sin SO(2)
+                self.inp_epochs.setValue(600)
+                self.inp_batch.setValue(512)
+                self.inp_lr.setValue(0.0040)
+                self.inp_lambda_w.setValue(0.60)
+                self.inp_lambda_z.setValue(0.15)
+            if self.chk_usar_custom.isChecked():
+                self.on_cargar_orto()
         if not self.chk_usar_custom.isChecked():
             self.txt_codigo_arch.setPlainText(self.get_plantilla_codigo())
             self.lbl_arch_status.setText("[INFO]: Plantilla actualizada para la modalidad seleccionada.")
             self.lbl_arch_status.setStyleSheet("background-color: #111111; color: #45A29E; border: 1px solid #333333; padding: 5px; font-family: monospace; font-size: 10px; border-radius: 4px;")
 
-    def _on_tipo_red_changed(self, idx):
-        if "ortogonal" in self.cmb_tipo_red.currentText().lower():
+    def _on_so2_toggled(self, checked):
+        latent_dim = 3 if (self.rb_dim_3d.isChecked() if hasattr(self, 'rb_dim_3d') else self.rb_dim_3d_env.isChecked()) else 2
+        if latent_dim == 3:
+            return  # SO(2) aplica a 2D; se preserva la configuración récord de 3D
+        if checked:
+            # Configuración Récord 91.43% con rotación rígida SO(2)
             self.inp_epochs.setValue(600)
             self.inp_batch.setValue(512)
-            self.inp_lr.setValue(0.0030)
+            self.inp_lr.setValue(0.0020)
             self.inp_lambda_w.setValue(0.30)
             self.inp_lambda_z.setValue(0.45)
+        else:
+            # Configuración Récord 87.85% nativo crudo sin SO(2)
+            self.inp_epochs.setValue(600)
+            self.inp_batch.setValue(512)
+            self.inp_lr.setValue(0.0040)
+            self.inp_lambda_w.setValue(0.60)
+            self.inp_lambda_z.setValue(0.15)
+
+    def _on_tipo_red_changed(self, idx):
+        latent_dim = 3 if (self.rb_dim_3d.isChecked() if hasattr(self, 'rb_dim_3d') else self.rb_dim_3d_env.isChecked()) else 2
+        txt_tipo = self.cmb_tipo_red.currentText().lower()
+        if "convolucional" in txt_tipo and "ortogonal" in txt_tipo:
+            # Autoencoder Ortogonal Convolucional (Récord 89.0% Lucas - 81.3% Candela P5)
+            self.on_cargar_conv_orto()
+        elif "ortogonal" in txt_tipo:
+            if latent_dim == 3:
+                # Configuración Récord 88.45% en 3D
+                self.inp_epochs.setValue(800)
+                self.inp_batch.setValue(512)
+                self.inp_lr.setValue(0.0020)
+                self.inp_lambda_w.setValue(1.20)
+                self.inp_lambda_z.setValue(0.15)
+            elif self.chk_alineacion_so2.isChecked():
+                self.inp_epochs.setValue(600)
+                self.inp_batch.setValue(512)
+                self.inp_lr.setValue(0.0020)
+                self.inp_lambda_w.setValue(0.30)
+                self.inp_lambda_z.setValue(0.45)
+            else:
+                self.inp_epochs.setValue(600)
+                self.inp_batch.setValue(512)
+                self.inp_lr.setValue(0.0040)
+                self.inp_lambda_w.setValue(0.60)
+                self.inp_lambda_z.setValue(0.15)
+            self.cmb_align.setCurrentText("Pico Volumen Micrófono")
             self.chk_impedancia_reposo.setChecked(True)
-            self.chk_alineacion_so2.setChecked(True)
             self.cmb_loss.setCurrentText("MSE (Error Cuadrático Medio)")
+            self.inp_smooth_ms.setValue(90)
+            self.inp_pts_env.setValue(20)
+            self.cmb_filtro_linea.setCurrentText("Notch (IIR en Cascada)")
+            self.inp_notch.setValue(2.0)
+            self.inp_alpha.setValue(0.50)
+            self.inp_snr.setValue(0.50)
+            self.inp_outliers.setValue(0.10)
+            self.chk_p95.setChecked(False)
+            self.chk_correccion_intersesion.setChecked(False)
         else:
             self.inp_epochs.setValue(150)
             self.inp_batch.setValue(32)
             self.inp_lr.setValue(0.0020)
             self.inp_lambda_w.setValue(0.0)
             self.inp_lambda_z.setValue(0.0)
+
+    def on_cargar_conv_orto(self):
+        latent_dim = 3 if (self.rb_dim_3d.isChecked() if hasattr(self, 'rb_dim_3d') else (self.rb_dim_3d_env.isChecked() if hasattr(self, 'rb_dim_3d_env') else False)) else 2
+        n_ch = 3
+        if hasattr(self, 'chk_canal_0') and hasattr(self, 'chk_canal_1') and hasattr(self, 'chk_canal_2'):
+            ch_list = []
+            if self.chk_canal_0.isChecked(): ch_list.append(0)
+            if self.chk_canal_1.isChecked(): ch_list.append(1)
+            if self.chk_canal_2.isChecked(): ch_list.append(2)
+            if len(ch_list) >= 2:
+                n_ch = len(ch_list)
+
+        if hasattr(self, 'inp_pts_env'):
+            if self.inp_pts_env.value() == 100:
+                self.inp_pts_env.setValue(20)
+            t_len = self.inp_pts_env.value()
+        else:
+            t_len = 20
+
+        codigo = self.get_plantilla_codigo_conv_ortogonal(n_ch=n_ch, latent_dim=latent_dim, target_len=t_len)
+        self.txt_codigo_arch.setPlainText(codigo)
+        self.chk_usar_custom.setChecked(True)
+        self.inp_epochs.setValue(350)
+        self.inp_batch.setValue(512)
+        self.inp_lr.setValue(0.0030)
+        self.inp_lambda_w.setValue(2.00)
+        self.inp_lambda_z.setValue(0.50)
+        self.cmb_align.setCurrentText("Pico Volumen Micrófono")
+        self.chk_impedancia_reposo.setChecked(True)
+        self.cmb_loss.setCurrentText("MSE (Error Cuadrático Medio)")
+        self.inp_smooth_ms.setValue(90)
+        self.cmb_filtro_linea.setCurrentText("Notch (IIR en Cascada)")
+        self.inp_notch.setValue(2.0)
+        self.inp_lp.setValue(500.0)
+        self.inp_alpha.setValue(0.50)
+        self.inp_snr.setValue(0.50)
+        self.inp_outliers.setValue(0.10)
+        self.chk_p95.setChecked(False)
+        self.chk_correccion_intersesion.setChecked(False)
+        self.chk_alineacion_so2.setChecked(False)
+        self.on_verificar_arquitectura()
+        self.lbl_arch_status.setText(f"[OK]: Autoencoder Convolucional Ortogonal {latent_dim}D cargado ({n_ch}ch x {t_len}pts, K=5, Ch=(6, 12), Tanh).")
+        self.lbl_arch_status.setStyleSheet("background-color: #002211; color: #FFE600; border: 1px solid #FFE600; padding: 5px; font-family: monospace; font-size: 10px; border-radius: 4px;")
+
+    def on_pts_env_changed(self, new_val):
+        """Actualiza dinámicamente time_pts e input_dim en el editor de código al cambiar el remuestreo."""
+        if not hasattr(self, 'txt_codigo_arch'):
+            return
+        cod = self.txt_codigo_arch.toPlainText()
+        if not cod.strip():
+            return
+        import re
+        cod_mod = re.sub(r'time_pts\s*=\s*\d+', f'time_pts={new_val}', cod)
+        cod_mod = re.sub(r'target_len\s*=\s*\d+', f'target_len={new_val}', cod_mod)
+        n_ch = 3
+        if hasattr(self, 'chk_canal_0') and hasattr(self, 'chk_canal_1') and hasattr(self, 'chk_canal_2'):
+            ch_list = []
+            if self.chk_canal_0.isChecked(): ch_list.append(0)
+            if self.chk_canal_1.isChecked(): ch_list.append(1)
+            if self.chk_canal_2.isChecked(): ch_list.append(2)
+            if len(ch_list) >= 2:
+                n_ch = len(ch_list)
+        cod_mod = re.sub(r'input_dim\s*=\s*\d+', f'input_dim={n_ch * new_val}', cod_mod)
+        if cod_mod != cod:
+            self.txt_codigo_arch.setPlainText(cod_mod)
+            self.on_verificar_arquitectura()
+
+    def get_plantilla_codigo_conv_ortogonal(self, n_ch=3, latent_dim=2, target_len=20):
+        class_name = f"ConvOrthogonalAutoencoder{latent_dim}D"
+        return f'''import torch
+import torch.nn as nn
+
+class {class_name}(nn.Module):
+    """
+    Autoencoder Convolucional Ortogonal {latent_dim}D: Récord 89.0% Lucas - 81.3% Candela P5 (Media Armónica 85.0%).
+    Configuración Óptima: K=5, Canales=(6, 12), Activación=Tanh, lr=0.003, lw=2.0, lz=0.5.
+    Combina extracción morfológica temporal vía Conv1d con regularización ortogonal en pesos y espacio latente.
+    """
+    def __init__(self, in_channels={n_ch}, time_pts={target_len}, conv_channels=(6, 12), kernel_size=5, latent_dim={latent_dim}):
+        super().__init__()
+        self.in_channels = in_channels
+        self.time_pts = time_pts
+        c1, c2 = conv_channels
+        pad = kernel_size // 2
+        
+        self.conv1 = nn.Conv1d(in_channels, c1, kernel_size=kernel_size, padding=pad, bias=False)
+        self.conv2 = nn.Conv1d(c1, c2, kernel_size=kernel_size, padding=pad, bias=False)
+        self.act = nn.Tanh()
+        
+        self.fc1 = nn.Linear(c2 * time_pts, 32, bias=False)
+        self.fc2 = nn.Linear(32, latent_dim, bias=False)
+        
+        self.dfc1 = nn.Linear(latent_dim, 32, bias=False)
+        self.dfc2 = nn.Linear(32, c2 * time_pts, bias=False)
+        self.deconv1 = nn.ConvTranspose1d(c2, c1, kernel_size=kernel_size, padding=pad, bias=False)
+        self.deconv2 = nn.ConvTranspose1d(c1, in_channels, kernel_size=kernel_size, padding=pad, bias=False)
+        self.c2 = c2
+
+    def encode(self, x):
+        if x.dim() == 2:
+            x_3d = x.view(x.shape[0], self.in_channels, self.time_pts)
+        else:
+            x_3d = x
+        h1 = self.act(self.conv1(x_3d))
+        h2 = self.act(self.conv2(h1))
+        h_flat = h2.view(h2.shape[0], -1)
+        h3 = self.act(self.fc1(h_flat))
+        return self.fc2(h3)
+
+    def decode(self, z):
+        dh1 = self.act(self.dfc1(z))
+        dh2 = self.act(self.dfc2(dh1)).view(dh1.shape[0], self.c2, self.time_pts)
+        dh3 = self.act(self.deconv1(dh2))
+        recon_3d = self.deconv2(dh3)
+        return recon_3d
+
+    def forward(self, x):
+        orig_dim = x.dim()
+        if orig_dim == 2:
+            x_3d = x.view(x.shape[0], self.in_channels, self.time_pts)
+        else:
+            x_3d = x
+        h1 = self.act(self.conv1(x_3d))
+        h2 = self.act(self.conv2(h1))
+        h_flat = h2.view(h2.shape[0], -1)
+        h3 = self.act(self.fc1(h_flat))
+        z = self.fc2(h3)
+        
+        dh1 = self.act(self.dfc1(z))
+        dh2 = self.act(self.dfc2(dh1)).view(dh1.shape[0], self.c2, self.time_pts)
+        dh3 = self.act(self.deconv1(dh2))
+        recon_3d = self.deconv2(dh3)
+        
+        if orig_dim == 2:
+            recon = recon_3d.view(recon_3d.shape[0], -1)
+        else:
+            recon = recon_3d
+        return recon, z
+
+    def weight_orthogonality_loss(self):
+        loss = 0.0
+        for layer in [self.fc1, self.fc2, self.dfc1, self.dfc2]:
+            W = layer.weight
+            d0, d1 = W.shape
+            if d0 < d1:
+                gram = torch.mm(W, W.t())
+                I = torch.eye(d0, device=W.device)
+            else:
+                gram = torch.mm(W.t(), W)
+                I = torch.eye(d1, device=W.device)
+            loss = loss + torch.norm(gram - I, p='fro')**2
+            
+        for conv in [self.conv1, self.conv2, self.deconv1, self.deconv2]:
+            W = conv.weight.view(conv.weight.shape[0], -1)
+            d0, d1 = W.shape
+            if d0 < d1:
+                gram = torch.mm(W, W.t())
+                I = torch.eye(d0, device=W.device)
+            else:
+                gram = torch.mm(W.t(), W)
+                I = torch.eye(d1, device=W.device)
+            loss = loss + torch.norm(gram - I, p='fro')**2
+        return loss
+'''
 
     def on_cargar_orto(self):
         latent_dim = 3 if self.rb_dim_3d.isChecked() else 2
@@ -2241,21 +2564,30 @@ class AutoencoderPersonalizado(nn.Module):
         codigo_orto = self.get_plantilla_codigo_ortogonal(n_ch=n_ch, latent_dim=latent_dim, target_len=t_len)
         self.txt_codigo_arch.setPlainText(codigo_orto)
         self.chk_usar_custom.setChecked(True)
-        self.lbl_arch_status.setText(f"[OK]: Arquitectura OrthogonalAE cargada ({n_ch}ch x {t_len}pts = {n_ch*t_len}D).")
+        if latent_dim == 3:
+            self.inp_epochs.setValue(800)
+            self.inp_batch.setValue(512)
+            self.inp_lr.setValue(0.0020)
+            self.inp_lambda_w.setValue(1.20)
+            self.inp_lambda_z.setValue(0.15)
+        self.lbl_arch_status.setText(f"[OK]: Arquitectura OrthogonalAE {latent_dim}D cargada ({n_ch}ch x {t_len}pts = {n_ch*t_len}D).")
         self.lbl_arch_status.setStyleSheet("background-color: #002211; color: #00FF88; border: 1px solid #00AA55; padding: 5px; font-family: monospace; font-size: 10px; border-radius: 4px;")
 
     def get_plantilla_codigo_ortogonal(self, n_ch=3, latent_dim=2, target_len=20):
         input_dim = n_ch * target_len
+        hidden_dim = 64 if latent_dim == 3 else 32
+        class_name = f"OrthogonalAutoencoder{latent_dim}D"
+        record_label = "Configuración Récord 88.45% 3D" if latent_dim == 3 else "Configuración Récord 87% - 91% 2D"
         return f'''import torch
 import torch.nn as nn
 
-class OrthogonalAutoencoder2D(nn.Module):
+class {class_name}(nn.Module):
     """
-    Autoencoder Ortogonal 2D (Configuración Récord 87% - 91%).
+    Autoencoder Ortogonal {latent_dim}D: {record_label}.
     Topología totalmente conexa simétrica sin sesgo (bias=False) con regularización ortogonal:
-    Entrada: {n_ch} canales x {target_len} puntos = {input_dim} dimensiones.
+    Entrada: {n_ch} canales x {target_len} puntos = {input_dim} dimensiones -> {hidden_dim} -> 16 -> {latent_dim}.
     """
-    def __init__(self, input_dim={input_dim}, hidden_dim=32, latent_dim={latent_dim}):
+    def __init__(self, input_dim={input_dim}, hidden_dim={hidden_dim}, latent_dim={latent_dim}):
         super().__init__()
         self.fc1 = nn.Linear(input_dim, hidden_dim, bias=False)
         self.fc2 = nn.Linear(hidden_dim, 16, bias=False)
@@ -2512,7 +2844,12 @@ def reconstruction_loss(
 
         gamma_sdtw = float(self.inp_gamma_sdtw.value())
         clustering_text = self.cmb_clustering.currentText().lower()
-        algoritmo_clustering = "kmeans" if "k-means" in clustering_text or "kmeans" in clustering_text else "gmm"
+        if "lda" in clustering_text or "supervisado" in clustering_text:
+            algoritmo_clustering = "lda"
+        elif "k-means" in clustering_text or "kmeans" in clustering_text:
+            algoritmo_clustering = "kmeans"
+        else:
+            algoritmo_clustering = "gmm"
         lambda_orto = float(self.inp_lambda_orto.value())
         filtro_linea_text = self.cmb_filtro_linea.currentText().lower()
         tipo_filtro_linea = "notch" if "notch" in filtro_linea_text else "adaptativo"
@@ -2524,7 +2861,13 @@ def reconstruction_loss(
         if len(canales_features) < 2:
             canales_features = ["canal_0", "canal_1", "canal_2"]
 
-        tipo_arq = "ortogonal" if "ortogonal" in self.cmb_tipo_red.currentText().lower() else "convolucional"
+        txt_tipo = self.cmb_tipo_red.currentText().lower()
+        if "convolucional" in txt_tipo and "ortogonal" in txt_tipo:
+            tipo_arq = "conv_ortogonal"
+        elif "ortogonal" in txt_tipo:
+            tipo_arq = "ortogonal"
+        else:
+            tipo_arq = "convolucional"
         lambda_w = float(self.inp_lambda_w.value())
         lambda_z = float(self.inp_lambda_z.value())
         usar_imp = self.chk_impedancia_reposo.isChecked()
@@ -2567,6 +2910,9 @@ def reconstruction_loss(
             'notch_q': float(self.inp_notch.value()),
             'gate_ratio_ruido': float(self.inp_gate.value()),
             'w_canales': [float(self.inp_w0.value()), float(self.inp_w1.value()), float(self.inp_w2.value())],
+            'seed': 100,
+            'pre_pct': float(self.inp_pre_pct.value()),
+            'post_pct': float(self.inp_post_pct.value()),
             'rutas': list(self.rutas_actuales)
         }
 
@@ -2825,7 +3171,8 @@ class MachineLearningPanel(QWidget):
             'algoritmo_clustering_pca': t.cmb_cluster.currentText(),
             'algoritmo_clustering_umap': 'K-Means',
             'aplicar_trevisan': t.chk_trevisan.isChecked(),
-            'aplicar_correccion_intersesion': t.chk_correccion_intersesion.isChecked() if hasattr(t, 'chk_correccion_intersesion') else True,
+            'aplicar_correccion_intersesion': t.chk_correccion_intersesion.isChecked() if hasattr(t, 'chk_correccion_intersesion') else False,
+            'correccion_impedancia': t.chk_correccion_impedancia.isChecked() if hasattr(t, 'chk_correccion_impedancia') else True,
             'ignorar_ventana_cero': t.chk_ignorar_cero.isChecked(),
             'pre_pct': t.inp_pre_pct.value(),
             'post_pct': t.inp_post_pct.value(),
@@ -2890,7 +3237,8 @@ class MachineLearningPanel(QWidget):
             'algoritmo_clustering_pca': 'K-Means',
             'algoritmo_clustering_umap': t.cmb_cluster.currentText(),
             'aplicar_trevisan': t.chk_trevisan.isChecked(),
-            'aplicar_correccion_intersesion': t.chk_correccion_intersesion.isChecked() if hasattr(t, 'chk_correccion_intersesion') else True,
+            'aplicar_correccion_intersesion': t.chk_correccion_intersesion.isChecked() if hasattr(t, 'chk_correccion_intersesion') else False,
+            'correccion_impedancia': t.chk_correccion_impedancia.isChecked() if hasattr(t, 'chk_correccion_impedancia') else True,
             'ignorar_ventana_cero': t.chk_ignorar_cero.isChecked(),
             'pre_pct': t.inp_pre_pct.value(),
             'post_pct': t.inp_post_pct.value(),
@@ -2940,6 +3288,7 @@ class MachineLearningPanel(QWidget):
             'target_weight': t.inp_umap_tw.value(),
             'eliminar_outliers_train': t.chk_outliers_train.isChecked(),
             'aplicar_trevisan': t_umap.chk_trevisan.isChecked(),
+            'correccion_impedancia': t.chk_correccion_impedancia.isChecked() if hasattr(t, 'chk_correccion_impedancia') else True,
             'ignorar_ventana_cero': t_umap.chk_ignorar_cero.isChecked(),
             'pre_pct': t_umap.inp_pre_pct.value(),
             'post_pct': t_umap.inp_post_pct.value(),
@@ -2957,6 +3306,7 @@ class MachineLearningPanel(QWidget):
             'outliers_pct': t.inp_outliers.value(),
             'notch_q': t.inp_notch.value(),
             'use_manual_exclusions': t.chk_manual_excl.isChecked(),
+            'correccion_impedancia': t.chk_correccion_impedancia.isChecked() if hasattr(t, 'chk_correccion_impedancia') else True,
             'epochs': t.inp_epochs.value(),
             'batch_size': t.inp_batch.value(),
             'latent_dim': t.inp_latent.value(),

@@ -1,6 +1,6 @@
 # Memoria del Proyecto: Decodificación de Habla Submáximal y Espacio Latente Universal
 
-**Fecha de ultima consolidacion:** 2026-09-17 00:18 UTC-3  
+**Fecha de ultima consolidacion:** 2026-09-25 10:15 UTC-3  
 **Sujetos analizados:** Candela (2026-09-15, 2026-09-01, 2026-08-28), Lucas (2026-07-10), Petra (Silicona med1 y med2)  
 **Ventanas totales procesadas:** 1191 + 213 = 1404 ventanas sEMG
 
@@ -89,6 +89,49 @@ El autoencoder convolucional 1D entrenado sin supervisión con regularización p
 - **Diagnostico del Ruido de Linea:** El zumbido de 50 Hz (incluso tras Notch) introduce artefactos de fase no lineales que distorsionan el gradiente del autoencoder. En sesiones con ruido residual alto, el autoencoder rinde peor que PCA; con senal limpia, el autoencoder supera al PCA por casi 10 puntos porcentuales.
 - **Frontera /o/ vs /u/:** Ambas vocales alcanzaron metricas record (83.7% y 78.0%), pero siguen siendo el par mas proximo debido al reclutamiento co-dependiente del orbicular. Marca el limite fisiologico del registro de superficie en la zona peribucal.
 - **Reporte LaTeX:** Se inserto la seccion completa del Experimento 3 en `reportes_experimentos/Reporte_EMG_2026-09-15.tex` (seccion 5) con: objetivo, geometria anatomica (5 fotografias), metodologia, analisis espectral promedio (FFT, PSD, espectrogramas, 5 vocales), y subseccion de Autoencoder Conv1D 3D con tablas de metricas y figuras.
+
+### 1.7 Sincronización Dinámica de Dimensiones en GUI y Agrupamiento Canónico de Sesiones
+- **Resolución de Error de Dimensiones Lineales en GUI:**
+  - El error `mat1 (2x240) y mat2 (1200x32)` se debía a una asincronía entre el código generado en la plantilla ($12 \times 100 = 1200$ entradas para la capa lineal `fc1`) y la longitud de remuestreo fijada en la interfaz ($12 \times 20 = 240$).
+  - Se modificó `compilar_modelo_desde_codigo` en `motor_autoencoder_unificado.py` para inyectar dinámicamente la longitud temporal real del lote de datos en los parámetros `time_pts`, `target_len`, `time_len`, `pts` e `input_dim = \text{canales} \times T$.
+  - Se conectó el control de puntos de envolvente en `ui_analysis.py` (`on_pts_env_changed`) para actualizar dinámicamente el texto del editor y validar la arquitectura en tiempo real para cualquier valor de remuestreo ($T = 20, 50, 100, 200, 500$).
+- **Estandarización del Agrupamiento Canónico de Sesiones:**
+  - Se formalizó en `extraer_sesion_agnostica` la regla canónica del proyecto: ante tomas nombradas como `vocal_pruebaotoma_sujeto` (ej. `A_Prueba1_Candela`, `E_Prueba1_Candela`, `I_T1_Lucas`), se extrae `parts[1].upper()` (ej. `PRUEBA1`, `T1`).
+  - Esto garantiza que todas las vocales grabadas durante una misma prueba pertenezcan a la misma sesión, evitando que la normalización por reposo e impedancia $P_{95}$ se calcule sobre vocales aisladas, preservando rígidamente la sinergia intermuscular.
+  - En `experimento_candela_conv_ortogonal.py` se corrigió la asignación de sesiones con `extraer_sesion_agnostica(t)` y se excluyó la toma incompleta `Prueba5` de Candela 01/09.
+- **Validación Empírica Exitosa:**
+  - Verificación en `scratch/verificar_cambios.py` superó todos los tests (código de salida 0): agrupamiento canónico de las 5 vocales verificado en motor y GPU, y compatibilidad dimensional de capas lineales probada sin excepciones para $T = 20, 50, 100, 200$.
+  - Ejecución de `experimento_candela_conv_ortogonal.py` confirmó la recuperación completa de la geometría en Candela 01/09 (Risorio):
+    - **Exactitud Global GMM:** **$75.51\%$** (Silueta $+0.430$, Davies-Bouldin $0.91$).
+    - **Vocal /a/:** Alcanzó **$85.7\%$** (eliminando el artefacto donde caía "arriba y abajo" al quedar aislada de las demás vocales).
+    - **Desglose Multiclase:** /a/ $85.7\%$, /e/ $52.8\%$, /i/ $87.8\%$, /o/ $69.4\%$, /u/ $78.0\%$.
+    - **Separación de Pares:** /o/ vs /u/ $74.0\%$ | /e/ vs /i/ $91.7\%$.
+  - Ejecución de `experimento_candela_perdida_compuesta.py` (Barrido de $\beta \in [0.00, 0.02, 0.05, 0.10, 0.20]$ con decodificador Dual-Head RMS + TKEO):
+    - Al igual que en Lucas, **$\beta = 0.05$** fue el punto óptimo del decodificador dual en Candela 01/09, alcanzando **$70.41\%$** global (frente a $68.88\%$ en $\beta = 0.00$), elevando la vocal /u/ de $58.5\%$ a **$68.3\%$** y la separación /o/ vs /u/ a **$68.8\%$**.
+    - El modelo de una sola cabeza (`ConvOrthogonalAE`) preserva mayor concentración en el cuello de botella (75.51%), pero la cabeza dual confirma que la regularización por energía instantánea TKEO con $\beta = 0.05$ favorece sistemáticamente el balance en fonemas de mandíbula cerrada (/u/).
+- **Ablación de Ventana de Segmentación (Simétrica 50/50 frente a Asimétrica 40/60):**
+  - Se ensayó la ventana de corte simétrica de Lucas (`pre_pct = 0.50`, `post_pct = 0.50`) en Candela.
+  - La exactitud global en Candela 01/09 se redujo de **$75.51\%$ a $65.83\%$**.
+  - La vocal **/o/** se desplomó de **$69.4\%$ a $11.1\%$**, absorbida por **/u/** ($100.0\%$), y la separación del par /o/ vs /u/ cayó de $74.0\%$ a $59.2\%$.
+  - En Candela 15/09 (Cigomático), la /o/ colapsó al $0.0\%$ (absorbida por /u/ al $97.7\%$).
+- **Barrido de Parámetros en Lucas con Ventana Asimétrica 40/60 (`grid_search_lucas_ventana4060.py`):**
+  - Se desarrolló el script maestro de Grid Search modular para las 35 tomas de Lucas (`2026-07-10`), aplicando la ventana fisiológica de $40\%$ pre / $60\%$ post, RMS de $90\,\text{ms}$, remuestreo a 20 puntos ($D=60$), calibración intersesión y purga por Isolation Forest (10%).
+  - Soporta 4 modalidades de búsqueda:
+    1. `conv_2d`: Autoencoder Convolucional 1D Ortogonal 2D.
+    2. `mlp_2d_sin_so2`: Autoencoder MLP Totalmente Conexo Ortogonal 2D sin rotación/alineación SO(2).
+    3. `conv_3d`: Autoencoder Convolucional 1D Ortogonal 3D.
+    4. `mlp_3d_sin_so2`: Autoencoder MLP Totalmente Conexo Ortogonal 3D sin corrección externa.
+  - Almacena automáticamente caché del dataset (`dataset_lucas_ventana4060.npz`), guarda progreso incremental en CSV para permitir pausa/reanudación, y exporta pesos `.pt`, configuración `.json` y gráfico `.png` para el modelo campeón de cada modo.
+  - Se incorporó el nivel masivo `--tier 5760` (con exactamente las 5,760 combinaciones históricas de `channels`, `kernel_size`, `act`, `lr`, $\lambda_W$ y $\lambda_Z$ para convolucionales, y 5,040 combinaciones para MLP con 12 configuraciones de capas ocultas). Optimizado con `set_to_none=True` y multi-hilo en CPU.
+  - **Resultados Consolidados de los 4 Modos (48 combinaciones por modo, 100% Zero-Labels):**
+    1. **`conv_2d`:** **$83.63\%$ GMM Global** (Silueta $+0.322$, DB $0.95$). Desglose: /a/: $91.5\%$, /e/: $62.4\%$, /i/: $90.6\%$, /o/: $80.2\%$, /u/: $93.9\%$. Separación /o/ vs /u/: **$87.0\%$**, /e/ vs /i/: $76.8\%$. Config: `channels=(8, 16), k=3, tanh, lr=0.002, lw=0.8, lz=0.3`.
+    2. **`mlp_2d_sin_so2`:** **$78.24\%$ GMM Global** (Silueta $+0.349$, DB $0.94$). Desglose: /a/: $100.0\%$, /e/: $65.3\%$, /i/: $70.8\%$, /o/: $59.4\%$, /u/: $98.0\%$. Separación /o/ vs /u/: **$78.5\%$**, /e/ vs /i/: $68.1\%$. Config: `hidden=(32, 16), tanh, lr=0.002, lw=1.2, lz=0.25`.
+    3. **`conv_3d`:** **$84.03\%$ GMM Global** (Silueta $+0.292$, DB $1.15$). Desglose: /a/: $90.4\%$, /e/: $63.4\%$, /i/: $93.4\%$, /o/: $79.2\%$, /u/: $93.9\%$. Separación /o/ vs /u/: **$86.5\%$**, /e/ vs /i/: $78.7\%$. Config: `channels=(6, 12), k=3, tanh, lr=0.002, lw=1.5, lz=0.5`.
+    4. **`mlp_3d_sin_so2`:** **$85.03\%$ GMM Global** (Silueta $+0.320$, DB $1.09$). Desglose: /a/: $92.6\%$, /e/: $67.3\%$, /i/: $90.6\%$, /o/: $81.2\%$, /u/: $93.9\%$. Separación /o/ vs /u/: **$87.5\%$**, /e/ vs /i/: $79.2\%$. Piso mínimo por vocal: **$67.3\%$**. Config: `hidden=(32, 16), tanh, lr=0.003, lw=1.2, lz=0.45`.
+  - **Conclusión Biomecánica:** La ventana $40/60$ eleva la separabilidad y el balance multiclase en Lucas tanto en redes convolucionales como en MLPs totalmente conexos. En 3D, el MLP sin corrección SO(2) alcanza un récord del $85.03\%$ con un piso homogéneo del $67.3\%$, demostrando que la cola del $60\%$ retiene la información de cierre articular necesaria para resolver el par /o/ vs /u/ ($87.5\%$).
+- **Integración de Ventana de Corte Variable en la Interfaz Gráfica (`ui_analysis.py`, `main_app.py`):**
+  - Se añadieron controles numéricos `inp_pre_pct` y `inp_post_pct` (`QDoubleSpinBox`, rango $0.05\text{--}0.95$, paso $0.05$, valores por defecto $0.40$ y $0.60$) en la sección *5. Alineación de Pulso Fisiológico y Ventana de Corte* de la pestaña de Autoencoder.
+  - Se conectaron en `get_autoencoder_kwargs()` para reemplazar los valores hardcodeados de $0.50$, propagándolos a través de `main_app.py` hacia `motor.extraer_dataset_unificado` en los flujos de extracción, ejecución completa y evaluación.
 
 
 **Puntos Clave Consolidados:**
@@ -1855,4 +1898,905 @@ El autoencoder convolucional 1D entrenado sin supervisión con regularización p
   - Tiempo de importación: Reducido de **7500 ms** a **1.6 ms** (> 4000x más rápido).
   - Tiempo de auditoría sobre 30 tomas: Reducido a **1.3 ms** en primera lectura y **0.2 ms** con caché en memoria.
   - Tiempo de ejecución de `_on_explorer_selection_changed`: Reducido a **3.9 ms**, eliminando de forma definitiva todo congelamiento perceptible en la GUI.
+
+### Hito 90 - 2026-09-23: Generación Masiva de Figuras Multimodales Paper (4 Paneles) para Diego e Integración Automatizada en Generador de Reportes y GUI
+
+- **Módulo Oficial de Generación Multimodal (`EMG_desarrollo/analysis/generador_figura_multimodal.py`):**
+  - Se estructuró la función `generar_figura_paper_multimodal(toma_path, out_file=None, pulso_idx=1)` con la arquitectura de 4 paneles de alta resolución (300 DPI) para publicaciones científicas:
+    1. **Panel 0 (Espectrograma de Audio STFT):** Pre-énfasis acústico $y[n] = x[n] - 0.97 x[n-1]$, mapa de grises (`Greys`), rango dinámico de 45 dB ($[V_{\max} - 45, V_{\max}]$), corte a 2500 Hz y barra de color en eje dedicado (`cax`) mediante `GridSpec(4, 2)` con `width_ratios=[0.97, 0.03]`, resolviendo el desplazamiento horizontal de subpíxeles.
+    2. **Panel 1 (Micrófono):** Señal de audio rectificada en gris ($\alpha=0.55$) con envolvente acústica rápida de 15 ms en negro normalizada a 1.0.
+    3. **Panel 2 (Activación Muscular EMG):** Envolventes musculares suavizadas (75 ms) filtradas con cancelador adaptativo NLMS en fase cero, normalizadas por el Supremo Tricanal del pulso individual ($M_{\text{supremo, pulso}}$) y etiquetadas con los nombres anatómicos de `metadata.json` (Masetero en rojo `#E63946`, Orbicular en naranja `#F77F00`, etc.).
+    4. **Panel 3 (Espectrograma Muscular RGB):** Pre-énfasis en señales crudas sEMG $y[n] = x[n] - 0.95 x[n-1]$ para resaltar frecuencias motoras altas, corte $20\text{--}600\,\text{Hz}$ e interpolación bicúbica.
+    5. **Alineación Causal Sincronizada:** Eje temporal $t=0.0\,\text{s}$ anclado al inicio acústico mediante búsqueda robusta retrógrada desde el pico fonatorio, línea vertical discontinua compartida a través de los 4 paneles y supresión de etiquetas intermedias del eje X (`labelbottom=False`) para eliminar solapamientos tipográficos.
+- **Procesamiento Masivo de Todas las Mediciones de Diego (Sujeto1):**
+  - **Sesión `2026-09-23` (19 tomas):** Se procesaron las 19 mediciones individuales (`A_Prueba2` a `U_Pruebat1`), generando `plot_paper_combined.png` en cada carpeta individual y respaldando el catálogo consolidado en `EMG_desarrollo/resultados/figuras_paper_multimodal/2026-09-23/`.
+  - **Sesión `2026-09-22` (8 tomas):** Se procesaron las 8 mediciones individuales (`O_Prueba6` a `U_Prueba9`), generando `plot_paper_combined.png` en cada carpeta individual y respaldando el catálogo consolidado en `EMG_desarrollo/resultados/figuras_paper_multimodal/2026-09-22/`.
+- **Automatización en el Reporte de Laboratorio (`reportes_experimentos/generador_reportes.py`):**
+  - Búsqueda insensible a mayúsculas/minúsculas para identificar carpetas de vocales (`a_*` y `A_*`).
+  - Auto-detección y generación dinámica de `plot_paper_combined.png` en tiempo real mediante `generar_figura_paper_multimodal` si la figura no existe previamente en la carpeta de la toma.
+  - Soporte de ejecución directa por fecha o directorio sin requerir archivo JSON (`python generador_reportes.py 2026-09-23`). Compilación exitosa de `Reporte_EMG_2026-09-23.pdf` (9.7 MB).
+- **Integración en el Motor de Reportes y la GUI (`report_engine.py` y `report_dialog.py`):**
+  - **`ReportEngine`:** Métodos `generate_report()` y `generate_snr_report()` actualizados para auto-generar la figura multimodal e insertarla bajo cada vocal. Se incorporó el método `generate_multimodal_paper_figures()`.
+  - **`ReportDialog`:** Se añadió el Botón 5 ("5. Figuras Multimodales Paper") y el modo `'multimodal'` en `ReportWorker` para permitir al usuario generar las figuras de las tomas seleccionadas de forma asíncrona directamente desde la interfaz gráfica.
+  - **Validación del Reporte SNR:** Compilación exitosa de `Reporte_SNR_2026-09-23.pdf` (37 MB, 24 páginas) conteniendo la tabla cronológica, evolución de SNR y las 19 figuras multimodales completas.
+
+### Hito 92 - 2026-09-23: Integración Universal del Control de Corrección por Impedancia en PCA, UMAP y Autoencoder Supervisado
+
+- **Objetivo y Contexto:**
+  - Tras el descubrimiento empírico que elevó la exactitud de agrupamiento no supervisado al récord histórico del 87.85% / 91.43% mediante el acondicionamiento de reposo basal pre-contracción y escala dinámica $P_{95}$ por sesión y canal, se implementó dicho control de forma homogénea en los motores de PCA, UMAP (no supervisado y supervisado) y extracción tensorial para Autoencoders supervisados.
+- **Implementación en el Backend:**
+  - **`generador_pca_umap.py`:**
+    - Funciones auxiliares `extraer_sesion_agnostica` y `acondicionar_reposo_impedancia` integradas a nivel de módulo con `numpy` y `scipy.signal` (filtro Butterworth pasa-bajos orden 3, $W_n=0.3$, sustracción de $\mu_{\text{reposo}}$ y normalización por $P_{95} - \mu_{\text{reposo}} + 1\text{e-}6$).
+    - `extraer_y_filtrar` y `ejecutar_procesamiento` actualizados para aceptar `correccion_impedancia=True` y aplicarlo de forma transparente a PCA 2D, PCA 3D, UMAP 2D y UMAP 3D.
+  - **`generador_pca_tensorial.py`:**
+    - Extracción tensorial actualizada para aplicar el acondicionamiento de reposo e impedancia $P_{95}$ por sesión a la matriz tricanal antes de exportar `caracteristicas_exportadas.csv`.
+  - **`generador_umap_supervisado.py`:**
+    - Incorporación de `correccion_impedancia` antes del particionado físico de entrenamiento y prueba.
+- **Integración en la Interfaz Gráfica (`ui_analysis.py` y `main_app.py`):**
+  - **`PcaTab`:** Casilla de verificación `chk_correccion_impedancia` añadida en el panel de DSP Avanzado y Normalización (activada por defecto, color `#00FF88`), propagada en `get_pca_kwargs()`.
+  - **`UmapTab`:** Casilla de verificación `chk_correccion_impedancia` añadida en DSP Avanzado y Normalización (activada por defecto, color `#00FF88`), propagada en `get_umap_kwargs()`.
+  - **`UmapSupervisadoTab`:** Casilla de verificación `chk_correccion_impedancia` añadida en Filtros DSP (activada por defecto, color `#00FF88`), propagada en `get_umap_supervisado_kwargs()`.
+  - **`AutoencodersTab`:** Casilla de verificación `chk_correccion_impedancia` añadida en Opciones de Entrenamiento y Exclusiones (activada por defecto, color `#00FF88`), propagada en `get_autoencoder_kwargs()`.
+  - **`main_app.py`:** Propagación en la plantilla de ejecución de `extraer_autoencoder` (`gpt.ejecutar_procesamiento`).
+- **Verificación y Pruebas Empíricas:**
+  - Verificación unitaria y de GUI (`test_correccion_impedancia.py`): 100% aprobado.
+  - Verificación de flujo completo sobre tomas reales de la base de datos (`test_pipeline_impedancia.py`):
+    - PCA 2D con `correccion_impedancia=True`: 91.40% de exactitud con 90 repeticiones válidas.
+    - PCA 2D con `correccion_impedancia=False`: 90.23% de exactitud.
+    - Extracción tensorial para autoencoder supervisado: Matriz de 90 repeticiones x 60 características exportada limpiamente con corrección de impedancia activa.
+
+### Hito 93 - 2026-09-23: Desactivación por Defecto de la Corrección Intersesión y Preservación como Parámetro Opcional
+
+- **Directiva del Usuario:**
+  - "no dejes en el PCA el parámetro que dice corrección intersesión, porque si usas eso y usas la corrección de impedancia pasan cosas raras."
+  - "igual ojo la idea es que la correccion intersesion siga siendo un parametro pero no por defecto"
+- **Diagnóstico del Conflicto:**
+  - La antigua "Corrección Intersesión por Lote" escalaba cada canal muscular por un factor $C_c = 1.0 / \max(V_c / \max(V), 0.20)$ basado en el percentil $P_{95}$.
+  - Si dicha calibración actuaba conjuntamente con la "Corrección por Impedancia" (sustracción de reposo basal pre-fonatorio y reescalado dinámico por $P_{95} - \mu_{\text{reposo}}$), se producía una doble normalización que distorsionaba las proporciones de amplitud intermusculares y alteraba los centroides de los clústeres.
+- **Modificaciones Realizadas:**
+  1. **Interfaz Gráfica (`EMG_desarrollo/gui_app/views/ui_analysis.py`):**
+     - En `PcaTab`: Se preservó el control `self.chk_correccion_intersesion` ("Corrección Intersesión por Lote (Calibración de Ganancia)") junto al nuevo `self.chk_correccion_impedancia`, configurado **desmarcado por defecto** (`setChecked(False)`).
+     - En `UmapTab`: Se configuró `self.chk_correccion_intersesion.setChecked(False)` por defecto.
+     - En `AutoencodersTab`: Se configuró `self.chk_correccion_intersesion.setChecked(False)` por defecto.
+     - En `get_pca_kwargs()` y `get_umap_kwargs()`: Se lee el estado del widget preservando la opción del usuario (`False` por defecto).
+  2. **Motor de Procesamiento (`EMG_desarrollo/deep_learning/pca_umap_clustering/generador_pca_umap.py`):**
+     - En `ejecutar_procesamiento()` y `extraer_y_filtrar()`: Se configuró `aplicar_correccion_intersesion=False` por defecto en las firmas de función. Si el usuario decide activarla explícitamente, el parámetro se respeta.
+- **Validación:**
+  - Pruebas unitarias (`test_correccion_impedancia.py`) y de integración de audio real (`test_pipeline_impedancia.py`) aprobadas al 100%, verificando que por defecto la corrección de impedancia opere limpiamente sin activación de la calibración intersesión redundante.
+
+### Hito 94 - 2026-09-23: Generador de Atlas Vectorial PDF de Activación sEMG e Integración en la GUI
+
+- **Objetivo y Contexto:**
+  - Creación de un documento Atlas en formato PDF de alta resolución vectorial para catalogar la dinámica mioeléctrica temporal (curvas de campana de $-600\,\text{ms}$ a $+800\,\text{ms}$) frente a las cinco vocales (/A/, /E/, /I/, /O/, /U/) a través de todos los sujetos experimentales (Candela, Lucas, Santi, Petra) y condiciones musculares registradas.
+  - Requisito de incorporar la fotografía de colocación de electrodos al costado de cada músculo cuando esté disponible, manteniendo una diagramación armónica y estable cuando no exista fotografía fiduciaria.
+  - Requisito de implementar una interfaz gráfica dentro del sistema (`gui_app`) para que el usuario pueda generar y abrir el Atlas con un solo clic.
+
+- **Motor de Renderizado Vectorial (`EMG_desarrollo/analysis/generador_atlas_pdf.py`):**
+  - **Extracción de Señales y Promediado Multiserie:** Carga directa desde archivos `grabacion.csv`, normalización obligatoria por el Supremo Tricanal del Pulso Individual ($M_{\text{supremo, pulso}}$) y promediado de todas las series de cada sesión/músculo con cómputo de la envolvente de error estándar de la media ($\pm \text{SEM}$).
+  - **Diagramación Modular con Soporte de Fotografía:**
+    - Panel lateral de metadatos (nombre muscular, función bioeléctrica, fecha, tomas y canal sEMG con ajuste automático de saltos de línea `textwrap`).
+    - Columna de fotografía fiduciaria: Cuando `incluir_foto=True`, detecta fotografías del directorio de grabación o imágenes de cámara de alta resolución vinculadas (`foto_override` hacia `EMG_desarrollo/fotos/`). Si no se dispone de foto fiduciaria, dibuja un recuadro sobrio "Sin fotografía fiduciaria" preservando estrictamente la cuadrícula y las coordenadas horizontales de las cinco columnas de vocales.
+    - Detección automática y anotación de picos temporales dominantes en milisegundos respecto a la fonación acústica ($t=0$).
+  - **Temas Visuales:**
+    - `publicacion`: Fondo blanco, tipografía oscura, curvas en rojo bioeléctrico y bandas SEM en gris suave, optimizado para impresión y artículos científicos.
+    - `oscuro`: Fondo navy/pizarra (`#0B101B`), rejillas cian sutiles y curvas contrastadas para visualización en pantalla.
+
+- **Interfaz Gráfica y Conexión (`gui_app`):**
+  - **`AtlasDialog` (`EMG_desarrollo/gui_app/views/atlas_dialog.py`):** Diálogo interactivo con selector de sujetos (Candela, Lucas, Santi, Petra), conmutador de temas, opción de inclusión de fotos, selector de filas por página (1 a 4), selector de ruta de guardado, barra de progreso y botón directo para abrir el PDF resultante en el visor del sistema operativo.
+  - **`AtlasWorker` (`QThread`):** Ejecución asíncrona sin bloqueo del hilo principal de la aplicación, con emisión de porcentajes y mensajes de estado en tiempo real.
+  - **Integración en `ComparativeTab` (`ui_analysis.py`):** Botón estilizado `btn_generar_atlas` ("GENERAR ATLAS DE ACTIVACIÓN sEMG (PDF)") en el panel de herramientas comparativas.
+  - **Conexión en `main_app.py`:** Enrutamiento del evento `clicked` al método `_open_atlas_dialog`.
+
+- **Validación y Pruebas Empíricas:**
+  - Generación de `EMG_desarrollo/resultados/atlas_emg_con_fotos.pdf` (13 páginas vectoriales, tema publicación).
+  - Generación de `EMG_desarrollo/resultados/atlas_emg_oscuro.pdf` (13 páginas vectoriales, tema oscuro).
+  - Verificación sintáctica con `py_compile` e importación en el entorno `venv` aprobadas al 100%.
+
+### Hito 95 - 2026-09-23: Auditoría y Diagnóstico Bioeléctrico de Tomas 21/09 y 22/09 (/O/ vs /U/)
+
+- **Objetivo y Contexto:**
+  - Evaluar la discriminabilidad de las vocales **/O/** y **/U/** en las grabaciones del 22/09 (comparando Posición 1: Pruebas 6 y 7 frente a Posición 2: Pruebas 8 y 9) y del 21/09 (Pruebas S1 con posición propia frente a S2 y S3).
+  - Determinar si existen diferencias cuantitativas/morfológicas entre ambas vocales o si continúan solapadas.
+
+- **Diagnóstico de la Medición del 22/09 (0922):**
+  - **Canal 0 (Dev1/ai0 - Masetero):** Inactivo / plano en todas las pruebas (amplitud $\pm 25\,\mu\text{V}$, sin ráfagas fonatorias asociadas al audio). Canal desacoplado o músculo inactivo.
+  - **Canales 1 (Depresor) y 2 (Orbicular):** Ráfagas sincrónicas limpias ($\sim 400\text{--}800\,\mu\text{V}$).
+  - **Posición 1 (Pruebas 6 y 7):** Amplitudes idénticas al microvoltio ($104.6\,\mu\text{V}$ en O frente a $109.1\,\mu\text{V}$ en U para Orbicular; $102.7\,\mu\text{V}$ en O frente a $102.7\,\mu\text{V}$ en U para Depresor). Ratios de activación prácticamente unitarios ($0.98$ vs $0.94$). Formas de onda y ataques congruentes.
+  - **Posición 2 (Pruebas 8 y 9):** Tras recolocación física, el Depresor incrementó sensibilidad respecto al Orbicular. Sin embargo, ambas vocales mantuvieron la misma relación de co-activación proporcional ($1.34$ en O vs $1.57$ en U), quedando dentro de la dispersión típica intra-sesión.
+  - **Conclusión 22/09:** /O/ y /U/ se mantienen completamente mezcladas en ambas posiciones.
+
+- **Diagnóstico de la Medición del 21/09 (0921):**
+  - **Canal 2 (Dev1/ai2 - Orbi Horizontal):** Canal desconectado / muerto en todas las pruebas (banda continua plana de ruido térmico $\pm 50\text{--}70\,\mu\text{V}$ sin modulación).
+  - **Canales 0 (Masetero) y 1 (Orbi Vertical):** Activos.
+  - **Posición S1 vs S2/S3:** En S1 se aprecian ráfagas de Masetero ligeramente más intensas en U ($\sim 1000\,\mu\text{V}$ vs $\sim 700\,\mu\text{V}$), pero con canal 1 idéntico. En S2 y S3, ambos canales (0 y 1) replican perfiles morfológicos indistinguibles entre O y U.
+  - **Conclusión 21/09:** Al operar con solo 2 canales efectivos y sin sensor en el vientre anterior del digástrico, /O/ y /U/ están totalmente solapadas.
+
+### Hito 96 - 2026-09-23: Redacción y Consolidación del Cuaderno de Tesis Oficial (DOCX)
+
+- **Objetivo y Contexto:**
+  - Actualizar y organizar de forma rigurosa y no destructiva el cuaderno de tesis oficial del usuario (`Cuaderno_Tesis_Original.docx`), completando los epígrafes vacíos y estructurando la discusión científica en torno a los últimos experimentos de septiembre.
+  - Generar el documento final `Cuaderno_Tesis_Organizado.docx` preservando el 100% de las 159 imágenes, estilos y notas de laboratorio previas.
+
+- **Contenidos Técnicos Integrados:**
+  1. **Páginas 40–41: Discusión Metodológica sobre Rotación Rígida $SO(2)$ y Variabilidad Intersesión:**
+     - **Evidencia Empírica del Grid Search:** Análisis de la distribución de exactitud de las 252 combinaciones de hiperparámetros (media: 72.5%, mediana: 73.7%, máx: 81.9%). Demostración de que la separación forzada de /u/ canibaliza a /e/ (cayendo a < 5%).
+     - **Análisis Crítico de Procrustes Rígido ($SO(2)$):** Explicación de por qué la variabilidad intersesión es una deformación afín anisótropa (impedancia y colocación) y no un giro rígido isométrico, justificando la directiva de congelar `USE_ALIGNMENT = False`.
+     - **Autoencoder Ortogonal Dinámico del 91.43% (`modelorecord.py`):** Documentación de la calibración por impedancia basal de reposo por sesión ($\text{base\_mean} = \text{mean}(:10)$ y $\text{base\_max} = P_{95} - \text{base\_mean}$) y las dos funciones de pérdida estructurales:
+       $$\mathcal{L}_{\text{total}} = \mathcal{L}_{\text{recon}} + \lambda_W \cdot \mathcal{L}_W + \lambda_Z \cdot \mathcal{L}_Z$$
+       con $\lambda_W = 1.2$ (ortogonalidad de pesos $\|W W^T - I\|_F^2$) y $\lambda_Z = 0.15$ (esfericidad y decorrelación latente $\|\text{Cov}(Z) - I_d\|_F^2$), junto con la tabla completa de métricas récord.
+  2. **Páginas 52–54: Mediciones en Masetero y Orbicular (21, 22 y 23 de Septiembre):**
+     - **Ventaja Fisiológica del Masetero:** Desacoplamiento total de los artefactos de deglución y suelo de la boca.
+     - **Hallazgo Bicanal:** Masetero (Ch0) y Orbicular (Ch1) por sí solos separan con nitidez /a/ (94%), /e/ (100%) e /i/ (100%), demostrando que dos canales bastan para la fonética macroscópica.
+     - **Cuello de Botella Fisiológico /o/ vs /u/:** Demostración con las matrices de confusión reales de por qué la constricción esfinteriana del orbicular y la postura mandibular semejante provocan entre 35.3% y 70.6% de confusión cruzada, fundamentando la necesidad de un tercer sensor en el vientre anterior del digástrico o decodificación MUAP temporal en alta frecuencia (2000 Hz).
+
+- **Archivos Generados y Respaldados:**
+  - `Cuaderno_Tesis_Organizado.docx` en `/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/` (45 MB).
+  - Copia directa en `/home/santiago/Descargas/Cuaderno_Tesis_Organizado.docx`.
+  - Copia respaldada en `/home/santiago/Documentos/santiago vault/Materias/Tesis/Cuaderno_Tesis_Organizado.docx`.
+
+### Hito 97 - 2026-09-23: Redacción Individual de Epígrafes y Textos Específicos por Figura (Págs 40–41 y 52–54)
+
+- **Objetivo y Contexto:**
+  - Completar los textos y epígrafes faltantes debajo de cada una de las figuras individuales del Cuaderno de Tesis (`Cuaderno_Tesis_Organizado.docx`) siguiendo las instrucciones directas del usuario.
+  
+- **Textos y Epígrafes Asignados por Figura:**
+  1. **"Amplitud Vs Derivada" y "Calibrar Canales" (`image53.png`, `image145.png`):**
+     - Epígrafe y explicación de cómo ponderar los canales para que cada vocal alcance el máximo en su músculo primario (/a/ máximo en digástrico por apertura, /i/ en risorio por sonrisa, /u/ en orbicular por protrusión).
+     - Calibración por percentil 95 relativo al reposo basal (`base_mean`).
+     - Análisis de la velocidad de ataque $\dot{x}(t)$ (derivada temporal): ataque explosivo en /i/ vs gradual en /e/, y órbitas concéntricas indistinguibles entre /o/ y /u/ en el orbicular.
+  2. **"Distintos Sujetos y tríadas musculares, patrones interesantes" (`image40`, `image39`, `image58`, `image42`, `image37`):**
+     - Epígrafes y discusión detallada de cómo el espacio latente se curva, gira y se deforma según el sujeto, la configuración de montaje y el tamaño de los electrodos (rotación de 90° horaria entre sujetos, dispersión triangular de tríada completa y cizalladuras).
+     - Demostración de que la variación inter-sesión no es un giro rígido $SO(2)$.
+  3. **"Discussion Orbicularis Belly" (`image72.png`, `image94.png`):**
+     - Explicación de que el par Vientre Anterior y Orbicular, bien colocado y medido, tiene la capacidad de desacoplar casi todas las vocales menos el par /o/ y /u/.
+  4. **Antes de "Esto es masetero y orbicularis, impresionante de las pruebas 1 a 5" (`image83.png`, `image22.png`):**
+     - Justificación fisiológica del cambio: se buscó reemplazar al vientre anterior porque es muy difícil mantener los electrodos pegados por la gravedad y el sudor en la zona submentoniana. Se eligió el masetero como músculo activo del movimiento mandibular, logrando desacoplar casi todas las vocales junto con el orbicular.
+  5. **Bajo "En 3d clasifica practicamente todo" (`image13.png`):**
+     - Texto conciso reportando la exactitud sobresaliente en 3D (/a/ 94%, /e/ 100%, /i/ 100%) y concentrándose el error en /u/ (71% hacia /o/).
+  6. **Bajo "Prueba 6 y 7" (`image119.png`, `image47.png`):**
+     - Constatación de que en las Pruebas 6 y 7, 8 y 9, y 4 y 5, con distintas posiciones y tamaños de electrodos, no se pudo separar /o/ de /u/.
+     - Próximo ensayo experimental acordado: reducir la distancia interelectrodo utilizando pines y electrodos más chicos (los actuales no permitían bajar de 1.5 cm).
+  7. **Bajo "Experimento 3 orbicularis horizontal, vertical y masetero" (`image10.png`):**
+     - Réplica del ensayo con electrodos chicos y registro de orbicular horizontal y vertical junto a masetero.
+  8. **Comparativa Candela vs Lucas (`image111.png`, `image18.png`):**
+     - Evidencia del colapso cruzado universal entre sujetos: en Candela la /o/ se confunde como /u/ (78.6%), mientras que en Lucas la /u/ se confunde con la /o/ (100%).
+
+### Hito 98 - 2026-09-23: Consolidación de Espectrogramas vs Envolventes, Autoencoder Ortogonal 91.43% y Reubicación de Rotación SO(2) en Página 45
+
+- **Sobre Usar el Espectrograma como Feature para Autoencoder (Páginas 42–44):**
+  - **Representación Intuitiva RGB:** Mapeo de la tríada tricanal a espacio cromático RGB (Ch0 Milohioideo/Anterior Belly en Rojo, Ch1 Depresor/Risorio en Verde, Ch2 Orbicular en Azul) permitiendo visualizar la coordinación tiempo-frecuencia en una sola imagen.
+  - **Limitación Biomecánica frente a Envolventes Continuas:**
+    - Cuantitativamente rinde por debajo del modelado continuo (GMM 42.83% sin DAE, 43.63% con DAE en 2D, y 49.00% en 3D).
+    - Canibalización extrema de /e/ (colapso al 1.0% de detección en 3D).
+    - Causa física: la STFT (ventanas de 64-128 ms) promedia temporalmente la descarga de unidades motoras y dispersa en frecuencia, destruyendo la tasa de subida de potenciales de acción MUAP que discrimina /e/ frente a /i/. El modelado 1D continuo (envolventes al 56.1% y 87.8%, o Inception al 61.6%) es categóricamente superior.
+- **Autoencoder Ortogonal Dinámico del 91.43% y Calibración por Impedancia (Páginas 40–41):**
+  - **Calibración por Impedancia Basal de Reposo:** $\text{base\_mean} = \text{mean}(x[:10])$, $\text{base\_max} = P_{95}(x) - \text{base\_mean}$, $x_{\text{norm}} = (x - \text{base\_mean}) / \max(\text{base\_max}, 10^{-6})$.
+  - **Función de Pérdida Estructural:** $\mathcal{L}_{\text{total}} = \mathcal{L}_{\text{recon}} + \lambda_W \cdot \mathcal{L}_W + \lambda_Z \cdot \mathcal{L}_Z$ con $\lambda_W = 1.2$ ($\|W W^T - I\|_F^2$) y $\lambda_Z = 0.15$ ($\|\text{Cov}(Z) - I_d\|_F^2$).
+  - **Récord Histórico:** 91.43% global (/a/ 92.9%, /o/ 93.0%, /u/ 99.0%, /i/ 88.4%, /e/ 69.3%, exactitud local /o/-/u/ 95.5%).
+- **Reubicación Estricta de la Discusión sobre Rotación Rígida $SO(2)$ en Página 45:**
+  - Contextualizada frente a la figura de Procrustes (`image131.png`) y comparativa multisesión (`image142.png`): "Aunque una rotación ortogonal rígida $R(\theta) \in SO(2)$ preserva distancias relativas dentro de una sesión, la variabilidad intersesión no es un giro de cuerpo rígido. Las diferencias de impedancia electrodo-piel y los desplazamientos milimétricos al recolocar electrodos introducen deformaciones afines anisotrópicas. Forzar una rotación rígida sobreajusta los extremos fonatorios pero destruye la topología intermedia, razón por la cual en la arquitectura se fijó `USE_ALIGNMENT = False`."
+
+### Hito 99 - 2026-09-23: Detalle del Autoencoder Pre-Ortogonal GAP+GMP (87.8% 15 Sep) y PCA Multisesión (Rotación y Traslación del Espacio de Fases)
+
+- **Autoencoder Conv1D en Envolvente 3D (Candela 15 Sep, Récord Histórico 87.8%):**
+  - Modelo previo a la formulación del autoencoder ortogonal.
+  - **Mecanismo de Pooling Dual Invariante:** Red convolucional de 3 etapas Conv1D con `LeakyReLU(0.1)` acoplada a Global Average Pooling (GAP) para capturar la energía integral del pulso y Global Max Pooling (GMP) para retener la amplitud pico, concatenados a 32 características hacia el cuello de botella latente $\mathbb{R}^3$.
+  - Pérdida puramente $\text{MSE}(x, \hat{x})$ bajo régimen 100% no supervisado (cero etiquetas).
+  - Rendimiento: 87.79% exactitud GMM, silueta $+0.285$, Davies-Bouldin $1.42$ (/a/ 88.4%, /e/ 88.4%, /i/ 100%, /o/ 83.7%, /u/ 78.0%).
+  - Demostración empírica de que el autoencoder no lineal supera al PCA lineal (87.8% vs 78.0%) cuando la señal se encuentra libre de artefactos de red de 50 Hz.
+- **PCA 2D Multisesión: Rotación y Traslación del Espacio de Fases (Páginas 45–51):**
+  - Diagnóstico de la falta de superposición entre grabaciones de distintos días o montajes (01/09 Risorio, 15/09 Cigomático, 18/09 Modíolo):
+    - *Traslaciones:* originadas por corrimientos del nivel basal de reposo electrodo-piel.
+    - *Rotaciones y Deformaciones:* causadas por desplazamientos milimétricos y cambio de músculo registrado, alterando las sinergias relativas.
+  - **Discusión sobre Rotación Rígida $SO(2)$ y Procrustes:** Forzar una isometría rígida ($SO(2)$) con traslación global sobreajusta los fonemas extremos pero destruye la topología intermedia (dispersión catastrófica de /e/ y colapso de /o/ y /u/ en `image131.png`), fundamentando `USE_ALIGNMENT = False`.
+  - Solución consolidada: traslación al origen por reposo basal ($\text{base\_mean}$) y normalización independiente de ganancia dinámica por canal ($P_{95} - \text{base\_mean}$).
+
+### Hito 100 - 2026-09-23: Consolidación Exitosa del Cuaderno de Tesis Organizado (68 Elementos en 13 Puntos de Inserción)
+
+- **Documento Generado:** `Cuaderno_Tesis_Organizado.docx` (45 MB) en la raíz del repositorio y en el directorio de artefactos del brain.
+- **Puntos de Inserción Consolidados (52 a 54, 45 a 51, 42 a 44, 40 a 41):**
+  1. `P[617]`: Candela vs Lucas (colapso cruzado universal O vs U).
+  2. `P[609]`: Experimento 3 (electrodos chicos en masetero y orbicular horizontal/vertical).
+  3. `P[589]`: Pruebas 6 a 9 (límite de distancia interelectrodo en esfínter labial).
+  4. `P[573]`: En 3D clasifica (exactitud macro del masetero y orbicular).
+  5. `P[570]`: Masetero intro (motivación fisiológica del reemplazo del vientre anterior).
+  6. `P[494]`: PCA Multisesión, Rotación y Traslación del Espacio de Fases, y Discusión sobre Rotación Rígida $SO(2)$ / Procrustes.
+  7. `P[483]`: Autoencoder Conv1D 15 Sep Récord Histórico 87.8% (arquitectura GAP+GMP pre-ortogonal y desglose completo).
+  8. `P[451]`: Sobre usar el espectrograma como feature para Autoencoder (intuición RGB y límite biofísico de la STFT).
+  9. `P[437]`: Calibrar canales (impacto en la envolvente temporal por percentil 95).
+  10. `P[412]`: Orbicularis Belly (capacidad y límite bioeléctrico del par C0-C1).
+  11. `P[407]`: Espacios rotados (curvatura, deformación y giro horario de 90° entre sujetos/montajes).
+  12. `P[401]`: Amplitud vs Derivada (ponderación de canales y velocidad de reclutamiento $\dot{x}(t)$).
+  13. `P[398]`: Grid Search y Autoencoder Ortogonal del 91.43% (calibración por impedancia $\text{base\_mean}$ / $P_{95}$ y pérdidas $\mathcal{L}_W$ y $\mathcal{L}_Z$).
+- **Estado:** 100% de las imágenes y textos del documento original preservados de forma no destructiva con epígrafes y redacción técnica completa.
+
+### Hito 101 - 2026-09-23: Aplicación de Filtro de Lenguaje Humano y Acomodación de Figuras de Rotación, Autoencoder Ortogonal y Récords
+
+- **Regla de Estilo Incorporada en AGENTS.md (/learn):**
+  - Prohibición estricta de lenguaje de paper académico pomposo, tecnicismos inflados y estilo de IA.
+  - Adopción obligatoria de redacción simple, llana y de cuaderno de laboratorio cotidiano de estudiante ("cortito y al pie").
+- **Acomodación Exacta de Figuras y Textos en Cuaderno de Tesis (`Cuaderno_Tesis_Organizado.docx`):**
+  1. `image116.png` y `image122.png` (pág. 41): Grid Search de Lucas (252 combinaciones, promedio 72.5%, balance entre U y E).
+  2. `image53.png` (pág. 41): Amplitud vs Derivada (calibración de canales y ataque rápido de /i/ vs gradual de /e/).
+  3. `image40`, `image39`, `image58`, `image42`, `image37` (págs. 41-42): Diferentes sujetos y tríadas (curvatura y deformación del espacio de fases).
+  4. `image72` y `image94` (pág. 42): Vientre anterior y orbicular (desacopla todo menos O y U).
+  5. `image145.png` (pág. 43): Calibración y dinámica en el tiempo de 0 a 500 ms.
+  6. `image105`, `image79`, `image151` (págs. 43-44): Espectrograma RGB visual vs pérdida de dinámica temporal fina.
+  7. `image118` y `image24` (págs. 44-45): Autoencoder 1D Candela 15 Sep (87.8% sin ruido de 50 Hz).
+  8. `image159`, `image69`, `image142`, `image131`, `image6` (págs. 48-50): Herradura de PCA 2D, sesiones corridas por cambio de músculo/electrodo, y por qué rotar con Procrustes rígido no funciona al deformarse las nubes.
+  9. `image68.png` (pág. 51): Rotación y alineación en mediciones de Lucas por toma (de 73.2% a 81.4%).
+  10. `image3.png` (pág. 51): Primera corrida del Autoencoder Ortogonal 2D (600 épocas, ~80% de acierto).
+  11. `image139.png` (pág. 52): Impacto de corregir reposo e impedancia (+15.45% de ganancia neta).
+  12. **Inserción de Imagen de Récord Lucas 2D (`lucas_espacio_latente_2d_crudo.png`):** Espacio canónico 2D con 87.85% GMM y matriz de confusión (A 92.9%, E 87.1%, I 75.7%).
+  13. `image117.png`, `image63.png`, `image61.png` (págs. 52-54): Récord del Autoencoder Ortogonal 3D con 88.45% de exactitud (nube 3D, matriz de confusión y etiquetas reales vs GMM).
+  14. `image83`, `image22`, `image13`, `image119`, `image47`, `image10`, `image111`, `image18` (págs. 54-59): Masetero (por sudor y agarre firme), clasificación 3D, pruebas 6 a 9 con electrodos chicos y confusión universal O vs U.
+- **Archivo Generado:** `/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/Cuaderno_Tesis_Organizado.docx` (45.63 MB, 876 elementos XML, 100% no destructivo).
+
+### Hito 102 - 2026-09-24: Navegación y Conmutación de Chats de Antigravity vía Chrome DevTools Protocol (CDP) y WebApp Móvil TARS
+
+- **Diagnóstico y Descubrimiento del Entorno de Antigravity:**
+  - Se identificó que Antigravity (Electron) expone automáticamente un puerto de depuración Chrome DevTools Protocol (CDP) registrado en `~/.config/Antigravity/DevToolsActivePort`.
+  - La navegación interna entre conversaciones se realiza mediante enlaces `a[href*="/c/<id>"]` donde el título de cada chat reside en el atributo `aria-label`.
+  - Al simular un click sintético en estos enlaces vía CDP WebSocket (`Runtime.evaluate`), Antigravity conmuta suavemente la conversación en la pantalla de la computadora sin necesidad de recargar la aplicación ni conocer atajos de teclado.
+
+- **Implementación en el Servidor Backend (`tars_web_server.py`):**
+  - Se agregaron las funciones `get_devtools_ws_url()`, `eval_in_antigravity(js_expr)`, `get_current_antigravity_convo_id()`, `get_antigravity_chats()` y `switch_antigravity_chat(target)`.
+  - El buscador por nombre admite coincidencia exacta por identificador UUID, coincidencia por subcadena o coincidencia aproximada de palabras en el título del chat.
+  - Se optimizó la lectura del transcript activo (`get_active_transcript_path`): en lugar de buscar por fecha de modificación (`mtime`) entre todas las carpetas del disco, ahora consulta directamente el ID de la conversación abierta en Antigravity vía CDP, apuntando al archivo exacto al instante.
+  - Nuevas rutas HTTP agregadas a la API:
+    - `GET /api/chats`: Devuelve el ID del chat activo y la lista completa de chats abiertos con sus títulos y estado.
+    - `POST /api/switch_chat`: Permite conmutar al chat especificado (`target`: id, título, `"siguiente"` o `"anterior"`).
+  - En `handle_sync`, se incorporó la detección de cambio de chat (`chat_changed`), notificando al teléfono para que actualice el encabezado y muestre los nuevos mensajes sin repetir historiales antiguos.
+
+- **Comandos de Voz y Texto Añadidos a TARS:**
+  - *"siguiente chat"*, *"próximo chat"*, *"avanzar chat"*, *"otro chat"*: Conmuta a la conversación siguiente y Elena confirma el nombre por voz.
+  - *"chat anterior"*, *"volver al chat"*, *"retroceder chat"*: Conmuta a la conversación anterior.
+  - *"cambiar al chat de [nombre]"*, *"abrir chat [nombre]"*, *"ir al chat [nombre]"*: Busca el chat por título y lo activa en la pantalla.
+  - *"listar chats"*, *"qué chats hay"*: Elena enumera la cantidad de chats abiertos, los títulos principales y cuál está activo.
+
+- **Interfaz Móvil en la WebApp (`TARS/web/`):**
+  - **Botón en Encabezado:** Se agregó un botón interactivo `#chat-selector-btn` que muestra el título del chat activo recortado prolijamente con un ícono de despliegue.
+  - **Modal Táctil:** Al pulsar el botón, se abre un diálogo deslizante `#chats-modal` con botones de salto rápido ("Anterior" y "Siguiente") y la lista scrolleable de todas las conversaciones abiertas. El chat activo aparece resaltado con un badge visual.
+  - Al tocar cualquier conversación en la lista, Antigravity conmuta de inmediato en la PC y la WebApp del teléfono se sincroniza al nuevo contexto.
+
+
+- **Hito 103:** Se corrigió un problema de saturación en el pool de conexiones de la WebApp. Las consultas síncronas al CDP en la sincronización periódica agotaban los sockets del navegador. Se redujeron drásticamente los timeouts de `urllib` (0.2s) y `websockets` (0.5s) en `tars_web_server.py`.
+- **Hito 104:** Se agregó un atajo de teclado global a `tars_wake_word.py` usando `pynput.keyboard.GlobalHotKeys`. Ahora presionar `Ctrl + Alt + Flecha Derecha` o `Ctrl + Alt + Flecha Izquierda` envía un comando POST al servidor TARS (`/api/switch_chat`) para alternar chats de forma invisible y fluida, evitando la necesidad del celular o el micrófono para saltar entre ventanas.
+
+### Hito 105 - 2026-09-24: Reparación y Validación Exitosa de Formato OOXML en Cuaderno_Tesis_Organizado.docx
+
+- **Diagnóstico del Error de Apertura:**
+  - Al inyectar la imagen nueva de Lucas en el script previo, se alteró la serialización del namespace principal en `word/_rels/document.xml.rels` y el dibujo carecía de nodos obligatorios (`<wp:effectExtent>` y `<wp:cNvGraphicFramePr>`), provocando que Word rechazara el archivo por incompatibilidad de esquema.
+- **Corrección Implementada (`reparar_cuaderno_tesis.py`):**
+  - Inyección de relaciones como texto plano preservando el namespace estándar de OpenXML sin modificaciones colaterales.
+  - Clonación profunda de la estructura de dibujo de una figura original válida con todo el esquema OOXML completo.
+  - Preservación íntegra de los 17 bloques de notas de laboratorio en lenguaje humano simple y directo.
+- **Validación Empírica:**
+  - Verificación de sintaxis XML al 100% en todas las partes del paquete ZIP.
+  - Apertura y conversión headless exitosa con LibreOffice Writer (`writer_pdf_Export`) a `/tmp/Cuaderno_Tesis_Organizado.pdf` con código de salida 0 y sin errores de formato.
+- **Archivo Disponible:** `/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/Cuaderno_Tesis_Organizado.docx` (45.63 MB).
+
+### Hito 106 - 2026-09-24: Evaluación de Secuencia Continua de 125 Pulsos con Compuerta Acústica y Supremo Tricanal
+
+- **Objetivo:**
+  - Evaluar la secuencia continua de fonación libre (`2026-06-10/SecuenciaContinua_Prueba5_Sujeto1`, 125 pulsos A-E-I-O-U) sobre el modelo de Autoencoder Ortogonal 2D entrenado al 91.43%.
+- **Metodología y Correcciones Clave:**
+  - **Compuerta acústica de energía adaptativa en micrófono (Canal 3):** Se eliminó el corte por metrónomo rígido que acumulaba desfases temporales a lo largo de los 4 minutos de grabación. La compuerta detectó 124 pulsos perfectamente centrados en la contracción fonatoria real.
+  - **Pipeline idéntico a `generador_pca_umap`:** Filtro Notch 50 Hz ($Q=2.0$), Pasa-banda 20-500 Hz, Envolvente RMS de 90 ms, resta de piso de ruido interpulso.
+  - **Normalización estricta por el Supremo Tricanal del Pulso Individual:** Preservación del balance bioeléctrico intermuscular sin inflar canales secundarios.
+  - **Corrección de impedancia:** Filtro Butterworth paso bajo orden 3 ($W_n=0.3$), resta de reposo basal `:5` s y normalización por percentil 95.
+  - **Remuestreo:** 20 puntos temporales por canal (vector de 60 características de entrada).
+- **Resultados de Clasificación No Supervisada:**
+  - **Exactitud global no supervisada:** **84.68%** (105 de 124 pulsos clasificados correctamente).
+  - **Desglose por vocal:**
+    - Vocal /e/: **100.0%** (25/25)
+    - Vocal /o/: **96.0%** (24/25)
+    - Vocal /a/: **80.0%** (20/25)
+    - Vocal /u/: **75.0%** (18/24)
+    - Vocal /i/: **72.0%** (18/25)
+- **Diagnóstico:**
+  - La falta de precisión anterior ocurría por dos motivos: cortar a ciegas con el metrónomo (que desfasaba las ventanas) y normalizar los canales por separado (que rompía la sinergia muscular inflando músculos secundarios). Al usar la compuerta acústica y el Supremo Tricanal, el autoencoder separa los 5 grupos de vocales con 84.7% de acierto.
+- **Salida:** Figura guardada en `EMG_desarrollo/resultados/trayectorias_continuas/evaluacion_125_pulsos_secuencia_continua_p5.png`.
+
+### Hito 107 - 2026-09-24: Comparativa de Fronteras de Decisión (Modelos 91% y 87%) frente a Secuencia Continua
+
+- **Objetivo:**
+  - Visualizar lado a lado el espacio latente original de entrenamiento con sus fronteras de decisión GMM (panel izquierdo) frente a la proyección directa de la secuencia continua de 125 pulsos (panel derecho) en dos modelos clave:
+    1. Modelo Ortogonal 91.43% (con alineación topológica inter-sesión).
+    2. Modelo Ortogonal 87.85% (nativo crudo, sin rotación rígida).
+- **Resultados de la Proyección Directa sobre Fronteras de Decisión:**
+  - **Modelo 91.43% (`comparativa_91_fronteras_y_secuencia_continua.png`):**
+    - Panel izquierdo: 504 muestras de Lucas con 91.43% GMM.
+    - Panel derecho: los 124 pulsos de la secuencia continua proyectados sobre las mismas fronteras de Lucas muestran que los grupos de vocales se mantienen compactos, pero caen desfasados respecto a las regiones de decisión originales (exactitud directa 13.7%). La vocal /e/ cae dentro de la región de /a/, /a/ dentro de /u/, y /o/ dentro de /e/.
+  - **Modelo 87.85% Nativo Crudo (`comparativa_87_fronteras_y_secuencia_continua.png`):**
+    - Panel izquierdo: 504 muestras de Lucas con 87.85% GMM nativo sin rotación rígida.
+    - Panel derecho: los 124 pulsos de la secuencia continua caen agrupados en el semiplano inferior ($Z_2 < 0$) con un 20.2% de exactitud directa (capturando la vocal /e/).
+- **Conclusión Clave:**
+  - En ambos modelos, la red neuronal conserva la capacidad intrínseca de formar los 5 conglomerados vocálicos limpios y separables en la secuencia continua. Sin embargo, al proyectar directamente sobre las fronteras fijas entrenadas con otra sesión/sujeto, los conglomerados caen en posiciones desplazadas, evidenciando que las fronteras de decisión fijas requieren calibración adaptativa para operar en tiempo real inter-sesión.
+- **Archivos Generados:**
+  - `EMG_desarrollo/resultados/trayectorias_continuas/comparativa_91_fronteras_y_secuencia_continua.png`
+  - `EMG_desarrollo/resultados/trayectorias_continuas/comparativa_87_fronteras_y_secuencia_continua.png`
+
+### Hito 108 - 2026-09-24: Corrección de Sincronización Fonatoria y Validación Fisiológica de la Secuencia Continua
+
+- **Diagnóstico del Error de Sincronización:**
+  - El usuario advirtió que la vocal /a/ no podía estar físicamente cerca de la vocal /u/ (apertura mandibular vs constricción labial).
+  - Al auditar el audio del micrófono segundo a segundo, se descubrió que a $t = 5.16\text{ s}$ existía un sonido débil (amplitud 842, clic de metrónomo o respiración) que la compuerta acústica tomó como el primer evento ('A').
+  - La fonación humana real inició a $t = 7.22\text{ s}$ (amplitud de voz > 20.000). Esto causó un desfase cíclico de $+1$ en todas las etiquetas: la verdadera /u/ fue etiquetada como /a/ (de allí la superposición aparente con /u/), y la verdadera /a/ fue etiquetada como /e/.
+- **Sincronización Corregida:**
+  - Al fijar la detección en los eventos fonatorios reales a partir de $t \ge 6.0\text{ s}$, la fisiología recuperó coherencia perfecta:
+    - Vocal /a/: Canal 0 (milohioideo/digástrico) dominante con activación $1.00$.
+    - Vocal /e/ e /i/: Canal 1 (depresor/modíolo) dominante con activación $1.00$.
+    - Vocal /o/ y /u/: Canal 2 (orbicular) dominante con activación $1.00$.
+- **Resultados en el Modelo 91% (`comparativa_91_fronteras_y_secuencia_continua.png`):**
+  - **Exactitud Directa en Fronteras de Lucas: 67.48% (83/123)** sin calibración previa.
+  - Desglose por vocal:
+    - Vocal /a/: **100.0%** (25/25 aciertos perfectos en la región roja).
+    - Vocal /e/: **100.0%** (25/25 aciertos perfectos en la región celeste).
+    - Vocal /u/: **100.0%** (24/24 aciertos perfectos en la región naranja).
+    - Vocal /o/: 29.2% (7/24, frontera orbicular con /u/).
+    - Vocal /i/: 8.0% (2/25, frontera de sonrisa con /e/).
+- **Resultados en el Modelo 87% Nativo (`comparativa_87_fronteras_y_secuencia_continua.png`):**
+  - Los 5 conglomerados se forman nítidamente separados sin solapamiento entre /a/ y /u/, proyectados en el cuadrante inferior.
+
+
+
+
+- **Hito 105:** Se implementó la visualización en tiempo real de los procesos internos de Antigravity ("Pensando...", ejecución de herramientas y comandos) en la interfaz del celular. `tars_web_server.py` ahora analiza los bloques `PLANNER_RESPONSE` sin contenido final para extraer el `toolAction` o `thinking`, enviándolo al frontend que actualiza dinámicamente la etiqueta de estado (`micStatusLabel`).
+
+### Hito 109 - 2026-09-24: Corrección Definitiva del Cuaderno de Tesis: Desacople de Fotos Anatómicas y Unificación de Epígrafes
+
+- **Corrección de la Captura 1 (Gráfico de Lucas 2D):**
+  - Se eliminaron las fotos anatómicas del cuello y de la cara que se habían clonado por accidente al usar una plantilla de párrafo triple.
+  - El gráfico de Lucas (Espacio Canónico 2D 87.85% y Matriz de Confusión) quedó completamente solo, centrado y con su tamaño correspondiente.
+  - Las fotos anatómicas originales permanecen intactas en su ubicación original en la página 3 (`P[25]`).
+- **Corrección de Captura 2 (`image159.png`):**
+  - Se añadió epígrafe simple explicando la distribución de las 5 vocales en forma de herradura en PCA 2D.
+- **Corrección de Captura 3 (`image69.png` + `image142.png`):**
+  - Texto unificado que describe la nube multisesión superpuesta arriba y la comparativa facetada en 3 paneles abajo, explicando la inclinación de la sesión 01/09 por el cambio muscular.
+- **Corrección de Captura 4 (`image117.png` + `image63.png`):**
+  - Texto unificado para el récord del Autoencoder Ortogonal 3D (88.45% GMM), explicando el desacople de O y U en el espacio 3D y detallando los porcentajes por vocal de la matriz de confusión.
+- **Corrección de Captura 5 (Tabla 552):**
+  - Se preservó la tabla de parámetros sin alteraciones ni desbordes.
+- **Validación y Exportación:**
+  - Archivo generado y disponible en: `/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/Cuaderno_Tesis_Organizado.docx`.
+
+### Hito 111 - 2026-09-24: Reproducción Exacta del Modelo Récord 87.85% sin SO(2) y Coincidencia Espacial en Secuencia Continua (77.24%)
+
+- **Configuración de Hiperparámetros Confirmada por el Usuario (`modelorecord.py`):**
+  - `SEED = 100`
+  - `EPOCHS = 600`
+  - `LR = 0.004`
+  - `LAMBDA_W = 0.6`
+  - `LAMBDA_Z = 0.15`
+  - `USE_ALIGNMENT = False` (sin rotación rígida SO(2))
+  - Normalización: filtro Butterworth orden 3, Wn=0.3, sustracción de los primeros 10 puntos de reposo y escalado por percentil 95 por canal.
+- **Entrenamiento y Replicación Récord de Lucas:**
+  - El autoencoder reprodujo con exactitud matemática el **87.85% de exactitud GMM** sobre los 502 pulsos de entrenamiento de Lucas.
+  - Matriz de confusión idéntica:
+    - /a/: 91/98 (92.9%)
+    - /e/: 88/101 (87.1%)
+    - /i/: 78/103 (75.7%)
+    - /o/: 86/100 (86.0%)
+    - /u/: 98/100 (98.0%)
+  - Topología nativa de los centroides de Lucas:
+    - /a/ en $(-0.89, +2.37)$ (arriba a la izquierda)
+    - /e/ en $(-0.11, +0.74)$ (centro)
+    - /i/ en $(+0.25, -0.27)$ (abajo)
+    - /o/ en $(+1.28, +1.77)$ (arriba a la derecha)
+    - /u/ en $(+1.77, +1.32)$ (extremo derecho)
+- **Evaluación Directa de la Secuencia Continua P5:**
+  - Al procesar los 123 pulsos de la toma continua `SecuenciaContinua_Prueba5_Sujeto1` con este modelo idéntico:
+    - La coincidencia geométrica es total: no hay ninguna rotación espuria entre tomas.
+    - La vocal /a/ de P5 cae arriba a la izquierda ($Z_1 = -1.19, Z_2 = +1.91$).
+    - La vocal /e/ de P5 cae en el centro ($Z_1 = -0.01, Z_2 = +1.08$).
+    - La vocal /i/ de P5 cae abajo ($Z_1 = +0.01, Z_2 = +0.28$).
+    - La vocal /o/ de P5 cae a la derecha ($Z_1 = +1.39, Z_2 = +1.32$).
+    - La vocal /u/ de P5 cae al extremo derecho ($Z_1 = +1.84, Z_2 = +1.18$).
+  - **Exactitud Directa sobre las Fronteras de Lucas: 77.24% (95 de 123 pulsos aciertos)** sin necesidad de calibración, rotación Procrustes ni ajuste fino.
+- **Archivos Actualizados:**
+  - Checkpoint y proyecciones sincronizadas: `EMG_desarrollo/resultados/resultados_pca_umap/2026-09-12/General_por_sujeto/lucas/lucas_viejo_para_probar/autoencoder_ortogonal_reposo_optimo/modelo_optimo.pt` y `proyecciones_latentes_2d_crudo.csv`.
+  - Gráfico comparativo final: `EMG_desarrollo/resultados/trayectorias_continuas/comparativa_87_fronteras_y_secuencia_continua.png`.
+
+### Hito 113 - 2026-09-24: Código de Colores Universal, Visualizador de Ventanas Cortadas y Decodificador en la Interfaz
+
+- **Código de Colores Oficial Universal para Vocales (/learn):**
+  - /a/: Rojo (`#E63946`)
+  - /e/: Azul (`#1F77B4`)
+  - /i/: Verde (`#2CA02C`)
+  - /o/: Morado (`#9D4EDD`)
+  - /u/: Amarillo (`#E7A61A`)
+  - Codificado de forma estricta e inmutable en `.agents/AGENTS.md` y aplicado a todos los gráficos de fronteras y secuencias continuas.
+- **Visualización Detallada de las Ventanas Cortadas (P5):**
+  - Archivo generado: `EMG_desarrollo/resultados/trayectorias_continuas/secuencia_continua_ventanas_cortadas_p5.png`.
+  - Panel superior: Traza temporal completa (5 a 75 segundos) del micrófono y de los 3 canales sEMG con los 123 eventos marcados y coloreados según la vocal decodificada.
+  - Fila media: Envolventes temporales $[-1.0\text{ s}, +1.0\text{ s}]$ superpuestas de los 3 canales musculares (Milohioideo, Depresor, Orbicular) por vocal, mostrando la activación dominante de cada fonema.
+  - Fila inferior: Descriptores remuestreados a 20 puntos por canal (vector 60D que ingresa a la red).
+- **Parámetros Predeterminados en la Interfaz (Conmutación Dinámica):**
+  - Sin rotación rígida SO(2): `SEED=100`, `EPOCHS=600`, `LR=0.0040`, `LAMBDA_W=0.60`, `LAMBDA_Z=0.15` (Récord 87.85% nativo).
+  - Con rotación rígida SO(2): `SEED=100`, `EPOCHS=600`, `LR=0.0030`, `LAMBDA_W=0.90`, `LAMBDA_Z=0.30` (Récord ~91%).
+  - Al marcar o desmarcar `chk_alineacion_so2` en `AutoencoderNoSupervisadoTab`, los campos se actualizan de forma automática e inmediata.
+- **Módulos Integrados en la GUI (`ui_analysis.py` y `main_app.py`):**
+  - Botón `btn_decodificar_continua`: Permite seleccionar cualquier sesión de secuencia continua y decodificarla en el espacio latente del autoencoder generando los gráficos y CSVs de salida.
+  - Botón `btn_probar_otro_dataset`: Permite cargar un CSV o NPZ externo (como en `modelorecord.py`) y evaluarlo directamente sobre el modelo entrenado sin supervisión ni reentrenamiento.
+  - Funciones implementadas en `EMG_desarrollo/deep_learning/motor_autoencoder_unificado.py`: `decodificar_secuencia_continua(...)` y `evaluar_en_dataset_externo(...)`.
+
+
+### Hito 112 - 2026-09-24: Corrección de Figuras en Reportes, Agrupamiento por Vocal y Sección Multimodal Dedicada
+
+- **Diagnóstico y Solución de Regresión en Figuras:**
+  - La figura de espectrograma multimodal de 4 paneles (`generador_figura_multimodal.py`) se estaba guardando bajo el nombre `plot_paper_combined.png`, lo cual sobreescribió y desplazó el gráfico de 3 músculos del paper (`plot_3_musculos_standalone.py`) y alteró la estructura de las tomas en el reporte.
+  - Se corrigió el nombre de salida del espectrograma multimodal a `plot_espectrograma_multimodal.png`.
+  - Se restauró `plot_paper_combined.png` como la figura oficial de 3 músculos del paper (señal continua rectificada, ventanas temporales alineadas y segmentos concatenados con sustracción de ruido interpulso).
+  - Se ejecutó la actualización en lote para la totalidad de las 27 tomas de Diego (19 tomas de `2026-09-23` y 8 tomas de `2026-09-22`), comprobando en disco la existencia simultánea del 100% de los 3 tipos de figuras en cada carpeta: `plot_calibrado_*.png`, `plot_paper_combined.png` y `plot_espectrograma_multimodal.png`.
+
+- **Reestructuración de Reportes (Agrupamiento por Vocal A, E, I, O, U):**
+  - Se modificaron ambos motores de reporte (`reportes_experimentos/generador_reportes.py` y `EMG_desarrollo/analysis/report_engine.py`) para ordenar las mediciones agrupadas por vocal fonatoria (`A_Pruebat1`, `A_Prueba2`, `A_Prueba3`, ..., `E_Pruebat1`, `E_Prueba2`, ..., etc.) en lugar de series temporales dispersas.
+  - En cada subsección de medición individual se integran sus dos figuras fundamentales:
+    1. Gráfico de 3 Músculos del Paper (`plot_paper_combined.png`).
+    2. Gráfico Calibrado con Filtro Notch y Pasabanda (`plot_calibrado_*.png`).
+
+- **Sección Multimodal al Cierre del Reporte:**
+  - Se creó una sección final dedicada: `\section{Análisis Multimodal de Señales y Espectrogramas}`.
+  - En esta sección se presentan todos los espectrogramas multimodales de 4 paneles agrupados por vocal (envolvente RMS tricanal, espectrograma bioeléctrico muscular, señal de audio del micrófono rectificada y espectrograma de voz alineado).
+
+- **Depuración Estricta de Paréntesis en Títulos:**
+  - Se auditaron y eliminaron todos los paréntesis en los títulos de secciones, subsecciones y subsubsecciones en cumplimiento riguroso de las reglas de redacción del proyecto.
+
+### Hito 114 - 2026-09-24: Ensayo Experimental de Capas Convolucionales en el Autoencoder Ortogonal
+
+- **Objetivo del Experimento:**
+  - Evaluar empíricamente si incorporar capas convolucionales 1D antes del cuello de botella ortogonal mejora o deteriora la separación fonatoria respecto al modelo denso lineal de `modelorecord.py` (87.85%).
+- **Arquitectura Probada (`test_conv_ortogonal.py`):**
+  - Entrada: 3 canales x 20 muestras temporales.
+  - Encoder: `Conv1d(3, 16, kernel_size=3, padding=1)` + `LeakyReLU(0.1)` + `Conv1d(16, 8, kernel_size=3, padding=1)` + aplanado a vector denso + proyección ortogonal a 2D ($Z \in \mathbb{R}^2$).
+  - Decoder simétrico transconvolucional. Mismos hiperparámetros de control: `SEED=100`, `EPOCHS=600`, `LR=0.004`, `LAMBDA_W=0.6`, `LAMBDA_Z=0.15`.
+- **Resultados Cuantitativos:**
+  - Exactitud en Lucas: cayó de **87.85%** a **77.69%** (-10.16%).
+  - Exactitud directa en P5: cayó de **77.24%** (95/123) a **69.92%** (86/123).
+- **Diagnóstico del Daño al Patrón:**
+  - La convolución local promedia las transiciones rápidas en las 20 muestras temporales.
+  - Esto destruye el rasgo temporal que separa a **/e/** de **/i/**: 70 de los 101 pulsos de /e/ se fusionaron dentro de la nube de /i/ (colapso de exactitud en /e/ al 27.7%).
+  - Conclusión: las capas convolucionales en este nivel de remuestreo temporal degradan la discriminación fonatoria. El modelo lineal ortogonal denso es superior, más nítido y computacionalmente óptimo.
+- **Gráfico Comparativo Generado:**
+  - `EMG_desarrollo/resultados/trayectorias_continuas/comparativa_conv_ortogonal_87.png`.
+
+### Hito 115 - 2026-09-24: Ensayo de Entropía Cruzada Supervisada y Módulo de Grid Search Convolucional
+
+- **Diagnóstico y Corrección de Extracción en P5:**
+  - El usuario detectó con precisión que el resultado inicial de 16.56% era anómalo.
+  - Causa identificada: el script rápido había detectado picos en la envolvente muscular (151 eventos desfasados) sin dividir por el Supremo Tricanal por Pulso ($M_{\text{supremo}}$) ni restar ruido basal.
+  - Al restaurar la segmentación oficial guiada por micrófono (123 eventos) con normalización por Supremo Tricanal y sustracción de reposo, el modelo reveló su comportamiento real.
+- **Resultados del Autoencoder Ortogonal con Entropía Cruzada ($\lambda_{CE} = 0.5$):**
+  - **Lucas (Entrenamiento):** Exactitud cabeza Softmax = **89.04%**, GMM = **86.85%**.
+  - **Secuencia Continua P5 (Transferencia Directa en Fronteras):** Salto de **77.24% a 86.99% (107 de 123 aciertos)**.
+    - /a/: 25/25 (100.0%)
+    - /e/: 23/25 (92.0%)
+    - /i/: 17/25 (68.0%)
+    - /o/: 20/24 (83.3%)
+    - /u/: 22/24 (91.7%)
+  - **Cabeza Softmax Directa en P5:** **82.11% (101 de 123 aciertos)**.
+  - **Conclusión:** Una regularización supervisada moderada ($\lambda_{CE} = 0.5$) ayuda a compactar los cúmulos fonatorios a lo largo de las sinergias naturales sin romper la transferibilidad inter-toma, alcanzando el récord de **87.0% directo en la secuencia continua P5**.
+  - **Gráfico Definitivo:** `EMG_desarrollo/resultados/trayectorias_continuas/comparativa_ce_supervisada_87.png`.
+- **Módulo de Grid Search Convolucional Ortogonal:**
+  - Archivo implementado: `EMG_desarrollo/deep_learning/grid_search_conv_ortogonal.py`.
+  - Explora sistemáticamente núcleos, canales, activaciones y pesos ortogonales evaluando la media armónica entre Lucas y P5.
+
+### Hito 116 - 2026-09-24: Generación del Apunte Técnico PDF Consolidado
+
+- **Documento Generado:** `reportes_experimentos/apunte_arquitectura_red_y_secuencia_continua.pdf` (13 páginas, 3.78 MB), compilado desde `reportes_experimentos/apunte_arquitectura_red_y_secuencia_continua.tex` con `pdflatex`.
+- **Estructura y Contenidos Consolidados:**
+  1. **Acondicionamiento Bioeléctrico y Corrección de Impedancia:** Filtro Notch 50 Hz ($Q=30$), Pasabanda Butterworth [20, 450] Hz, envolvente RMS de 91 ms, y normalización por reposo y percentil 95 por sesión.
+  2. **Arquitectura del Autoencoder Ortogonal 2D:** Explicación matemática detallada de la red 60D $\to$ 32 $\to$ 16 $\to$ 2D $\to$ 16 $\to$ 32 $\to$ 60D, funciones de pérdida ($\mathcal{L}_{\text{recon}}, \mathcal{L}_W, \mathcal{L}_Z$) y código Python oficial comentado de `modelorecord.py`.
+  3. **Rotación Rígida SO(2) vs Representación Nativa:** Comparativa entre el modelo 91% (SO2) y el modelo nativo sin rotación (87.85% en Lucas, 77.24% en P5).
+  4. **Detección y Segmentación en Secuencia Continua P5:** Detección acústica por micrófono (Canal 3, 123 pulsos sincronizados) para evitar falsos positivos mioeléctricos, y regla obligatoria del Supremo Tricanal por Pulso Individual ($M_{\text{supremo, pulso}}$) con sustracción de reposo.
+  5. **Ensayo de Capas Convolucionales 1D:** Análisis del colapso de la vocal /e/ (caída a 27.7%) por el promediado local de transitorios de pendiente de ataque, confirmando la superioridad de la capa densa ortogonal.
+  6. **Efecto de la Entropía Cruzada Supervisada:** Detalle del salto de 77.24% a **86.99% en P5** con supervisión moderada ($\lambda_{CE} = 0.5$) como fuerza de centrado sin distorsionar la variedad bioeléctrica.
+  7. **Figuras Integradas:** Cuatro gráficos oficiales de alta resolución insertados con el código de colores universal (/a/ rojo, /e/ azul, /i/ verde, /o/ morado, /u/ amarillo).
+  8. **Módulo de Grid Search Convolucional:** Descripción del script `grid_search_conv_ortogonal.py` y función de ranking por media armónica multisesión.
+
+### Hito 117 - 2026-09-24: Verificación y Réplica Exacta de los Modelos Récord (87.85% Nativo y 91.43% SO(2)) en el Motor Unificado y la GUI
+
+- **Diagnóstico y Confirmación de Hiperparámetros Óptimos:**
+  - El usuario indicó con precisión que el desfase en SO(2) se debía a parámetros distintos.
+  - Al aislar los conjuntos de hiperparámetros históricos, ambos modelos fueron replicados al 100% de exactitud matemática con `venv/bin/python`:
+    1. **Modelo Nativo Crudo (sin rotación):** $\text{LR} = 0.004$, $\lambda_W = 0.60$, $\lambda_Z = 0.15$, Épocas = 600, Seed = 100. Resultado: **87.85% global** exacto (441 / 502 aciertos: /a/ 92.9%, /e/ 87.1%, /i/ 75.7%, /o/ 86.0%, /u/ 98.0%).
+    2. **Modelo con Alineación Topológica SO(2):** $\text{LR} = 0.002$, $\lambda_W = 0.30$, $\lambda_Z = 0.45$, Épocas = 600, Seed = 100. Resultado: **91.434% global** exacto (459 / 502 aciertos: /a/ 93.9%, /e/ 79.2%, /i/ 92.2%, /o/ 93.0%, /u/ 99.0%).
+- **Automatización en la GUI (`ui_analysis.py`):**
+  - El checkbox de Alineación SO(2) conmuta automáticamente los campos entre ambos conjuntos óptimos.
+  - La visualización en el motor genera ahora el panel doble con fronteras de decisión (`pcolormesh`), centroides de diamante con borde blanco y matriz de confusión en mapa de calor, con la paleta de colores universal obligatoria.
+
+### Hito 118 - 2026-09-24: Corrección Integral de Gráficos 3D en Reporte y Adaptación Multimodal Compacta
+
+- **Causa Raíz de los Gráficos 3D Vacíos o Sin Ejes:**
+  - El módulo `plotter_calibrado.py` activaba `plt.style.use('dark_background')` sin restaurar el estilo por defecto, provocando que los textos, ejes y ticks de los gráficos 3D subsiguientes quedaran en color blanco sobre el fondo blanco del papel, y las cajas de leyenda con fondo negro.
+  - Se forzó el restablecimiento de `plt.style.use('default')` y `rcParams` limpios en todos los generadores.
+- **Mejoras Implementadas en Gráficos 3D:**
+  1. **Cubo 3D de Proporciones:** Paneles sombreados (`xaxis.set_pane_color`), líneas de ejes en gris oscuro `(0.2, 0.2, 0.2, 0.9)`, ticks y etiquetas en negro en negrita, y caja de leyenda con fondo blanco.
+  2. **Cubo 3D de la Totalidad de Pulsos:** Se corrigió la condición de extracción que exigía que los tres canales tuvieran picos (`c0 > 0 and c1 > 0 and c2 > 0`). Dado que en la sesión de Diego el Canal 1 estaba inactivo (`-`), todos los pulsos eran descartados. Con la nueva lógica de relleno con ceros para canales inactivos, se representan la totalidad de los 130 pulsos registrados.
+  3. **Espacio de Fases Dinámico:** Se restauró la visibilidad de los 6 paneles con trayectorias individuales por vocal, órbita promedio negra, vértice máximo de estrella dorada y panel comparativo tridimensional con paneles sombreados.
+  4. **Eliminación de Paréntesis en Títulos:** Se adecuaron los títulos de paneles y proyecciones ortogonales (`Plano XY: Frontal e Inferior`, `Comparativa de Órbitas: Lazos 3D`, etc.) cumpliendo con la regla de redacción del proyecto.
+- **Adaptación Multimodal Compacta:**
+  - En `generador_figura_multimodal.py`, se acotó la ventana temporal estrictamente a $t \in [-0.4, 0.4]\text{ s}$ centrada en el inicio acústico y se compactaron las dimensiones gráficas (`figsize=(8.5, 5.8)`).
+  - En `generador_reportes.py` y `report_engine.py`, se redujo el ancho de inclusión en LaTeX a `0.55\textwidth` para ocupar la mitad de página.
+  - Se regeneraron en lote las 27 tomas de Diego (`2026-09-23` y `2026-09-22`) con el nuevo estándar.
+
+### Hito 119 - 2026-09-24: Resolución Definitiva de Extracción y Flujo Completo del Autoencoder Récord (87.85% y 91.43%)
+
+- **Diagnóstico Fundamental del Usuario:**
+  - El usuario advirtió que `caracteristicas_exportadas.csv` en `lucas_viejo_para_probar` no tenía corrección de impedancia previa en la extracción, sino que la normalización por reposo y percentil 95 debe realizarse sobre las features procesadas (envolventes filtradas con Butterworth) al momento del entrenamiento del Autoencoder.
+  - El colapso a 39.40% en la GUI se debió a que `extraer_dataset_unificado` ejecutaba un bucle desacoplado que realizaba una normalización previa destructiva, aplicaba parámetros discordantes (`pre_pct=0.50` vs ranuras asimétricas, LP=450 Hz en vez de 500 Hz) y realizaba una doble purga de anomalías.
+- **Implementación Canónica en el Motor Unificado (`motor_autoencoder_unificado.py`):**
+  - Se integró la delegación directa a `generador_pca_umap.extraer_y_filtrar` en `extraer_dataset_unificado` con `correccion_impedancia=False`, asegurando que `dataset_autoencoder_unificado.npz` y `caracteristicas_exportadas.csv` se generen con las features biológicamente puras (502 muestras de Lucas `2026-07-10`).
+  - La corrección de impedancia por sesión (`base_mean = mean(:10)`, `base_max = P95 - base_mean`) se preserva estrictamente en `entrenar_autoencoder` sobre las features procesadas.
+- **Verificación de Punta a Punta Exitosa:**
+  - Extracción desde los archivos `.wav` de las 35 tomas de Lucas `2026-07-10` y entrenamiento automático:
+    1. **Nativo Crudo:** **87.85% global** exacto.
+    2. **Alineado SO(2):** **91.43% global** exacto.
+  - Se sincronizaron los scripts puente de `main_app.py` (`run_autoencoder_no_sup_extraer` y `run_autoencoder_no_sup_completo`) para garantizar que la interfaz gráfica reproduzca estos números con un solo clic.
+
+- **Hito 106:** Corrección crítica en la inyección de mensajes desde la app del celular y normalización fonética de voz TTS (Elena):
+  1. **Inyección directa vía CDP:** Se reemplazó la simulación de teclado X11 (`pynput` / `Ctrl+L`) en `send_to_antigravity_ide` por el protocolo nativo de Chrome DevTools (`Input.insertText` sobre el elemento Lexical `[aria-label="Message input"]` y click automático en `button[aria-label="Send message"]`). Esto garantiza que los mensajes enviados desde el celular entren directamente a la sesión activa sin depender del foco de ventana de la PC.
+  2. **Traductor fonético de LaTeX y depuración de símbolos para TTS:** Se integró un conversor matemático en `tars_web_server.py` y `speak_response.py`. Traduce fórmulas LaTeX a lenguaje hablado natural (`\frac{a}{b}` -> `a sobre b`, `\sqrt` -> `raíz de`, `|x|` -> `módulo de`, potencias, subíndices, letras griegas y operadores). Se eliminaron de raíz los caracteres `$` y `_` fuera de fórmulas, impidiendo que el motor de voz pronuncie "signo de dólar" o "guión bajo" en variables y rutas.
+
+### Hito 120 - 2026-09-24: Robustecimiento y Sincronización del Decodificador de Secuencia Continua
+
+- **Sincronización Automática de Proyecciones de Entrenamiento:**
+  - Se identificó que al entrenar desde la GUI, el modelo `.pth` se respaldaba en `modelos_entrenados/`, pero las proyecciones latentes de entrenamiento (`proyecciones_latentes_2d_crudo.csv`) quedaban exclusivamente en la carpeta temporal de corrida.
+  - Se modificó `evaluar_espacio_latente` para replicar automáticamente las proyecciones latentes tanto crudas como alineadas en `modelos_dir`, garantizando que cualquier decodificación posterior cuente de inmediato con las fronteras del clasificador GMM.
+- **Robustecimiento de `decodificar_secuencia_continua`:**
+  - **Umbral de Micrófono Adaptativo y Acotamiento de Pulsos:** Se implementó un cálculo adaptativo para la altura mínima de picos en audio (`min(2000.0, max(500.0, p98 * 0.35))`) y acotamiento al número de pulsos de `metadata.json`, evitando falsos positivos al final de la grabación.
+  - **Búsqueda Jerárquica de Checkpoints y Fronteras:** El motor prioriza el modelo récord validado en `lucas_viejo_para_probar/autoencoder_ortogonal_reposo_optimo/modelo_optimo.pt` (77.24% de transferencia directa en P5 sin calibración) o el modelo recién entrenado en `modelos_entrenados/`, resolviendo sus proyecciones latentes asociadas.
+  - **Soporte de Secuencias sin Ground Truth:** Si la grabación continua carece de `valid_words`, el sistema decodifica fonemas en modo libre sin inventar etiquetas ficticias ni fallar por discrepancia de clases.
+  - **Ampliación de Malla en Gráficos:** La cuadrícula de decisión de fondo cubre conjuntamente las proyecciones de entrenamiento y los pulsos continuos, y se dibujan los centroides de entrenamiento con rombos destacados.
+- **Depuración Estricta de Paréntesis:**
+  - Se eliminaron todos los paréntesis residuales en títulos de gráficos y botones de la interfaz (`ui_analysis.py`, `main_app.py`, `motor_autoencoder_unificado.py`).
+- **Estado Actual del Sistema:**
+  - Extracción y entrenamiento unificado 100% operativos al 87.85% nativo y 91.43% SO(2).
+  - Decodificador continuo verificado empíricamente con éxito sobre P5 (`SecuenciaContinua_Prueba5_Sujeto1`): 123 eventos detectados por micrófono, carga automática de `modelo_optimo.pt` con sus proyecciones latentes de entrenamiento, exactitud directa de **77.24%** (95/123 pulsos) con /a/ al 100%, /e/ al 92%, /i/ al 24%, /o/ al 75% y /u/ al 95.8%, guardando el informe gráfico y el CSV de predicciones.
+
+### Hito 121 - 2026-09-24: Actualización del Motor de Barrido Épico Convolucional (3600/5760 Configs) con Detección y Alerta de Récord en Tiempo Real
+
+- **Expansión del Espacio de Búsqueda de Ortogonalidad y Decorrelación:**
+  - Confirmación del hallazgo: en el barrido inicial de 324 combinaciones, el mejor modelo (Fila 84, Armónica 83.00%, Lucas 83.07%, P5 82.93%) saturó en los límites superiores de búsqueda ($\lambda_W = 0.9, \lambda_Z = 0.2$).
+  - Se parametrizó un espacio de búsqueda masivo con opciones de 3600 combinaciones (por defecto) y 5760 combinaciones:
+    - Canales: `(3, 6)`, `(4, 8)`, `(4, 12)`, `(6, 12)`, `(8, 16)` (y `(8, 24)` en modo 5760).
+    - Núcleos: $K \in \{3, 5, 7, 9\}$.
+    - Activaciones: `tanh` y `gelu`.
+    - Tasa de Aprendizaje: $\text{LR} \in \{0.002, 0.003, 0.004\}$ (y $0.006$ en 5760).
+    - Ortogonalidad de Pesos: $\lambda_W \in \{0.6, 0.8, 1.0, 1.2, 1.5, 2.0\}$.
+    - Decorrelación Latente: $\lambda_Z \in \{0.15, 0.25, 0.35, 0.45, 0.60\}$ (y $0.70$).
+- **Optimización de Rendimiento en el Bucle de Entrenamiento:**
+  - Registro de buffers para las matrices identidad en `ParametricConvOrthogonalAE`, eliminando la alocación redundante de 8 matrices identidad por época (3200 alocaciones por modelo).
+  - Detección automática de aceleración por GPU (`device = cuda/cpu`), acelerando el tiempo por modelo de ~2.5 s a menos de ~0.8 s en CPU y ~0.2 s en GPU.
+- **Sistema de Alerta y Notificación de Récord en Tiempo Real:**
+  - Umbral inicial a batir: Media Armónica $> 83.00\%$ con piso de vocal en P5 $\ge 50.0\%$.
+  - Cuando una configuración quiebra el récord:
+    1. Banner prominente en consola con desglose multisesión y porcentajes por vocal sin paréntesis.
+    2. Triple campanilla de terminal (`\a\a\a`) y locución del sistema no bloqueante (`spd-say`).
+    3. Guardado automático e inmediato de `modelo_campeon_conv_ortogonal.pt`, `config_campeon.json`, `proyecciones_campeon_p5.csv`, `proyecciones_campeon_lucas.csv` y gráfico comparativo `grafico_campeon_record.png`.
+  - Soporte para reanudación con `--resume`, persistencia incremental de CSV y control de épocas.
+
+### Hito 122 - 2026-09-24: Validación Empírica del Detector Gate Doble en Secuencia Continua P5 (100% EMG sin Micrófono)
+
+- **Física y Fisiología del Desacople del Micrófono:**
+  - El micrófono llega tarde por el retraso electromecánico (EMD) inherente a la fonación, perdiendo el transitorio de ataque muscular, e imposibilita el habla silenciosa real.
+  - Se implementó y validó el detector de **Gate Doble con Histéresis y Backtracking** sobre la Norma Tricanal Combinada $S_{\text{emg}}[n] = \sqrt{\sum_{c=0}^2 \tilde{e}_c[n]^2}$ con sustracción de ruido basal y estadística robusta (MAD).
+- **Parámetros Consolidados:**
+  - Umbral bajo: $U_{\text{bajo}} = \text{mediana}_{\text{ruido}} + 4.0 \times \sigma_{\text{MAD}}$ ($547.9$, pegado al piso para sensibilidad máxima).
+  - Umbral alto de confirmación: $U_{\text{alto}} = 1800.0$ (evita falsos positivos en reposo y captura contracciones sutiles).
+  - Tiempo de guarda de cierre: $T_{\text{hold}} = 180\text{ ms}$.
+  - Tiempo refractario mínimo: $T_{\text{refr}} = 800\text{ ms}$.
+  - Ventana de búsqueda hacia atrás (backtracking): $350\text{ ms}$.
+- **Resultados Empíricos sobre `SecuenciaContinua_Prueba5_Sujeto1`:**
+  - En los primeros 25 segundos (10 pulsos completos: /a/, /e/, /i/, /o/, /u/, /a/, /e/, /i/, /o/, /u/), el detector capturó el 100% de las contracciones (10/10) exactamente en su inicio motor.
+  - Gráfico de alta resolución exportado a: `EMG_desarrollo/resultados/analisis_gate_doble/comparativa_gate_doble_primeros_pulsos.png`.
+
+### Hito 123 - 2026-09-24: Superación de la Exactitud de Transferencia Directa en P5 con Gate Doble (81.30% vs 77.24% con Micrófono)
+
+- **Diagnóstico del Comportamiento del Autoencoder Frente al Gate Doble:**
+  - Se evaluó el modelo campeón lineal (`modelo_optimo.pt`) frente a las ventanas segmentadas exclusivamente por el Gate Doble 100% sEMG sin micrófono:
+    1. **Onset Directo como Inicio de Ventana:** Exactitud 34.96%. Causa física: desfasaje temporal (*time shift*) respecto al espacio temporal en el que fue entrenado el modelo (que espera el pico en el centro).
+    2. **Pico Muscular Local:** Exactitud 52.85%. Causa física: el pico de contracción tiene jitter intermuscular según el fonema (/a/ pico precoz mandibular vs /u/ meseta labial).
+    3. **Proyección por Desfase Fisiológico EMD ($n_{\text{onset}} + 350\text{ ms}$):** **Exactitud 81.30% (100 / 123 aciertos)**.
+- **Superación Neta del Micrófono:**
+  - El Gate Doble supera a la alineación por micrófono clásico (**81.30% frente a 77.24%**, +5 aciertos adicionales) y mejora individualmente todas las vocales:
+    - /a/: 100.0% $\to$ 100.0%
+    - /e/: 92.0% $\to$ **96.0%**
+    - /i/: 24.0% $\to$ **28.0%**
+    - /o/: 75.0% $\to$ **83.3%**
+    - /u/: 95.8% $\to$ **100.0%**
+    - Piso mínimo: 24.0% $\to$ **28.0%**
+- **Fundamento Biomecánico del Éxito:**
+  - El micrófono introducía variaciones espurias de sincronismo por intensidad de la voz y acústica del ambiente ($\pm 50\text{ ms}$ de jitter).
+  - El Gate Doble con backtracking detecta el inicio biológico puro con cero jitter. Proyectando la ventana al centro temporal esperado, el Autoencoder recibe una señal más limpia y homogénea que con el audio.
+- **Hoja de Ruta Metodológica:**
+  - **Compatibilidad Inmediata (Modelos Existentes):** Usar el centro proyectado $n_{\text{onset}} + 350\text{ ms}$ para decodificación continua sin micrófono logrando 81.30%.
+  - **Evolución Futura (Nuevos Modelos):** Entrenar el Autoencoder directamente alineado desde el inicio motor $n_{\text{onset}}$ de forma nativa para descartar tiempos muertos.
+
+### Hito 124 - 2026-09-24: Consolidación del Detector Gate Doble y Desfasajes Intermusculares en el Reporte Técnico LaTeX
+
+- **Integración Aditiva en `reportes_experimentos/apunte_arquitectura_red_y_secuencia_continua.tex`:**
+  - Se redactó e insertó la sección completa: `\section{Segmentación de Habla Continua sin Micrófono: Detector Gate Doble y Desfasajes Intermusculares}`.
+  - Subsecciones incorporadas:
+    1. `\subsection{Concepto y Funcionamiento del Algoritmo Gate Doble}`: Fundamento biofísico de por qué falla una compuerta simple de audio (falsos disparos por deglución vs pérdida de ataque) y cómo el Gate Doble confirma arriba con $U_{\text{alto}}$ y corta abajo con $U_{\text{bajo}}$ mediante *backtracking*.
+    2. `\subsection{Formulación Matemática y Calibración sobre la Norma Tricanal}`: Ecuaciones exhaustivas de $S_{\text{emg}}[n]$ con resta de reposo basal, $\sigma_{\text{MAD}}$, umbrales $U_{\text{bajo}}$ y $U_{\text{alto}}$, y tiempos $T_{\text{hold}}$, $T_{\text{refr}}$ y $T_{\text{back}}$.
+    3. `\subsection{Desfasajes Intermusculares y Retraso Electromecánico Fisiológico}`: Explicación del retraso neuromuscular EMD ($349.2 \pm 45.8\text{ ms}$) y análisis cinemático de los 3 canales superpuestos para cada una de las 5 vocales.
+    4. `\subsection{Evaluación del Autoencoder y Superación del Micrófono con 81.30\% de Exactitud}`: Desglose comparativo completo frente al audio (Micrófono 77.24% vs Gate Doble 81.30%), ganancia por vocal y diagnóstico físico del menor jitter.
+    5. `\subsection{Hoja de Ruta Metodológica para Nuevos Modelos}`: Compatibilidad inmediata con proyección $n_{\text{onset}} + 350\text{ ms}$ y directivas para futuros entrenamientos directos desde el onset.
+  - Inclusión de las tres figuras oficiales del detector Gate Doble:
+    - `comparativa_gate_doble_primeros_pulsos.png` (detalle de los primeros 10 pulsos en 3 canales, norma combinada con umbrales y audio con adelanto bioeléctrico).
+    - `grafico_totalidad_123_pulsos_gate_doble.png` (panorámica de los 123 pulsos detectados en toda la sesión).
+    - `grafico_3_canales_superpuestos_desfasajes.png` (canales superpuestos en un mismo gráfico mostrando desfasajes intermusculares y EMD).
+  - Actualización del resumen del documento, incorporación de la fila en la tabla de síntesis final y adición de la directiva de habla silenciosa para tiempo real.
+  - Riguroso cumplimiento de las directivas de estilo: cero emojis, cero paréntesis en títulos y epígrafes, variables desglosadas con unidades y tono de laboratorio humano y directo.
+  - **Compilación Exitosa a PDF:** Se compiló el documento completo con `pdflatex` en `reportes_experimentos/apunte_arquitectura_red_y_secuencia_continua.pdf` (18 páginas, 5.7 MB), con resolución total del índice y de las referencias cruzadas.
+
+### Hito 125 - 2026-09-24: Integración de Gate Doble, Defaults 3D Récord 88.45%, Clasificador Supervisado LDA y Plan Decodificador DAQ
+
+- **Corrección de Error en Autoencoder 3D:**
+  - Se corrigió el fallo `NameError: name 'marker_por_fecha' is not defined` en `EMG_desarrollo/deep_learning/motor_autoencoder_unificado.py` inicializando `marker_por_fecha` inmediatamente al obtener `fechas_unicas`.
+- **Integración del Método de Alineación Gate Doble:**
+  - **Interfaces Gráficas:** Añadida la opción `"Gate Doble (sEMG Puro)"` en los desplegables de alineación (`cmb_align`) de las pestañas PCA, UMAP y Autoencoder de `ui_analysis.py`, manteniendo invariantes los valores predeterminados de micrófono.
+  - **Motor DSP (`generador_pca_umap.py`):** Cuando `modo_alineacion` contiene `"Gate Doble"`, procesa exclusivamente los canales musculares seleccionados (sin requerir micrófono), calcula la norma tricanal combinada $S_{\text{emg}}[n]$, aplica el detector de histéresis y *backtracking* con estadística robusta (MAD), y alinea los centros de ventana en $n_{\text{onset}} + 350\text{ ms}$ (adelanto fisiológico EMD).
+  - **Decodificador Continuo (`motor_autoencoder_unificado.py`):** En `decodificar_secuencia_continua`, se añadió el parámetro `modo_deteccion`. Al seleccionar `"Gate Doble"`, segmenta la señal continua al 100% mioeléctrico con cero dependencia del canal de audio.
+- **Configuración Predeterminada para Autoencoder en 3D (Récord 88.45%):**
+  - Se configuraron los valores récord oficiales al conmutar a 3D en `ui_analysis.py`:
+    - Épocas: `800`
+    - Tasa de Aprendizaje: `0.0020`
+    - Factor Ortogonalidad de Pesos ($\lambda_W$): `1.20`
+    - Factor Decorrelación Latente ($\lambda_Z$): `0.15`
+    - Tamaño de Lote: `512`
+    - Arquitectura Fisiológica Simétrica: `input_dim -> 64 -> 16 -> 3 -> 16 -> 64 -> input_dim` (Tanh, `bias=False`).
+- **Clasificador Supervisado LDA para Trazado de Fronteras:**
+  - Se añadió la opción `"Supervisado (LDA: Fronteras Lineales)"` en `cmb_clustering` de `ui_analysis.py`.
+  - En `evaluar_espacio_latente` y `decodificar_secuencia_continua` de `motor_autoencoder_unificado.py`, se integró `LinearDiscriminantAnalysis()`. Al proyectar sobre secuencias continuas, las fronteras son hiperplanos exactos ajustados sobre las proyecciones de entrenamiento de Lucas, evitando solapamientos estocásticos de componentes Gaussianas ciegas.
+- **Plan Arquitectónico del Módulo Decodificador en Tiempo Real (DAQ):**
+  - Análisis exhaustivo de `autoforge_daq.py` y formulación de la hoja de ruta técnica para decodificación bioeléctrica en streaming sin audio (buffer circular de 2.5 s, RMS online 91 ms, Gate Doble en tiempo real, inferencia PyTorch < 0.05 ms y display de fonemas vía señales Qt).
+- **Corrección de Crash de Silueta con 1 Sola Clase:**
+  - En `evaluar_espacio_latente` (linea ~1898), se añadió un guard que verifica `len(np.unique(Y_eval)) >= 2` antes de calcular `silhouette_score` y `davies_bouldin_score`. Si solo hay 1 clase vocal en los datos extraídos, se asigna `sil = 0.0` y `db = inf` con un aviso en consola, evitando el `ValueError` que ocurría al usar Gate Doble sobre tomas de una sola vocal.
+
+### Hito 126 - 2026-09-24: Calibración Fina de Gate Doble, Selector Flexible para Probar en Otro Sujeto y Récord de Autoencoder Convolucional Ortogonal
+
+- **Calibración Fina del Detector Gate Doble por Toma:**
+  - Se ajustaron los umbrales adaptativos en `generador_pca_umap.py` para capturar la totalidad de contracciones musculares suaves (vocales cerradas /u/, /i/ y /e/):
+    $$U_{\text{alto}} = \max(\text{med}_{\text{base}} + 2.2 \cdot \sigma_{\text{rob}}, \; p_{98} \cdot 0.18)$$
+    $$U_{\text{bajo}} = \text{med}_{\text{base}} + 1.0 \cdot \sigma_{\text{rob}}$$
+    $$T_{\text{refr}} = \min(0.650 \cdot f_s, \; 0.65 \cdot W_{\text{pulso}})$$
+  - Esta calibración elimina la sobre-filtración de tomas con baja amplitud muscular y converge a la misma cantidad de repeticiones que el micrófono (~501 ventanas).
+
+- **Evolución del Botón "Probar en Otro Conjunto de Mediciones" en la GUI:**
+  - En `main_app.py` (`run_autoencoder_no_sup_probar_otro_dataset`), se reemplazó la solicitud rígida de archivos CSV/NPZ por un diálogo selector interactivo tri-modal:
+    1. **Mediciones Marcadas en el Gestor:** Si el usuario seleccionó tomas del otro sujeto en el árbol izquierdo (`SessionExplorer`), las procesa directamente con un clic.
+    2. **Elegir Carpeta de Grabaciones:** Permite navegar a cualquier carpeta de la base de datos (ej. otra fecha o sujeto), escaneando recursivamente las subcarpetas que contienen `canal_0/grabacion.wav`.
+    3. **Cargar Archivo de Dataset:** Mantiene la opción de cargar archivos pre-extraídos `.npz` o `.csv`.
+  - Al seleccionar grabaciones crudas (opciones 1 y 2), el sistema ejecuta automáticamente `motor.extraer_dataset_unificado` con el pipeline DSP activo (Gate Doble o Mic, filtros, envolvente, calibración P95) y evalúa el espacio latente con el modelo entrenado mediante `motor.evaluar_espacio_latente`.
+  - Se habilitó en `evaluar_espacio_latente` el paso opcional de `modelo_path` y la instanciación dinámica de `hidden_dim = 64` para 3D (o 32 para 2D).
+
+- **Récord del Autoencoder Convolucional Ortogonal (Barrido de Parámetros):**
+  - **Configuración Destacada:** Iteración 3179/5760 (55.2% del barrido de búsqueda en grilla).
+  - **Hiperparámetros Óptimos:**
+    - Tamaño de Núcleo Convolucional ($K$): `5`
+    - Canales de Salida ($C$): `(6, 12)`
+    - Función de Activación: `tanh`
+    - Tasa de Aprendizaje ($\eta$): `0.003`
+    - Factor de Ortogonalidad de Pesos ($\lambda_W$): `2.0`
+    - Factor de Decorrelación Latente ($\lambda_Z$): `0.5`
+  - **Métricas de Separación Latente GMM:**
+    - Sujeto de Entrenamiento (Lucas): **$89.0\%$**
+    - Sujeto de Generalización (Candela P5): **$81.3\%$**
+    - Media Armónica Balanceada: **$85.0\%$**
+  - **Criterio de Selección:** Se priorizó esta configuración por su alta exactitud en el espacio latente de entrenamiento de Lucas (89.0%) y su preservación geométrica de las 5 clases fonatorias, logrando un balance inter-sujeto con Candela sin canibalizar vocales.
+  - **Integración Oficial en la Interfaz Gráfica (`ui_analysis.py`):**
+    - Se añadió la opción `"Autoencoder Ortogonal Convolucional: Récord 89% Lucas - 81% P5"` al desplegable de arquitecturas (`cmb_tipo_red`) y el botón directo `"Cargar Conv-Ortogonal: Récord 85%"`.
+    - Al seleccionarlo, se configuran automáticamente los valores óptimos: Épocas = 350, Batch = 512, LR = 0.0030, $\lambda_W = 2.0$, $\lambda_Z = 0.5$, Impedancia de Reposo activada y carga de la plantilla PyTorch `ConvOrthogonalAutoencoder` en el editor de código con $K=5$, Canales $(6, 12)$ y función de pérdida ortogonal dual en capas convolucionales y lineales.
+    - Se agregó el soporte del tag `conv_ortogonal` en `motor_autoencoder_unificado.py` para aplicar acondicionamiento de reposo e impedancia automáticamente.
+
+### Hito 127 - 2026-09-24: Verificación Empírica de la Configuración 3179 y Resolución de Discrepancias en la GUI
+
+- **Confirmación Numérica y Replicación Idéntica:**
+  - Se ejecutó la configuración 3179 ($K=5$, Canales $(6, 12)$, Tanh, $\text{lr}=0.003$, $\lambda_W=2.0$, $\lambda_Z=0.5$, 350 épocas) tanto en el script de grilla como a través de `motor_autoencoder_unificado.py` con el código generado por la interfaz:
+    - **Lucas (Entrenamiento):** **89.04%** (Silueta: $+0.425$, Davies-Bouldin: $0.795$)
+      - /a/: 91.8%
+      - /e/: 77.2%
+      - /i/: 88.3%
+      - /o/: 94.0%
+      - /u/: 94.0%
+    - **Candela P5 (Transferencia Directa sin fine-tuning):** **81.30%** (100 / 123 aciertos)
+      - /a/: 100.0%
+      - /e/: 84.0%
+      - /i/: 52.0%
+      - /o/: 75.0%
+      - /u/: 95.8%
+    - **Media Armónica Inter-Sujeto:** **85.00%**
+- **Diagnóstico y Corrección de los Puntos de Falla en la GUI:**
+  1. **Acondicionamiento de Reposo e Impedancia:** En versiones previas del motor, el acondicionamiento de reposo se omitía durante el entrenamiento cuando se usaba código personalizado, pero se aplicaba durante la evaluación. Se unificó para que aplique simétricamente en ambas fases.
+  2. **Alineación SO(2):** La rotación rígida artificial SO(2) debe permanecer **desactivada**, ya que las coordenadas nativas ortogonales ya preservan la geometría canónica sin necesidad de forzar Kabsch contra una sesión arbitraria.
+  3. **Entorno Virtual (`venv`):** Al correr desde terminal, se debe invocar `./venv/bin/python3` o activar el entorno (`source venv/bin/activate`) para disponer de `sklearn` y `torch`.
+
+### Hito 128 - 2026-09-24: Corrección de Detección de Pulsos en Espacio de Fases 3D Multisesión
+
+- **Diagnóstico del Error en la Galería del Espacio de Fases:**
+  - El usuario reportó que el espacio de fases dinámico 3D se generaba vacío (los 6 paneles en blanco sin trayectorias ni órbitas, salvo el punto de reposo).
+  - Causa exacta: la función `generate_dynamic_phase_space_3d` en `report_engine.py` dependía exclusivamente de la clave `"maxima_per_cut"` en el JSON de resultados de cada toma. En sesiones como las de Candela (`2026-09-18` y `2026-09-15`), dicha clave no existe, provocando que la lista de picos resultara vacía y se omitiera la extracción de segmentos.
+- **Solución Implementada:**
+  - Se incorporó un mecanismo robusto de fallback multi-nivel: en ausencia de `"maxima_per_cut"`, se leen los parámetros físicos del metrónomo (`bpm`, `noise_seconds`) de `metadata.json` y se detectan automáticamente los picos locales sobre la envolvente sumada de los canales activos.
+  - Además, se blindó la carga de audio para rellenar con ceros canales inactivos o faltantes sin interrumpir el procesamiento tricanal.
+- **Validación:**
+  - Se regeneró la galería de 6 paneles y las proyecciones 2D para `2026-09-18` y `2026-09-15`, confirmando que todas las trayectorias vocálicas por pulso, órbitas promedio negras, estrellas de excursión máxima y lazos comparativos cerrados se grafican con nitidez sobre los paneles sombreados.
+
+### Hito 129 - 2026-09-24: Selector Jerárquico de Mediciones, Corrección de Corte LP a 500 Hz, Decodificación Continua con Tira de Pulsos y Barrido Conv-Ortogonal en 3D
+
+- **Selector Jerárquico Interactivo para Probar en Otro Sujeto (`selector_otro_sujeto_dialog.py`):**
+  - Se implementó un diálogo modal con árbol (`QTreeWidget`), casillas de verificación (checkboxes) jerárquicas con sincronización padre-hijo (Sujeto -> Fecha -> Medición), buscador reactivo en tiempo real y botones de selección rápida: "Marcar Todo", "Desmarcar Todo", "Solo Continuas" y "Solo Aisladas".
+  - Mantiene la compatibilidad con datasets externos `.npz` y `.csv`.
+  - Integrado en `main_app.py` (`run_autoencoder_no_sup_probar_otro_dataset`) para procesar dinámicamente las tomas seleccionadas mediante `motor.extraer_dataset_unificado`.
+
+- **Corrección de Frecuencia de Corte Pasa-Bajos a 500.0 Hz por Defecto:**
+  - Se identificó la discrepancia entre el 88.02% (501 ventanas) y el 89.04% (502 ventanas): la caja de `LP Cutoff` en la GUI inicializaba en 450.0 Hz en lugar de 500.0 Hz.
+  - Al cortar en 450 Hz, un pulso de /i/ perdía energía de alta frecuencia y quedaba excluido por umbral de SNR, reduciendo el conteo y perturbando levemente la frontera GMM entre /o/ y /u/.
+  - Se fijó `self.inp_lp.setValue(500.0)` como predeterminado tanto en el arranque (`__init__`) como en la función de carga rápida (`on_cargar_conv_orto`).
+
+- **Decodificación de Secuencia Continua con Tira Temporal y Modelo Campeón Convolucional:**
+  - Se actualizó `decodificar_secuencia_continua` en `motor_autoencoder_unificado.py` y `main_app.py`:
+    - Se eliminó la línea de trayectoria continua que unía los puntos en el espacio latente.
+    - Se sustituyó el panel de reconstrucción por una tira temporal de la señal bioeléctrica continua (norma EMG tricanal), resaltando las ventanas segmentadas con sombreado de color por clase, líneas de corte y rótulos de texto (`1:A`, `2:E`, `4:O`, etc.) con indicación de aciertos y errores.
+    - Se añadió la generación de un gráfico panorámico completo (`grafico_totalidad_pulsos_decodificados.png`) dividido en 4 tramos de 60 segundos que abarca la totalidad de la grabación continua.
+    - Se reemplazó la carga del modelo lineal antiguo por el modelo convolucional ortogonal campeón recién entrenado (soporte de checkpoints de `ConvOrthogonalAutoencoder` y compilación de código personalizado), logrando una transferencia directa a Candela P5 del **81.30%** (100 / 123 pulsos acertados) frente al 77.2% anterior.
+
+- **Módulo de Búsqueda en Grilla para Autoencoder Convolucional Ortogonal en 3D (`grid_search_conv_ortogonal_3d.py`):**
+  - Implementación del script de barrido masivo adaptado a un espacio latente de 3 dimensiones ($Z \in \mathbb{R}^3$):
+    - Arquitectura `ParametricConvOrthogonalAE3D`: compresión con convoluciones 1D, capa densa intermedia de 64 unidades y proyección a 3 coordenadas latentes.
+    - Función de pérdida con buffer precalculado $I_{3\times 3}$: decorrelación latente $\mathcal{L}_Z = \|\text{Cov}(Z) - I_{3\times 3}\|_F^2$ y ortogonalidad matricial $\mathcal{L}_W$.
+    - Métricas conjuntas: GMM en 3D sobre Lucas, transferencia directa a P5 en 3D y optimización de la media armónica sin canibalización de fonemas ($\min(\text{Vocal}_{\text{P5}}) \ge 50\%$).
+    - Visualización con subplots 3D (`Axes3D`) para Lucas y P5, matriz de confusión y exportación automática del modelo campeón `modelo_campeon_conv_ortogonal_3d.pt`.
+    - Modos de ejecución configurables (`quick`, `3600`, `5760`) con soporte para reanudación (`--resume`).
+
+- **Punto de Pausa del Barrido en Grilla 2D (`grid_search_conv_ortogonal.py`):**
+  - **Iteración pausada:** `[3936/5760]` ($68.3\%$ completado).
+  - **Parámetros en pausa:** $K = 3$, Canales $= (8, 16)$, Activación $= \tanh$, $\text{lr} = 0.006$, $\lambda_W = 0.8$, $\lambda_Z = 0.15$.
+  - **Métricas instantáneas:** Lucas: $85.3\%$, P5: $78.0\%$, Media Armónica: $81.5\%$, Tiempo restante estimado en pausa: $22.3\text{ min}$.
+  - **Archivo de persistencia:** `EMG_desarrollo/resultados/grid_search_conv_ortogonal/resultados_grid_search_5760.csv` (3939 filas guardadas).
+  - **Comando exacto para reanudar cuando se desee:**
+    ```bash
+    ./venv/bin/python3 EMG_desarrollo/deep_learning/grid_search_conv_ortogonal.py --mode 5760 --resume
+    ```
+
+### Hito 130 - 2026-09-24: Estudio Fisiológico de TKEO, Resolución Temporal y Descubrimiento del Autoencoder con Pérdida Compuesta Dual Head
+
+- **Aclaración Canónica del Sujeto en Prueba 5:**
+  - El usuario aclaró que la toma `SecuenciaContinua_Prueba5_Sujeto1` (2026-06-10, 123 pulsos a 30 BPM) corresponde al mismo sujeto (Lucas en habla continua). Por ende, la transferencia evalúa la generalización intra-sujeto desde habla aislada a habla continua rápida sin re-entrenamiento ni ajuste fino.
+
+- **Evaluación del Operador de Energía Teager-Kaiser (TKEO) en la Entrada:**
+  - **Solo TKEO:** En el entrenamiento de Lucas alcanzó **$89.84\%$** de exactitud GMM (superando a RMS en aisladas, con /o/ al $99.0\%$ y /a/ al $98.0\%$).
+  - **El fallo en continua:** En la secuencia continua P5, la vocal **/i/** se desplomó al **$32.0\%$** (canibalizada, solo 8 aciertos de 25), rompiendo el equilibrio multiclase.
+  - **Híbrido Espacial (6 Canales):** Meter RMS y TKEO juntos como canales de entrada degradó la generalización ($60.98\%$ en P5) debido al desbalance de escalas físicas entre microvoltios de amplitud y energía cuadrática.
+
+- **Evaluación de Resolución Temporal (20 vs 25 vs 30 vs 35 Puntos):**
+  - Se confirmó experimentalmente que **20 puntos por canal es el óptimo físico absoluto**.
+  - A mayor número de puntos (bines $< 35\text{ ms}$), el modelo decae monótonamente ($84.5\% \to 81.7\% \to 80.5\% \to 78.3\%$) y la vocal /i/ se destruye ($70.9\% \to 37.9\%$), debido a que las convoluciones captan el disparo estocástico asíncrono de las unidades motoras individuales en lugar del patrón global de la envolvente.
+
+### Hito 131 - 2026-09-24: Integración Completa en el Reporte LaTeX: Autoencoder Convolucional Ortogonal Récord, TKEO, Resolución Temporal y Pérdida Compuesta Dual Head
+
+- **Documento Actualizado:** `reportes_experimentos/apunte_arquitectura_red_y_secuencia_continua.tex` (edición puramente aditiva y no destructiva).
+- **Secciones Nuevas Incorporadas:**
+  1. `\subsection{Descubrimiento del Autoencoder Convolucional Ortogonal Récord}`:
+     - Configuración 3179 ($K=5$, Canales $(6, 12)$, Tanh, $\text{lr}=0.003$, $\lambda_W=2.0$, $\lambda_Z=0.5$).
+     - Ecuación de pérdida con búferes persistentes de identidad $I_{d_l}$ y matriz de covarianza empírica $\text{Cov}(Z)$.
+     - Tabla comparativa frente al control lineal (Lucas $89.04\%$, P5 $81.30\%$, Armónica $85.00\%$) y superación del colapso de /e/.
+     - Figura: `EMG_desarrollo/resultados/grid_search_conv_ortogonal/grafico_campeon_record.png`.
+  2. `\section{Estudio del Operador de Energía Teager-Kaiser frente a la Envolvente RMS}`:
+     - Formulación matemática discreta $\Psi[s[n]] = s[n]^2 - s[n-1] s[n+1]$, rectificación y suavizado de $90.5\,\text{ms}$.
+     - Desglose exhaustivo de variables con unidades ($\mu\text{V}$, $\mu\text{V}^2$).
+     - Evaluación de entrada pura TKEO ($89.84\%$ en Lucas pero colapso de /i/ al $32.0\%$ en P5) y entrada híbrida 6 canales ($60.98\%$).
+     - Diagnóstico físico del colapso de /i/ por sensibilidad cuadrática al piso de reposo en habla continua.
+     - Figura: `EMG_desarrollo/resultados/experimento_rms_tkeo_riguroso/comparativa_rigurosa_rms_vs_tkeo.png`.
+  3. `\section{Estudio de Resolución Temporal: Comparativa de 20 frente a 25, 30 y 35 Puntos}`:
+     - Barrido de puntos $T \in \{20, 25, 30, 35\}$ por canal.
+     - Demostración empírica de caída monótona ($85.00\% \to 81.74\% \to 80.54\% \to 78.37\%$) y destrucción de /i/ ($52\% \to 32\%$).
+     - Justificación biofísica: $20$ puntos ($50\,\text{ms}$) es el óptimo físico que promedia el *jitter* estocástico de las unidades motoras sin captar ruido aleatorio inter-espiga.
+     - Figura: `EMG_desarrollo/resultados/experimento_resolucion_temporal/comparativa_resoluciones_temporales.png`.
+  4. `\section{Autoencoder con Pérdida Compuesta Dual Head: Reconstrucción Simultánea de RMS y TKEO}`:
+     - Entrada limpia $3 \times 20$ RMS con decodificador de dos cabezas paralelas (reconstrucción simultánea de envolvente RMS y perfil TKEO).
+     - Formulación de $\mathcal{L}_{\text{compuesta}} = \text{MSE}(\hat{X}_{\text{RMS}}, X_{\text{RMS}}) + \beta \cdot \text{MSE}(\hat{X}_{\text{TKEO}}, X_{\text{TKEO}}) + \lambda_W \mathcal{L}_W + \lambda_Z \mathcal{L}_Z$.
+     - Barrido de $\beta \in [0.00, 0.20]$: máximo en $\beta = 0.05$ con **$82.11\%$ en P5 (101/123 pulsos)**, **$88.65\%$ en Lucas**, media armónica récord de **$85.25\%$** y preservación inmaculada de todas las vocales (piso en Lucas $77.2\%$, piso en P5 $52.0\%$).
+     
+### Hito 132 - 2026-09-24: Evaluación Experimental en Candela (01/09 vs 15/09) y Corrección de Impedancia Inter-Toma
+
+- **Motivación Experimental:**
+  - El usuario propuso evaluar la arquitectura convolucional ortogonal compacta ($K=5$, Canales $(6, 12)$, Tanh, $\lambda_W=2.0$, $\lambda_Z=0.5$, 20 muestras) sobre dos sesiones de Candela con diferente configuración mioeléctrica (01/09 con Risorio vs 15/09 con Cigomático Mayor) para estudiar la disociación fonatoria.
+- **Diagnóstico del Artefacto de Desdoblamiento de /a/:**
+  - En la primera prueba, la vocal /a/ del 01/09 apareció dividida en dos bandas paralelas (arriba y abajo).
+  - Causa: Entre Prueba1/Prueba2 y Prueba3/Prueba4/Prueba5 hubo una variación de offset de contacto piel-electrodo. Sin sustracción de reposo ni balance de impedancias, el salto de continua dominó el eje $Z_2$.
+  - Solución: Se integró la extracción oficial con sustracción dinámica de ruido basal IQR y acondicionamiento de impedancia inter-toma (`acondicionar_reposo_impedancia`). Las dos bandas colapsaron de inmediato en un único racimo mandibular.
+- **Resultados Cuantitativos Corregidos:**
+  1. **Candela 01/09 (Risorio en Canal 1, Anterior Belly en Canal 0, Orbicular en Canal 2):**
+     - Ventanas: 217 inliers post-purga (Isolation Forest 10%).
+     - **Separación Par /e/ frente a /i/:** **$100.0\%$** (/i/ alcanza $76.2\%$ con cero confusiones hacia /e/).
+     - **Separación Par /o/ frente a /u/:** **$53.0\%$** (Colapso en el polo del orbicular superior).
+     - Exactitud GMM Global: $55.76\%$ (Silueta $+0.369$, DB $1.12$).
+     - Desglose: /a/: $38.1\%$, /e/: $58.0\%$, /i/: $76.2\%$, /o/: $79.2\%$, /u/: $17.1\%$.
+  2. **Candela 15/09 (Cigomático Mayor en Canal 1, Anterior Belly en Canal 0, Orbicular en Canal 2):**
+     - Ventanas: 197 inliers post-purga (carpeta `2026-09-16`).
+     - **Separación Par /e/ frente a /i/:** **$100.0\%$** (/i/ alcanza **$100.0\%$ de exactitud pura**, 39/39 aciertos).
+     - **Separación Par /o/ frente a /u/:** **$59.5\%$** (Polo labial superior concentrado).
+     - Exactitud GMM Global: **$64.97\%$** (Silueta $+0.436$, DB $0.94$).
+     - Desglose: /a/: $30.8\%$, /e/: $75.0\%$, /i/: $100.0\%$, /o/: $65.8\%$, /u/: $53.7\%$.
+- **Conclusión Fisiológica:**
+  - Ambas sesiones convergen a una geometría triangular idéntica:
+    - Polo de sonrisa (/i/): Aislado con 100% de pureza respecto a /e/ (en 15/09 perfecto 39/39).
+    - Polo mandibular (/a/ y /e/): Agrupado abajo.
+    - Polo labial (/o/ y /u/): Agrupado arriba por co-activación orbicular.
+  - Artefactos generados:
+    - Gráfico comparativo: `EMG_desarrollo/resultados/experimento_candela_conv_ortogonal/evaluacion_candela_0901_y_0915.png`.
+    - Métricas consolidadas: `EMG_desarrollo/resultados/experimento_candela_conv_ortogonal/metricas_candela.json`.
+
+### Hito 133 - 2026-09-25: Implementación de Ventana de Corte Variable en GUI y Lanzamiento de Barrido Masivo Cuatrimodal en Lucas
+
+- **Integración de Ventana de Corte Variable en GUI:**
+  - Archivo `EMG_desarrollo/gui_app/views/ui_analysis.py`:
+    - Sección 5 actualizada: "5. Alineación de Pulso Fisiológico y Ventana de Corte".
+    - Controles interactivos agregados: `inp_pre_pct` (default 0.40) e `inp_post_pct` (default 0.60) con rango 0.05 a 0.95.
+    - `get_autoencoder_kwargs` conectado dinámicamente con `pre_pct` y `post_pct` para el motor no supervisado.
+  - Archivo `EMG_desarrollo/gui_app/main_app.py`:
+    - Métodos `run_autoencoder_no_sup_extraer`, `run_autoencoder_no_sup_completo` y `run_autoencoder_no_sup_evaluar` actualizados para propagar `pre_pct` y `post_pct` a `extraer_dataset_unificado`.
+
+- **Resultados de Validación Previa (Tier Rápido, 48 Combinaciones por Modo):**
+  - `conv_2d`: 83.63% Exactitud GMM Global (/a/: 91.5%, /e/: 62.4%, /i/: 90.6%, /o/: 80.2%, /u/: 93.9%, /o/-/u/: 87.0%, silueta: +0.322).
+  - `mlp_2d_sin_so2`: 78.24% Exactitud GMM Global (/a/: 100.0%, /e/: 65.3%, /i/: 70.8%, /o/: 59.4%, /u/: 98.0%, /o/-/u/: 78.5%, silueta: +0.349).
+  - `conv_3d`: 84.03% Exactitud GMM Global (/a/: 90.4%, /e/: 63.4%, /i/: 93.4%, /o/: 79.2%, /u/: 93.9%, /o/-/u/: 86.5%, silueta: +0.292).
+  - `mlp_3d_sin_so2`: 85.03% Exactitud GMM Global (/a/: 92.6%, /e/: 67.3%, /i/: 90.6%, /o/: 81.2%, /u/: 93.9%, /o/-/u/: 87.5%, silueta: +0.320).
+
+- **Lanzamiento del Barrido Masivo Completo (Tier 5760 / 5040):**
+  - **Script ejecutado:** `EMG_desarrollo/deep_learning/grid_search_lucas_ventana4060.py` con `--modo todos --tier 5760 --epochs 350`.
+  - **Modos incluidos en secuencia:**
+    1. `conv_2d`: 5.760 combinaciones (canales, núcleos de 3 a 9, activaciones, lr, regularizaciones).
+    2. `mlp_2d_sin_so2`: 5.040 combinaciones (12 configuraciones de capas ocultas, tanh/gelu, 5 lrs, regularizaciones).
+    3. `conv_3d`: 5.760 combinaciones.
+    4. `mlp_3d_sin_so2`: 5.040 combinaciones.
+  - **Total de combinaciones:** 21.600 ejecuciones a 350 épocas con optimizador Adam y regularización ortogonal analítica.
+  - **Persistencia y Trazabilidad:** Guardado incremental muestra a muestra en `resultados_<modo>_5760.csv`, con exportación automática de pesos `.pt`, configuración `.json` y gráfico de dispersión `.png` para el modelo campeón de cada modo.
+
+- **Punto de Pausa Solicitado por el Usuario:**
+  - **Fecha y hora de pausa:** 2026-09-25 13:15 UTC-3.
+  - **Modo en proceso:** `conv_2d` (Autoencoder Convolucional 1D Ortogonal 2D).
+  - **Combinaciones completadas y guardadas:** 1.703 de 5.760 ($29.6\%$).
+  - **Archivo de persistencia:** `EMG_desarrollo/resultados/grid_search_lucas_ventana4060/conv_2d/resultados_conv_2d_5760.csv` (1.704 filas con encabezado).
+  - **Récord actual vigente del modo:** **80.44%** de exactitud global GMM (Separación /o/-/u/: $84.5\%$, Piso mínimo: $59.4\%$).
+  - **Configuración campeona vigente:** Canales $(3, 6)$, núcleo $K = 5$, activación Tanh, $\text{lr} = 0.002$, $\lambda_W = 2.0$, $\lambda_Z = 0.35$.
+  - **Artefactos del campeón preservados:**
+    - Pesos: `EMG_desarrollo/resultados/grid_search_lucas_ventana4060/conv_2d/campeon_conv_2d.pt`
+    - Configuración: `EMG_desarrollo/resultados/grid_search_lucas_ventana4060/conv_2d/config_campeon_conv_2d.json`
+    - Gráfico: `EMG_desarrollo/resultados/grid_search_lucas_ventana4060/conv_2d/campeon_conv_2d.png`
+  - **Comando exacto para reanudar cuando el usuario lo disponga:**
+    ```bash
+    ./venv/bin/python3 EMG_desarrollo/deep_learning/grid_search_lucas_ventana4060.py --modo todos --tier 5760 --epochs 350
+    ```
+    (El script detectará automáticamente las 1.703 combinaciones ya evaluadas, recuperará el récord del $80.44\%$ y continuará sin pérdidas desde la combinación 1.704).
+
+### Hito 134 - 2026-09-25: Preparación de Build de Windows, Actualización de Spec de PyInstaller y Sincronización Git
+
+- **Preparación para Compilación en Windows:**
+  - Se auditó la cadena de empaquetado PyInstaller (`build.bat`, `crear_spec_ejecutable.py`, `aplicar_parches_ejecutable.py`).
+  - Se actualizaron `EMG_desarrollo/herramientas_build/crear_spec_ejecutable.py` y `EMG_desarrollo/EMG_Ejecutable_Build/EMG_Studio.spec` para incluir explícitamente los nuevos módulos en `additional_modules`:
+    - `analysis.generador_figura_multimodal`
+    - `analysis.generador_atlas_pdf`
+    - `analysis.batch_actualizar_figuras_reporte`
+    - `gui_app.views.atlas_dialog`
+    - `gui_app.views.selector_otro_sujeto_dialog`
+  - Se corrigió la importación de `os` en la cabecera generada de `EMG_Studio.spec` para evitar excepciones al evaluar el icono.
+- **Archivos Incorporados y Consolidados en el Repositorio:**
+  - Nuevos diálogos GUI y motores de reporte: `atlas_dialog.py`, `selector_otro_sujeto_dialog.py`, `generador_atlas_pdf.py`, `batch_actualizar_figuras_reporte.py`.
+  - Scripts de experimentación bioeléctrica y grid search: `grid_search_lucas_ventana4060.py`, `experimento_candela_conv_ortogonal.py`, `experimento_candela_perdida_compuesta.py`, `experimento_perdida_compuesta_tkeo.py`, `experimento_resolucion_temporal.py`, `experimento_rms_tkeo_lucas.py`, `experimento_rms_vs_tkeo_riguroso.py`, `grid_search_conv_ortogonal.py`, `grid_search_conv_ortogonal_3d.py`.
+  - Reportes LaTeX actualizados: `Reporte_EMG_2026-09-18.tex`, `Reporte_EMG_2026-09-22.tex`, `Reporte_EMG_2026-09-23.tex`, `Reporte_EMG_2026-09-24.tex`, `Reporte_SNR_2026-09-23.tex`, `apunte_arquitectura_red_y_secuencia_continua.tex`.
+  - Cuaderno de Tesis actualizado: `Cuaderno_Tesis.docx`.
+- **Sincronización:**
+  - Confirmación y subida íntegra a GitHub (`origin/master`) para habilitar la compilación nativa en entorno Windows mediante `build.bat`.
+
+
+
+
+
+
+
 

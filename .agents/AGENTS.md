@@ -51,17 +51,24 @@ Aplica de forma estricta e inexcepcional a **TODO tipo de título, encabezado o 
 1. **Prohibición Absoluta de Paréntesis en Títulos:** Está terminantemente prohibido colocar paréntesis `(...)` en cualquier título o al final del mismo (ej. NO escribir `Título (Aclaración)`, `CANAL AD620 (TOPOLOGÍA ORIGINAL)`, `ETAPA DE ALIMENTACIÓN (±9V)`). El título debe contener exclusivamente el nombre directo y conciso del elemento o bloque. Si se requiere separar conceptos o clarificar, emplear dos puntos (`:`) o guión (`-`) sin paréntesis.
 2. **Prohibición de Palabras de Relleno:** No utilizar adjetivos o términos de relleno artificiales (ej. NO agregar "Fisiológico", "Avanzado", "Estratégico", etc., salvo que el usuario lo solicite explícitamente). Los títulos deben ser sobrios, profesionales y directos.
 
-## Lenguaje Natural y Prohibición de Términos Rebuscados o Calcos del Inglés
-Está **terminantemente prohibido** emplear términos rebuscados, jerga forzada o calcos artificiales del inglés que resulten antinaturales en español técnico directo (ej. **NO** utilizar palabras como *'retrabajo'*, *'pipeline'*, *'pipelines'*, *'trade-off'*, *'framework'*, *'throughput'*, etc.).
-- En su lugar, utilizar vocabulario técnico en español natural, directo, sobrio y comprensible:
-  - En lugar de *'retrabajo'* / *'rework'*: utilizar **'modificación'**, **'mejora'**, **'adaptación en placa'**, **'ajuste del circuito'**.
-  - En lugar de *'pipeline'*: utilizar **'secuencia de procesamiento'**, **'cadena de procesamiento'**, **'flujo de trabajo'**, **'acondicionamiento'**.
-  - En lugar de expresiones pomposas o rebuscadas: redacción simple, llana y directa ("cortito y al pie").
+## Lenguaje Humano, Natural y Prohibición de Tono Académico Rebuscado o de IA
+Está **terminantemente prohibido** redactar textos, epígrafes, explicaciones o notas con tono de paper académico pomposo, tecnicismos inflados o estilo artificial de Inteligencia Artificial (ej. NO usar "deformaciones afines anisotrópicas", "isometría rígida", "cuello de botella latente", "canibalización de fonemas", "variedad bioeléctrica", "atenuación de artefactos gravitatorios").
 
-## Lenguaje Sobrio y Prohibición de Adjetivos Redundantes
-Está prohibido utilizar adjetivos sobrecargados o términos técnicos redundantes para referirse a elementos estándar del sistema:
-- **Evitar:** "amplificador bioeléctrico diferencial", "sistema bioeléctrico", "plataforma biopotencial", "instrumentación de precisión", etc.
-- **Utilizar:** Términos directos, sobrios y naturales en español: *"amplificador"*, *"baterías"*, *"cables"*, *"electrodos"*, *"adquisición"*, *"medición"*.
+1. **Estilo Real del Usuario (Cuaderno de Laboratorio Simple y Directo):**
+   - Escribir en lenguaje humano, accesible y cotidiano, exactamente como un estudiante universitario explica sus pruebas a un compañero o en sus notas de laboratorio ("cortito y al pie").
+   - Usar explicaciones prácticas y visuales:
+     - En vez de *"deformaciones afines anisotrópicas por impedancia"*: decir *"el electrodo se movió un milímetro o cambió el contacto con la piel, así que los valores se estiran o cambian de escala entre un día y otro"*.
+     - En vez de *"canibalización dimensional de clases fonatorias"*: decir *"al forzar la separación de una vocal terminamos mezclando y arruinando las otras"*.
+     - En vez de *"atenuación de artefactos gravitatorios en el suelo de la boca"*: decir *"el electrodo abajo de la mandíbula se despega fácil por la gravedad y el sudor, en cambio en la mejilla (masetero) queda firme"*.
+   - Las conclusiones deben ser directas: *"con esto la O y la U siguen saliendo mezcladas"*, *"en 3D clasifica casi todo perfecto menos tal caso"*, *"el electrodo chico ayudó a que no se toquen los cables"*.
+
+2. **Cero Palabras de Relleno e Inteligencia Artificial:**
+   - Evitar conectores típicos de IA como "es fundamental destacar que", "resulta imperativo señalar", "desempeña un rol crucial". Ir directo al hecho concreto sin introducciones decorativas.
+   - Prohibido emplear palabras forzadas como 'retrabajo', 'pipeline', 'trade-off', 'framework', etc.
+
+3. **Lenguaje Sobrio para Elementos Físicos:**
+   - No usar adjetivos inflados ("amplificador bioeléctrico diferencial", "plataforma biopotencial").
+   - Utilizar nombres simples y directos: "amplificador", "baterías", "cables", "electrodos", "placa", "medición".
 
 ## Obligatoriedad de Normalización por el Supremo Tricanal por Pulso Individual
 Está **terminantemente prohibido** normalizar cada canal muscular de forma independiente dividiendo por su propio máximo ($x_c / \max(x_c)$) y está **terminantemente prohibido normalizar por el máximo global de la sesión** (`np.max(sesion)`).
@@ -273,3 +280,12 @@ La ganancia del amplificador de instrumentación AD620 en la placa de adquisici�
 
 ## Formato de Encabezados LaTeX (fancyhdr)
 En documentos técnicos con `fancyhdr`, configurar únicamente `\fancyhead[L]` y `\fancyhead[R]` sin texto largo en `\fancyhead[C]`, para evitar superposiciones tipográficas entre el nombre de la institución y el título del documento.
+
+## Código de Colores Oficial Universal para Vocales
+En todos los gráficos, diagramas, interfaces y visualizaciones del proyecto, el código de colores estricto y universal para las 5 vocales es:
+- **/a/**: Rojo (`#E63946`)
+- **/e/**: Azul (`#1F77B4`)
+- **/i/**: Verde (`#2CA02C`)
+- **/o/**: Morado (`#9D4EDD`)
+- **/u/**: Amarillo (`#E7A61A`)
+Está terminantemente prohibido alterar esta asignación cromática en cualquier módulo de visualización o reporte.

@@ -3,195 +3,82 @@ import glob
 import subprocess
 import json
 import argparse
+import re
+import sys
 from datetime import datetime
 
-LATEX_TEMPLATE = r"""\documentclass[11pt,a4paper]{article}
-\usepackage[utf8]{inputenc}
-\usepackage[spanish]{babel}
-\usepackage{graphicx}
-\usepackage{geometry}
-\usepackage{caption}
-\usepackage{subcaption}
-\usepackage{hyperref}
-\geometry{top=2cm, bottom=2cm, left=2.5cm, right=2.5cm}
+# Asegurar path para módulos de EMG_desarrollo
+repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys_path_target = os.path.join(repo_root, "EMG_desarrollo")
+if sys_path_target not in sys.path:
+    sys.path.insert(0, sys_path_target)
 
-\title{Reporte de Experimento EMG}
-\author{Ñandú - Sistema de Adquisición EMG}
-\date{<<FECHA>>}
+def escape_latex(text):
+    """Escapa caracteres reservados de LaTeX."""
+    if not text:
+        return ""
+    text = str(text)
+    text = text.replace('\\', '')
+    text = text.replace('_', r'\_')
+    text = text.replace('&', r'\&')
+    text = text.replace('%', r'\%')
+    text = text.replace('#', r'\#')
+    text = text.replace('$', r'\$')
+    return text
 
-\begin{document}
+def parse_prueba_sort_key(folder_name):
+    """Devuelve una clave de ordenamiento natural para nombres como A_Pruebat1, A_Prueba2, etc."""
+    nums = re.findall(r'\d+', folder_name)
+    val = int(nums[0]) if nums else 999
+    return (val, folder_name)
 
-\maketitle
-
-\section{Configuración y Hardware}
-\textbf{Baterías:} <<BATERIAS>> \\
-\textbf{Tierra:} <<TIERRA>>
-
-\section{Armado y Electrodos}
-<<ELECTRODOS_NOTA>>
-
-\section{Ubicación de los Músculos}
-\begin{itemize}
-    \item \textbf{Canal 0:} <<CANAL_0>>
-    \item \textbf{Canal 1:} <<CANAL_1>>
-    \item \textbf{Canal 2:} <<CANAL_2>>
-\end{itemize}
-<<MUSCULOS_NOTA>>
-
-\section{Protocolo y Secuencia}
-<<SECUENCIA>>
-
-\section{Notas y Observaciones}
-<<NOTAS>>
-
-\newpage
-\section{Análisis de Señales}
-
-\subsection{Patrones Musculares (Comparativa de Vocales)}
-\begin{figure}[h!]
-    \centering
-    \begin{subfigure}{0.32\textwidth}
-        \includegraphics[width=\textwidth]{<<IMG_PATRON_A>>}
-        \caption{Vocal A}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}{0.32\textwidth}
-        \includegraphics[width=\textwidth]{<<IMG_PATRON_E>>}
-        \caption{Vocal E}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}{0.32\textwidth}
-        \includegraphics[width=\textwidth]{<<IMG_PATRON_I>>}
-        \caption{Vocal I}
-    \end{subfigure}
-    
-    \vspace{0.5cm}
-    \begin{subfigure}{0.32\textwidth}
-        \includegraphics[width=\textwidth]{<<IMG_PATRON_O>>}
-        \caption{Vocal O}
-    \end{subfigure}
-    \hspace{1cm}
-    \begin{subfigure}{0.32\textwidth}
-        \includegraphics[width=\textwidth]{<<IMG_PATRON_U>>}
-        \caption{Vocal U}
-    \end{subfigure}
-    \caption{Comparativa de los patrones musculares promedio suavizados para las 5 vocales.}
-\end{figure}
-
-\newpage
-\subsection{Vocal A}
-\begin{figure}[h!]
-    \centering
-    \includegraphics[width=0.8\textwidth]{<<IMG_PAPER_A>>}
-    \caption{Registro combinado de la vocal A. Señal con ruido restado, alineada y normalizada.}
-\end{figure}
-\begin{figure}[h!]
-    \centering
-    \includegraphics[width=0.8\textwidth]{<<IMG_CALIB_A>>}
-    \caption{Señales calibradas de la vocal A (filtro notch, pasabanda 20-500 Hz, envolvente RMS 75 ms).}
-\end{figure}
-
-\newpage
-\subsection{Vocales E e I}
-\begin{figure}[h!]
-    \centering
-    \begin{subfigure}{0.48\textwidth}
-        \includegraphics[width=\textwidth]{<<IMG_PAPER_E>>}
-        \caption{Registro E}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}{0.48\textwidth}
-        \includegraphics[width=\textwidth]{<<IMG_PAPER_I>>}
-        \caption{Registro I}
-    \end{subfigure}
-    \caption{Registro combinado de las vocales E e I.}
-\end{figure}
-\begin{figure}[h!]
-    \centering
-    \begin{subfigure}{0.48\textwidth}
-        \includegraphics[width=\textwidth]{<<IMG_CALIB_E>>}
-        \caption{Calibrado E}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}{0.48\textwidth}
-        \includegraphics[width=\textwidth]{<<IMG_CALIB_I>>}
-        \caption{Calibrado I}
-    \end{subfigure}
-    \caption{Señales calibradas comparativas de las vocales E e I.}
-\end{figure}
-
-\newpage
-\subsection{Vocales O y U}
-\begin{figure}[h!]
-    \centering
-    \begin{subfigure}{0.48\textwidth}
-        \includegraphics[width=\textwidth]{<<IMG_PAPER_O>>}
-        \caption{Registro O}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}{0.48\textwidth}
-        \includegraphics[width=\textwidth]{<<IMG_PAPER_U>>}
-        \caption{Registro U}
-    \end{subfigure}
-    \caption{Registro combinado de las vocales O y U.}
-\end{figure}
-\begin{figure}[h!]
-    \centering
-    \begin{subfigure}{0.48\textwidth}
-        \includegraphics[width=\textwidth]{<<IMG_CALIB_O>>}
-        \caption{Calibrado O}
-    \end{subfigure}
-    \hfill
-    \begin{subfigure}{0.48\textwidth}
-        \includegraphics[width=\textwidth]{<<IMG_CALIB_U>>}
-        \caption{Calibrado U}
-    \end{subfigure}
-    \caption{Señales calibradas comparativas de las vocales O y U.}
-\end{figure}
-
-\end{document}
-"""
-
-def find_image(base_dir, vocal, img_type):
-    """Busca dinámicamente la ruta de la imagen según la vocal y el tipo de gráfico."""
-    # Buscar la subcarpeta de la vocal (soporta minúsculas 'a_*' y mayúsculas 'A_*')
-    folders = glob.glob(os.path.join(base_dir, f"{vocal.lower()}_*"))
-    if not folders:
-        folders = glob.glob(os.path.join(base_dir, f"{vocal.upper()}_*"))
-    if not folders:
-        return "example-image" # Fallback de LaTeX si no existe
-    
-    vocal_folder = folders[0]
-    
+def find_image_in_folder(vocal_folder, img_type):
+    """Busca dinámicamente la ruta de la imagen en la carpeta según el tipo de gráfico."""
+    if not os.path.isdir(vocal_folder):
+        return None
+        
+    imgs = []
     if img_type == "patron":
-        pattern = "patron_muscular_grabacion.png"
+        imgs = glob.glob(os.path.join(vocal_folder, "patron_muscular_grabacion.png"))
     elif img_type == "paper":
-        pattern = "plot_paper_combined.png"
+        imgs = glob.glob(os.path.join(vocal_folder, "plot_paper_combined.png"))
+        if not imgs:
+            try:
+                from deep_learning.dataset_tools.plot_3_musculos_standalone import generar_plot_3_musculos
+                gen_p = generar_plot_3_musculos(vocal_folder, mostrar=False)
+                if gen_p and os.path.exists(gen_p):
+                    imgs = [gen_p]
+            except Exception as err:
+                print(f"[Aviso] No se pudo autogenerar plot 3 músculos para {vocal_folder}: {err}")
     elif img_type == "calib":
-        pattern = "plot_calibrado_*.png"
-    
-    img_search = os.path.join(vocal_folder, pattern)
-    imgs = glob.glob(img_search)
-    
-    # Auto-generación de la figura multimodal paper si no existe
-    if not imgs and img_type == "paper":
-        try:
-            repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            sys_path_target = os.path.join(repo_root, "EMG_desarrollo")
-            if sys_path_target not in sys.path:
-                sys.path.insert(0, sys_path_target)
-            from analysis.generador_figura_multimodal import generar_figura_paper_multimodal
-            print(f"[Reporte Lab] Generando figura multimodal paper para {os.path.basename(vocal_folder)}...")
-            gen_path = generar_figura_paper_multimodal(vocal_folder)
-            if os.path.exists(gen_path):
-                imgs = [gen_path]
-        except Exception as err:
-            print(f"[Aviso] No se pudo autogenerar figura paper para {vocal_folder}: {err}")
-    
-    if imgs:
-        # Reemplazar barras invertidas por normales para LaTeX
-        return imgs[0].replace('\\', '/')
-    return "example-image"
+        imgs = glob.glob(os.path.join(vocal_folder, "plot_calibrado_*.png"))
+        if not imgs:
+            try:
+                from analysis.plotter_calibrado import plotear_medicion_secuencial
+                fecha = os.path.basename(os.path.dirname(vocal_folder))
+                toma = os.path.basename(vocal_folder)
+                cfg_calib = {
+                    'notch': True, 'bandpass': True, 'tipo_env': 'rms',
+                    'start_time': None, 'end_time': None, 'tema_oscuro': False, 'graficar_fft': False
+                }
+                plotear_medicion_secuencial(f"{fecha}/{toma}", cfg_calib, mostrar_plot=False)
+                imgs = glob.glob(os.path.join(vocal_folder, "plot_calibrado_*.png"))
+            except Exception as err:
+                print(f"[Aviso] No se pudo autogenerar plot calibrado para {vocal_folder}: {err}")
+    elif img_type == "multimodal":
+        imgs = glob.glob(os.path.join(vocal_folder, "plot_espectrograma_multimodal.png"))
+        if not imgs:
+            try:
+                from analysis.generador_figura_multimodal import generar_figura_paper_multimodal
+                gen_p = generar_figura_paper_multimodal(vocal_folder)
+                if gen_p and os.path.exists(gen_p):
+                    imgs = [gen_p]
+            except Exception as err:
+                print(f"[Aviso] No se pudo autogenerar figura multimodal para {vocal_folder}: {err}")
+                
+    if imgs and os.path.exists(imgs[0]):
+        return os.path.abspath(imgs[0]).replace('\\', '/')
+    return None
 
 def generar_reporte(config_input):
     config = {}
@@ -204,7 +91,6 @@ def generar_reporte(config_input):
         base_dir = config.get("directorio_base", f"../EMG_desarrollo/base_de_datos_electrodos/{fecha}")
     else:
         # Se ingresó una fecha o una ruta directa a una sesión
-        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         if os.path.isdir(config_input_str):
             base_dir = config_input_str
             fecha = os.path.basename(base_dir)
@@ -215,7 +101,7 @@ def generar_reporte(config_input):
         # Extraer metadatos automáticos desde la primera toma encontrada
         canales = {"0": "Canal 0", "1": "Canal 1", "2": "Canal 2"}
         sujeto = "Sujeto"
-        for d in os.listdir(base_dir) if os.path.isdir(base_dir) else []:
+        for d in sorted(os.listdir(base_dir)) if os.path.isdir(base_dir) else []:
             m_file = os.path.join(base_dir, d, "canal_0", "metadata.json")
             if os.path.exists(m_file):
                 try:
@@ -235,38 +121,167 @@ def generar_reporte(config_input):
             "fecha": fecha,
             "baterias": "Alimentación por baterías de 9V (bajo ruido)",
             "tierra": "Referencia GND en apófisis mastoides",
-            "electrodos_nota": f"Registro de superficie sEMG submáximal ({sujeto})",
+            "electrodos_nota": f"Registro de superficie sEMG submáximal ({escape_latex(sujeto)})",
             "canales": canales,
-            "musculos_nota": f"Canal 0: {canales['0']}, Canal 1: {canales['1']}, Canal 2: {canales['2']}",
+            "musculos_nota": f"Canal 0: {escape_latex(canales['0'])}, Canal 1: {escape_latex(canales['1'])}, Canal 2: {escape_latex(canales['2'])}",
             "secuencia": "Secuencia periódica de fonación vocálica guiada por metrónomo a 30 BPM",
             "notas": "Reporte técnico integral compilado de forma automatizada por el sistema."
         }
         
     base_dir = os.path.abspath(base_dir)
     
-    tex_content = LATEX_TEMPLATE
-    tex_content = tex_content.replace("<<FECHA>>", fecha)
-    tex_content = tex_content.replace("<<BATERIAS>>", config.get("baterias", "N/A"))
-    tex_content = tex_content.replace("<<TIERRA>>", config.get("tierra", "N/A"))
-    tex_content = tex_content.replace("<<ELECTRODOS_NOTA>>", config.get("electrodos_nota", ""))
-    
+    # 1. Cabecera y Configuración
+    doc = []
+    doc.append(r"\documentclass[11pt,a4paper]{article}")
+    doc.append(r"\usepackage[utf8]{inputenc}")
+    doc.append(r"\usepackage[spanish]{babel}")
+    doc.append(r"\usepackage{graphicx}")
+    doc.append(r"\usepackage{geometry}")
+    doc.append(r"\usepackage{caption}")
+    doc.append(r"\usepackage{subcaption}")
+    doc.append(r"\usepackage{hyperref}")
+    doc.append(r"\usepackage{float}")
+    doc.append(r"\geometry{top=2cm, bottom=2cm, left=2.5cm, right=2.5cm}")
+    doc.append("")
+    doc.append(r"\title{Reporte de Experimento EMG}")
+    doc.append(r"\author{Ñandú - Sistema de Adquisición EMG}")
+    doc.append(f"\\date{{{escape_latex(fecha)}}}")
+    doc.append("")
+    doc.append(r"\begin{document}")
+    doc.append("")
+    doc.append(r"\maketitle")
+    doc.append("")
+    doc.append(r"\section{Configuración y Hardware}")
+    doc.append(f"\\textbf{{Baterías:}} {escape_latex(config.get('baterias', 'N/A'))} \\\\")
+    doc.append(f"\\textbf{{Tierra:}} {escape_latex(config.get('tierra', 'N/A'))}")
+    doc.append("")
+    doc.append(r"\section{Armado y Electrodos}")
+    doc.append(escape_latex(config.get('electrodos_nota', '')))
+    doc.append("")
+    doc.append(r"\section{Ubicación de los Músculos}")
+    doc.append(r"\begin{itemize}")
     canales = config.get("canales", {})
-    tex_content = tex_content.replace("<<CANAL_0>>", canales.get("0", "N/A"))
-    tex_content = tex_content.replace("<<CANAL_1>>", canales.get("1", "N/A"))
-    tex_content = tex_content.replace("<<CANAL_2>>", canales.get("2", "N/A"))
-    tex_content = tex_content.replace("<<MUSCULOS_NOTA>>", config.get("musculos_nota", ""))
+    doc.append(f"    \\item \\textbf{{Canal 0:}} {escape_latex(canales.get('0', 'N/A'))}")
+    doc.append(f"    \\item \\textbf{{Canal 1:}} {escape_latex(canales.get('1', 'N/A'))}")
+    doc.append(f"    \\item \\textbf{{Canal 2:}} {escape_latex(canales.get('2', 'N/A'))}")
+    doc.append(r"\end{itemize}")
+    doc.append(escape_latex(config.get('musculos_nota', '')))
+    doc.append("")
+    doc.append(r"\section{Protocolo y Secuencia}")
+    doc.append(escape_latex(config.get('secuencia', '')))
+    doc.append("")
+    doc.append(r"\section{Notas y Observaciones}")
+    doc.append(escape_latex(config.get('notas', '')))
+    doc.append("")
     
-    tex_content = tex_content.replace("<<SECUENCIA>>", config.get("secuencia", ""))
-    tex_content = tex_content.replace("<<NOTAS>>", config.get("notas", ""))
+    # 2. Patrones Musculares Comparativa (si existen)
+    doc.append(r"\newpage")
+    doc.append(r"\section{Patrones Musculares Promedio}")
+    doc.append("Comparativa de los patrones musculares promedio suavizados para las 5 vocales fonatorias:")
+    doc.append("")
     
-    # Remplazar imágenes
-    vocales = ["a", "e", "i", "o", "u"]
+    patron_imgs = {}
+    for v in ["A", "E", "I", "O", "U"]:
+        v_folders = sorted(glob.glob(os.path.join(base_dir, f"{v}_*")) + glob.glob(os.path.join(base_dir, f"{v.lower()}_*")))
+        v_folders = [f for f in v_folders if os.path.isdir(f) and 'secuencia' not in os.path.basename(f).lower()]
+        if v_folders:
+            p_img = find_image_in_folder(v_folders[0], "patron")
+            if p_img:
+                patron_imgs[v] = p_img
+                
+    if patron_imgs:
+        doc.append(r"\begin{figure}[H]")
+        doc.append(r"\centering")
+        v_keys = [k for k in ["A", "E", "I", "O", "U"] if k in patron_imgs]
+        for idx, vk in enumerate(v_keys):
+            doc.append(r"\begin{subfigure}{0.31\textwidth}")
+            doc.append(f"    \\includegraphics[width=\\textwidth]{{{patron_imgs[vk]}}}")
+            doc.append(f"    \\caption{{Vocal {vk}}}")
+            doc.append(r"\end{subfigure}")
+            if idx == 2:
+                doc.append(r"\vspace{0.4cm}")
+            elif idx < len(v_keys) - 1:
+                doc.append(r"\hfill")
+        doc.append(r"\caption{Comparativa de patrones musculares promedio suavizados.}")
+        doc.append(r"\end{figure}")
+        doc.append("")
+
+    # 3. Recopilar carpetas por vocal
+    vocales = ["A", "E", "I", "O", "U"]
+    tomas_por_vocal = {}
     for v in vocales:
-        v_upper = v.upper()
-        tex_content = tex_content.replace(f"<<IMG_PATRON_{v_upper}>>", find_image(base_dir, v, "patron"))
-        tex_content = tex_content.replace(f"<<IMG_PAPER_{v_upper}>>", find_image(base_dir, v, "paper"))
-        tex_content = tex_content.replace(f"<<IMG_CALIB_{v_upper}>>", find_image(base_dir, v, "calib"))
+        v_folders = glob.glob(os.path.join(base_dir, f"{v}_*")) + glob.glob(os.path.join(base_dir, f"{v.lower()}_*"))
+        v_folders = [f for f in v_folders if os.path.isdir(f) and 'secuencia' not in os.path.basename(f).lower()]
+        v_folders.sort(key=parse_prueba_sort_key)
+        if v_folders:
+            tomas_por_vocal[v] = v_folders
+
+    # 4. Sección de Análisis de Señales por Vocal: Plot Calibrado y Plot 3 Músculos Paper
+    doc.append(r"\newpage")
+    doc.append(r"\section{Análisis de Señales por Vocal}")
+    doc.append("A continuación se presentan los registros de 3 músculos del paper y las señales calibradas agrupadas vocal por vocal:")
+    doc.append("")
+
+    for v in vocales:
+        if v not in tomas_por_vocal:
+            continue
+            
+        doc.append(f"\\subsection{{Vocal {v}}}")
+        doc.append(f"Se presentan a continuación las tomas registradas para la vocal \\textbf{{{v}}}, ordenadas cronológicamente por número de prueba:")
+        doc.append("")
         
+        for folder in tomas_por_vocal[v]:
+            toma_name = os.path.basename(folder)
+            doc.append(f"\\subsubsection{{Medición: {escape_latex(toma_name)}}}")
+            
+            paper_img = find_image_in_folder(folder, "paper")
+            calib_img = find_image_in_folder(folder, "calib")
+            
+            if paper_img:
+                doc.append(r"\begin{figure}[H]")
+                doc.append(r"\centering")
+                doc.append(f"\\includegraphics[width=0.88\\textwidth]{{{paper_img}}}")
+                doc.append(f"\\caption{{Registro de 3 músculos de la vocal {v} - {escape_latex(toma_name)}: línea temporal de ventanas y concatenación simétrica con ruido restado.}}")
+                doc.append(r"\end{figure}")
+                doc.append("")
+                
+            if calib_img:
+                doc.append(r"\begin{figure}[H]")
+                doc.append(r"\centering")
+                doc.append(f"\\includegraphics[width=0.88\\textwidth]{{{calib_img}}}")
+                doc.append(f"\\caption{{Señales calibradas de la vocal {v} - {escape_latex(toma_name)}: filtro Notch en 50 Hz, pasabanda y envolvente RMS.}}")
+                doc.append(r"\end{figure}")
+                doc.append("")
+
+    # 5. Sección Final: Análisis Multimodal de Señales y Espectrogramas (4 paneles)
+    doc.append(r"\newpage")
+    doc.append(r"\section{Análisis Multimodal de Señales y Espectrogramas}")
+    doc.append("A continuación se presentan los registros multimodales de 4 paneles para las mediciones de la sesión, agrupados vocal por vocal. Cada figura integra el espectrograma acústico STFT con pre-énfasis, el oscilograma del micrófono rectificado con su envolvente acústica, la activación EMG normalizada por el Supremo Tricanal del pulso y el espectrograma muscular RGB:")
+    doc.append("")
+
+    for v in vocales:
+        if v not in tomas_por_vocal:
+            continue
+            
+        doc.append(f"\\subsection{{Vocal {v}: Espectrogramas y Registro Multimodal}}")
+        doc.append("")
+        
+        for folder in tomas_por_vocal[v]:
+            toma_name = os.path.basename(folder)
+            spec_img = find_image_in_folder(folder, "multimodal")
+            
+            if spec_img:
+                doc.append(r"\begin{figure}[H]")
+                doc.append(r"\centering")
+                doc.append(f"\\includegraphics[width=0.55\\textwidth]{{{spec_img}}}")
+                doc.append(f"\\caption{{Análisis multimodal de 4 paneles para la vocal {v} - {escape_latex(toma_name)}: espectrograma acústico con pre-énfasis, señal de micrófono rectificada, activación muscular sEMG por Supremo Tricanal y espectrograma RGB.}}")
+                doc.append(r"\end{figure}")
+                doc.append("")
+
+    doc.append(r"\end{document}")
+    
+    tex_content = "\n".join(doc)
+    
     # Guardar archivo .tex
     report_name = f"Reporte_EMG_{fecha}"
     out_dir = os.path.abspath(os.path.dirname(__file__))
@@ -283,9 +298,12 @@ def generar_reporte(config_input):
         subprocess.run(["pdflatex", "-interaction=nonstopmode", f"{report_name}.tex"], cwd=out_dir, check=True, stdout=subprocess.DEVNULL)
         # Compilar dos veces para asegurar referencias
         subprocess.run(["pdflatex", "-interaction=nonstopmode", f"{report_name}.tex"], cwd=out_dir, check=True, stdout=subprocess.DEVNULL)
-        print(f"PDF generado exitosamente: {os.path.join(out_dir, report_name + '.pdf')}")
+        pdf_path = os.path.join(out_dir, report_name + '.pdf')
+        print(f"PDF generado exitosamente: {pdf_path}")
+        return pdf_path
     except subprocess.CalledProcessError as e:
         print("Error al compilar el PDF. Verifica si LaTeX está instalado correctamente y los paths a las imágenes no tienen caracteres raros.")
+        return None
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generador de reportes en LaTeX para experimentos EMG")

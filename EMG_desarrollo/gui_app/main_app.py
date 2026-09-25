@@ -649,6 +649,14 @@ class ReaperStyleHub(QMainWindow):
     dialog = ReportDialog(rutas, parent=self)
     dialog.exec()
 
+  def _open_atlas_dialog(self):
+    """
+    Abre el diálogo para configurar y generar el Atlas de Activación Muscular sEMG en PDF.
+    """
+    from views.atlas_dialog import AtlasDialog
+    dialog = AtlasDialog(base_db=self.base_dir, parent=self)
+    dialog.exec()
+
   def _confirmar_y_limpiar_analisis_results(self):
     """
     Abre un diálogo de confirmación y purga los archivos de análisis JSON
@@ -931,6 +939,8 @@ class ReaperStyleHub(QMainWindow):
     self.analysis_panel.tab_comparativo.btn_run_comparativo.clicked.connect(self.run_analisis_comparativo_nativo)
     self.analysis_panel.tab_comparativo.btn_run_sesion.clicked.connect(self.run_analisis_sesion_nativo)
     self.analysis_panel.tab_comparativo.btn_generar_reporte.clicked.connect(self._open_report_dialog)
+    if hasattr(self.analysis_panel.tab_comparativo, 'btn_generar_atlas'):
+      self.analysis_panel.tab_comparativo.btn_generar_atlas.clicked.connect(self._open_atlas_dialog)
     self.analysis_panel.tab_comparativo.btn_limpiar_analisis_results.clicked.connect(self._confirmar_y_limpiar_analisis_results)
     lyt_analysis.addWidget(self.analysis_panel, stretch=1)
 
@@ -1057,6 +1067,10 @@ class ReaperStyleHub(QMainWindow):
         ae_no_sup.btn_plotear.clicked.connect(self.run_autoencoder_no_sup_plotear)
       if hasattr(ae_no_sup, 'btn_flujo_completo'):
         ae_no_sup.btn_flujo_completo.clicked.connect(self.run_autoencoder_no_sup_completo)
+      if hasattr(ae_no_sup, 'btn_decodificar_continua'):
+        ae_no_sup.btn_decodificar_continua.clicked.connect(self.run_autoencoder_no_sup_decodificar_continua)
+      if hasattr(ae_no_sup, 'btn_probar_otro_dataset'):
+        ae_no_sup.btn_probar_otro_dataset.clicked.connect(self.run_autoencoder_no_sup_probar_otro_dataset)
       if hasattr(ae_no_sup, 'btn_lanzar_estudio'):
         ae_no_sup.btn_lanzar_estudio.clicked.connect(self._lanzar_estudio_autoencoder_no_sup)
       if hasattr(ae_no_sup, 'btn_abrir_resultados'):
@@ -2659,6 +2673,7 @@ gpt.ejecutar_procesamiento(
     target_length=kwargs.get('target_length', 100),
     notch_q=kwargs.get('notch_q', 2.0),
     use_manual_exclusions=kwargs.get('use_manual_exclusions', True),
+    correccion_impedancia=kwargs.get('correccion_impedancia', True),
     verbose=True
 )
 """
@@ -2954,12 +2969,17 @@ npz_path, n_pulsos = motor.extraer_dataset_unificado(
     carpeta_salida=carpeta_exp,
     tipo_envolvente=kwargs.get('tipo_envolvente', 'rms'),
     smooth_ms=kwargs.get('smooth_ms', 90),
-    alpha_ruido=kwargs.get('alpha_ruido', 1.0),
-    target_len=kwargs.get('target_len', 100),
+    alpha_ruido=kwargs.get('alpha_ruido', 0.50),
+    target_len=kwargs.get('target_len', 20),
     outlier_contamination=kwargs.get('outlier_contamination', 0.10),
     w_canales=kwargs.get('w_canales', [1.0, 1.0, 1.0]),
-    tipo_filtro_linea=kwargs.get('tipo_filtro_linea', 'adaptativo'),
+    tipo_filtro_linea=kwargs.get('tipo_filtro_linea', 'notch'),
     notch_q=kwargs.get('notch_q', 2.0),
+    highpass_cutoff_hz=kwargs.get('highpass_cutoff_hz', 20.0),
+    lowpass_cutoff_hz=kwargs.get('lowpass_cutoff_hz', 500.0),
+    pre_pct=kwargs.get('pre_pct', 0.40),
+    post_pct=kwargs.get('post_pct', 0.60),
+    snr_min=kwargs.get('snr_min', 0.50),
     canales_features=kwargs.get('canales_features', ['canal_0', 'canal_1', 'canal_2']),
     callback_log=print
 )
@@ -3051,6 +3071,7 @@ modelo, pth = motor.entrenar_autoencoder(
     carpeta_salida=target_folder,
     usar_custom_arch=kwargs.get('usar_custom_arch', False),
     codigo_custom_arch=kwargs.get('codigo_custom_arch', None),
+    seed=kwargs.get('seed', 100),
     callback_log=print
 )
 print(f"\\nEntrenamiento culminado con exito: {pth}")
@@ -3202,14 +3223,17 @@ npz_path, n_pulsos = motor.extraer_dataset_unificado(
     carpeta_salida=carpeta_exp,
     tipo_envolvente=tipo_env,
     smooth_ms=smooth_ms,
-    alpha_ruido=kwargs.get('alpha_ruido', 1.0),
-    target_len=kwargs.get('target_len', 100),
+    alpha_ruido=kwargs.get('alpha_ruido', 0.50),
+    target_len=kwargs.get('target_len', 20),
     highpass_cutoff_hz=kwargs.get('highpass_cutoff_hz', 20.0),
-    lowpass_cutoff_hz=kwargs.get('lowpass_cutoff_hz', 450.0),
+    lowpass_cutoff_hz=kwargs.get('lowpass_cutoff_hz', 500.0),
     notch_q=kwargs.get('notch_q', 2.0),
+    snr_min=kwargs.get('snr_min', 0.50),
     outlier_contamination=kwargs.get('outlier_contamination', 0.10),
+    pre_pct=kwargs.get('pre_pct', 0.40),
+    post_pct=kwargs.get('post_pct', 0.60),
     w_canales=kwargs.get('w_canales', [1.0, 1.0, 1.0]),
-    tipo_filtro_linea=kwargs.get('tipo_filtro_linea', 'adaptativo'),
+    tipo_filtro_linea=kwargs.get('tipo_filtro_linea', 'notch'),
     canales_features=kwargs.get('canales_features', ['canal_0', 'canal_1', 'canal_2']),
     callback_log=print
 )
@@ -3233,6 +3257,7 @@ modelo, pth = motor.entrenar_autoencoder(
     carpeta_salida=carpeta_exp,
     usar_custom_arch=kwargs.get('usar_custom_arch', False),
     codigo_custom_arch=kwargs.get('codigo_custom_arch', None),
+    seed=kwargs.get('seed', 100),
     callback_log=print
 )
 
@@ -3258,6 +3283,256 @@ if metricas and metricas.get('fig_path') and os.path.exists(metricas['fig_path']
     motor.abrir_imagen_en_visor(metricas['fig_path'])
 """
     self._launch_bridge_script("flujo_completo_autoencoder_no_sup", "FLUJO COMPLETO AUTOENCODER NO SUPERVISADO", kwargs, template)
+
+  def run_autoencoder_no_sup_decodificar_continua(self):
+    from PySide6.QtWidgets import QFileDialog
+    root_dir = get_project_root()
+    base_dir = os.path.join(root_dir, "base_de_datos_electrodos")
+    
+    initial_dir = base_dir
+    rutas = self.explorer_widget.get_selected_paths()
+    if rutas:
+      posible_fecha_dir = os.path.dirname(rutas[0])
+      if os.path.isdir(posible_fecha_dir):
+        initial_dir = posible_fecha_dir
+
+    carpeta = QFileDialog.getExistingDirectory(
+      self,
+      "Seleccione la carpeta de Secuencia Continua a Decodificar",
+      initial_dir
+    )
+    if not carpeta:
+      self.log_console.append("> Decodificación de secuencia continua cancelada por el usuario.\n")
+      return
+
+    kwargs = self.tab_dl_ml.tab_autoencoder_no_sup.get_kwargs()
+    carpeta_clean = carpeta.replace("\\", "/")
+    template = f'''
+import json
+import sys
+import os
+import glob
+
+project_root = r'{{ROOT_PROJECT_DIR}}'
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+with open(r'{{TEMP_JSON}}', 'r') as f:
+    kwargs = json.load(f)
+
+carpeta_secuencia = r"{carpeta_clean}"
+
+import deep_learning.motor_autoencoder_unificado as motor
+
+smooth_ms = kwargs.get('smooth_ms', 90)
+notch_q = kwargs.get('notch_q', 2.0)
+target_len = kwargs.get('target_len', 20)
+modo_deteccion = kwargs.get('modo_alineacion', 'Pico Volumen Micrófono')
+algoritmo_clustering = kwargs.get('algoritmo_clustering', 'gmm')
+latent_dim = kwargs.get('latent_dim', 2)
+
+# Buscar el modelo recién entrenado en la carpeta de procesamiento más reciente
+proc_dirs = sorted(glob.glob(os.path.join(project_root, "resultados", "resultados_autoencoder", "procesamiento_*")))
+target_folder = proc_dirs[-1] if proc_dirs else os.path.join(project_root, "resultados", "resultados_autoencoder")
+
+modelo_path = os.path.join(target_folder, f"autoencoder_envolvente_{latent_dim}d.pth")
+if not os.path.exists(modelo_path):
+    cands = [
+        os.path.join(project_root, "resultados", "grid_search_conv_ortogonal", "modelo_campeon_conv_ortogonal.pt"),
+        os.path.join(project_root, "resultados", "resultados_autoencoder", "modelos_entrenados", f"autoencoder_envolvente_{latent_dim}d.pth")
+    ]
+    modelo_path = next((c for c in cands if os.path.exists(c)), None)
+
+codigo_custom = kwargs.get('codigo_custom_arch', None)
+usar_custom = kwargs.get('usar_custom_arch', False)
+
+# Si hay código de arquitectura guardado en la carpeta del modelo, usarlo
+if target_folder:
+    arch_py = os.path.join(target_folder, "arquitectura_autoencoder.py")
+    if os.path.exists(arch_py) and not codigo_custom:
+        with open(arch_py, 'r', encoding='utf-8') as f_arch:
+            codigo_custom = f_arch.read()
+            usar_custom = True
+
+out_decod = os.path.join(target_folder, f"decodificacion_{os.path.basename(carpeta_secuencia)}") if target_folder else None
+
+resultados = motor.decodificar_secuencia_continua(
+    carpeta_secuencia=carpeta_secuencia,
+    modelo_path=modelo_path,
+    carpeta_salida=out_decod,
+    smooth_ms=smooth_ms,
+    notch_q=notch_q,
+    target_length=target_len,
+    latent_dim=latent_dim,
+    modo_deteccion=modo_deteccion,
+    algoritmo_clasificacion=algoritmo_clustering,
+    usar_custom_arch=usar_custom,
+    codigo_custom_arch=codigo_custom,
+    callback_log=print
+)
+print(f"\\nDecodificación finalizada. Exactitud: {{resultados['exactitud']:.2f}}%")
+print(f"Informe gráfico: {{resultados['fig_path']}}")
+if resultados.get('fig_path') and os.path.exists(resultados['fig_path']):
+    motor.abrir_imagen_en_visor(resultados['fig_path'])
+'''
+    self._launch_bridge_script("decodificar_continua_no_sup", f"DECODIFICADOR CONTINUO: {os.path.basename(carpeta)}", kwargs, template)
+
+  def run_autoencoder_no_sup_probar_otro_dataset(self):
+    from gui_app.views.selector_otro_sujeto_dialog import SelectorMedicionesOtroSujetoDialog
+    from PySide6.QtWidgets import QMessageBox
+
+    rutas_sel = self.explorer_widget.get_selected_paths() if hasattr(self, 'explorer_widget') else []
+
+    dialog = SelectorMedicionesOtroSujetoDialog(self, rutas_preseleccionadas=rutas_sel)
+    if dialog.exec() != SelectorMedicionesOtroSujetoDialog.Accepted:
+      self.log_console.append("> Evaluación en otro sujeto cancelada por el usuario.\n")
+      return
+
+    rutas_evaluar = dialog.get_selected_paths()
+    archivo_directo = dialog.get_selected_file()
+
+    if not rutas_evaluar and not archivo_directo:
+      QMessageBox.warning(self, "Sin Selección", "No se seleccionó ninguna medición ni archivo para evaluar.")
+      return
+
+    kwargs = self.tab_dl_ml.tab_autoencoder_no_sup.get_kwargs()
+
+    if rutas_evaluar:
+      rutas_clean = [r.replace("\\", "/") for r in rutas_evaluar]
+      template = f'''
+import json
+import sys
+import os
+from datetime import datetime
+
+project_root = r'{{ROOT_PROJECT_DIR}}'
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+with open(r'{{TEMP_JSON}}', 'r') as f:
+    kwargs = json.load(f)
+
+rutas = {rutas_clean}
+
+import deep_learning.motor_autoencoder_unificado as motor
+
+modalidad = kwargs.get('modalidad', 'envolvente')
+latent_dim = kwargs.get('latent_dim', 2)
+tipo_env = kwargs.get('tipo_envolvente', 'rms')
+smooth_ms = kwargs.get('smooth_ms', 100)
+modo_align = kwargs.get('modo_alineacion', 'Pico Volumen Micrófono')
+algoritmo_clustering = kwargs.get('algoritmo_clustering', 'gmm')
+usar_so2 = kwargs.get('usar_alineacion_so2', False)
+ref_session = kwargs.get('ref_session', 'T2')
+
+ts_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+carpeta_exp = os.path.join(project_root, "resultados", "resultados_autoencoder", f"evaluacion_intersujeto_{{ts_str}}_{{modalidad}}_{{latent_dim}}d")
+os.makedirs(carpeta_exp, exist_ok=True)
+
+print("\\n" + "="*70)
+print(f"  EVALUACIÓN EN OTRO SUJETO / DATASET ({{len(rutas)}} MEDICIONES)")
+print(f"  Modalidad: {{modalidad.upper()}} | Dimensión: {{latent_dim}}D | Alineación: {{modo_align}}")
+print(f"  Clustering: {{algoritmo_clustering.upper()}} | Carpeta: {{carpeta_exp}}")
+print("="*70 + "\\n")
+
+# 1. Extracción de dataset con las opciones configuradas en la GUI
+npz_path, n_pulsos = motor.extraer_dataset_unificado(
+    rutas,
+    aplicar_correccion_intersesion=kwargs.get('aplicar_correccion_intersesion', True),
+    usar_calibracion_p95=kwargs.get('usar_calibracion_p95', True),
+    modo_alineacion=modo_align,
+    carpeta_salida=carpeta_exp,
+    tipo_envolvente=tipo_env,
+    smooth_ms=smooth_ms,
+    alpha_ruido=kwargs.get('alpha_ruido', 0.50),
+    target_len=kwargs.get('target_len', 20),
+    highpass_cutoff_hz=kwargs.get('highpass_cutoff_hz', 20.0),
+    lowpass_cutoff_hz=kwargs.get('lowpass_cutoff_hz', 500.0),
+    notch_q=kwargs.get('notch_q', 2.0),
+    snr_min=kwargs.get('snr_min', 0.50),
+    outlier_contamination=kwargs.get('outlier_contamination', 0.10),
+    pre_pct=kwargs.get('pre_pct', 0.40),
+    post_pct=kwargs.get('post_pct', 0.60),
+    w_canales=kwargs.get('w_canales', [1.0, 1.0, 1.0]),
+    tipo_filtro_linea=kwargs.get('tipo_filtro_linea', 'notch'),
+    canales_features=kwargs.get('canales_features', ['canal_0', 'canal_1', 'canal_2']),
+    callback_log=print
+)
+
+# 2. Evaluación en el espacio latente del modelo entrenado
+metricas = motor.evaluar_espacio_latente(
+    archivo_npz=npz_path,
+    modelo=None,
+    modalidad=modalidad,
+    latent_dim=latent_dim,
+    carpeta_salida=carpeta_exp,
+    usar_custom_arch=kwargs.get('usar_custom_arch', False),
+    codigo_custom_arch=kwargs.get('codigo_custom_arch', None),
+    mostrar_grafico=True,
+    algoritmo_clustering=algoritmo_clustering,
+    usar_alineacion_so2=usar_so2,
+    ref_session=ref_session,
+    callback_log=print
+)
+
+print(f"\\nEvaluación en otro sujeto culminada con éxito!")
+print(f"Exactitud {{metricas.get('algoritmo_clustering', 'Clustering')}} Global: {{metricas['cluster_acc']:.2f}}%")
+print(f"Informe gráfico guardado en: {{metricas['fig_path']}}")
+print(f"Archivos guardados en: {{carpeta_exp}}")
+if metricas and metricas.get('fig_path') and os.path.exists(metricas['fig_path']):
+    motor.abrir_imagen_en_visor(metricas['fig_path'])
+'''
+      self._launch_bridge_script("evaluar_otro_sujeto_no_sup", f"EVALUACION OTRO SUJETO ({len(rutas_evaluar)} tomas)", kwargs, template)
+    else:
+      archivo_clean = archivo_directo.replace("\\", "/")
+      template = f'''
+import json
+import sys
+import os
+from datetime import datetime
+
+project_root = r'{{ROOT_PROJECT_DIR}}'
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+with open(r'{{TEMP_JSON}}', 'r') as f:
+    kwargs = json.load(f)
+
+ruta_externa = r"{archivo_clean}"
+
+import deep_learning.motor_autoencoder_unificado as motor
+
+modalidad = kwargs.get('modalidad', 'envolvente')
+latent_dim = kwargs.get('latent_dim', 2)
+algoritmo_clustering = kwargs.get('algoritmo_clustering', 'gmm')
+usar_so2 = kwargs.get('usar_alineacion_so2', False)
+ref_session = kwargs.get('ref_session', 'T2')
+
+ts_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+carpeta_exp = os.path.join(project_root, "resultados", "resultados_autoencoder", f"evaluacion_externa_{{ts_str}}_{{modalidad}}_{{latent_dim}}d")
+os.makedirs(carpeta_exp, exist_ok=True)
+
+metricas = motor.evaluar_espacio_latente(
+    archivo_npz=ruta_externa,
+    modelo=None,
+    modalidad=modalidad,
+    latent_dim=latent_dim,
+    carpeta_salida=carpeta_exp,
+    usar_custom_arch=kwargs.get('usar_custom_arch', False),
+    codigo_custom_arch=kwargs.get('codigo_custom_arch', None),
+    mostrar_grafico=True,
+    algoritmo_clustering=algoritmo_clustering,
+    usar_alineacion_so2=usar_so2,
+    ref_session=ref_session,
+    callback_log=print
+)
+
+print(f"\\nEvaluación externa finalizada. Exactitud Global: {{metricas['cluster_acc']:.2f}}%")
+print(f"Informe gráfico: {{metricas['fig_path']}}")
+if metricas.get('fig_path') and os.path.exists(metricas['fig_path']):
+    motor.abrir_imagen_en_visor(metricas['fig_path'])
+'''
+      self._launch_bridge_script("evaluar_dataset_externo_no_sup", f"EVALUACION DATASET EXTERNO ({os.path.basename(archivo_directo)})", kwargs, template)
 
   def _sync_electrode_viewer(self):
     """Sincroniza el visor de electrodos con las mediciones seleccionadas en el gestor."""

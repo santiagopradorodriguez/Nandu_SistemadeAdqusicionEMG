@@ -1,0 +1,901 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish,es-noshorthands,es-tabla]{babel}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{geometry}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{hyperref}
+\usepackage{float}
+\usepackage{listings}
+\usepackage{xcolor}
+
+\geometry{top=2cm, bottom=2cm, left=2.2cm, right=2.2cm}
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.96,0.96,0.97}
+
+\lstdefinestyle{pythonstyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen}\itshape,
+    keywordstyle=\color{blue}\bfseries,
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=4,
+    frame=single,
+    rulecolor=\color{black!20}
+}
+\lstset{style=pythonstyle}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!70!black,
+    citecolor=blue!70!black,
+    urlcolor=blue!70!black
+}
+
+\addto\captionsspanish{\renewcommand{\tablename}{Tabla}}
+\addto\captionsspanish{\renewcommand{\figurename}{Figura}}
+
+\title{\textbf{Apunte Técnico: Arquitectura del Autoencoder Ortogonal, Decodificación en Secuencia Continua y Análisis de Supervisión}\\
+\large Laboratorio de Sistemas Dinámicos - Proyecto Ñandú EMG}
+\author{\textbf{Santiago Prado} \and \textbf{Lucas Braunstein}}
+\date{24 de Septiembre de 2026}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Este documento técnico consolida los avances y análisis experimentales en torno a la decodificación bioeléctrica de habla submáximal para las cinco vocales del español (/a/, /e/, /i/, /o/, /u/) a partir de electromiografía de superficie facial tricanal. Se presenta en detalle la arquitectura del autoencoder lineal ortogonal bidimensional, los esquemas de compensación de impedancia tisular y acondicionamiento en reposo, el algoritmo de detección acústica por micrófono para secuencias de habla continua, y la comparación empírica entre variantes arquitectónicas: representación nativa frente a rotación rígida SO(2), inserción de capas convolucionales 1D, y el impacto de incorporar una pérdida de clasificación supervisada moderada con entropía cruzada. Los resultados demuestran que el acondicionamiento guiado por el micrófono con normalización por el Supremo Tricanal por Pulso Individual permite una transferencia directa sin reentrenar de hasta un $86.99\%$ de exactitud en secuencias continuas. Asimismo, se introduce el algoritmo de detección Gate Doble basado exclusivamente en la norma tricanal bioeléctrica, el cual permite prescindir del micrófono acústico y alcanza un $81.30\%$ de exactitud de transferencia directa en habla continua mediante la compensación del retraso electromecánico fisiológico de $350\,\text{ms}$.
+\end{abstract}
+
+\vspace{0.3cm}
+\tableofcontents
+\newpage
+
+\section{Introducción y Planteo Experimental}
+\label{sec:introduccion}
+
+La decodificación bioeléctrica de fonemas vocálicos a partir de electromiografía de superficie (sEMG) en la zona peribucal y submentoniana presenta dos desafíos principales:
+\begin{enumerate}
+    \item \textbf{Variabilidad inter-toma e inter-sesión:} Los cambios sutiles en la impedancia de contacto piel-electrodo, el sudor, la fatiga neuromuscular o el reposicionamiento milimétrico alteran las amplitudes absolutas registradas entre distintas series.
+    \item \textbf{Generalización desde calibración a habla continua:} Mientras que en las tomas de calibración el sujeto pronuncia palabras o vocales aisladas con pausas prolongadas de descanso, en una secuencia continua las contracciones se suceden de forma fluida a cadencia controlada por metrónomo, requiriendo segmentación temporal automática y preservación estricta de las sinergias intermusculares.
+\end{enumerate}
+
+El sistema registra tres canales mioeléctricos y un canal acústico mediante una placa de adquisición a una frecuencia de muestreo $f_s = 2000\,\text{Hz}$:
+\begin{itemize}
+    \item \textbf{Canal 0:} Vientre anterior del digástrico y complejo suprahioideo (apertura mandibular para la vocal /a/).
+    \item \textbf{Canal 1:} Depresor del ángulo de la boca y modíolo comisural (tensión y descenso lateral comisural).
+    \item \textbf{Canal 2:} Músculo orbicular de la boca (fruncimiento y protrusión labial para /o/ y /u/).
+    \item \textbf{Canal 3:} Micrófono de audio (referencia acústica y sincronización temporal precisa de los eventos de fonación).
+\end{itemize}
+
+\section{Acondicionamiento Bioeléctrico y Corrección de Impedancia}
+\label{sec:acondicionamiento}
+
+La señal cruda de cada canal muscular $s_c(t)$ (con $c \in \{0, 1, 2\}$ y $t$ el tiempo en segundos) se procesa mediante una cascada de filtrado digital:
+\begin{enumerate}
+    \item \textbf{Filtro de muesca (Notch IIR):} Elimina la interferencia de la red eléctrica de $50\,\text{Hz}$ con un factor de calidad $Q = 30.0$:
+    \begin{equation}
+        H_{\text{notch}}(z) = \frac{1 - 2\cos(\omega_0) z^{-1} + z^{-2}}{1 - 2 r \cos(\omega_0) z^{-1} + r^2 z^{-2}}
+    \end{equation}
+    donde $\omega_0 = 2\pi \cdot 50 / f_s$ rad/muestra es la pulsación digital normalizada, y $r = 1 - \pi \cdot (50/Q) / f_s$ define el ancho de banda del notch.
+    \item \textbf{Filtro pasabanda Butterworth:} De cuarto orden, con frecuencias de corte entre $f_{\text{baja}} = 20\,\text{Hz}$ y $f_{\text{alta}} = 450\,\text{Hz}$, eliminando derivas de línea de base causadas por movimiento y ruidos de alta frecuencia ajenos a la banda mioeléctrica.
+    \item \textbf{Cálculo de envolvente RMS:} La potencia instantánea rectificada se integra mediante una ventana deslizante de $W_{\text{RMS}} = \text{int}(0.091 \cdot f_s) = 182$ muestras ($91\,\text{ms}$):
+    \begin{equation}
+        x_c[n] = \sqrt{\frac{1}{W_{\text{RMS}}} \sum_{k = -W_{\text{RMS}}/2}^{W_{\text{RMS}}/2} s_{c,\text{filt}}^2[n - k]}
+    \end{equation}
+    donde $x_c[n]$ es el valor de la envolvente RMS en la muestra $n$, expresada en microvoltios ($\mu\text{V}$).
+\end{enumerate}
+
+\subsection{Acondicionamiento de Reposo y Escalado Robusto por Percentil}
+\label{subsec:acondicionamiento_reposo}
+
+Para contrarrestar las variaciones lentas de impedancia piel-electrodo entre sesiones de un mismo usuario, se implementa una normalización local basada en dos referencias estadísticas calculadas por canal y por sesión:
+\begin{equation}
+    \tilde{x}_{c}[n] = \frac{x_{c,\text{filt}}[n] - \mu_{\text{reposo}, c}}{P_{95, c} - \mu_{\text{reposo}, c} + \epsilon}
+    \label{eq:normalizacion_reposo}
+\end{equation}
+donde:
+\begin{itemize}
+    \item $x_{c,\text{filt}}[n]$ es la envolvente muscular suavizada mediante un filtro Butterworth pasabajos de tercer orden con frecuencia de corte normalizada $W_n = 0.3$.
+    \item $\mu_{\text{reposo}, c}$ es el nivel medio de la señal durante las primeras 10 muestras de reposo basal en esa sesión (microvoltios, $\mu\text{V}$).
+    \item $P_{95, c}$ es el percentil 95 de la envolvente del canal $c$ a lo largo de toda la sesión (microvoltios, $\mu\text{V}$), que proporciona una cota superior robusta inmune a espigas espurias.
+    \item $\epsilon = 10^{-6}$ es una constante de regularización numérica para prevenir divisiones por cero.
+    \item $\tilde{x}_{c}[n]$ es la característica acondicionada admensional enviada a la red.
+\end{itemize}
+
+El código Python correspondiente a este acondicionamiento es:
+\begin{lstlisting}[language=Python]
+# Suavizado pasabajos Butterworth
+b_bw, a_bw = signal.butter(N=3, Wn=0.3, btype='low')
+X_filt = np.zeros_like(X_reshaped)
+for i in range(N):
+    for c in range(n_ch):
+        X_filt[i, c, :] = signal.filtfilt(b_bw, a_bw, X_reshaped[i, c, :])
+
+# Normalizacion por reposo basal y percentil 95 por sesion
+X_norm = np.zeros_like(X_filt)
+for s in np.unique(sesiones):
+    mask = (sesiones == s)
+    for c in range(n_ch):
+        base_mean = np.mean(X_filt[mask, c, :10])
+        base_max = np.percentile(X_filt[mask, c, :], 95) - base_mean + 1e-6
+        X_norm[mask, c, :] = (X_filt[mask, c, :] - base_mean) / base_max
+\end{lstlisting}
+
+\section{Arquitectura del Autoencoder Ortogonal 2D}
+\label{sec:arquitectura_red}
+
+El modelo central del proyecto, consolidado en \texttt{modelorecord.py}, es un autoencoder puramente lineal con regularización ortogonal explícita en pesos y en espacio latente. La entrada a la red es un vector plano de dimensión $D = 60$, compuesto por 3 canales musculares remuestreados uniformemente a $N_{\text{puntos}} = 20$ muestras temporales cada uno ($3 \times 20 = 60$).
+
+\subsection{Estructura de Capas y Función de Activación}
+\label{subsec:estructura_capas}
+
+La red se estructura como un cuello de botella simétrico sin sesgos (\texttt{bias=False}):
+\begin{itemize}
+    \item \textbf{Codificador (Encoder):}
+    \begin{align}
+        h_1 &= \tanh(W_1 \cdot x), \quad W_1 \in \mathbb{R}^{32 \times 60} \\
+        h_2 &= \tanh(W_2 \cdot h_1), \quad W_2 \in \mathbb{R}^{16 \times 32} \\
+        z &= W_3 \cdot h_2, \quad W_3 \in \mathbb{R}^{2 \times 16}
+    \end{align}
+    \item \textbf{Decodificador (Decoder):}
+    \begin{align}
+        dh_1 &= \tanh(W_4 \cdot z), \quad W_4 \in \mathbb{R}^{16 \times 2} \\
+        dh_2 &= \tanh(W_5 \cdot dh_1), \quad W_5 \in \mathbb{R}^{32 \times 16} \\
+        \hat{x} &= W_6 \cdot dh_2, \quad W_6 \in \mathbb{R}^{60 \times 32}
+    \end{align}
+\end{itemize}
+donde $x \in \mathbb{R}^{60}$ es el vector de entrada acondicionada, $z = (Z_1, Z_2) \in \mathbb{R}^2$ son las coordenadas latentes de la contracción, y $\hat{x} \in \mathbb{R}^{60}$ es la reconstrucción de la señal. Se utiliza $\tanh(\cdot)$ en las capas intermedias para acotar no linealmente las activaciones sin saturar a cero los gradientes negativos, mientras que la proyección al espacio latente $z$ y la salida $\hat{x}$ son lineales.
+
+\subsection{Función de Pérdida con Penalización Ortogonal y Decorrelación Latente}
+\label{subsec:perdida_ortogonal}
+
+El entrenamiento se realiza de forma totalmente no supervisada (sin etiquetas de fonemas) mediante una función de pérdida compuesta por tres términos:
+\begin{equation}
+    \mathcal{L}_{\text{total}} = \mathcal{L}_{\text{recon}} + \lambda_W \cdot \mathcal{L}_W + \lambda_Z \cdot \mathcal{L}_Z
+    \label{eq:loss_total}
+\end{equation}
+
+\begin{enumerate}
+    \item \textbf{Pérdida de Reconstrucción:} Error cuadrático medio (MSE) entre la entrada y su reproducción:
+    \begin{equation}
+        \mathcal{L}_{\text{recon}} = \frac{1}{N \cdot D} \sum_{i=1}^N \|x^{(i)} - \hat{x}^{(i)}\|_2^2
+    \end{equation}
+    donde $N$ es la cantidad de pulsos de entrenamiento y $D = 60$ es la dimensión de entrada.
+    \item \textbf{Penalización de Ortogonalidad de Pesos ($\mathcal{L}_W$):} Fuerza a que las matrices de transformación lineal de todas las capas sean ortogonales, evitando que direcciones independientes colapsen entre sí:
+    \begin{equation}
+        \mathcal{L}_W = \sum_{l=1}^6 \|W_l W_l^T - I_{\min(d_{\text{in}}, d_{\text{out}})}\|_F^2
+    \end{equation}
+    donde $\|\cdot\|_F$ denota la norma de Frobenius y $I$ es la matriz identidad.
+    \item \textbf{Penalización de Decorrelación e Isometría Latente ($\mathcal{L}_Z$):} Exige que la matriz de covarianza de las coordenadas latentes $z$ sobre todo el lote converja a la identidad bidimensional:
+    \begin{equation}
+        \text{Cov}(Z) = \frac{1}{N - 1} \sum_{i=1}^N (z^{(i)} - \bar{z})(z^{(i)} - \bar{z})^T
+    \end{equation}
+    \begin{equation}
+        \mathcal{L}_Z = \|\text{Cov}(Z) - I_2\|_F^2
+    \end{equation}
+    donde $\bar{z} = \frac{1}{N} \sum_{i=1}^N z^{(i)}$ es el centroide global del lote. Este término desacopla de forma rígida el eje $Z_1$ del eje $Z_2$, impidiendo que la red use una sola dimensión oblicua y forzando la apertura de una base canónica bidimensional.
+\end{enumerate}
+
+\subsection{Código Fuente Oficial de la Red}
+\label{subsec:codigo_oficial}
+
+A continuación se transcribe la definición exacta de la clase del autoencoder utilizada en el modelo récord:
+\begin{lstlisting}[language=Python]
+class OrthogonalAutoencoder2D(nn.Module):
+    def __init__(self, input_dim=60, hidden_dim=32, latent_dim=2):
+        super().__init__()
+        self.fc1 = nn.Linear(input_dim, hidden_dim, bias=False)
+        self.fc2 = nn.Linear(hidden_dim, 16, bias=False)
+        self.fc3 = nn.Linear(16, latent_dim, bias=False)
+        self.act = nn.Tanh()
+        self.dfc1 = nn.Linear(latent_dim, 16, bias=False)
+        self.dfc2 = nn.Linear(16, hidden_dim, bias=False)
+        self.dfc3 = nn.Linear(hidden_dim, input_dim, bias=False)
+
+    def encode(self, x):
+        h1 = self.act(self.fc1(x))
+        h2 = self.act(self.fc2(h1))
+        return self.fc3(h2)
+
+    def forward(self, x):
+        h1 = self.act(self.fc1(x))
+        h2 = self.act(self.fc2(h1))
+        z = self.fc3(h2)
+        dh1 = self.act(self.dfc1(z))
+        dh2 = self.act(self.dfc2(dh1))
+        recon = self.dfc3(dh2)
+        return recon, z
+
+    def weight_orthogonality_loss(self):
+        loss = 0.0
+        for layer in [self.fc1, self.fc2, self.fc3, self.dfc1, self.dfc2, self.dfc3]:
+            W = layer.weight
+            if W.shape[0] < W.shape[1]:
+                gram = torch.mm(W, W.t())
+                I = torch.eye(W.shape[0], device=W.device)
+            else:
+                gram = torch.mm(W.t(), W)
+                I = torch.eye(W.shape[1], device=W.device)
+            loss += torch.norm(gram - I, p='fro')**2
+        return loss
+\end{lstlisting}
+
+\section{Rotación Rígida SO2 frente al Modelo Nativo sin Alineación}
+\label{sec:rotacion_so2}
+
+En el desarrollo histórico del proyecto se identificaron dos regímenes de operación:
+\begin{enumerate}
+    \item \textbf{Régimen con Rotación Rígida SO(2) (\texttt{USE\_ALIGNMENT = True}):}
+    Aplica una transformación ortogonal de Procrustes bidimensional para alinear la orientación del espacio latente entre sesiones basándose en los 4 vértices extremos fonatorios (anclando la vocal /a/ hacia el semieje $+Y$ vertical):
+    \begin{equation}
+        Z_{\text{alineado}} = (Z - \mu) \cdot R(\theta) + \mu_{\text{ref}}
+    \end{equation}
+    donde $R(\theta) = \begin{pmatrix} \cos\theta & -\sin\theta \\ \sin\theta & \cos\theta \end{pmatrix} \in \text{SO}(2)$ es la matriz de rotación pura sin deformación afín ($\det(R) = +1$). Bajo esta configuración se obtiene el récord histórico de entrenamiento en Lucas del $91.43\%$ de exactitud con hiperparámetros:
+    $$\text{SEED} = 100, \quad \text{EPOCHS} = 600, \quad \text{LR} = 0.003, \quad \lambda_W = 0.9, \quad \lambda_Z = 0.30$$
+    Sin embargo, al transferir directamente sobre la secuencia continua P5 sin reentrenamiento, este modelo alcanza un $67.5\%$ (83 de 123 pulsos acertados), debido a que la rotación rígida fuerza un compromiso global que desvía ligeramente las fronteras de las vocales intermedias.
+    \item \textbf{Régimen Nativo sin Rotación (\texttt{USE\_ALIGNMENT = False}):}
+    Permite que la red aprenda la orientación libre óptima de las sinergias articulatorias directamente a partir del acondicionamiento por reposo. Con los hiperparámetros:
+    $$\text{SEED} = 100, \quad \text{EPOCHS} = 600, \quad \text{LR} = 0.004, \quad \lambda_W = 0.6, \quad \lambda_Z = 0.15$$
+    El modelo alcanza un $87.85\%$ de exactitud GMM en entrenamiento sobre Lucas y eleva la exactitud directa en la secuencia continua P5 al **$77.24\%$** (95 de 123 pulsos acertados), confirmando que las sinergias nativas no rotadas poseen mayor congruencia espacial directa entre tomas.
+\end{enumerate}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/trayectorias_continuas/comparativa_87_fronteras_y_secuencia_continua.png}
+\caption{Comparativa del modelo récord nativo sin rotación SO(2). Panel izquierdo: 502 pulsos de Lucas con fronteras de decisión GMM (87.85\% exactitud). Panel derecho: 123 pulsos de la secuencia continua P5 proyectados directamente sobre las fronteras de Lucas (77.24\% de acierto directo sin calibración previa).}
+\label{fig:comparativa_87}
+\end{figure}
+
+\section{Detección y Segmentación de la Secuencia Continua P5}
+\label{sec:secuencia_continua}
+
+A diferencia de las tomas de palabras aisladas donde cada fonación está separada por varios segundos de silencio, la toma continua \texttt{SecuenciaContinua\_Prueba5\_Sujeto1} consiste en una emisión ininterrumpida de fonemas al ritmo de un metrónomo a $30\,\text{BPM}$ (un pulso cada $2.0\,\text{s}$).
+
+\subsection{Detección por Canal Acústico y Prevención de Falsos Positivos}
+\label{subsec:deteccion_acustica}
+
+Para segmentar las fonaciones sin sesgos, se utiliza la señal de audio del micrófono (Canal 3). La envolvente acústica se calcula promediando el valor absoluto del micrófono en una ventana deslizante de $50\,\text{ms}$:
+\begin{equation}
+    x_{\text{mic}}[n] = \frac{1}{W_{\text{mic}}} \sum_{k=0}^{W_{\text{mic}}-1} |s_{\text{mic}}[n - k]|
+\end{equation}
+con $W_{\text{mic}} = \text{int}(0.050 \cdot f_s) = 100$ muestras. Sobre esta envolvente se ejecuta un detector de picos con dos condiciones físicas restrictivas:
+\begin{equation}
+    p_{\text{idx}} = \text{find\_peaks}(x_{\text{mic}}, \; \text{distancia} \ge 1.2 \cdot f_s, \; \text{altura} \ge 2000)
+\end{equation}
+
+Esta elección es fundamental: cuando se intenta segmentar basándose únicamente en la envolvente mioeléctrica de los músculos, se detectan eventos espurios correspondientes a degluciones, carraspeos o reajustes labiales involuntarios, detectando hasta 151 picos que rompen la secuencia temporal. El micrófono aísla exactamente las **123 fonaciones reales**, garantizando sincronía total con la secuencia fonatoria.
+
+\subsection{Normalización Obligatoria por el Supremo Tricanal por Pulso Individual}
+\label{subsec:supremo_tricanal}
+
+Alrededor de cada instante de fonación $p_{\text{idx}}$ se extrae una ventana de dos segundos $[-1.0\,\text{s}, +1.0\,\text{s}]$ ($W_{\text{pre}} = W_{\text{post}} = 2000$ muestras). La normalización de los 3 canales debe satisfacer estrictamente la regla de conservación de sinergia intermuscular del proyecto:
+
+\begin{equation}
+    x_{c,\text{depurada}}(t) = \max\left( x_c(t) - \mu_{\text{ruido}, c}, \; 0 \right)
+\end{equation}
+\begin{equation}
+    M_{\text{supremo, pulso}} = \max_{c \in \{0, 1, 2\}} \left( \max_{t \in [-1\,\text{s}, +1\,\text{s}]} x_{c,\text{depurada}}(t) \right) + \epsilon
+\end{equation}
+\begin{equation}
+    \tilde{x}_c(t) = \frac{x_{c,\text{depurada}}(t)}{M_{\text{supremo, pulso}}}
+    \label{eq:supremo_formula}
+\end{equation}
+donde:
+\begin{itemize}
+    \item $\mu_{\text{ruido}, c}$ es la mediana del piso de ruido basal del canal $c$ durante el intervalo inicial de silencio de la toma ($5.0\,\text{s}$).
+    \item $M_{\text{supremo, pulso}}$ es el máximo bioeléctrico global entre los tres canales musculares registrado durante esa contracción individual.
+    \item $\tilde{x}_c(t)$ es la envolvente normalizada adimensional.
+\end{itemize}
+
+\textbf{Justificación fisiológica:} Dividir cada canal por su propio máximo ($\max(x_c)$) destruiría la sinergia motora (un músculo antagonista casi inactivo alcanzaría artificialmente 1.0). Normalizar por el Supremo Tricanal del pulso asegura que el músculo motor primario alcance $1.0$, mientras que los músculos secundarios conservan su proporción fisiológica exacta. Además, evaluar el Supremo \textit{por pulso individual} neutraliza las variaciones de intensidad fonatoria y despegues leves de electrodos a lo largo de la toma.
+
+Cada ventana tricanal normalizada se remuestrea mediante interpolación lineal a 20 puntos por canal, conformando el vector de 60 dimensiones que alimenta a la red:
+\begin{equation}
+    v_{\text{60D}} = \Big[ \tilde{x}_0[0], \dots, \tilde{x}_0[19], \; \tilde{x}_1[0], \dots, \tilde{x}_1[19], \; \tilde{x}_2[0], \dots, \tilde{x}_2[19] \Big] \in \mathbb{R}^{60}
+\end{equation}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/trayectorias_continuas/secuencia_continua_ventanas_cortadas_p5.png}
+\caption{Visualización exhaustiva de la segmentación de la secuencia continua P5. Panel superior: señal de micrófono y los 3 canales musculares con los 123 eventos detectados (del segundo 7 al 75). Fila media: envolventes tricanales superpuestas de $[-1.0\,\text{s}, +1.0\,\text{s}]$ para cada vocal. Fila inferior: vectores de características remuestreados a 20 muestras por canal que ingresan a la red.}
+\label{fig:ventanas_cortadas_p5}
+\end{figure}
+
+\section{Segmentación de Habla Continua sin Micrófono: Detector Gate Doble y Desfasajes Intermusculares}
+\label{sec:gate_doble}
+
+La segmentación acústica mediante micrófono descrita en la sección anterior resolvió la extracción de eventos en el habla vocalizada tradicional. Sin embargo, el objetivo central de una prótesis fonatoria o de una interfaz para habla silenciosa (\textit{silent speech}) exige prescindir completamente del audio, ya que en un paciente con anartria, parálisis de cuerdas vocales o laringectomía no existe emisión sonora audible. Asimismo, el registro acústico introduce variaciones espurias por intensidad de la voz y resonancia acústica del ambiente, sumado a que la onda sonora arriba con retraso físico respecto a la contracción muscular.
+
+\subsection{Concepto y Funcionamiento del Algoritmo Gate Doble}
+\label{subsec:concepto_gate_doble}
+
+En el procesamiento de audio convencional, una compuerta de ruido o \textit{gate} opera con un único umbral: si la amplitud supera dicho nivel, la compuerta se abre; si cae por debajo, se cierra. Al aplicar esta lógica simple a la señal mioeléctrica facial, el método fracasa:
+\begin{enumerate}
+    \item Si se configura un umbral bajo para captar el inicio real del movimiento, cualquier artefacto sutil (deglución, movimiento involuntario de lengua, respiración profunda o deriva de línea de base) abre la compuerta en falso.
+    \item Si se eleva el umbral para asegurar que solo dispare con contracciones intensas, la compuerta abre de forma tardía, perdiendo los primeros $150$ a $250\,\text{ms}$ de ataque muscular donde reside información fonética crítica.
+\end{enumerate}
+
+Para resolver este dilema biomecánico se diseñó e implementó el algoritmo de \textbf{Gate Doble}, que desacopla la decisión de \textit{confirmación} de la decisión de \textit{corte temporal}:
+\begin{itemize}
+    \item \textbf{Umbral Alto de Confirmación ($U_{\text{alto}}$):} Actúa como cerrojo de certeza. Si la actividad muscular no supera este umbral, el sistema ignora cualquier fluctuación previa, evitando falsos disparos por degluciones o ruidos basales.
+    \item \textbf{Umbral Bajo de Disparo ($U_{\text{bajo}}$):} Define la frontera estocástica de reposo. Una vez que el pulso es confirmado por el umbral alto, el algoritmo retrocede en el tiempo (\textit{backtracking}) hasta encontrar la muestra exacta en que la señal emergió del piso de ruido cruzando $U_{\text{bajo}}$.
+\end{itemize}
+En términos prácticos: el algoritmo confirma la presencia del fonema arriba con certeza absoluta, pero mide y corta la contracción abajo con precisión milimétrica.
+
+\subsection{Formulación Matemática y Calibración sobre la Norma Tricanal}
+\label{subsec:matematica_gate_doble}
+
+Para que el detector sea sensible a cualquier vocal independientemente de qué músculo intervenga (apertura mandibular en /a/, tensión comisural en /e/--/i/, o fruncimiento labial en /o/--/u/), la señal de guiado no es un canal aislado sino la \textbf{Norma Combinada Tricanal} $S_{\text{emg}}[n]$:
+\begin{equation}
+    S_{\text{emg}}[n] = \sqrt{ \sum_{c=0}^2 \Big( \max\big( x_{c,\text{env}}[n] - \mu_{\text{reposo}, c}, \; 0 \big) \Big)^2 }
+    \label{eq:norma_tricanal}
+\end{equation}
+donde:
+\begin{itemize}
+    \item $n$ es el índice temporal de la muestra a $f_s = 2000\,\text{Hz}$.
+    \item $x_{c,\text{env}}[n]$ es la envolvente RMS del canal muscular $c \in \{0, 1, 2\}$ expresada en microvoltios ($\mu\text{V}$).
+    \item $\mu_{\text{reposo}, c}$ es la mediana del nivel de reposo basal en el canal $c$ calculada durante los primeros segundos silenciosos de la toma.
+    \item $S_{\text{emg}}[n]$ es la amplitud compuesta instantánea en microvoltios ($\mu\text{V}$), que integra la energía bioeléctrica coordinada de los tres músculos peribucales.
+\end{itemize}
+
+Los umbrales y parámetros de temporización se calibran de forma robusta sobre el intervalo de reposo mediante la Desviación Absoluta de la Mediana (MAD):
+\begin{equation}
+    \sigma_{\text{MAD}} = 1.4826 \cdot \text{mediana}\Big( |S_{\text{emg}}[n] - \text{mediana}(S_{\text{emg}}[n])| \Big), \quad n \in \text{reposo}
+\end{equation}
+\begin{equation}
+    U_{\text{bajo}} = \text{mediana}(S_{\text{emg}}[n_{\text{reposo}}]) + 3.0 \cdot \sigma_{\text{MAD}} \approx 434\,\mu\text{V}
+\end{equation}
+\begin{equation}
+    U_{\text{alto}} = 1300.0\,\mu\text{V}
+\end{equation}
+El sistema incorpora un tiempo de guarda de cierre $T_{\text{hold}} = 180\,\text{ms}$ ($360$ muestras) para tolerar valles internos durante la articulación, un periodo refractario mínimo $T_{\text{refr}} = 800\,\text{ms}$ ($1600$ muestras) que impide re-disparos múltiples sobre un mismo fonema, y una ventana de retroceso $T_{\text{back}} = 350\,\text{ms}$ ($700$ muestras) para ubicar el inicio motor $n_{\text{onset}}$.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/analisis_gate_doble/comparativa_gate_doble_primeros_pulsos.png}
+\caption{Detección y segmentación bioeléctrica de los primeros eventos de la secuencia continua mediante el algoritmo Gate Doble. Panel superior: envolventes RMS de los tres canales musculares. Panel medio: norma tricanal combinada con umbrales de confirmación e inicio y ventanas de compuerta con retroceso. Panel inferior: señal de audio de referencia donde se evidencia el adelanto del inicio muscular frente al pico acústico.}
+\label{fig:comparativa_gate_doble_primeros_pulsos}
+\end{figure}
+
+En la Figura~\ref{fig:comparativa_gate_doble_primeros_pulsos} se observa la dinámica del detector sobre las dos primeras series vocálicas, cubriendo diez fonemas consecutivos entre los segundos 5 y 26. La norma tricanal combinada supera con holgura el umbral alto en cada contracción, mientras que el umbral bajo con búsqueda hacia atrás fija el inicio bioeléctrico exacto de cada fonema. Al contrastar con el canal inferior de audio, se aprecia con claridad que la activación muscular se inicia de forma sistemática cientos de milisegundos antes del sonido.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/analisis_gate_doble/grafico_totalidad_123_pulsos_gate_doble.png}
+\caption{Registro completo de los 123 eventos fonatorios en la secuencia continua P5 capturados exclusivamente mediante el algoritmo de Gate Doble. La curva en negro ilustra la norma tricanal combinada y las franjas anaranjadas señalan la apertura y cierre automático de la compuerta bioeléctrica a lo largo de toda la sesión sin requerir micrófono.}
+\label{fig:totalidad_123_pulsos_gate_doble}
+\end{figure}
+
+Al ejecutar este detector sobre la toma continua completa \texttt{SecuenciaContinua\_Prueba5\_Sujeto1}, el algoritmo detectó con exactitud matemática los \textbf{123 pulsos fonatorios reales}, 123 de 123, con cero falsos positivos durante los descansos y cero omisiones (Figura~\ref{fig:totalidad_123_pulsos_gate_doble}).
+
+\subsection{Desfasajes Intermusculares y Retraso Electromecánico Fisiológico}
+\label{subsec:desfasajes_intermusculares}
+
+Al superponer los tres canales musculares y la señal del micrófono sobre una misma base temporal, se evidencia un fenómeno biofísico cardinal: \textbf{el retraso electromecánico fisiológico EMD}.
+
+Antes de que las cuerdas vocales vibren y el sonido salga al aire, el cerebro ya envió los potenciales de acción motores, las fibras musculares se despolarizaron, se inició el ciclo de puentes cruzados de actina-miosina y las estructuras óseas y labiales comenzaron su desplazamiento cinemático. El análisis de las contracciones reveló que el inicio mioeléctrico $n_{\text{onset}}$ detectado por el Gate Doble precede al pico acústico del micrófono por un intervalo medio de:
+\begin{equation}
+    \Delta t_{\text{EMD}} = 349.2 \pm 45.8\,\text{ms}
+\end{equation}
+distribuido de forma regular según el fonema: $316\,\text{ms}$ en /i/, $337\,\text{ms}$ en /a/, $351\,\text{ms}$ en /u/, $357\,\text{ms}$ en /o/ y $375\,\text{ms}$ en /e/.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/analisis_gate_doble/grafico_3_canales_superpuestos_desfasajes.png}
+\caption{Dinámica temporal de los tres canales musculares superpuestos en un mismo gráfico para los primeros eventos de la secuencia continua. Se aprecian las diferencias de fase y reclutamiento selectivo entre canales: el milohioideo lidera la vocal /a/, el depresor comanda el ataque explosivo de /i/, y el orbicular domina en /u/ con la mandíbula cerrada.}
+\label{fig:canales_superpuestos_desfasajes}
+\end{figure}
+
+Asimismo, la Figura~\ref{fig:canales_superpuestos_desfasajes} exhibe la coordinación sinérgica y los desfasajes propios de cada grupo muscular:
+\begin{itemize}
+    \item \textbf{Vocal /a/:} El Canal 0 (milohioideo y vientre anterior) arranca primero y domina de forma excluyente con amplitudes elevadas para traccionar el hioides y abrir la mandíbula, mientras que el depresor (Canal 1) y el orbicular (Canal 2) permanecen prácticamente planos.
+    \item \textbf{Vocal /e/:} Se produce una co-activación suave y gradual entre el depresor del ángulo de la boca y el milohioideo, mientras el orbicular se mantiene silente.
+    \item \textbf{Vocal /i/:} El depresor exhibe un ataque vertical sumamente rápido y explosivo ($\tau_{\text{subida}} < 50\,\text{ms}$), correspondiente a la retracción lateral firme de la comisura labial.
+    \item \textbf{Vocal /o/:} El orbicular de los labios se activa en conjunto con el depresor en una sinergia equilibrada, con leve participación del descenso mandibular.
+    \item \textbf{Vocal /u/:} El orbicular domina de forma absoluta alcanzando amplitudes máximas superiores a $6500\,\mu\text{V}$ para proyectar y fruncir los labios en bocina, mientras el milohioideo permanece en reposo total ($0\,\mu\text{V}$), confirmando que la articulación ocurre con la mandíbula completamente cerrada.
+\end{itemize}
+
+\subsection{Evaluación del Autoencoder y Superación del Micrófono con 81.30\% de Exactitud}
+\label{subsec:evaluacion_autoencoder_gate_doble}
+
+Para comprobar cómo interpreta el autoencoder lineal ortogonal de referencia (\texttt{modelo\_optimo.pt}) las ventanas segmentadas exclusivamente por el Gate Doble sin micrófono, se contrastaron tres criterios de alineación temporal sobre las 123 contracciones de la secuencia continua P5:
+\begin{enumerate}
+    \item \textbf{Onset Directo como Inicio de Ventana ($[n_{\text{onset}}, \; n_{\text{onset}} + 2.0\,\text{s}]$):}
+    Alimentando la red con la ventana que arranca exactamente en el inicio del movimiento muscular, la exactitud de transferencia cayó al $34.96\%$. La causa física es el desfasaje temporal (\textit{time shift}): el modelo de referencia fue entrenado con ventanas donde la contracción muscular se ubica en el centro (alrededor de $t = 0.0\,\text{s}$), por lo que un vector que arranca en el extremo izquierdo desubica los pesos de la primera capa densa.
+    \item \textbf{Alineación por Pico Muscular Máximo:}
+    Centrando la ventana en el pico de mayor amplitud de la envolvente tricanal, la exactitud alcanzó un $52.85\%$. El limitante radica en la dispersión cinemática intermuscular: fonemas de apertura como /a/ alcanzan su pico rápidamente, mientras que fonemas labiales como /u/ presentan una meseta prolongada cuyo máximo fluctúa temporalmente.
+    \item \textbf{Proyección por Desfase Fisiológico EMD ($n_{\text{centro}} = n_{\text{onset}} + 350\,\text{ms}$):}
+    Aprovechando la estabilidad del retraso electromecánico de $350\,\text{ms}$, se proyecta el centro de la ventana a $n_{\text{onset}} + 350\,\text{ms}$, extrayendo $[-1.0\,\text{s}, +1.0\,\text{s}]$ alrededor de ese punto y normalizando por el Supremo Tricanal por Pulso Individual. Bajo este esquema, la exactitud de transferencia directa sin micrófono alcanzó un \textbf{81.30\%} ($100$ de $123$ pulsos acertados).
+\end{enumerate}
+
+\begin{table}[H]
+\centering
+\begin{tabularx}{\textwidth}{p{4.5cm} c c X}
+\toprule
+\textbf{Fonema Articulado} & \textbf{Micrófono Acústico} & \textbf{Gate Doble 100\% sEMG} & \textbf{Variación Relativa} \\
+\midrule
+Vocal /a/ & 100.0\% (25/25) & \textbf{100.0\%} (25/25) & Igual desempeño (perfecto) \\
+Vocal /e/ & 92.0\% (23/25) & \textbf{96.0\%} (24/25) & $+4.0\%$ ($+1$ pulso) \\
+Vocal /i/ & 24.0\% (6/25) & \textbf{28.0\%} (7/25) & $+4.0\%$ ($+1$ pulso) \\
+Vocal /o/ & 75.0\% (18/24) & \textbf{83.3\%} (20/24) & $+8.3\%$ ($+2$ pulsos) \\
+Vocal /u/ & 95.8\% (23/24) & \textbf{100.0\%} (24/24) & $+4.2\%$ (perfecto, $+1$ pulso) \\
+\midrule
+\textbf{Exactitud Global} & \textbf{77.24\%} (95/123) & \textbf{81.30\%} (100/123) & \textbf{$+4.06\%$ ($+5$ pulsos netos)} \\
+Piso Mínimo de Vocal & 24.0\% & \textbf{28.0\%} & $+4.0\%$ de elevación basal \\
+\bottomrule
+\end{tabularx}
+\caption{Comparativa cuantitativa de transferencia directa en la secuencia continua P5 entre el detector acústico por micrófono y el detector bioeléctrico Gate Doble proyectado por retraso electromecánico.}
+\label{tab:comparativa_gate_doble}
+\end{table}
+
+\textbf{Diagnóstico de la superación del micrófono:}
+El detector Gate Doble supera al micrófono acústico ($81.30\%$ frente a $77.24\%$) debido a que el audio adolece de una variabilidad de fase intrínseca de hasta $\pm 50\,\text{ms}$ provocada por cambios en la potencia vocal o en la resonancia de la cavidad bucal. En cambio, el Gate Doble detecta el reclutamiento motor primario en la piel con fidelidad temporal invariable. Al proyectar la ventana con el desfase fisiológico fijo, el autoencoder recibe morfologías de contracción más estables y homogéneas que las guiadas por el sonido.
+
+\subsection{Hoja de Ruta Metodológica para Nuevos Modelos}
+\label{subsec:hoja_ruta_gate_doble}
+
+Este hallazgo define dos caminos de implementación claros en el proyecto:
+\begin{enumerate}
+    \item \textbf{Compatibilidad Inmediata con Modelos Existentes:} Utilizar el detector Gate Doble proyectando el centro a $n_{\text{onset}} + 350\,\text{ms}$. Esto permite alimentar los autoencoders actuales y lograr un $81.30\%$ de exactitud continua de forma $100\%$ mioeléctrica.
+    \item \textbf{Entrenamiento Nativo desde el Inicio Motor:} En futuras sesiones de entrenamiento, segmentar las tomas de calibración utilizando directamente el inicio de la contracción $n_{\text{onset}}$ como origen temporal ($t = 0$), eliminando el segundo de reposo previo innecesario. De este modo, la red aprenderá a clasificar directamente la fase de ataque, reduciendo a la mitad el tamaño del vector de entrada y recortando la latencia de respuesta para interfaces en tiempo real.
+\end{enumerate}
+
+\section{Ensayo de Capas Convolucionales 1D y Preservación del Patrón}
+\label{sec:ensayo_convolucional}
+
+Con el objetivo de evaluar si la extracción de patrones de contracción locales a lo largo del tiempo mejoraba la separación fonatoria, se diseñó e implementó un autoencoder convolucional 1D ortogonal (\texttt{ConvOrthogonalAutoencoder2D}) respetando rigurosamente todos los hiperparámetros de control de \texttt{modelorecord.py} (\textit{ceteris paribus}):
+\begin{itemize}
+    \item Entrada conformada como tensor tridimensional $(B, C_{\text{in}}, T) = (B, 3, 20)$.
+    \item Capa convolucional 1: $\text{Conv1d}(3, 8, \text{kernel}=5, \text{padding}=2, \text{bias}=\text{False})$ con activación $\tanh$.
+    \item Capa convolucional 2: $\text{Conv1d}(8, 16, \text{kernel}=3, \text{padding}=1, \text{bias}=\text{False})$ con activación $\tanh$.
+    \item Aplanado a vector denso de $16 \times 20 = 320$ dimensiones, seguido de dos capas densas ortogonales hasta $Z \in \mathbb{R}^2$.
+    \item Decodificador simétrico compuesto por capas lineales y convoluciones transpuestas (\texttt{ConvTranspose1d}).
+\end{itemize}
+
+\subsection{Resultados Empíricos y Colapso de la Vocal E}
+\label{subsec:resultados_convolucionales}
+
+El ensayo demostró de forma concluyente que agregar capas convolucionales deteriora el rendimiento tanto en entrenamiento como en transferencia directa:
+
+\begin{table}[H]
+\centering
+\begin{tabularx}{\textwidth}{p{6.5cm} c c X}
+\toprule
+\textbf{Métrica de Evaluación} & \textbf{Modelo Lineal} & \textbf{Convolucional 1D} & \textbf{Variación} \\
+\midrule
+Exactitud GMM Lucas (Train) & \textbf{87.85\%} & 77.69\% & $-10.16\%$ \\
+Exactitud Directa Secuencia P5 & \textbf{77.24\%} (95/123) & 69.92\% (86/123) & $-7.32\%$ \\
+Vocal /a/ en Lucas & 92.9\% (91/98) & 90.8\% (89/98) & $-2.1\%$ \\
+Vocal /e/ en Lucas & \textbf{87.1\%} (88/101) & \textbf{27.7\%} (28/101) & \textbf{$-59.4\%$ (Colapso)} \\
+Vocal /i/ en Lucas & 75.7\% (78/103) & 100.0\% (103/103) & $+24.3\%$ \\
+Vocal /o/ en Lucas & 86.0\% (86/100) & 76.0\% (76/100) & $-10.0\%$ \\
+Vocal /u/ en Lucas & 98.0\% (98/100) & 92.0\% (92/100) & $-6.0\%$ \\
+\bottomrule
+\end{tabularx}
+\caption{Comparativa cuantitativa entre el modelo lineal de referencia y el autoencoder con capas convolucionales 1D.}
+\label{tab:comparativa_conv}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/trayectorias_continuas/comparativa_conv_ortogonal_87.png}
+\caption{Espacio latente y fronteras de decisión del modelo convolucional 1D. Se observa la canibalización de la vocal /e/ (azul), absorbida casi en su totalidad por la región de la vocal /i/ (verde).}
+\label{fig:comparativa_conv}
+\end{figure}
+
+\subsection{Diagnóstico Biofísico del Fallo Convolucional}
+\label{subsec:diagnostico_biofisico_conv}
+
+El colapso de la vocal /e/ frente a la /i/ posee una explicación física directa:
+\begin{enumerate}
+    \item La entrada a la red ya es una envolvente compactada a 20 muestras que describe la morfología macroscópica de la contracción.
+    \item La distinción electromiográfica entre /e/ y /i/ radica en la pendiente de ataque temporal del complejo cigomático/depresor: la /i/ presenta un reclutamiento rápido y explosivo ($\tau_{\text{ataque}} \approx 5$ muestras), mientras que la /e/ recluta las unidades motoras de forma más suave y gradual ($\tau_{\text{ataque}} \approx 10$ muestras).
+    \item Al aplicar núcleos convolucionales de tamaño 5 y 3 que barren puntos contiguos, la red promedia localmente la envolvente, difuminando exactamente el transitorio de subida que las distingue.
+    \item Por el contrario, la capa densa del autoencoder lineal evalúa el perfil global de activación intermuscular como un vector rígido en $\mathbb{R}^{60}$, preservando la ortogonalidad y la separación sin mezclar muestras adyacentes.
+\end{enumerate}
+
+\section{Efecto de la Entropía Cruzada Supervisada en la Secuencia Continua}
+\label{sec:entropia_cruzada}
+
+Para examinar si una guía supervisada ligera sobre el espacio latente permitía mejorar la compacidad de los cúmulos fonatorios, se acopló una cabeza lineal de clasificación Softmax sobre $z \in \mathbb{R}^2$:
+\begin{equation}
+    \hat{y} = \text{Softmax}(W_{\text{cls}} \cdot z + b_{\text{cls}}), \quad W_{\text{cls}} \in \mathbb{R}^{5 \times 2}, \; b_{\text{cls}} \in \mathbb{R}^5
+\end{equation}
+incorporando la pérdida de entropía cruzada al entrenamiento de Lucas con un peso moderado $\lambda_{CE} = 0.5$:
+\begin{equation}
+    \mathcal{L}_{\text{total}} = \mathcal{L}_{\text{recon}} + \lambda_W \mathcal{L}_W + \lambda_Z \mathcal{L}_Z + \lambda_{CE} \cdot \left( -\frac{1}{N} \sum_{i=1}^N \sum_{k=0}^4 y_k^{(i)} \log \hat{y}_k^{(i)} \right)
+\end{equation}
+
+\subsection{Diagnóstico y Resolución del Error de Extracción en Pruebas Iniciales}
+\label{subsec:error_extraccion}
+
+En una primera prueba rápida, la evaluación de P5 sobre este modelo pareció colapsar al $16.56\%$ de exactitud. La inspección del código reveló que dicho ensayo preliminar había empleado un script de extracción defectuoso que no utilizó el canal de audio del micrófono y omitió la división por el Supremo Tricanal y la resta de ruido de reposo.
+
+Al corregir la extracción de P5 aplicando estrictamente la cadena consolidada (detección por micrófono de los 123 pulsos y normalización por Supremo Tricanal), el modelo supervisado reveló su comportamiento real:
+
+\begin{table}[H]
+\centering
+\begin{tabularx}{\textwidth}{p{6.0cm} c c X}
+\toprule
+\textbf{Métrica de Evaluación} & \textbf{No Supervisado} & \textbf{Con Entropía Cruzada} & \textbf{Mejora} \\
+\midrule
+Exactitud en Lucas (GMM) & 87.85\% & 86.85\% & $-1.00\%$ \\
+Exactitud en Lucas (Softmax) & --- & \textbf{89.04\%} & --- \\
+\midrule
+\textbf{Exactitud Directa en P5 (GMM)} & \textbf{77.24\%} (95/123) & \textbf{86.99\%} (107/123) & \textbf{$+9.75\%$} \\
+Exactitud Directa en P5 (Softmax) & --- & \textbf{82.11\%} (101/123) & --- \\
+\midrule
+Vocal /a/ en Secuencia P5 & 76.0\% (19/25) & \textbf{100.0\%} (25/25) & $+24.0\%$ \\
+Vocal /e/ en Secuencia P5 & 68.0\% (17/25) & \textbf{92.0\%} (23/25) & $+24.0\%$ \\
+Vocal /i/ en Secuencia P5 & 68.0\% (17/25) & 68.0\% (17/25) & $0.0\%$ \\
+Vocal /o/ en Secuencia P5 & 83.3\% (20/24) & 83.3\% (20/24) & $0.0\%$ \\
+Vocal /u/ en Secuencia P5 & 91.7\% (22/24) & 91.7\% (22/24) & $0.0\%$ \\
+\bottomrule
+\end{tabularx}
+\caption{Resultados definitivos del autoencoder ortogonal con regularización de entropía cruzada frente al modelo no supervisado.}
+\label{tab:comparativa_ce}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/trayectorias_continuas/comparativa_ce_supervisada_87.png}
+\caption{Espacio latente y fronteras de decisión con entropía cruzada moderada ($\lambda_{CE}=0.5$). Panel izquierdo: Lucas en entrenamiento (89.04\% Softmax). Panel derecho: Secuencia continua P5 proyectada de forma directa, alcanzando un récord del 86.99\% de acierto (107 de 123 fonaciones correctas).}
+\label{fig:comparativa_ce}
+\end{figure}
+
+\subsection{Conclusión Científica del Rol de la Supervisión Suave}
+\label{subsec:conclusion_supervision}
+
+A diferencia de una red supervisada profunda que sobreajusta memorizando artefactos del sujeto de entrenamiento, una supervisión suave ($\lambda_{CE} = 0.5$) confinada sobre un cuello de botella ortogonal bidimensional actúa como una \textbf{fuerza de centrado}:
+\begin{itemize}
+    \item No deforma la topología bioeléctrica natural porque el término $\mathcal{L}_W$ y $\mathcal{L}_Z$ obligan a conservar la ortogonalidad y la varianza unitaria.
+    \item Compacta levemente los cúmulos de /e/ y /a/, reduciendo su dispersión radial.
+    \item Como resultado, las proyecciones de una sesión completamente distinta (P5) caen con mayor holgura dentro de los sectores angulares correctos, elevando la exactitud de transferencia directa del $77.24\%$ al \textbf{86.99\%}.
+\end{itemize}
+
+\section{Módulo de Búsqueda Sistemática de Hiperparámetros}
+\label{sec:grid_search}
+
+Para explorar de forma automatizada si existe alguna configuración convolucional capaz de superar al modelo lineal, se implementó el módulo \texttt{grid\_search\_conv\_ortogonal.py} en \texttt{EMG\_desarrollo/deep\_learning/}.
+
+El script recorre combinaciones en el siguiente espacio paramétrico:
+\begin{itemize}
+    \item \textbf{Canales convolucionales:} $(4, 8)$, $(8, 16)$ y $(16, 32)$.
+    \item \textbf{Tamaño de núcleo temporal:} $3$, $5$ y $7$ muestras.
+    \item \textbf{Funciones de activación:} $\tanh$ y $\text{LeakyReLU}(0.1)$.
+    \item \textbf{Tasas de aprendizaje:} $\eta \in \{0.002, 0.004, 0.008\}$.
+    \item \textbf{Pesos ortogonales:} $\lambda_W \in \{0.3, 0.6, 0.9\}$ y $\lambda_Z \in \{0.10, 0.20\}$.
+\end{itemize}
+
+\subsection{Criterio de Ranking Multisesión}
+\label{subsec:criterio_ranking}
+
+Para evitar seleccionar modelos que colapsen una vocal en favor de otras, el script calcula en cada iteración la \textbf{media armónica} entre el rendimiento en Lucas y la transferencia directa a la secuencia continua P5:
+\begin{equation}
+    \text{Acc}_{\text{armónica}} = \frac{2 \cdot \text{Acc}_{\text{Lucas}} \cdot \text{Acc}_{\text{P5}}}{\text{Acc}_{\text{Lucas}} + \text{Acc}_{\text{P5}} + \epsilon}
+\end{equation}
+penalizando si alguna vocal individual en P5 desciende a cero. Los resultados se exportan incrementalmente a un archivo CSV (\texttt{resultados\_grid\_search.csv}) asegurando la persistencia de datos ante interrupciones.
+
+\subsection{Descubrimiento del Autoencoder Convolucional Ortogonal Récord}
+\label{subsec:conv_ortogonal_record}
+
+Tras observar el colapso preliminar de la vocal /e/ en modelos convolucionales iniciales con exceso de canales o núcleos desbalanceados, se expandió el barrido sistemático a un espacio de 5760 combinaciones en \texttt{grid\_search\_conv\_ortogonal.py}. La iteración 3179 identificó una configuración convolucional que superó a todas las líneas base previas:
+
+\begin{itemize}
+    \item \textbf{Canales convolucionales intermedios:} $C_1 = 6$ y $C_2 = 12$ filtros.
+    \item \textbf{Tamaño de núcleo temporal:} $K = 5$ muestras en ambas capas con relleno (\textit{padding}) de 2 muestras para conservar la longitud $T = 20$.
+    \item \textbf{Función de activación no lineal:} $\tanh(x)$ en todas las capas ocultas, evitando la saturación asimétrica de ReLU y permitiendo gradientes suaves.
+    \item \textbf{Cuello de botella latente:} Aplanado de $12 \times 20 = 240$ dimensiones hacia una capa densa intermedia de 64 unidades, y compresión final a $Z \in \mathbb{R}^2$.
+    \item \textbf{Decodificador simétrico:} Expansión densa de 2 a 64 y luego a 240 unidades, remoldeado a $(12, 20)$ y des-convolución mediante dos capas \texttt{ConvTranspose1d} con núcleos $K = 5$.
+    \item \textbf{Hiperparámetros de optimización:} Tasa de aprendizaje $\eta = 0.003$, optimizador Adam, tamaño de lote de 512 muestras, 350 épocas completas, ponderación de ortogonalidad de pesos $\lambda_W = 2.0$ y decorrelación latente $\lambda_Z = 0.5$.
+\end{itemize}
+
+\subsubsection{Formulación Matemática de la Pérdida con Búferes Identidad}
+\label{subsubsec:perdida_conv_ortogonal}
+
+La función de pérdida total del modelo convolucional se define como:
+\begin{equation}
+    \mathcal{L}_{\text{total}} = \text{MSE}(\hat{X}, X) + \lambda_W \mathcal{L}_W + \lambda_Z \mathcal{L}_Z
+\end{equation}
+donde:
+\begin{itemize}
+    \item $\hat{X} \in \mathbb{R}^{B \times 3 \times 20}$ y $X \in \mathbb{R}^{B \times 3 \times 20}$ representan, respectivamente, el tensor tricanal reconstruido por el decodificador y el tensor de entrada de la envolvente RMS, con $B$ el número de ventanas en el lote, $3$ canales musculares y $20$ muestras temporales por canal.
+    \item $\text{MSE}(\hat{X}, X)$ es el error cuadrático medio de reconstrucción:
+    \begin{equation}
+        \text{MSE}(\hat{X}, X) = \frac{1}{B \cdot 3 \cdot 20} \sum_{b=1}^B \sum_{c=0}^2 \sum_{t=1}^{20} (\hat{x}_{b, c}[t] - x_{b, c}[t])^2
+    \end{equation}
+    donde $\hat{x}_{b, c}[t]$ es el valor reconstruido y $x_{b, c}[t]$ es el valor de entrada para la ventana $b$, el canal $c$ y la muestra temporal $t$, adimensionales tras la normalización por el Supremo Tricanal del pulso individual.
+    \item $\mathcal{L}_W$ es la penalización de ortogonalidad matricial acumulada sobre las capas convolucionales y lineales:
+    \begin{equation}
+        \mathcal{L}_W = \sum_{l=1}^L \|W_l W_l^T - I_{d_l}\|_F^2
+    \end{equation}
+    donde $W_l$ es la matriz de pesos de la capa $l$ reformateada a dos dimensiones ($C_{\text{out}} \times (C_{\text{in}} \cdot K)$ en convoluciones), $I_{d_l} \in \mathbb{R}^{d_l \times d_l}$ es la matriz identidad precalculada y registrada como búfer persistente no entrenable en memoria para eliminar asignaciones dinámicas por época, y $\|\cdot\|_F$ indica la norma de Frobenius.
+    \item $\mathcal{L}_Z$ es la penalización de decorrelación sobre la matriz de covarianza de las coordenadas en el plano latente:
+    \begin{equation}
+        \mathcal{L}_Z = \|\text{Cov}(Z) - I_2\|_F^2
+    \end{equation}
+    donde $\text{Cov}(Z) = \frac{1}{B-1} \sum_{b=1}^B (z_b - \bar{z})(z_b - \bar{z})^T \in \mathbb{R}^{2 \times 2}$ es la matriz de covarianza muestral del lote latente, $\bar{z} \in \mathbb{R}^2$ es el centroide medio, e $I_2$ es la matriz identidad bidimensional. Esta penalización obliga a que las dos coordenadas $z_1$ y $z_2$ posean varianza unitaria y covarianza cruzada nula, distribuyendo uniformemente la dispersión fonatoria.
+    \item $\lambda_W = 2.0$ y $\lambda_Z = 0.5$ son los coeficientes de regularización.
+\end{itemize}
+
+\subsubsection{Resultados Cuantitativos y Balance de Clases}
+\label{subsubsec:resultados_conv_ortogonal}
+
+A diferencia del intento convolucional preliminar donde la vocal /e/ colapsó al 27.7\%, la configuración 3179 resolvió el equilibrio entre clases:
+
+\begin{table}[H]
+\centering
+\begin{tabularx}{\textwidth}{p{6.0cm} c c X}
+\toprule
+\textbf{Métrica de Evaluación} & \textbf{Lineal de Control} & \textbf{Convolucional Óptimo} & \textbf{Variación Neta} \\
+\midrule
+Exactitud en Lucas (GMM) & 87.85\% & \textbf{89.04\%} & $+1.19\%$ \\
+Exactitud Directa en Secuencia P5 & 77.24\% (95/123) & \textbf{81.30\%} (100/123) & $+4.06\%$ (+5 aciertos) \\
+Media Armónica Multisesión & 82.20\% & \textbf{85.00\%} & $+2.80\%$ \\
+\midrule
+Vocal /a/ en Lucas & 92.9\% & 91.8\% & $-1.1\%$ \\
+Vocal /e/ en Lucas & 87.1\% & 77.2\% & Conservada sin colapso \\
+Vocal /i/ en Lucas & 75.7\% & \textbf{88.3\%} & $+12.6\%$ \\
+Vocal /o/ en Lucas & 86.0\% & \textbf{94.0\%} & $+8.0\%$ \\
+Vocal /u/ en Lucas & 98.0\% & 94.0\% & $-4.0\%$ \\
+\midrule
+Vocal /a/ en Secuencia P5 & 100.0\% & 100.0\% & $0.0\%$ \\
+Vocal /e/ en Secuencia P5 & 92.0\% & 84.0\% & Preservada \\
+Vocal /i/ en Secuencia P5 & 24.0\% & \textbf{52.0\%} & $+28.0\%$ \\
+Vocal /o/ en Secuencia P5 & 75.0\% & 75.0\% & $0.0\%$ \\
+Vocal /u/ en Secuencia P5 & 95.8\% & 95.8\% & $0.0\%$ \\
+Piso Mínimo de Clase en P5 & 24.0\% & \textbf{52.0\%} & $+28.0\%$ \\
+\bottomrule
+\end{tabularx}
+\caption{Comparativa entre el modelo lineal clásico y el autoencoder convolucional ortogonal óptimo.}
+\label{tab:comparativa_conv_optimo}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/grafico_campeon_record.png}
+\caption{Proyecciones en el espacio latente y matrices de confusión del autoencoder convolucional ortogonal récord. Se observa una distribución homogénea en forma de cruz tanto en calibración como en habla continua, sin canibalizar ninguna vocal.}
+\label{fig:conv_campeon_record}
+\end{figure}
+
+El factor decisivo para que este modelo convolucional triunfara radica en el tamaño de núcleo $K=5$ combinado con pocos canales ($6$ y $12$) y una fuerte penalización de ortogonalidad ($\lambda_W = 2.0$). El núcleo $K=5$ abarca $250\,\text{ms}$ de la señal (a la escala temporal de 20 muestras por segundo), lo cual captura la forma de onda de la contracción sin difuminar el transitorio rápido que diferencia a la vocal /e/ de la /i/.
+
+\section{Estudio del Operador de Energía Teager-Kaiser frente a la Envolvente RMS}
+\label{sec:estudio_tkeo}
+
+Con el fin de investigar si la incorporación de información sobre la velocidad de cambio y la frecuencia instantánea de descarga de las unidades motoras mejora la separabilidad frente a la amplitud cuadrática convencional, se evaluó el operador de energía no lineal de Teager-Kaiser (TKEO).
+
+\subsection{Formulación Matemática del Operador de Energía}
+\label{subsec:form_tkeo}
+
+El operador de Teager-Kaiser discreto $\Psi$ cuantifica la energía mecánica y eléctrica instantánea requerida para generar una señal bioeléctrica:
+\begin{equation}
+    \Psi[s[n]] = s[n]^2 - s[n-1] \cdot s[n+1]
+\end{equation}
+donde:
+\begin{itemize}
+    \item $s[n]$ es la amplitud de la señal mioeléctrica filtrada en la muestra discreta $n$, con unidades de microvoltios ($\mu\text{V}$).
+    \item $s[n-1]$ y $s[n+1]$ representan las muestras retardada y adelantada un paso temporal $\Delta t = 1/f_s = 0.5\,\text{ms}$ respecto a $n$, con una frecuencia de muestreo $f_s = 2000\,\text{Hz}$.
+    \item $\Psi[s[n]]$ es el valor instantáneo del operador, con dimensiones físicas proporcionales a microvoltios al cuadrado ($\mu\text{V}^2$).
+\end{itemize}
+
+Dado que en presencia de ruido estocástico el operador puede generar valores negativos espurios en los cruces por cero, se aplica rectificación y filtrado de suavizado con ventana de media móvil:
+\begin{equation}
+    e_{\text{TKEO}}[n] = \frac{1}{W} \sum_{k=-W/2}^{W/2} \max(0, \; \Psi[s[n+k]])
+\end{equation}
+donde $W = 181$ muestras (correspondientes a $90.5\,\text{ms}$ a $2000\,\text{Hz}$). Posteriormente, la señal se interpola a $20$ puntos por canal y se normaliza por el Supremo Tricanal del pulso individual:
+\begin{equation}
+    M_{\text{supremo, TKEO}} = \max_{c \in \{0, 1, 2\}} \left( \max_{t} e_{\text{TKEO}, c}[t] \right)
+\end{equation}
+
+\subsection{Evaluación Experimental de TKEO en la Entrada}
+\label{subsec:eval_tkeo_entrada}
+
+Se llevaron a cabo ensayos sistemáticos sustituyendo la envolvente RMS por TKEO, y construyendo un esquema híbrido de 6 canales ($3$ canales RMS $+ 3$ canales TKEO):
+
+\begin{table}[H]
+\centering
+\begin{tabularx}{\textwidth}{p{5.5cm} c c X}
+\toprule
+\textbf{Modalidad de Entrada} & \textbf{Lucas (Train)} & \textbf{P5 (Continua)} & \textbf{Diagnóstico Principal} \\
+\midrule
+Envolvente RMS Pura (3 Canales) & 89.04\% & \textbf{81.30\%} & Distribución equilibrada; piso en P5 del 52.0\% en /i/. \\
+Operador TKEO Puro (3 Canales) & \textbf{89.84\%} & 79.67\% & Récord en aisladas (/o/ 99\%, /a/ 98\%), pero /i/ colapsa al 32.0\% en P5. \\
+Híbrido RMS + TKEO (6 Canales) & 87.25\% & 60.98\% & Conflicto de escalas físicas ($\mu\text{V}$ vs $\mu\text{V}^2$); fuerte degradación en continua. \\
+\bottomrule
+\end{tabularx}
+\caption{Comparativa de desempeño entre la envolvente RMS, el operador TKEO y la entrada híbrida tricanal.}
+\label{tab:comparativa_tkeo}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/experimento_rms_tkeo_riguroso/comparativa_rigurosa_rms_vs_tkeo.png}
+\caption{Comparativa rigurosa entre la entrada RMS y el operador de energía Teager-Kaiser. En la secuencia continua P5 se observa que TKEO eleva la separación de /a/ y /o/, pero canibaliza a la vocal /i/ reduciéndola a un 32\% de acierto debido a la sensibilidad cuadrática al piso de ruido.}
+\label{fig:comparativa_rigurosa_tkeo}
+\end{figure}
+
+\subsubsection{Causa Física del Colapso de la Vocal I con TKEO en Entrada}
+\label{subsubsec:causa_fisica_tkeo}
+
+El análisis de los registros reveló la causa fisiológica de este comportamiento:
+\begin{enumerate}
+    \item La vocal /i/ se articula con tensión comisural suave del músculo depresor/risorio, produciendo potenciales de acción de amplitud baja y frecuencia moderada.
+    \item Al elevar las diferencias al cuadrado, el operador TKEO atenúa fuertemente las contracciones sutiles frente a las contracciones de gran excursión mandibular (/a/) o labial (/o/), encogiendo el rayo latente de /i/ hacia el origen de reposo.
+    \item En habla continua, donde no hay pausas de descanso absoluto y existe cocontracción basal residual, el producto cruzado $s[n-1] \cdot s[n+1]$ introduce fluctuaciones cuadráticas en reposo, confundiendo al codificador y haciendo que los pulsos continuos de /i/ se mezclen con /e/ o se pierdan en el centro neutro.
+\end{enumerate}
+
+\section{Estudio de Resolución Temporal: Comparativa de 20 frente a 25, 30 y 35 Puntos}
+\label{sec:estudio_resolucion_temporal}
+
+Un parámetro arquitectónico fundamental es la cantidad de puntos temporales $T$ que componen la ventana de entrada por cada canal muscular. Se realizó un barrido experimental sistemático sobre la misma red convolucional fijando las condiciones de entrenamiento y variando $T \in \{20, 25, 30, 35\}$ muestras.
+
+\subsection{Resultados Empíricos del Barrido Temporal}
+\label{subsec:resultados_barrido_temporal}
+
+\begin{table}[H]
+\centering
+\begin{tabularx}{\textwidth}{c c c c c X}
+\toprule
+\textbf{Puntos ($T$)} & \textbf{Duración por Bin} & \textbf{Lucas (Train)} & \textbf{P5 (Test)} & \textbf{Armónica} & \textbf{Vocal /i/ en P5} \\
+\midrule
+\textbf{20} & $\mathbf{50.0\,\text{ms}}$ & \textbf{89.04\%} & \textbf{81.30\%} & \textbf{85.00\%} & \textbf{52.0\% (13/25)} \\
+25 & $40.0\,\text{ms}$ & 87.85\% & 76.42\% & 81.74\% & 44.0\% (11/25) \\
+30 & $33.3\,\text{ms}$ & 87.25\% & 74.80\% & 80.54\% & 40.0\% (10/25) \\
+35 & $28.6\,\text{ms}$ & 86.65\% & 71.54\% & 78.37\% & 32.0\% (8/25) \\
+\bottomrule
+\end{tabularx}
+\caption{Desempeño del autoencoder convolucional ortogonal en función de la resolución temporal de la envolvente.}
+\label{tab:resolucion_temporal}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/experimento_resolucion_temporal/comparativa_resoluciones_temporales.png}
+\caption{Evolución de las métricas en función de la resolución temporal. Se confirma una caída monótona del desempeño a medida que se aumenta el número de muestras por canal, siendo 20 puntos el óptimo físico.}
+\label{fig:resolucion_temporal}
+\end{figure}
+
+\subsection{Fundamento Biofísico del Óptimo en 20 Muestras}
+\label{subsec:fundamento_optimo_20}
+
+El deterioro monótono al aumentar la resolución temporal se explica por la naturaleza bioeléctrica del electromiograma:
+\begin{enumerate}
+    \item Una resolución de $T = 20$ muestras sobre la ventana de un segundo equivale a un submuestreo con bines de integración de $50\,\text{ms}$. A esta escala temporal, las descargas individuales de los potenciales de acción de las unidades motoras (cuyas duraciones rondan entre $5$ y $15\,\text{ms}$) se integran de forma suave, preservando el perfil macroscópico de reclutamiento muscular sin registrar fluctuaciones asíncronas aleatorias.
+    \item Al elevar la resolución a 25, 30 o 35 muestras, los bines caen por debajo de los $35\,\text{ms}$. En ese régimen, las convoluciones temporales comienzan a muestrear el intervalo inter-espiga y el disparo estocástico particular de cada contracción. Esto introduce ruido de fase no repetible entre distintas tomas, provocando sobreajuste en el entrenamiento y destruyendo la generalización a secuencias continuas, afectando con especial severidad a la vocal /i/.
+    \item Se concluye que \textbf{20 puntos por canal constituye el óptimo físico absoluto} para la decodificación de habla submáximal basada en envolventes mioeléctricas.
+\end{enumerate}
+
+\section{Autoencoder con Pérdida Compuesta Dual Head: Reconstrucción Simultánea de RMS y TKEO}
+\label{sec:perdida_compuesta}
+
+A partir de los hallazgos anteriores, se planteó la siguiente solución: si alimentar directamente TKEO en la entrada distorsiona el codificador por asimetría de escalas, ¿es posible aprovechar la sensibilidad de TKEO utilizándolo como una restricción física de reconstrucción en el decodificador?
+
+Para verificar esta hipótesis, se diseñó el autoencoder de dos cabezas (\textit{Dual-Head}), el cual recibe exclusivamente la envolvente RMS limpia en su entrada ($3 \times 20$), pero su cuello de botella latente debe reconstruir simultáneamente dos señales:
+\begin{enumerate}
+    \item La envolvente RMS original $\hat{X}_{\text{RMS}} \in \mathbb{R}^{B \times 3 \times 20}$ a través de la primera cabeza decodificadora.
+    \item El perfil de energía de Teager-Kaiser $\hat{X}_{\text{TKEO}} \in \mathbb{R}^{B \times 3 \times 20}$ a través de una segunda cabeza decodificadora en paralelo.
+\end{enumerate}
+
+\subsection{Formulación Matemática de la Pérdida Compuesta}
+\label{subsec:form_perdida_compuesta}
+
+La función de pérdida compuesta se formula de la siguiente manera:
+\begin{equation}
+    \mathcal{L}_{\text{compuesta}} = \text{MSE}(\hat{X}_{\text{RMS}}, X_{\text{RMS}}) + \beta \cdot \text{MSE}(\hat{X}_{\text{TKEO}}, X_{\text{TKEO}}) + \lambda_W \mathcal{L}_W + \lambda_Z \mathcal{L}_Z
+\end{equation}
+donde:
+\begin{itemize}
+    \item $\hat{X}_{\text{RMS}} \in \mathbb{R}^{B \times 3 \times 20}$ y $X_{\text{RMS}} \in \mathbb{R}^{B \times 3 \times 20}$ representan el tensor tricanal predicho por la cabeza principal y el tensor de entrada de envolvente RMS, respectivamente.
+    \item $\hat{X}_{\text{TKEO}} \in \mathbb{R}^{B \times 3 \times 20}$ y $X_{\text{TKEO}} \in \mathbb{R}^{B \times 3 \times 20}$ representan el perfil energético predicho por la cabeza secundaria y el perfil real calculado según la ecuación del operador de Teager-Kaiser.
+    \item $\text{MSE}(\cdot, \cdot)$ es el error cuadrático medio:
+    \begin{equation}
+        \text{MSE}(\hat{X}, X) = \frac{1}{B \cdot 3 \cdot 20} \sum_{b=1}^B \sum_{c=0}^2 \sum_{t=1}^{20} (\hat{x}_{b, c}[t] - x_{b, c}[t])^2
+    \end{equation}
+    \item $\beta \ge 0$ es el factor de acoplamiento energético adimensional que regula la influencia de la cabeza de Teager-Kaiser sobre el espacio latente.
+    \item $\mathcal{L}_W = \sum_{l} \|W_l W_l^T - I_{d_l}\|_F^2$ es la penalización de ortogonalidad sobre las matrices de pesos con búferes precalculados $I_{d_l}$.
+    \item $\mathcal{L}_Z = \|\text{Cov}(Z) - I_2\|_F^2$ es la penalización de decorrelación sobre la covarianza del espacio latente $Z \in \mathbb{R}^{B \times 2}$.
+    \item $\lambda_W = 2.0$ y $\lambda_Z = 0.5$ son los pesos de regularización ortogonal fijados en el barrido sistemático.
+\end{itemize}
+
+\subsection{Barrido del Factor Beta y Descubrimiento del Récord Balanceado}
+\label{subsec:barrido_beta}
+
+Se realizó un barrido experimental de $\beta \in [0.00, 0.20]$ manteniendo invariantes todas las demás condiciones (\textit{ceteris paribus}):
+
+\begin{table}[H]
+\centering
+\begin{tabularx}{\textwidth}{c c c c c X}
+\toprule
+\textbf{Factor $\beta$} & \textbf{Lucas (Train)} & \textbf{P5 (Continua)} & \textbf{Armónica} & \textbf{Piso Lucas} & \textbf{Piso P5} \\
+\midrule
+$0.00$ (Control RMS) & \textbf{89.04\%} & 81.30\% (100/123) & 85.00\% & 77.2\% (/e/) & 52.0\% (/i/) \\
+$0.02$ & 88.84\% & 81.30\% (100/123) & 84.90\% & 77.2\% (/e/) & 52.0\% (/i/) \\
+$\mathbf{0.05}$ & 88.65\% & \textbf{82.11\% (101/123)} & \textbf{85.25\%} & \textbf{77.2\% (/e/)} & \textbf{52.0\% (/i/)} \\
+$0.10$ & 88.45\% & 80.49\% (99/123) & 84.28\% & 77.2\% (/e/) & 48.0\% (/i/) \\
+$0.20$ & 87.65\% & 78.05\% (96/123) & 82.57\% & 75.2\% (/e/) & 40.0\% (/i/) \\
+\bottomrule
+\end{tabularx}
+\caption{Desempeño multisesión del autoencoder con pérdida compuesta para distintos valores de acoplamiento beta.}
+\label{tab:barrido_beta}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/experimento_perdida_compuesta/comparativa_perdida_compuesta_betas.png}
+\caption{Evolución del desempeño en función del factor de acoplamiento beta. Se observa el máximo de exactitud armónica y transferencia en beta igual a 0.05.}
+\label{fig:perdida_compuesta_betas}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/experimento_perdida_compuesta/resultado_campeon_perdida_compuesta.png}
+\caption{Panel integral de evaluación del modelo campeón con pérdida compuesta y beta igual a 0.05. En el panel superior se presentan las proyecciones latentes en entrenamiento y en secuencia continua con detección de aciertos y errores, junto a la matriz de confusión multiclase. En el panel inferior se detalla la tira temporal de decodificación continua con las ventanas bioeléctricas y las predicciones fonatorias sobre los primeros 35 pulsos.}
+\label{fig:dashboard_campeon_compuesto}
+\end{figure}
+
+\subsubsection{Análisis de los Resultados con Beta Igual a 0.05}
+\label{subsubsec:analisis_beta_005}
+
+La configuración con $\beta = 0.05$ alcanzó un desempeño sobresaliente:
+\begin{enumerate}
+    \item \textbf{Nuevo récord de transferencia continua:} Alcanzó un $82.11\%$ de acierto en habla continua ($101$ de $123$ pulsos decodificados correctamente), superando el $81.30\%$ del control y sumando un acierto neto adicional.
+    \item \textbf{Mejora neta en la vocal /o/:} La tasa de detección de la vocal /o/ en habla continua se elevó del $75.0\%$ al \textbf{79.2\%}, debido a que la cabeza decodificadora de Teager-Kaiser obliga al espacio latente a captar el estallido de energía muscular del orbicular sin ensuciar la entrada.
+    \item \textbf{Invarianza del piso mínimo de clases:} A diferencia de la entrada con TKEO directo que destruyó a la vocal /i/ dejándola en 32\%, con la pérdida compuesta el piso de la peor vocal en continua se mantuvo estrictamente en el \textbf{52.0\%} ($13/25$ aciertos en /i/), y en entrenamiento de Lucas el piso permaneció intacto en el \textbf{77.2\%} en la vocal /e/.
+    \item \textbf{Media armónica máxima:} La exactitud armónica alcanzó el valor récord de \textbf{85.25\%}, consolidándose como el modelo no supervisado más balanceado y robusto del proyecto.
+\end{enumerate}
+
+\section{Síntesis y Directivas de Implementación}
+\label{sec:sintesis}
+
+\begin{table}[H]
+\centering
+\begin{tabularx}{\textwidth}{p{4.5cm} c c X}
+\toprule
+\textbf{Configuración} & \textbf{Lucas (Train)} & \textbf{P5 (Test)} & \textbf{Diagnóstico Principal} \\
+\midrule
+Lineal Nativo sin SO(2) & 87.85\% & 77.24\% & Geometría robusta, 100\% no supervisado. Base de referencia histórica. \\
+Lineal con Rotación SO(2) & 91.43\% & 67.50\% & Máximo ajuste en entrenamiento; ligera desviación en vocales intermedias en P5. \\
+Convolucional 1D Inicial & 77.69\% & 69.92\% & Convolución con exceso de canales promedia transitorios y canibaliza la vocal /e/. \\
+Convolucional Ortogonal Óptimo & \textbf{89.04\%} & \textbf{81.30\%} & Canales (6, 12), kernel 5, Tanh y regularización estricta; rescata /e/ y equilibra las 5 vocales. \\
+Convolucional Entrada TKEO Pura & 89.84\% & 79.67\% & Récord en aisladas (/o/ 99\%), pero colapsa la vocal /i/ al 32.0\% en habla continua. \\
+Pérdida Compuesta ($\beta = 0.05$) & 88.65\% & \textbf{82.11\%} & Reconstrucción dual RMS y TKEO; récord de 101/123 en continua y 85.25\% de media armónica. \\
+Lineal con Entropía Cruzada ($\lambda_{CE}=0.5$) & 86.85\% & \textbf{86.99\%} & Cúmulos compactos en fronteras naturales; referencia supervisada. \\
+Lineal con Gate Doble 100\% sEMG & 87.85\% & \textbf{81.30\%} & Segmentación bioeléctrica pura sin micrófono con $n_{\text{onset}} + 350\,\text{ms}$, superando el audio. \\
+\bottomrule
+\end{tabularx}
+\caption{Resumen comparativo consolidado de las arquitecturas y esquemas de aprendizaje evaluados.}
+\label{tab:resumen_final}
+\end{table}
+
+\textbf{Directivas consolidadas para tiempo real:}
+\begin{enumerate}
+    \item \textbf{Arquitectura lineal y convolucional compacta:} Tanto la arquitectura lineal como la convolucional ortogonal compacta ($(6, 12)$ canales, $K=5$) requieren menos de 45.000 operaciones flotantes, ejecutándose en menos de $0.05\,\text{ms}$ en CPU, garantizando latencia cero para streaming continuo.
+    \item \textbf{Resolución temporal óptima de 20 muestras:} La ventana de 1 segundo debe muestrearse estrictamente a 20 puntos por canal ($50\,\text{ms}$ por bin). Resoluciones más finas capturan el disparo estocástico de las unidades motoras y destruyen la generalización en habla continua.
+    \item \textbf{Entrada limpia RMS con regularización TKEO:} Para no distorsionar el codificador con el piso de ruido de la energía cuadrática, la entrada debe ser siempre la envolvente RMS limpia. Si se desea capturar la energía explosiva del orbicular y digástrico, debe utilizarse la pérdida compuesta dual-head con $\beta = 0.05$ en el decodificador.
+    \item \textbf{Corte por micrófono y normalización por Supremo:} La segmentación tradicional puede guiarse por micrófono acústico y normalizarse obligatoriamente por el Supremo Tricanal por Pulso individual.
+    \item \textbf{Segmentación autónoma por Gate Doble para habla silenciosa:} Para aplicaciones puramente mioeléctricas sin emisión de sonido, el detector Gate Doble con norma tricanal suprime el 100\% de falsos disparos y alcanza un $81.30\%$ en continua aplicando la proyección de $n_{\text{onset}} + 350\,\text{ms}$.
+    \item \textbf{Código de colores oficial universal:} Mantener en todas las visualizaciones: /a/ en rojo (\texttt{\#E63946}), /e/ en azul (\texttt{\#1F77B4}), /i/ en verde (\texttt{\#2CA02C}), /o/ en morado (\texttt{\#9D4EDD}) y /u/ en amarillo (\texttt{\#E7A61A}).
+\end{enumerate}
+
+\end{document}

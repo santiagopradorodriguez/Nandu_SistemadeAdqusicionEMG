@@ -50,7 +50,7 @@ def generar_figura_paper_multimodal(toma_path, out_file=None, pulso_idx=1, logge
     
     Parámetros:
         toma_path: Ruta absoluta o relativa al directorio de la medición.
-        out_file: Ruta de guardado opcional. Si es None, guarda 'plot_paper_combined.png' en toma_path.
+        out_file: Ruta de guardado opcional. Si es None, guarda 'plot_espectrograma_multimodal.png' en toma_path.
         pulso_idx: Índice del pulso a graficar (por defecto 1, segundo pulso).
         logger: Función para emitir mensajes de log.
         
@@ -183,9 +183,10 @@ def generar_figura_paper_multimodal(toma_path, out_file=None, pulso_idx=1, logge
         ruido_2 = np.median(seg_env2[:n_base]) if len(seg_env2) > n_base else np.min(seg_env2)
         seg_env2 = np.maximum(0.0, seg_env2 - ruido_2)
         
-    # 4. Creación del Panel Gráfico de 4 Subplots
-    fig = plt.figure(figsize=(10, 11))
-    gs = fig.add_gridspec(4, 2, width_ratios=[0.97, 0.03], height_ratios=[1.5, 1, 1, 1.5], wspace=0.02, hspace=0.28)
+    # 4. Creación del Panel Gráfico de 4 Subplots (Tamaño compacto / mitad)
+    plt.style.use('default')
+    fig = plt.figure(figsize=(8.5, 5.8), dpi=300)
+    gs = fig.add_gridspec(4, 2, width_ratios=[0.97, 0.03], height_ratios=[1.2, 0.9, 0.9, 1.2], wspace=0.02, hspace=0.35)
     
     ax0 = fig.add_subplot(gs[0, 0])
     cax = fig.add_subplot(gs[0, 1])
@@ -195,9 +196,10 @@ def generar_figura_paper_multimodal(toma_path, out_file=None, pulso_idx=1, logge
     axes = [ax0, ax1, ax2, ax3]
     
     # Ocultar etiquetas numéricas intermedias para evitar superposiciones tipográficas
-    ax0.tick_params(labelbottom=False)
-    ax1.tick_params(labelbottom=False)
-    ax2.tick_params(labelbottom=False)
+    ax0.tick_params(labelbottom=False, labelsize=8)
+    ax1.tick_params(labelbottom=False, labelsize=8)
+    ax2.tick_params(labelbottom=False, labelsize=8)
+    ax3.tick_params(labelsize=8)
     
     # --- PANEL 0: Espectrograma de Audio STFT con Pre-énfasis ---
     seg_mic_pre = np.append(seg_mic[0], seg_mic[1:] - 0.97 * seg_mic[:-1])
@@ -220,10 +222,11 @@ def generar_figura_paper_multimodal(toma_path, out_file=None, pulso_idx=1, logge
     im = ax0.imshow(Sxx_db, aspect='auto', origin='lower',
                     extent=extent_audio, cmap='Greys',
                     vmin=vmin_db, vmax=vmax_db, interpolation='bilinear')
-    ax0.set_title(f"Análisis Multimodal Fonético: Vocal /{vocal}/ - {prueba_nom} ({sujeto})", fontsize=13, fontweight='bold')
-    ax0.set_ylabel("Frecuencia (Hz)\n[Audio STFT]", fontweight='bold')
+    ax0.set_title(f"Análisis Multimodal Fonético: Vocal /{vocal}/ - {prueba_nom} - {sujeto}", fontsize=10, fontweight='bold', pad=4)
+    ax0.set_ylabel("Frecuencia (Hz)\n[Audio STFT]", fontweight='bold', fontsize=8)
     cbar = fig.colorbar(im, cax=cax)
-    cbar.set_label("Magnitud (dB)", rotation=270, labelpad=18, fontweight='bold')
+    cbar.set_label("Magnitud (dB)", rotation=270, labelpad=14, fontweight='bold', fontsize=7.5)
+    cbar.ax.tick_params(labelsize=7)
     
     # --- PANEL 1: Micrófono (Oscilograma rectificado + Envolvente normalizada) ---
     max_mic = np.max(np.abs(seg_mic)) if np.max(np.abs(seg_mic)) > 0 else 1.0
@@ -235,10 +238,10 @@ def generar_figura_paper_multimodal(toma_path, out_file=None, pulso_idx=1, logge
     mic_fast_env_norm = mic_fast_env / max_mic_env
     
     ax1.plot(t_axis, np.abs(seg_mic_norm), color='gray', linewidth=0.6, alpha=0.55, label='Audio rectificado')
-    ax1.plot(t_axis, mic_fast_env_norm, color='black', linewidth=1.5, label='Envolvente acústica')
-    ax1.set_ylabel("Amplitud Norm.\n[Micrófono]", fontweight='bold')
+    ax1.plot(t_axis, mic_fast_env_norm, color='black', linewidth=1.3, label='Envolvente acústica')
+    ax1.set_ylabel("Amplitud Norm.\n[Micrófono]", fontweight='bold', fontsize=8)
     ax1.set_ylim([-0.05, 1.1])
-    ax1.legend(loc='upper right', framealpha=0.85)
+    ax1.legend(loc='upper right', framealpha=0.85, fontsize=7.5)
     ax1.grid(True, alpha=0.3)
     
     # --- PANEL 2: Activación Muscular Normalizada (Supremo Tricanal) ---
@@ -251,14 +254,14 @@ def generar_figura_paper_multimodal(toma_path, out_file=None, pulso_idx=1, logge
     if max_supremo <= 0:
         max_supremo = 1.0
         
-    ax2.plot(t_axis, seg_env0 / max_supremo, color='#E63946', linewidth=2.5, label=f'{m0_name} (Ch0)')
+    ax2.plot(t_axis, seg_env0 / max_supremo, color='#E63946', linewidth=2.0, label=f'{m0_name} (Ch0)')
     if ch1_activo:
-        ax2.plot(t_axis, seg_env1 / max_supremo, color='#2A9D8F', linewidth=2.5, label=f'{m1_name} (Ch1)')
+        ax2.plot(t_axis, seg_env1 / max_supremo, color='#2A9D8F', linewidth=2.0, label=f'{m1_name} (Ch1)')
     if ch2_activo:
-        ax2.plot(t_axis, seg_env2 / max_supremo, color='#F77F00', linewidth=2.5, label=f'{m2_name} (Ch2)')
+        ax2.plot(t_axis, seg_env2 / max_supremo, color='#F77F00', linewidth=2.0, label=f'{m2_name} (Ch2)')
         
-    ax2.set_ylabel("Activación Norm.\n[Envolvente EMG]", fontweight='bold')
-    ax2.legend(loc='upper right', framealpha=0.85)
+    ax2.set_ylabel("Activación Norm.\n[Envolvente EMG]", fontweight='bold', fontsize=8)
+    ax2.legend(loc='upper right', framealpha=0.85, fontsize=7.5)
     ax2.grid(True, alpha=0.3)
     
     # --- PANEL 3: Espectrograma RGB Muscular con Pre-énfasis ---
@@ -284,24 +287,24 @@ def generar_figura_paper_multimodal(toma_path, out_file=None, pulso_idx=1, logge
     extent_emg = [t_stft_aligned[0] - dt_step_emg / 2, t_stft_aligned[-1] + dt_step_emg / 2, 20, 600]
     
     ax3.imshow(color_img, origin='lower', aspect='auto', extent=extent_emg, interpolation='bicubic')
-    ax3.set_ylabel("Frecuencia EMG (Hz)", fontweight='bold')
-    ax3.set_xlabel("Tiempo relativo a la fonación (s) [t = 0: inicio acústico]", fontweight='bold', fontsize=11)
+    ax3.set_ylabel("Frecuencia EMG (Hz)", fontweight='bold', fontsize=8)
+    ax3.set_xlabel("Tiempo relativo a la fonación (s) [t = 0: inicio acústico]", fontweight='bold', fontsize=8.5)
     
     label_rgb = f"Rojo: {m0_name}"
     if ch1_activo:
         label_rgb += f" | Verde: {m1_name}"
     if ch2_activo:
         label_rgb += f" | Amarillo: {m2_name}"
-    ax3.set_title(f"Espectrograma EMG RGB con Pre-énfasis ({label_rgb})", fontsize=11, fontweight='bold')
+    ax3.set_title(f"Espectrograma EMG RGB con Pre-énfasis: {label_rgb}", fontsize=8.5, fontweight='bold', pad=4)
     
     # Línea vertical punteada de referencia t=0 sincronizada
     for ax in axes:
-        ax.axvline(0.0, color='black', linestyle='--', linewidth=1.3, alpha=0.85)
+        ax.axvline(0.0, color='black', linestyle='--', linewidth=1.2, alpha=0.85)
         
-    ax0.set_xlim([-0.45, 0.85])
+    ax0.set_xlim([-0.4, 0.4])
     
     if out_file is None:
-        out_file = os.path.join(toma_path, "plot_paper_combined.png")
+        out_file = os.path.join(toma_path, "plot_espectrograma_multimodal.png")
         
     os.makedirs(os.path.dirname(os.path.abspath(out_file)), exist_ok=True)
     plt.savefig(out_file, dpi=300)
@@ -336,7 +339,7 @@ def procesar_sesion_completa(session_dir, out_central_dir=None, logger=print):
             
         logger(f"[Progreso {i+1}/{len(tomas)} - {((i+1)/len(tomas))*100:.1f}%] Procesando {t}...")
         try:
-            # 1. Guardar en la carpeta individual de la toma como plot_paper_combined.png
+            # 1. Guardar en la carpeta individual de la toma como plot_espectrograma_multimodal.png
             img_path = generar_figura_paper_multimodal(t_path, pulso_idx=1, logger=logger)
             generadas.append(img_path)
             

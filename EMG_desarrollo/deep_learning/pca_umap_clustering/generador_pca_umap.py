@@ -119,6 +119,72 @@ def get_interpulse_noise(processed_segment, initial_noise):
         
     return curr_mean
 
+def extraer_sesion_agnostica(toma_str):
+    """
+    Extrae la etiqueta de sesión o grupo a partir del nombre de la toma.
+    Maneja sufijos 'T1', 'T2', etc., o bien carpetas de fecha/sesión.
+    """
+    t_clean = str(toma_str).replace('\\', '/').split('/')[-1]
+    t_clean = t_clean.split('_Win')[0]
+    parts = t_clean.split('_')
+    # Regla canónica: formato vocal_pruebaotoma_sujeto (ej. A_Prueba1_Candela, E_T1_Lucas)
+    if len(parts) >= 2 and parts[0].upper() in ['A', 'E', 'I', 'O', 'U']:
+        return parts[1].upper()
+    for p in parts:
+        p_clean = p.strip()
+        if p_clean.startswith('T') and len(p_clean) >= 2 and p_clean[1:].isdigit():
+            return p_clean.upper()
+    m = re.search(r'(T\d+|S\d+|Sesion\d+|Prueba\d+)', t_clean, re.IGNORECASE)
+    if m:
+        return m.group(0).upper()
+    for p in reversed(parts):
+        p_clean = p.strip()
+        if any(char.isdigit() for char in p_clean) and len(p_clean) <= 10:
+            return p_clean.upper()
+    return 'S1'
+
+def acondicionar_reposo_impedancia(X_array, sesiones, n_canales=3, n_pts_reposo=10):
+    """
+    Acondicionamiento por reposo basal pre-contracción y rango dinámico P95 por sesión y canal.
+    Normaliza cada canal muscular para que el silencio basal sea 0.0 y el pico de activación sea ~1.0.
+    """
+    orig_shape = X_array.shape
+    if X_array.ndim == 2:
+        N, D = X_array.shape
+        n_pts = D // n_canales
+        X_reshaped = X_array.reshape(N, n_canales, n_pts).copy()
+    else:
+        N, n_canales, n_pts = X_array.shape
+        X_reshaped = X_array.copy()
+
+    X_filt = np.zeros_like(X_reshaped)
+    if n_pts >= 12:
+        try:
+            from scipy.signal import butter, filtfilt
+            b, a = butter(N=3, Wn=0.3, btype='low')
+            for i in range(N):
+                for c in range(n_canales):
+                    X_filt[i, c, :] = filtfilt(b, a, X_reshaped[i, c, :])
+        except Exception:
+            X_filt = X_reshaped.copy()
+    else:
+        X_filt = X_reshaped.copy()
+
+    unique_ses = np.unique(sesiones)
+    X_norm = np.zeros_like(X_filt)
+    pts_base = max(1, min(n_pts_reposo, n_pts // 4))
+
+    for s in unique_ses:
+        mask = (sesiones == s)
+        for c in range(n_canales):
+            base_mean = np.mean(X_filt[mask, c, :pts_base])
+            base_max = np.percentile(X_filt[mask, c, :], 95) - base_mean + 1e-6
+            X_norm[mask, c, :] = (X_filt[mask, c, :] - base_mean) / base_max
+
+    if len(orig_shape) == 2:
+        return X_norm.reshape(N, -1)
+    return X_norm
+
 def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, gate_ratio_ruido=8.0, smooth_ms=250, notch_q=2.0, target_len=100, return_raw_cache=False, aplicar_trevisan=False, modo_alineacion="Pico Volumen Micrófono", pre_pct=0.4, post_pct=0.6, canales_features=["canal_0", "canal_1", "canal_2"], ignorar_ventana_cero=False, cache_canales_data=None, aplicar_correccion_intersesion=False, tipo_envolvente="rms", lowpass_cutoff_hz=300.0, tipo_filtro_ruido="notch", highpass_cutoff_hz=20.0):
     """
     Extrae y alinea las ventanas de los canales solicitados.
@@ -131,12 +197,17 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, gate_ra
     mediciones_procesadas = []
     
     modo_str = str(modo_alineacion).strip()
+    es_modo_gate_doble = "gate doble" in modo_str.lower()
     es_modo_canal = modo_str.lower().startswith("pico canal")
     if es_modo_canal:
         ch_num = modo_str.lower().split()[-1]
         ch_target_global = f"canal_{ch_num}"
         canales_procesar = list(set(canales_features + [ch_target_global]))
+    elif es_modo_gate_doble:
+        ch_target_global = canales_features[0]
+        canales_procesar = list(set(canales_features))
     else:
+        ch_target_global = "canal_3"
         canales_procesar = list(set(canales_features + ["canal_3"]))
     
     total_mediciones = len(mediciones)
@@ -208,12 +279,12 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, gate_ra
             if cache_canales_data is not None and len(canales_data) == len(canales_procesar):
                 cache_canales_data[cache_key] = canales_data
                 
-        canales_req = list(set(canales_features + [ch_target_global])) if es_modo_canal else list(set(canales_features + ["canal_3"]))
-        ch_target = ch_target_global if es_modo_canal else "canal_3"
+        canales_req = canales_procesar
+        ch_target = ch_target_global
         if not all(ch in canales_data for ch in canales_req):
             continue
             
-        # Alinear ventanas usando canal maestro
+        # Alinear ventanas usando canal maestro o Gate Doble
         muestras_pulso = canales_data[ch_target]['muestras_pulso'] if ch_target in canales_data else canales_data[canales_features[0]]['muestras_pulso']
         sr_canal = canales_data[ch_target].get('samplerate', 2000)
         
@@ -237,6 +308,49 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, gate_ra
                 val_pico = env_smooth_cont[p_cand]
                 if val_pico >= 0.10 * np.max(env_smooth_cont) and val_pico > ch_noise * 1.1:
                     picos_alineacion.append(p_cand)
+        elif es_modo_gate_doble:
+            # Segmentación pura mioeléctrica por Gate Doble con histéresis y backtracking
+            envs = [canales_data[ch]['env_recortada'] for ch in canales_features if ch in canales_data]
+            min_len = min(len(e) for e in envs)
+            env_ref = envs[0][:min_len]
+            envs_clean = []
+            for ch, e in zip([ch for ch in canales_features if ch in canales_data], envs):
+                ch_noise = canales_data[ch].get('noise_levels', [0])[0] if len(canales_data[ch].get('noise_levels', [])) > 0 else 0
+                envs_clean.append(np.maximum(e[:min_len] - ch_noise, 0.0))
+            
+            S_emg = np.sqrt(np.sum([ec**2 for ec in envs_clean], axis=0))
+            
+            med_base = np.median(S_emg)
+            mad_base = np.median(np.abs(S_emg - med_base))
+            sigma_rob = 1.4826 * mad_base + 1e-6
+            
+            p98 = np.percentile(S_emg, 98)
+            U_alto = max(med_base + 2.2 * sigma_rob, p98 * 0.18)
+            U_bajo = med_base + 1.0 * sigma_rob
+                
+            T_refr = min(int(0.650 * sr_canal), int(0.65 * muestras_pulso))
+            max_lookback = int(0.350 * sr_canal)
+            
+            onsets = []
+            en_pulso = False
+            ultimo_onset = -T_refr
+            
+            for n in range(len(S_emg)):
+                if not en_pulso:
+                    if S_emg[n] >= U_alto and (n - ultimo_onset) >= T_refr:
+                        lb_st = max(0, n - max_lookback)
+                        sub_s = S_emg[lb_st:n]
+                        cruces = np.where(sub_s <= U_bajo)[0]
+                        n_on = lb_st + cruces[-1] if len(cruces) > 0 else lb_st
+                        onsets.append(n_on)
+                        ultimo_onset = n_on
+                        en_pulso = True
+                else:
+                    if S_emg[n] < U_bajo:
+                        en_pulso = False
+                        
+            # Proyección por desfase electromecánico EMD para compatibilidad con modelos existentes
+            picos_alineacion = np.array([int(on + 0.350 * sr_canal) for on in onsets if (on + 0.350 * sr_canal) < min_len])
         else:
             env_ref = canales_data["canal_3"]['env_recortada']
             dist_samples = int(0.8 * muestras_pulso)
@@ -1533,7 +1647,7 @@ def plot_confusion_matrix_heatmap(df_cm, title, filepath):
     plt.savefig(filepath, dpi=300, bbox_inches='tight', facecolor='white')
     plt.close()
 
-def extraer_y_filtrar(mediciones, base_dir, params, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=False, cache_canales_data=None, verbose=True, aplicar_correccion_intersesion=False):
+def extraer_y_filtrar(mediciones, base_dir, params, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=False, cache_canales_data=None, verbose=True, aplicar_correccion_intersesion=False, correccion_impedancia=True):
     X, Y, Tomas, SNRs = extraer_features_concatenadas(
         base_dir, mediciones, 
         alpha_ruido=params['alpha_ruido'], 
@@ -1604,8 +1718,19 @@ def extraer_y_filtrar(mediciones, base_dir, params, aplicar_trevisan, modo_aline
     if verbose:
         print(f"    Total outliers/SNR removidos: {outliers_detectados}")
         print(f"    Repeticiones finales válidas: {len(X_clean)}")
+
+    X_clean_arr = np.array(X_clean)
+    Y_clean_arr = np.array(Y_clean)
+    Tomas_clean_arr = np.array(Tomas_clean)
+
+    if correccion_impedancia and len(X_clean_arr) > 0:
+        sesiones_clean = np.array([extraer_sesion_agnostica(t) for t in Tomas_clean_arr])
+        n_ch = len(canales_features) if len(canales_features) > 0 else 3
+        X_clean_arr = acondicionar_reposo_impedancia(X_clean_arr, sesiones_clean, n_canales=n_ch)
+        if verbose:
+            print(f"    [Impedancia] Corrección por reposo basal y P95 aplicada ({len(np.unique(sesiones_clean))} sesiones detectadas)")
     
-    return np.array(X_clean), np.array(Y_clean), np.array(Tomas_clean), descartados
+    return X_clean_arr, Y_clean_arr, Tomas_clean_arr, descartados
 
 def aplicar_pesos_canales(X, canales_list, pesos):
     if pesos is None or not isinstance(pesos, (list, tuple)) or len(pesos) == 0:
@@ -1646,13 +1771,15 @@ def ejecutar_procesamiento(
     estilo_visual="Elipses",
     ignorar_ventana_cero=False,
     out_dir=None,
-    aplicar_correccion_intersesion=True,
+    aplicar_correccion_intersesion=False,
+    correccion_impedancia=True,
     tipo_filtro_ruido="notch",
     notch_q=2.0,
     highpass_cutoff_hz=20.0,
     lowpass_cutoff_hz=300.0,
     **kwargs
 ):
+    corr_imp = kwargs.get('correccion_impedancia', correccion_impedancia)
     if out_dir is None:
         script_dir = os.path.dirname(os.path.abspath(__file__))
         out_dir = os.path.join(script_dir, "resultados_pca_umap")
@@ -1716,7 +1843,8 @@ def ejecutar_procesamiento(
     resultados_ejecucion = {}
     if proc_pca_2d:
         print("\n=== PROCESANDO PCA 2D ===")
-        X_2d, Y_2d, Tomas_2d, desc_2d = extraer_y_filtrar(mediciones, base_dir, params_2d, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=ignorar_ventana_cero, aplicar_correccion_intersesion=aplicar_correccion_intersesion)
+        corr_imp_2d = params_2d.get('correccion_impedancia', corr_imp) if params_2d is not None else corr_imp
+        X_2d, Y_2d, Tomas_2d, desc_2d = extraer_y_filtrar(mediciones, base_dir, params_2d, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=ignorar_ventana_cero, aplicar_correccion_intersesion=aplicar_correccion_intersesion, correccion_impedancia=corr_imp_2d)
         resultados_ejecucion['X_2d'] = X_2d
         resultados_ejecucion['Y_2d'] = Y_2d
         if len(X_2d) > 0:
@@ -1786,7 +1914,8 @@ def ejecutar_procesamiento(
 
     if proc_umap_2d:
         print("\n=== PROCESANDO UMAP 2D ===")
-        X_2d_u, Y_2d_u, Tomas_2d_u, desc_2d_u = extraer_y_filtrar(mediciones, base_dir, params_umap, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=ignorar_ventana_cero, aplicar_correccion_intersesion=aplicar_correccion_intersesion)
+        corr_imp_u2d = params_umap.get('correccion_impedancia', corr_imp) if params_umap is not None else corr_imp
+        X_2d_u, Y_2d_u, Tomas_2d_u, desc_2d_u = extraer_y_filtrar(mediciones, base_dir, params_umap, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=ignorar_ventana_cero, aplicar_correccion_intersesion=aplicar_correccion_intersesion, correccion_impedancia=corr_imp_u2d)
         if len(X_2d_u) > 0:
             umap_2d = umap.UMAP(n_neighbors=min(umap_n_neighbors, len(X_2d_u)-1), min_dist=umap_min_dist, metric=umap_metric, n_components=2, random_state=42)
             X_umap_2d = umap_2d.fit_transform(X_2d_u)
@@ -1806,7 +1935,8 @@ def ejecutar_procesamiento(
 
     if proc_pca_3d:
         print("\n=== PROCESANDO PCA 3D ===")
-        X_3d, Y_3d, Tomas_3d, desc_3d = extraer_y_filtrar(mediciones, base_dir, params_3d, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=ignorar_ventana_cero, aplicar_correccion_intersesion=aplicar_correccion_intersesion)
+        corr_imp_3d = params_3d.get('correccion_impedancia', corr_imp) if params_3d is not None else corr_imp
+        X_3d, Y_3d, Tomas_3d, desc_3d = extraer_y_filtrar(mediciones, base_dir, params_3d, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=ignorar_ventana_cero, aplicar_correccion_intersesion=aplicar_correccion_intersesion, correccion_impedancia=corr_imp_3d)
         resultados_ejecucion['X_3d'] = X_3d
         resultados_ejecucion['Y_3d'] = Y_3d
         if len(X_3d) > 0:
@@ -1880,7 +2010,8 @@ def ejecutar_procesamiento(
 
     if proc_umap_3d:
         print("\n=== PROCESANDO UMAP 3D ===")
-        X_3d_u, Y_3d_u, Tomas_3d_u, desc_3d_u = extraer_y_filtrar(mediciones, base_dir, params_umap, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=ignorar_ventana_cero, aplicar_correccion_intersesion=aplicar_correccion_intersesion)
+        corr_imp_u3d = params_umap.get('correccion_impedancia', corr_imp) if params_umap is not None else corr_imp
+        X_3d_u, Y_3d_u, Tomas_3d_u, desc_3d_u = extraer_y_filtrar(mediciones, base_dir, params_umap, aplicar_trevisan, modo_alineacion, pre_pct, post_pct, canales_features, ignorar_ventana_cero=ignorar_ventana_cero, aplicar_correccion_intersesion=aplicar_correccion_intersesion, correccion_impedancia=corr_imp_u3d)
         if len(X_3d_u) > 0:
             umap_3d = umap.UMAP(n_neighbors=min(umap_n_neighbors, len(X_3d_u)-1), min_dist=umap_min_dist, metric=umap_metric, n_components=3, random_state=42)
             X_umap_3d = umap_3d.fit_transform(X_3d_u)

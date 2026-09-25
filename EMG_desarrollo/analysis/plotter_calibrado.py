@@ -544,7 +544,7 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
                         clean_seg = noise_seg[noise_seg <= q75 + 1.5 * iqr]
                         noise_level = np.median(clean_seg) if len(clean_seg) > 0 else np.median(noise_seg)
                         env = env - noise_level
-                        etiqueta_env += " (Offset restado)"
+                        etiqueta_env += " - Offset restado"
             y_plot = env
             lw = 1.2
         elif tipo_envolvente == 'rms':
@@ -561,7 +561,7 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
                         noise_level = np.nanmedian(clean_seg) if len(clean_seg) > 0 else np.nanmedian(noise_seg)
                         if not np.isnan(noise_level):
                             env_rms = env_rms - noise_level
-                            etiqueta_env += " (Offset restado)"
+                            etiqueta_env += " - Offset restado"
             y_plot = env_rms
             lw = 1.5
         else:
@@ -834,6 +834,7 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
         print(f"Pasando a la siguiente...\n")
     else:
         plt.close(fig)
+    plt.style.use('default')
 
 def flujo_principal():
     """

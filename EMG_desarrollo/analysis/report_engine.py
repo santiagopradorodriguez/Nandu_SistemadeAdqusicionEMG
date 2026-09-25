@@ -229,6 +229,14 @@ class ReportEngine:
                 key=lambda m: m['dt_obj']
             )
 
+        # Agrupar por vocal para visualización organizada (A, E, I, O, U)
+        info['vocales_agrupadas'] = OrderedDict()
+        for v in ['A', 'E', 'I', 'O', 'U']:
+            meds_v = [m for m in raw_meds if m['letra'] == v]
+            if meds_v:
+                meds_v.sort(key=lambda m: m['dt_obj'])
+                info['vocales_agrupadas'][v] = meds_v
+
         info['mediciones'] = raw_meds
 
         if not info['fecha']:
@@ -311,20 +319,40 @@ class ReportEngine:
                     if vals[c] > max_ch[c]:
                         max_ch[c] = vals[c]
 
+        plt.style.use('default')
+        plt.rcParams.update({
+            'text.color': 'black',
+            'axes.labelcolor': 'black',
+            'axes.edgecolor': '#333333',
+            'xtick.color': 'black',
+            'ytick.color': 'black',
+            'grid.color': '#cccccc',
+            'figure.facecolor': 'white',
+            'axes.facecolor': 'white',
+        })
         fig = plt.figure(figsize=(9, 7), dpi=300, facecolor='white')
         ax = fig.add_subplot(111, projection='3d')
         ax.set_facecolor('white')
-        ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
-        ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
-        ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
+        
+        # Paneles 3D con sombreado sutil para distinguir el volumen del cubo
+        ax.xaxis.set_pane_color((0.95, 0.95, 0.95, 0.8))
+        ax.yaxis.set_pane_color((0.92, 0.92, 0.92, 0.8))
+        ax.zaxis.set_pane_color((0.89, 0.89, 0.89, 0.8))
+        
+        # Líneas de eje, ticks y grilla en negro y gris contrastado
+        ax.xaxis.line.set_color((0.2, 0.2, 0.2, 0.9))
+        ax.yaxis.line.set_color((0.2, 0.2, 0.2, 0.9))
+        ax.zaxis.line.set_color((0.2, 0.2, 0.2, 0.9))
+        ax.tick_params(colors='black', labelsize=8)
+        ax.grid(True, color='#b0b0b0', linestyle='--', linewidth=0.5, alpha=0.7)
         
         ax.set_xlim([0.0, 1.0])
         ax.set_ylim([0.0, 1.0])
         ax.set_zlim([0.0, 1.0])
         
-        ax.set_xlabel(f"X: {m0_label} (Proporción)", fontsize=9, labelpad=8)
-        ax.set_ylabel(f"Y: {m1_label} (Proporción)", fontsize=9, labelpad=8)
-        ax.set_zlabel(f"Z: {m2_label} (Proporción)", fontsize=9, labelpad=8)
+        ax.set_xlabel(f"X: {m0_label} (Proporción)", fontsize=9, labelpad=8, color='black', fontweight='bold')
+        ax.set_ylabel(f"Y: {m1_label} (Proporción)", fontsize=9, labelpad=8, color='black', fontweight='bold')
+        ax.set_zlabel(f"Z: {m2_label} (Proporción)", fontsize=9, labelpad=8, color='black', fontweight='bold')
         
         colores_vocales = {
             'A': '#e41a1c',
@@ -368,7 +396,8 @@ class ReportEngine:
                         label=f"{vocal} ({ptag})"
                     )
                     
-        ax.legend(loc='center left', bbox_to_anchor=(1.05, 0.5), fontsize=8, frameon=True, framealpha=0.9)
+        ax.legend(loc='center left', bbox_to_anchor=(1.05, 0.5), fontsize=8,
+                  frameon=True, framealpha=0.95, facecolor='white', edgecolor='#cccccc', labelcolor='black')
         plt.tight_layout()
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
         plt.close()
@@ -377,9 +406,9 @@ class ReportEngine:
         if projections_output_path:
             fig_p, axes = plt.subplots(1, 3, figsize=(16, 5), dpi=300)
             planos = [
-                (0, 1, f"X: {m0_label}", f"Y: {m1_label}", "Plano XY (Frontal / Inferior)"),
-                (0, 2, f"X: {m0_label}", f"Z: {m2_label}", "Plano XZ (Lateral / XZ)"),
-                (1, 2, f"Y: {m1_label}", f"Z: {m2_label}", "Plano YZ (Lateral / YZ)")
+                (0, 1, f"X: {m0_label}", f"Y: {m1_label}", "Plano XY: Frontal e Inferior"),
+                (0, 2, f"X: {m0_label}", f"Z: {m2_label}", "Plano XZ: Lateral XZ"),
+                (1, 2, f"Y: {m1_label}", f"Z: {m2_label}", "Plano YZ: Lateral YZ")
             ]
             for ax_p, (ix, iy, lx, ly, p_title) in zip(axes, planos):
                 ax_p.set_facecolor('#fafafa')
@@ -489,8 +518,14 @@ class ReportEngine:
                         except Exception as e_json:
                             print(f"[Aviso] Lectura de picos en {rp}: {e_json}")
                             
-            if len(picos_ch.get(0, [])) > 0 and len(picos_ch.get(1, [])) > 0 and len(picos_ch.get(2, [])) > 0:
-                n_pulses = min(len(picos_ch[0]), len(picos_ch[1]), len(picos_ch[2]))
+            active_lens = [len(picos_ch[c]) for c in [0, 1, 2] if len(picos_ch[c]) > 0]
+            if active_lens:
+                n_pulses = max(active_lens)
+                for c_idx in [0, 1, 2]:
+                    if len(picos_ch[c_idx]) == 0:
+                        picos_ch[c_idx] = [0.0] * n_pulses
+                    elif len(picos_ch[c_idx]) < n_pulses:
+                        picos_ch[c_idx] += [0.0] * (n_pulses - len(picos_ch[c_idx]))
                 for i in range(n_pulses):
                     p0 = picos_ch[0][i]
                     p1 = picos_ch[1][i]
@@ -510,20 +545,40 @@ class ReportEngine:
         else:
             max_pulse_per_ch = [1.0, 1.0, 1.0]
                             
+        plt.style.use('default')
+        plt.rcParams.update({
+            'text.color': 'black',
+            'axes.labelcolor': 'black',
+            'axes.edgecolor': '#333333',
+            'xtick.color': 'black',
+            'ytick.color': 'black',
+            'grid.color': '#cccccc',
+            'figure.facecolor': 'white',
+            'axes.facecolor': 'white',
+        })
         fig = plt.figure(figsize=(10, 8), dpi=300, facecolor='white')
         ax = fig.add_subplot(111, projection='3d')
         ax.set_facecolor('white')
-        ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
-        ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
-        ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
+        
+        # Paneles 3D con sombreado sutil para distinguir el volumen del cubo
+        ax.xaxis.set_pane_color((0.95, 0.95, 0.95, 0.8))
+        ax.yaxis.set_pane_color((0.92, 0.92, 0.92, 0.8))
+        ax.zaxis.set_pane_color((0.89, 0.89, 0.89, 0.8))
+        
+        # Líneas de eje, ticks y grilla en negro y gris contrastado
+        ax.xaxis.line.set_color((0.2, 0.2, 0.2, 0.9))
+        ax.yaxis.line.set_color((0.2, 0.2, 0.2, 0.9))
+        ax.zaxis.line.set_color((0.2, 0.2, 0.2, 0.9))
+        ax.tick_params(colors='black', labelsize=8)
+        ax.grid(True, color='#b0b0b0', linestyle='--', linewidth=0.5, alpha=0.7)
         
         ax.set_xlim([0.0, 1.0])
         ax.set_ylim([0.0, 1.0])
         ax.set_zlim([0.0, 1.0])
         
-        ax.set_xlabel(f"X: {m0_label} (Proporción)", fontsize=10, labelpad=8)
-        ax.set_ylabel(f"Y: {m1_label} (Proporción)", fontsize=10, labelpad=8)
-        ax.set_zlabel(f"Z: {m2_label} (Proporción)", fontsize=10, labelpad=8)
+        ax.set_xlabel(f"X: {m0_label} (Proporción)", fontsize=10, labelpad=8, color='black', fontweight='bold')
+        ax.set_ylabel(f"Y: {m1_label} (Proporción)", fontsize=10, labelpad=8, color='black', fontweight='bold')
+        ax.set_zlabel(f"Z: {m2_label} (Proporción)", fontsize=10, labelpad=8, color='black', fontweight='bold')
         
         vocales_con_puntos = 0
         norm_vocal = mpl.colors.Normalize(vmin=0, vmax=4) if cmap_obj else None
@@ -545,7 +600,8 @@ class ReportEngine:
             vocales_con_puntos += 1
             
         if vocales_con_puntos > 0:
-            ax.legend(loc='center left', bbox_to_anchor=(1.05, 0.5), fontsize=10, frameon=True, framealpha=0.95)
+            ax.legend(loc='center left', bbox_to_anchor=(1.05, 0.5), fontsize=10,
+                      frameon=True, framealpha=0.95, facecolor='white', edgecolor='#cccccc', labelcolor='black')
             
         os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
         plt.tight_layout()
@@ -600,25 +656,67 @@ class ReportEngine:
             except Exception:
                 continue
 
-            picos = meta_dict.get("maxima_per_cut", [])
-            muestras_pulso = int(meta_dict.get("muestras_pulso", 4000))
-            pre_samples = int(0.4 * muestras_pulso)
-            post_samples = int(0.6 * muestras_pulso)
-
             sigs_env = []
             sr = 2000
             for c in range(3):
                 wav_path = os.path.join(path, f"canal_{c}", "grabacion.wav")
-                if not os.path.exists(wav_path):
-                    break
-                sig, sr = sf.read(wav_path)
-                if sig.ndim > 1: sig = sig[:, 0]
-                sig_filt = apply_filters(sig, sr)
-                env = compute_rms_env(sig_filt, sr, smooth_ms=180)
-                sigs_env.append(env)
+                if os.path.exists(wav_path):
+                    sig, sr = sf.read(wav_path)
+                    if sig.ndim > 1: sig = sig[:, 0]
+                    sig_filt = apply_filters(sig, sr)
+                    env = compute_rms_env(sig_filt, sr, smooth_ms=180)
+                    sigs_env.append(env)
+                elif len(sigs_env) > 0 and sigs_env[0] is not None:
+                    sigs_env.append(np.zeros_like(sigs_env[0]))
+                else:
+                    sigs_env.append(None)
 
-            if len(sigs_env) < 3:
+            if not sigs_env or sigs_env[0] is None or len(sigs_env) < 3:
                 continue
+            for c in range(3):
+                if sigs_env[c] is None:
+                    sigs_env[c] = np.zeros_like(sigs_env[0])
+
+            picos = meta_dict.get("maxima_per_cut", [])
+            muestras_pulso = int(meta_dict.get("muestras_pulso", 4000))
+
+            if not picos:
+                meta_json_path = os.path.join(path, "canal_0", "metadata.json")
+                if not os.path.exists(meta_json_path):
+                    meta_json_path = os.path.join(path, "metadata.json")
+                bpm = 30.0
+                noise_sec = 3.0
+                n_pulses_cfg = None
+                if os.path.exists(meta_json_path):
+                    try:
+                        with open(meta_json_path, 'r', encoding='utf-8') as mf:
+                            m_cfg = json.load(mf)
+                            bpm = float(m_cfg.get('bpm', 30.0))
+                            noise_sec = float(m_cfg.get('noise_seconds', 3.0))
+                            n_pulses_cfg = m_cfg.get('pulse_count')
+                    except Exception:
+                        pass
+                
+                muestras_pulso = int(round((60.0 / bpm) * sr))
+                segs_rs = meta_dict.get('segmentos_rs', [])
+                if segs_rs and isinstance(segs_rs, list):
+                    n_pulses = len(segs_rs)
+                elif n_pulses_cfg:
+                    n_pulses = int(n_pulses_cfg)
+                else:
+                    total_dur = len(sigs_env[0]) / sr
+                    n_pulses = max(1, int((total_dur - noise_sec) / (60.0 / bpm)))
+
+                env_sum = np.sum(sigs_env, axis=0)
+                picos = []
+                for i in range(n_pulses):
+                    s_idx = int(round(noise_sec * sr)) + i * muestras_pulso
+                    e_idx = min(len(env_sum), s_idx + muestras_pulso)
+                    if s_idx < len(env_sum) and e_idx > s_idx:
+                        picos.append(s_idx + int(np.argmax(env_sum[s_idx:e_idx])))
+
+            pre_samples = int(0.4 * muestras_pulso)
+            post_samples = int(0.6 * muestras_pulso)
 
             for p in picos:
                 p_start = p - pre_samples
@@ -667,6 +765,17 @@ class ReportEngine:
             'U': '#ff7f0e'
         }
 
+        plt.style.use('default')
+        plt.rcParams.update({
+            'text.color': 'black',
+            'axes.labelcolor': 'black',
+            'axes.edgecolor': '#333333',
+            'xtick.color': 'black',
+            'ytick.color': 'black',
+            'grid.color': '#cccccc',
+            'figure.facecolor': 'white',
+            'axes.facecolor': 'white',
+        })
         fig = plt.figure(figsize=(20, 13), facecolor='white', dpi=300)
         plt.subplots_adjust(wspace=0.15, hspace=0.25)
 
@@ -683,9 +792,18 @@ class ReportEngine:
         for vocal, pos in posiciones.items():
             ax = fig.add_subplot(pos[0], pos[1], pos[2], projection='3d')
             ax.set_facecolor('white')
-            ax.xaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
-            ax.yaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
-            ax.zaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
+            
+            # Paneles 3D con sombreado sutil para distinguir el volumen del cubo
+            ax.xaxis.set_pane_color((0.95, 0.95, 0.95, 0.8))
+            ax.yaxis.set_pane_color((0.92, 0.92, 0.92, 0.8))
+            ax.zaxis.set_pane_color((0.89, 0.89, 0.89, 0.8))
+            
+            # Líneas de eje, ticks y grilla en negro y gris contrastado
+            ax.xaxis.line.set_color((0.2, 0.2, 0.2, 0.9))
+            ax.yaxis.line.set_color((0.2, 0.2, 0.2, 0.9))
+            ax.zaxis.line.set_color((0.2, 0.2, 0.2, 0.9))
+            ax.tick_params(colors='black', labelsize=8)
+            ax.grid(True, color='#b0b0b0', linestyle='--', linewidth=0.5, alpha=0.7)
 
             pulsos = vocales_data[vocal]
             col = colores[vocal]
@@ -698,7 +816,7 @@ class ReportEngine:
                 c0_m.append(x)
                 c1_m.append(y)
                 c2_m.append(z)
-                ax.plot(x, y, z, color=col, alpha=0.35, linewidth=1.1)
+                ax.plot(x, y, z, color=col, alpha=0.45, linewidth=1.2)
 
             if c0_m:
                 x_med = np.mean(c0_m, axis=0)
@@ -715,20 +833,26 @@ class ReportEngine:
             ax.set_ylim([0.0, 1.05])
             ax.set_zlim([0.0, 1.05])
 
-            ax.set_xlabel(f"X: {m0_label}", fontsize=9, labelpad=7)
-            ax.set_ylabel(f"Y: {m1_label}", fontsize=9, labelpad=7)
-            ax.set_zlabel(f"Z: {m2_label}", fontsize=9, labelpad=7)
+            ax.set_xlabel(f"X: {m0_label}", fontsize=9, labelpad=7, color='black', fontweight='bold')
+            ax.set_ylabel(f"Y: {m1_label}", fontsize=9, labelpad=7, color='black', fontweight='bold')
+            ax.set_zlabel(f"Z: {m2_label}", fontsize=9, labelpad=7, color='black', fontweight='bold')
 
-            ax.set_title(f"Espacio Dinámico: Vocal {vocal}", fontsize=12, fontweight='bold', pad=8)
+            ax.set_title(f"Espacio Dinámico: Vocal {vocal}", fontsize=12, fontweight='bold', pad=8, color='black')
             ax.view_init(elev=25, azim=-60)
-            ax.legend(loc='upper left', fontsize=8.5)
+            ax.legend(loc='upper left', fontsize=8.5, facecolor='white', edgecolor='#cccccc', labelcolor='black', framealpha=0.95)
 
         # Panel 6: Síntesis comparativa de las 5 órbitas
         ax_comp = fig.add_subplot(2, 3, 6, projection='3d')
         ax_comp.set_facecolor('white')
-        ax_comp.xaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
-        ax_comp.yaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
-        ax_comp.zaxis.set_pane_color((1.0, 1.0, 1.0, 1.0))
+        ax_comp.xaxis.set_pane_color((0.95, 0.95, 0.95, 0.8))
+        ax_comp.yaxis.set_pane_color((0.92, 0.92, 0.92, 0.8))
+        ax_comp.zaxis.set_pane_color((0.89, 0.89, 0.89, 0.8))
+        
+        ax_comp.xaxis.line.set_color((0.2, 0.2, 0.2, 0.9))
+        ax_comp.yaxis.line.set_color((0.2, 0.2, 0.2, 0.9))
+        ax_comp.zaxis.line.set_color((0.2, 0.2, 0.2, 0.9))
+        ax_comp.tick_params(colors='black', labelsize=8)
+        ax_comp.grid(True, color='#b0b0b0', linestyle='--', linewidth=0.5, alpha=0.7)
 
         for vocal in ['A', 'E', 'I', 'O', 'U']:
             if vocal in medianas_por_vocal:
@@ -741,12 +865,12 @@ class ReportEngine:
         ax_comp.set_xlim([0.0, 1.05])
         ax_comp.set_ylim([0.0, 1.05])
         ax_comp.set_zlim([0.0, 1.05])
-        ax_comp.set_xlabel(f"X: {m0_label}", fontsize=9, labelpad=7)
-        ax_comp.set_ylabel(f"Y: {m1_label}", fontsize=9, labelpad=7)
-        ax_comp.set_zlabel(f"Z: {m2_label}", fontsize=9, labelpad=7)
-        ax_comp.set_title("Comparativa de Órbitas (Lazos 3D)", fontsize=12, fontweight='bold', pad=8)
+        ax_comp.set_xlabel(f"X: {m0_label}", fontsize=9, labelpad=7, color='black', fontweight='bold')
+        ax_comp.set_ylabel(f"Y: {m1_label}", fontsize=9, labelpad=7, color='black', fontweight='bold')
+        ax_comp.set_zlabel(f"Z: {m2_label}", fontsize=9, labelpad=7, color='black', fontweight='bold')
+        ax_comp.set_title("Comparativa de Órbitas: Lazos 3D", fontsize=12, fontweight='bold', pad=8, color='black')
         ax_comp.view_init(elev=25, azim=-60)
-        ax_comp.legend(loc='upper left', fontsize=8.5)
+        ax_comp.legend(loc='upper left', fontsize=8.5, facecolor='white', edgecolor='#cccccc', labelcolor='black', framealpha=0.95)
 
         plt.tight_layout()
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
@@ -756,9 +880,9 @@ class ReportEngine:
         if projections_output_path and medianas_por_vocal:
             fig_p, axes = plt.subplots(1, 3, figsize=(17, 5.2), dpi=300)
             planos = [
-                (0, 1, f"X: {m0_label}", f"Y: {m1_label}", "Cara Inferior (Plano XY)"),
-                (0, 2, f"X: {m0_label}", f"Z: {m2_label}", "Cara Lateral (Plano XZ)"),
-                (1, 2, f"Y: {m1_label}", f"Z: {m2_label}", "Cara Frontal (Plano YZ)")
+                (0, 1, f"X: {m0_label}", f"Y: {m1_label}", "Cara Inferior: Plano XY"),
+                (0, 2, f"X: {m0_label}", f"Z: {m2_label}", "Cara Lateral: Plano XZ"),
+                (1, 2, f"Y: {m1_label}", f"Z: {m2_label}", "Cara Frontal: Plano YZ")
             ]
             for ax_p, (c_x, c_y, lbl_x, lbl_y, p_title) in zip(axes, planos):
                 ax_p.scatter([0], [0], color='black', s=70, marker='s', zorder=10, label="Reposo (0,0)")
@@ -1489,67 +1613,85 @@ class ReportEngine:
         doc.append(r"\newpage")
 
         # ======================================================================
-        # SECCIÓN 2: Resultados y Análisis de Señales (Por Series / Pruebas)
+        # SECCIÓN 2: Resultados y Análisis de Señales por Vocal
         # ======================================================================
-        doc.append(r"\section{Resultados y Análisis de Señales}")
-        doc.append("A continuación se presentan las señales bioeléctricas calibradas y los patrones musculares correspondientes a cada una de las pruebas registradas en la sesión.")
+        doc.append(r"\section{Resultados y Análisis de Señales por Vocal}")
+        doc.append("A continuación se presentan las señales bioeléctricas calibradas y los registros de 3 músculos agrupados vocal por vocal para toda la sesión:")
         doc.append("")
         
-        for p_idx, (prueba_tag, meds_en_prueba) in enumerate(info['pruebas_agrupadas'].items()):
-            doc.append(f"\\subsection{{{escape_latex(prueba_tag)}: Secuencia de Vocales}}")
-            doc.append(f"Análisis detallado de las mediciones registradas en el bloque \\textbf{{{escape_latex(prueba_tag)}}}.")
+        for v_letra in ['A', 'E', 'I', 'O', 'U']:
+            if v_letra not in info.get('vocales_agrupadas', {}):
+                continue
+            meds_en_vocal = info['vocales_agrupadas'][v_letra]
+            doc.append(f"\\subsection{{Vocal {escape_latex(v_letra)}}}")
+            doc.append(f"Análisis detallado de las mediciones registradas para la vocal \\textbf{{{escape_latex(v_letra)}}}, ordenadas cronológicamente por número de prueba:")
             doc.append("")
             
-            # Cronología y vocales medidas en esta prueba
+            # Cronología y tomas medidas para esta vocal
             doc.append(r"\begin{table}[H]")
             doc.append(r"\centering")
-            doc.append(r"\begin{tabularx}{\textwidth}{c c X c c}")
+            doc.append(r"\begin{tabularx}{\textwidth}{c X c c}")
             doc.append(r"\toprule")
-            doc.append(r"\textbf{Orden} & \textbf{Vocal} & \textbf{Identificador de Medición} & \textbf{Hora Exacta} & $\mathbf{\Delta t}$ \textbf{(min)} \\")
+            doc.append(r"\textbf{Orden} & \textbf{Identificador de Medición} & \textbf{Hora Exacta} & $\mathbf{\Delta t}$ \textbf{(min)} \\")
             doc.append(r"\midrule")
-            for m_idx, med in enumerate(meds_en_prueba):
-                doc.append(f"{m_idx + 1} & {escape_latex(med['letra'])} & {escape_latex(med['name'])} & {med['hora_str']} & {med.get('delta_min', 0.0):.1f} \\\\")
+            for m_idx, med in enumerate(meds_en_vocal):
+                doc.append(f"{m_idx + 1} & {escape_latex(med['name'])} & {med['hora_str']} & {med.get('delta_min', 0.0):.1f} \\\\")
             doc.append(r"\bottomrule")
             doc.append(r"\end{tabularx}")
-            doc.append(f"\\caption{{Cronograma y secuencia de vocales registradas en {escape_latex(prueba_tag)}.}}")
+            doc.append(f"\\caption{{Tomas registradas para la vocal {escape_latex(v_letra)}.}}")
             doc.append(r"\end{table}")
             doc.append("")
             
-            # Recorrido vocal por vocal (A, E, I, O, U)
-            for med in meds_en_prueba:
+            # Recorrido de tomas para esta vocal
+            for med in meds_en_vocal:
                 letra = med['letra']
                 m_name = med['name']
                 hora = med['hora_str']
                 m_path = med['path']
                 
-                doc.append(f"\\subsubsection{{Vocal {escape_latex(letra)}: {escape_latex(m_name)} ({hora})}}")
+                doc.append(f"\\subsubsection{{Medición: {escape_latex(m_name)} - {hora}}}")
                 
-                # 1. Señal calibrada / Paper combinado
+                # 1. Señal calibrada / Paper combinado (3 músculos)
                 calib_img = find_first_existing([os.path.join(m_path, "plot_calibrado_*.png")])
                 paper_img = find_first_existing([os.path.join(m_path, "plot_paper_combined.png")])
                 
-                # Auto-generación dinámica de la figura paper multimodal si no existe
+                # Auto-generación dinámica de plot_paper_combined (3 músculos) si no existe
                 if not paper_img:
                     try:
-                        from analysis.generador_figura_multimodal import generar_figura_paper_multimodal
-                        logger(f"Auto-generando figura multimodal paper para {os.path.basename(m_path)}...")
-                        paper_img = generar_figura_paper_multimodal(m_path, logger=logger)
+                        from deep_learning.dataset_tools.plot_3_musculos_standalone import generar_plot_3_musculos
+                        logger(f"Auto-generando plot 3 músculos para {os.path.basename(m_path)}...")
+                        paper_img = generar_plot_3_musculos(m_path, mostrar=False)
                     except Exception as e:
-                        logger(f"Aviso: No se pudo auto-generar figura paper para {m_path}: {e}")
+                        logger(f"Aviso: No se pudo auto-generar plot 3 músculos para {m_path}: {e}")
                 
-                if calib_img:
-                    doc.append(r"\begin{figure}[H]")
-                    doc.append(r"\centering")
-                    doc.append(f"\\includegraphics[width=0.88\\textwidth]{{{calib_img}}}")
-                    doc.append(f"\\caption{{Figura: Señales calibradas de la vocal {escape_latex(letra)}. Se aplicó filtro Notch en 50 Hz ($Q=2.0$), filtro pasabanda Butterworth (20--500 Hz) y envolvente RMS.}}")
-                    doc.append(r"\end{figure}")
-                    doc.append("")
-                    
+                # Auto-generación dinámica de plot calibrado si no existe
+                if not calib_img:
+                    try:
+                        from analysis.plotter_calibrado import plotear_medicion_secuencial
+                        padre = os.path.basename(os.path.dirname(m_path))
+                        hijo = os.path.basename(m_path)
+                        cfg_c = {
+                            'notch': True, 'bandpass': True, 'tipo_env': 'rms',
+                            'start_time': None, 'end_time': None, 'tema_oscuro': False, 'graficar_fft': False
+                        }
+                        plotear_medicion_secuencial(f"{padre}/{hijo}", cfg_c, mostrar_plot=False)
+                        calib_img = find_first_existing([os.path.join(m_path, "plot_calibrado_*.png")])
+                    except Exception as e:
+                        logger(f"Aviso: No se pudo auto-generar plot calibrado para {m_path}: {e}")
+                
                 if paper_img:
                     doc.append(r"\begin{figure}[H]")
                     doc.append(r"\centering")
                     doc.append(f"\\includegraphics[width=0.88\\textwidth]{{{paper_img}}}")
-                    doc.append(f"\\caption{{Registro combinado multimodal de la vocal {escape_latex(letra)}. Espectrograma acústico STFT con pre-énfasis, señal de micrófono rectificada con envolvente acústica, activación EMG normalizada por Supremo Tricanal y espectrograma RGB muscular.}}")
+                    doc.append(f"\\caption{{Registro de 3 músculos de la vocal {escape_latex(letra)} ({escape_latex(m_name)}). Ventanas temporales y segmentos concatenados con ruido interpulso restado y normalización por Supremo Tricanal.}}")
+                    doc.append(r"\end{figure}")
+                    doc.append("")
+
+                if calib_img:
+                    doc.append(r"\begin{figure}[H]")
+                    doc.append(r"\centering")
+                    doc.append(f"\\includegraphics[width=0.88\\textwidth]{{{calib_img}}}")
+                    doc.append(f"\\caption{{Figura: Señales calibradas de la vocal {escape_latex(letra)} ({escape_latex(m_name)}). Se aplicó filtro Notch en 50 Hz ($Q=2.0$), filtro pasabanda Butterworth (20--500 Hz) y envolvente RMS.}}")
                     doc.append(r"\end{figure}")
                     doc.append("")
 
@@ -1616,7 +1758,7 @@ class ReportEngine:
             doc.append("")
 
         if 'cubo_proyecciones' in comp_images:
-            doc.append(r"\subsection{Proyecciones Bidimensionales en las Caras del Cubo (Planos XY, XZ y YZ)}")
+            doc.append(r"\subsection{Proyecciones Bidimensionales en las Caras del Cubo: Planos XY, XZ y YZ}")
             doc.append(r"\begin{figure}[H]")
             doc.append(r"\centering")
             doc.append(f"\\includegraphics[width=\\textwidth]{{{comp_images['cubo_proyecciones']}}}")
@@ -1644,7 +1786,7 @@ class ReportEngine:
             doc.append("")
 
         if 'espacio_fases_proyecciones' in comp_images:
-            doc.append(r"\subsection{Proyecciones Ortogonales en las Caras del Cubo (Lazos Continuos)}")
+            doc.append(r"\subsection{Proyecciones Ortogonales en las Caras del Cubo: Lazos Continuos}")
             doc.append(r"Descomposición ortogonal bidimensional de las órbitas promedio continuas sobre las tres caras ortogonales del cubo unitario. Esta proyección permite aislar de manera analítica la interacción y coordinación biomecánica entre cada par muscular específico.")
             doc.append(r"\begin{figure}[H]")
             doc.append(r"\centering")
@@ -1713,7 +1855,7 @@ class ReportEngine:
         # ======================================================================
         if pca_data is not None:
             doc.append(r"\newpage")
-            doc.append(r"\section{Análisis de Componentes Principales (PCA)}")
+            doc.append(r"\section{Análisis de Componentes Principales: PCA}")
             doc.append("Proyecciones ortogonales y clustering con fronteras de decisión sobre el conjunto integral de las series experimentadas, evaluando la tríada muscular completa y cada par en 2D y 3D.")
             doc.append("")
             
@@ -1721,7 +1863,7 @@ class ReportEngine:
             bp2 = pca_data.get('best_params_2d', pca_data.get('best_params', {}))
             bp3 = pca_data.get('best_params_3d', {})
             
-            doc.append(r"\subsection{Optimización de Hiperparámetros (Grid Search 2D y 3D)}")
+            doc.append(r"\subsection{Optimización de Hiperparámetros: Grid Search 2D y 3D}")
             doc.append("A continuación se presentan las configuraciones óptimas seleccionadas por el algoritmo de búsqueda exhaustiva en grilla:")
             doc.append(r"\begin{table}[H]")
             doc.append(r"\centering")
@@ -1765,12 +1907,12 @@ class ReportEngine:
             # Distribuciones de Exactitud del Grid Search (8 búsquedas: Tríada y 3 pares en 2D y 3D)
             dist_plots = pca_data.get('dist_plots', {})
             if dist_plots:
-                doc.append(r"\subsection{Distribuciones de Rendimiento en el Espacio de Búsqueda (8 Grid Searches)}")
+                doc.append(r"\subsection{Distribuciones de Rendimiento en el Espacio de Búsqueda: 8 Grid Searches}")
                 doc.append("Para cada una de las 4 configuraciones musculares (la tríada completa y los tres pares) se ejecutaron búsquedas sistemáticas en grilla evaluando proyecciones 2D y 3D, analizando la densidad de exactitud macro alcanzada:")
                 doc.append("")
                 
                 combi_nombres = {
-                    'triada': "Tríada Muscular Completa (Canales 0, 1 y 2)",
+                    'triada': "Tríada Muscular Completa: Canales 0, 1 y 2",
                     'par_0_1': "Par Muscular: Canal 0 y Canal 1",
                     'par_1_2': "Par Muscular: Canal 1 y Canal 2",
                     'par_0_2': "Par Muscular: Canal 0 y Canal 2"
@@ -1859,6 +2001,40 @@ class ReportEngine:
                     elif has_c3d:
                         doc.append(f"\\includegraphics[width=0.65\\textwidth]{{{sec['confusion_3d']}}}")
                     doc.append(f"\\caption{{Figura: Matrices de confusión y tasas de clasificación para {escape_latex(sec['nombre'])}.}}")
+                    doc.append(r"\end{figure}")
+        # ======================================================================
+        # SECCIÓN FINAL: Análisis Multimodal de Señales y Espectrogramas
+        # ======================================================================
+        doc.append(r"\newpage")
+        doc.append(r"\section{Análisis Multimodal de Señales y Espectrogramas}")
+        doc.append("A continuación se presentan los registros multimodales de 4 paneles para las vocales registradas en la sesión. Para cada medición se visualiza el espectrograma acústico STFT con pre-énfasis, el oscilograma del micrófono rectificado con su envolvente acústica, la activación muscular sEMG normalizada por el Supremo Tricanal del pulso y el espectrograma muscular RGB:")
+        doc.append("")
+        
+        for v in ['A', 'E', 'I', 'O', 'U']:
+            if v not in info.get('vocales_agrupadas', {}):
+                continue
+            meds_v = info['vocales_agrupadas'][v]
+            doc.append(f"\\subsection{{Vocal {escape_latex(v)}: Espectrogramas y Registro Multimodal}}")
+            doc.append("")
+            
+            for med in meds_v:
+                m_name = med['name']
+                m_path = med['path']
+                spec_img = find_first_existing([
+                    os.path.join(m_path, "plot_espectrograma_multimodal.png")
+                ])
+                if not spec_img:
+                    try:
+                        from analysis.generador_figura_multimodal import generar_figura_paper_multimodal
+                        spec_img = generar_figura_paper_multimodal(m_path, logger=logger)
+                    except Exception as e:
+                        logger(f"Aviso: No se pudo generar figura multimodal para {m_path}: {e}")
+                        
+                if spec_img:
+                    doc.append(r"\begin{figure}[H]")
+                    doc.append(r"\centering")
+                    doc.append(f"\\includegraphics[width=0.55\\textwidth]{{{spec_img}}}")
+                    doc.append(f"\\caption{{Análisis multimodal de 4 paneles para la vocal {escape_latex(v)} ({escape_latex(m_name)}): espectrograma acústico con pre-énfasis, oscilograma de audio rectificado, activación EMG normalizada por Supremo Tricanal y espectrograma RGB.}}")
                     doc.append(r"\end{figure}")
                     doc.append("")
 
@@ -2065,8 +2241,8 @@ class ReportEngine:
         m2_t = canales_final.get(2, "Canal 2")
         
         # 2. Tabla Detallada de SNR por Medición con Error
-        doc.append(r"\section{Tabla de Relación Señal-Ruido (SNR) de Todas las Mediciones}")
-        doc.append("A continuación se presentan los valores de Relación Señal-Ruido promedio por pulso con su correspondiente dispersión ($\text{SNR} \pm \sigma$) obtenidos para cada una de las pruebas registradas en la sesión:")
+        doc.append(r"\section{Tabla de Relación Señal-Ruido SNR de Todas las Mediciones}")
+        doc.append(r"A continuación se presentan los valores de Relación Señal-Ruido promedio por pulso con su correspondiente dispersión ($\text{SNR} \pm \sigma$) obtenidos para cada una de las pruebas registradas en la sesión:")
         doc.append(r"\begin{table}[H]")
         doc.append(r"\centering")
         doc.append(r"\small")
@@ -2093,7 +2269,7 @@ class ReportEngine:
         doc.append("")
 
         # 3. Resumen Estadístico de SNR
-        doc.append(r"\section{Resumen Estadístico de Relación Señal-Ruido (SNR)}")
+        doc.append(r"\section{Resumen Estadístico de Relación Señal-Ruido SNR}")
         doc.append(r"\begin{table}[H]")
         doc.append(r"\centering")
         doc.append(r"\begin{tabular}{lccc}")
@@ -2126,9 +2302,12 @@ class ReportEngine:
         # 4. Desglose detallado de calidad, recortes y ruido por serie
         doc.append(r"\newpage")
         doc.append(r"\section{Desglose de Calidad de Señal, Recortes y Ruido Interpulso}")
-        for p_idx, (prueba_tag, meds_en_prueba) in enumerate(info['pruebas_agrupadas'].items()):
-            doc.append(f"\\subsection{{{escape_latex(prueba_tag)}}}")
-            for med in meds_en_prueba:
+        for v_letra in ['A', 'E', 'I', 'O', 'U']:
+            if v_letra not in info.get('vocales_agrupadas', {}):
+                continue
+            meds_en_vocal = info['vocales_agrupadas'][v_letra]
+            doc.append(f"\\subsection{{Vocal {escape_latex(v_letra)}}}")
+            for med in meds_en_vocal:
                 letra = med['letra']
                 m_name = med['name']
                 m_path = med['path']
@@ -2152,28 +2331,11 @@ class ReportEngine:
                         ])
                     }
                 
-                paper_img = find_first_existing([os.path.join(m_path, "plot_paper_combined.png")])
-                if not paper_img:
-                    try:
-                        from analysis.generador_figura_multimodal import generar_figura_paper_multimodal
-                        paper_img = generar_figura_paper_multimodal(m_path, logger=logger)
-                    except Exception:
-                        pass
-                
-                has_any = (paper_img is not None) or any(imgs_ch[c]['promedio'] or imgs_ch[c]['recortes'] or imgs_ch[c]['evolucion'] for c in range(3))
+                has_any = any(imgs_ch[c]['promedio'] or imgs_ch[c]['recortes'] or imgs_ch[c]['evolucion'] for c in range(3))
                 if not has_any:
                     continue
 
-                doc.append(f"\\subsubsection{{Vocal {escape_latex(letra)}: {escape_latex(m_name)}}}")
-                
-                # Figura multimodal paper (4 paneles)
-                if paper_img:
-                    doc.append(r"\begin{figure}[H]")
-                    doc.append(r"\centering")
-                    doc.append(f"\\includegraphics[width=0.88\\textwidth]{{{paper_img}}}")
-                    doc.append(f"\\caption{{Análisis multimodal de la vocal {escape_latex(letra)} ({escape_latex(m_name)}): Espectrograma de audio con pre-énfasis, oscilograma acústico, activación EMG (Supremo Tricanal) y espectrograma muscular RGB.}}")
-                    doc.append(r"\end{figure}")
-                    doc.append("")
+                doc.append(f"\\subsubsection{{Medición: {escape_latex(m_name)}}}")
 
                 # 1. Pulso Promedio (Traza promedio, intervalo de confianza/desvío estándar y envolvente RMS media)
                 chs_prom = [c for c in range(3) if imgs_ch[c]['promedio']]
@@ -2229,6 +2391,42 @@ class ReportEngine:
                     doc.append(r"\end{figure}")
                     doc.append("")
                         
+        # ======================================================================
+        # SECCIÓN FINAL: Análisis Multimodal de Señales y Espectrogramas
+        # ======================================================================
+        doc.append(r"\newpage")
+        doc.append(r"\section{Análisis Multimodal de Señales y Espectrogramas}")
+        doc.append("A continuación se presentan los registros multimodales de 4 paneles para las mediciones de la sesión, agrupados vocal por vocal:")
+        doc.append("")
+        
+        for v in ['A', 'E', 'I', 'O', 'U']:
+            if v not in info.get('vocales_agrupadas', {}):
+                continue
+            meds_v = info['vocales_agrupadas'][v]
+            doc.append(f"\\subsection{{Vocal {escape_latex(v)}: Espectrogramas y Registro Multimodal}}")
+            doc.append("")
+            
+            for med in meds_v:
+                m_name = med['name']
+                m_path = med['path']
+                spec_img = find_first_existing([
+                    os.path.join(m_path, "plot_espectrograma_multimodal.png")
+                ])
+                if not spec_img:
+                    try:
+                        from analysis.generador_figura_multimodal import generar_figura_paper_multimodal
+                        spec_img = generar_figura_paper_multimodal(m_path, logger=logger)
+                    except Exception as e:
+                        logger(f"Aviso: No se pudo generar figura multimodal para {m_path}: {e}")
+                        
+                if spec_img:
+                    doc.append(r"\begin{figure}[H]")
+                    doc.append(r"\centering")
+                    doc.append(f"\\includegraphics[width=0.55\\textwidth]{{{spec_img}}}")
+                    doc.append(f"\\caption{{Análisis multimodal de 4 paneles para la vocal {escape_latex(v)} ({escape_latex(m_name)}): espectrograma acústico con pre-énfasis, oscilograma de audio rectificado, activación EMG normalizada por Supremo Tricanal y espectrograma RGB.}}")
+                    doc.append(r"\end{figure}")
+                    doc.append("")
+
         doc.append(r"\end{document}")
         clean_date = re.sub(r'[^a-zA-Z0-9_-]', '_', fecha)
         base_name = f"Reporte_SNR_{clean_date}"
@@ -2327,16 +2525,16 @@ class ReportEngine:
             
         img_fft = os.path.join(resumen_dir, "comparativa_fft_5vocales.png")
         if os.path.exists(img_fft):
-            doc.append(r"\section{Análisis de Frecuencias (FFT)}")
+            doc.append(r"\section{Análisis de Frecuencias: FFT}")
             doc.append(r"\begin{figure}[H]")
             doc.append(r"\centering")
-            doc.append(f"\\includegraphics[width=\textwidth]{{{safe_path(img_fft)}}}")
+            doc.append(f"\\includegraphics[width=\\textwidth]{{{safe_path(img_fft)}}}")
             doc.append(r"\caption{Comparativa global de espectro de frecuencias FFT para las 5 vocales, normalizada a 6.0 $\mu$V.}")
             doc.append(r"\end{figure}")
             
         img_psd = os.path.join(resumen_dir, "comparativa_psd_5vocales.png")
         if os.path.exists(img_psd):
-            doc.append(r"\section{Densidad Espectral de Potencia (PSD)}")
+            doc.append(r"\section{Densidad Espectral de Potencia: PSD}")
             doc.append(r"\begin{figure}[H]")
             doc.append(r"\centering")
             doc.append(f"\\includegraphics[width=\textwidth]{{{safe_path(img_psd)}}}")

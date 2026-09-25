@@ -93,6 +93,69 @@ def get_interpulse_noise(processed_segment, initial_noise):
         
     return curr_mean
 
+def extraer_sesion_agnostica(toma_str):
+    """
+    Extrae la etiqueta de sesión o grupo a partir del nombre de la toma.
+    Maneja sufijos 'T1', 'T2', etc., o bien carpetas de fecha/sesión.
+    """
+    t_clean = str(toma_str).replace('\\', '/').split('/')[-1]
+    t_clean = t_clean.split('_Win')[0]
+    parts = t_clean.split('_')
+    for p in parts:
+        p_clean = p.strip()
+        if p_clean.startswith('T') and len(p_clean) >= 2 and p_clean[1:].isdigit():
+            return p_clean.upper()
+    m = re.search(r'(T\d+|S\d+|Sesion\d+|Prueba\d+)', t_clean, re.IGNORECASE)
+    if m:
+        return m.group(0).upper()
+    for p in reversed(parts):
+        p_clean = p.strip()
+        if any(char.isdigit() for char in p_clean) and len(p_clean) <= 10:
+            return p_clean.upper()
+    return 'S1'
+
+def acondicionar_reposo_impedancia(X_array, sesiones, n_canales=3, n_pts_reposo=10):
+    """
+    Acondicionamiento por reposo basal pre-contracción y rango dinámico P95 por sesión y canal.
+    Normaliza cada canal muscular para que el silencio basal sea 0.0 y el pico de activación sea ~1.0.
+    """
+    orig_shape = X_array.shape
+    if X_array.ndim == 2:
+        N, D = X_array.shape
+        n_pts = D // n_canales
+        X_reshaped = X_array.reshape(N, n_canales, n_pts).copy()
+    else:
+        N, n_canales, n_pts = X_array.shape
+        X_reshaped = X_array.copy()
+
+    X_filt = np.zeros_like(X_reshaped)
+    if n_pts >= 12:
+        try:
+            from scipy.signal import butter, filtfilt
+            b, a = butter(N=3, Wn=0.3, btype='low')
+            for i in range(N):
+                for c in range(n_canales):
+                    X_filt[i, c, :] = filtfilt(b, a, X_reshaped[i, c, :])
+        except Exception:
+            X_filt = X_reshaped.copy()
+    else:
+        X_filt = X_reshaped.copy()
+
+    unique_ses = np.unique(sesiones)
+    X_norm = np.zeros_like(X_filt)
+    pts_base = max(1, min(n_pts_reposo, n_pts // 4))
+
+    for s in unique_ses:
+        mask = (sesiones == s)
+        for c in range(n_canales):
+            base_mean = np.mean(X_filt[mask, c, :pts_base])
+            base_max = np.percentile(X_filt[mask, c, :], 95) - base_mean + 1e-6
+            X_norm[mask, c, :] = (X_filt[mask, c, :] - base_mean) / base_max
+
+    if len(orig_shape) == 2:
+        return X_norm.reshape(N, -1)
+    return X_norm
+
 def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, smooth_ms=250, notch_q=30.0, target_len=100, return_raw_cache=False):
     """
     Extrae y alinea las ventanas de los canales 0, 1 y 2.
@@ -635,7 +698,9 @@ def ejecutar_procesamiento(
     umap_target_weight=0.5,
     umap_supervised=False,
     remove_spatial_outliers=True,
-    out_dir=None
+    out_dir=None,
+    correccion_impedancia=True,
+    **kwargs
 ):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     if out_dir is None:
@@ -747,6 +812,12 @@ def ejecutar_procesamiento(
         df_desc.to_csv(os.path.join(out_dir, "Descartados_IsolationForest_SNR.csv"), index=False)
         print("  -> Lista de descartados guardada en 'Descartados_IsolationForest_SNR.csv'")
     
+    corr_imp = kwargs.get('correccion_impedancia', correccion_impedancia)
+    if corr_imp and len(X) > 0:
+        sesiones = np.array([extraer_sesion_agnostica(t) for t in Tomas])
+        X = acondicionar_reposo_impedancia(X, sesiones, n_canales=3)
+        print(f"  [Impedancia] Corrección por reposo basal y P95 aplicada a {len(X)} repeticiones en {len(np.unique(sesiones))} sesiones.")
+
     # La normalización por pulso ya se aplicó dentro del bucle
     X_scaled = X
 

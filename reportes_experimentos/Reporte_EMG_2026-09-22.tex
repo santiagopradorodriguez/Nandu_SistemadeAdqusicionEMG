@@ -1,0 +1,229 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{graphicx}
+\usepackage{geometry}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{hyperref}
+\usepackage{float}
+\geometry{top=2cm, bottom=2cm, left=2.5cm, right=2.5cm}
+
+\title{Reporte de Experimento EMG}
+\author{Ñandú - Sistema de Adquisición EMG}
+\date{2026-09-22}
+
+\begin{document}
+
+\maketitle
+
+\section{Configuración y Hardware}
+\textbf{Baterías:} Alimentación por baterías de 9V (bajo ruido) \\
+\textbf{Tierra:} Referencia GND en apófisis mastoides
+
+\section{Armado y Electrodos}
+Registro de superficie sEMG submáximal (Sujeto1)
+
+\section{Ubicación de los Músculos}
+\begin{itemize}
+    \item \textbf{Canal 0:} masetero
+    \item \textbf{Canal 1:} -
+    \item \textbf{Canal 2:} orbi
+\end{itemize}
+Canal 0: masetero, Canal 1: -, Canal 2: orbi
+
+\section{Protocolo y Secuencia}
+Secuencia periódica de fonación vocálica guiada por metrónomo a 30 BPM
+
+\section{Notas y Observaciones}
+Reporte técnico integral compilado de forma automatizada por el sistema.
+
+\newpage
+\section{Patrones Musculares Promedio}
+Comparativa de los patrones musculares promedio suavizados para las 5 vocales fonatorias:
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}{0.31\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-22/O_Prueba6_Sujeto1/patron_muscular_grabacion.png}
+    \caption{Vocal O}
+\end{subfigure}
+\hfill
+\begin{subfigure}{0.31\textwidth}
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-22/U_Prueba6_Sujeto1/patron_muscular_grabacion.png}
+    \caption{Vocal U}
+\end{subfigure}
+\caption{Comparativa de patrones musculares promedio suavizados.}
+\end{figure}
+
+\newpage
+\section{Análisis de Señales por Vocal}
+A continuación se presentan los registros de 3 músculos del paper y las señales calibradas agrupadas vocal por vocal:
+
+\subsection{Vocal O}
+Se presentan a continuación las tomas registradas para la vocal \textbf{O}, ordenadas cronológicamente por número de prueba:
+
+\subsubsection{Medición: O\_Prueba6\_Sujeto1}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-22/O_Prueba6_Sujeto1/plot_paper_combined.png}
+\caption{Registro de 3 músculos de la vocal O - O\_Prueba6\_Sujeto1: línea temporal de ventanas y concatenación simétrica con ruido restado.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-22/O_Prueba6_Sujeto1/plot_calibrado_2026-09-22_O_Prueba6_Sujeto1.png}
+\caption{Señales calibradas de la vocal O - O\_Prueba6\_Sujeto1: filtro Notch en 50 Hz, pasabanda y envolvente RMS.}
+\end{figure}
+
+\subsubsection{Medición: O\_Prueba7\_Sujeto1}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-22/O_Prueba7_Sujeto1/plot_paper_combined.png}
+\caption{Registro de 3 músculos de la vocal O - O\_Prueba7\_Sujeto1: línea temporal de ventanas y concatenación simétrica con ruido restado.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-22/O_Prueba7_Sujeto1/plot_calibrado_2026-09-22_O_Prueba7_Sujeto1.png}
+\caption{Señales calibradas de la vocal O - O\_Prueba7\_Sujeto1: filtro Notch en 50 Hz, pasabanda y envolvente RMS.}
+\end{figure}
+
+\subsubsection{Medición: O\_Prueba8\_Sujeto1}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-22/O_Prueba8_Sujeto1/plot_paper_combined.png}
+\caption{Registro de 3 músculos de la vocal O - O\_Prueba8\_Sujeto1: línea temporal de ventanas y concatenación simétrica con ruido restado.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-22/O_Prueba8_Sujeto1/plot_calibrado_2026-09-22_O_Prueba8_Sujeto1.png}
+\caption{Señales calibradas de la vocal O - O\_Prueba8\_Sujeto1: filtro Notch en 50 Hz, pasabanda y envolvente RMS.}
+\end{figure}
+
+\subsubsection{Medición: O\_Prueba9\_Sujeto1}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-22/O_Prueba9_Sujeto1/plot_paper_combined.png}
+\caption{Registro de 3 músculos de la vocal O - O\_Prueba9\_Sujeto1: línea temporal de ventanas y concatenación simétrica con ruido restado.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-22/O_Prueba9_Sujeto1/plot_calibrado_2026-09-22_O_Prueba9_Sujeto1.png}
+\caption{Señales calibradas de la vocal O - O\_Prueba9\_Sujeto1: filtro Notch en 50 Hz, pasabanda y envolvente RMS.}
+\end{figure}
+
+\subsection{Vocal U}
+Se presentan a continuación las tomas registradas para la vocal \textbf{U}, ordenadas cronológicamente por número de prueba:
+
+\subsubsection{Medición: U\_Prueba6\_Sujeto1}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-22/U_Prueba6_Sujeto1/plot_paper_combined.png}
+\caption{Registro de 3 músculos de la vocal U - U\_Prueba6\_Sujeto1: línea temporal de ventanas y concatenación simétrica con ruido restado.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-22/U_Prueba6_Sujeto1/plot_calibrado_2026-09-22_U_Prueba6_Sujeto1.png}
+\caption{Señales calibradas de la vocal U - U\_Prueba6\_Sujeto1: filtro Notch en 50 Hz, pasabanda y envolvente RMS.}
+\end{figure}
+
+\subsubsection{Medición: U\_Prueba7\_Sujeto1}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-22/U_Prueba7_Sujeto1/plot_paper_combined.png}
+\caption{Registro de 3 músculos de la vocal U - U\_Prueba7\_Sujeto1: línea temporal de ventanas y concatenación simétrica con ruido restado.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-22/U_Prueba7_Sujeto1/plot_calibrado_2026-09-22_U_Prueba7_Sujeto1.png}
+\caption{Señales calibradas de la vocal U - U\_Prueba7\_Sujeto1: filtro Notch en 50 Hz, pasabanda y envolvente RMS.}
+\end{figure}
+
+\subsubsection{Medición: U\_Prueba8\_Sujeto1}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-22/U_Prueba8_Sujeto1/plot_paper_combined.png}
+\caption{Registro de 3 músculos de la vocal U - U\_Prueba8\_Sujeto1: línea temporal de ventanas y concatenación simétrica con ruido restado.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-22/U_Prueba8_Sujeto1/plot_calibrado_2026-09-22_U_Prueba8_Sujeto1.png}
+\caption{Señales calibradas de la vocal U - U\_Prueba8\_Sujeto1: filtro Notch en 50 Hz, pasabanda y envolvente RMS.}
+\end{figure}
+
+\subsubsection{Medición: U\_Prueba9\_Sujeto1}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-22/U_Prueba9_Sujeto1/plot_paper_combined.png}
+\caption{Registro de 3 músculos de la vocal U - U\_Prueba9\_Sujeto1: línea temporal de ventanas y concatenación simétrica con ruido restado.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-22/U_Prueba9_Sujeto1/plot_calibrado_2026-09-22_U_Prueba9_Sujeto1.png}
+\caption{Señales calibradas de la vocal U - U\_Prueba9\_Sujeto1: filtro Notch en 50 Hz, pasabanda y envolvente RMS.}
+\end{figure}
+
+\newpage
+\section{Análisis Multimodal de Señales y Espectrogramas}
+A continuación se presentan los registros multimodales de 4 paneles para las mediciones de la sesión, agrupados vocal por vocal. Cada figura integra el espectrograma acústico STFT con pre-énfasis, el oscilograma del micrófono rectificado con su envolvente acústica, la activación EMG normalizada por el Supremo Tricanal del pulso y el espectrograma muscular RGB:
+
+\subsection{Vocal O: Espectrogramas y Registro Multimodal}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-22/O_Prueba6_Sujeto1/plot_espectrograma_multimodal.png}
+\caption{Análisis multimodal de 4 paneles para la vocal O - O\_Prueba6\_Sujeto1: espectrograma acústico con pre-énfasis, señal de micrófono rectificada, activación muscular sEMG por Supremo Tricanal y espectrograma RGB.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-22/O_Prueba7_Sujeto1/plot_espectrograma_multimodal.png}
+\caption{Análisis multimodal de 4 paneles para la vocal O - O\_Prueba7\_Sujeto1: espectrograma acústico con pre-énfasis, señal de micrófono rectificada, activación muscular sEMG por Supremo Tricanal y espectrograma RGB.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-22/O_Prueba8_Sujeto1/plot_espectrograma_multimodal.png}
+\caption{Análisis multimodal de 4 paneles para la vocal O - O\_Prueba8\_Sujeto1: espectrograma acústico con pre-énfasis, señal de micrófono rectificada, activación muscular sEMG por Supremo Tricanal y espectrograma RGB.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-22/O_Prueba9_Sujeto1/plot_espectrograma_multimodal.png}
+\caption{Análisis multimodal de 4 paneles para la vocal O - O\_Prueba9\_Sujeto1: espectrograma acústico con pre-énfasis, señal de micrófono rectificada, activación muscular sEMG por Supremo Tricanal y espectrograma RGB.}
+\end{figure}
+
+\subsection{Vocal U: Espectrogramas y Registro Multimodal}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-22/U_Prueba6_Sujeto1/plot_espectrograma_multimodal.png}
+\caption{Análisis multimodal de 4 paneles para la vocal U - U\_Prueba6\_Sujeto1: espectrograma acústico con pre-énfasis, señal de micrófono rectificada, activación muscular sEMG por Supremo Tricanal y espectrograma RGB.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-22/U_Prueba7_Sujeto1/plot_espectrograma_multimodal.png}
+\caption{Análisis multimodal de 4 paneles para la vocal U - U\_Prueba7\_Sujeto1: espectrograma acústico con pre-énfasis, señal de micrófono rectificada, activación muscular sEMG por Supremo Tricanal y espectrograma RGB.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-22/U_Prueba8_Sujeto1/plot_espectrograma_multimodal.png}
+\caption{Análisis multimodal de 4 paneles para la vocal U - U\_Prueba8\_Sujeto1: espectrograma acústico con pre-énfasis, señal de micrófono rectificada, activación muscular sEMG por Supremo Tricanal y espectrograma RGB.}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-09-22/U_Prueba9_Sujeto1/plot_espectrograma_multimodal.png}
+\caption{Análisis multimodal de 4 paneles para la vocal U - U\_Prueba9\_Sujeto1: espectrograma acústico con pre-énfasis, señal de micrófono rectificada, activación muscular sEMG por Supremo Tricanal y espectrograma RGB.}
+\end{figure}
+
+\end{document}

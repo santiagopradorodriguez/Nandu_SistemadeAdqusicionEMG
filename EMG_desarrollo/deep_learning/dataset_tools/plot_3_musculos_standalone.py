@@ -3,7 +3,11 @@ import sys
 import numpy as np
 import soundfile as sf
 import matplotlib
-matplotlib.use('TkAgg')
+if 'matplotlib.pyplot' not in sys.modules and not os.environ.get('MPLBACKEND'):
+    try:
+        matplotlib.use('TkAgg')
+    except Exception:
+        pass
 import matplotlib.pyplot as plt
 import json
 from scipy.signal import find_peaks, butter, filtfilt, iirnotch
@@ -66,22 +70,12 @@ def get_interpulse_noise(env_segment, initial_noise):
         return initial_noise
     return curr_mean
 
-def main():
-    if len(sys.argv) < 2:
-        import tkinter as tk
-        from tkinter import filedialog
-        root = tk.Tk()
-        root.withdraw()
-        med_path = filedialog.askdirectory(title="Selecciona la carpeta de la medición (ej: toma_1)")
-        if not med_path:
-            print("No se seleccionó ninguna medición.")
-            sys.exit(0)
-        theme = "light"
-    else:
-        med_path = sys.argv[1]
-        theme = sys.argv[2] if len(sys.argv) > 2 else "light"
-        smooth_ms_val = float(sys.argv[3]) if len(sys.argv) > 3 else 250.0
-        
+def generar_plot_3_musculos(med_path, theme="light", smooth_ms_val=250.0, frac_pulsos=0.5, mostrar=False, out_path=None):
+    """
+    Genera el gráfico del paper de 3 músculos (Línea temporal completa y ventanas concatenadas).
+    Guarda en out_path (por defecto med_path/plot_paper_combined.png).
+    """
+    med_path = os.path.abspath(med_path)
     med_rel_path = os.path.basename(med_path)
     
     bpm_a_usar = 30
@@ -121,11 +115,10 @@ def main():
     picos = picos + start_search 
     
     if len(picos) == 0:
-        print("No se encontraron picos en canal_3")
-        sys.exit(1)
+        print(f"No se encontraron picos en canal_3 para {med_path}")
+        return None
         
     # Selección de la mitad de los pulsos para mayor claridad visual y detalle en el paper
-    frac_pulsos = float(sys.argv[4]) if len(sys.argv) > 4 else 0.5
     total_picos = len(picos)
     num_picos_mostrar = max(1, int(np.ceil(total_picos * frac_pulsos)))
     picos = picos[:num_picos_mostrar]
@@ -328,8 +321,8 @@ def main():
         ax1.set_xlim(min_t_ax1 - margen, max_t_ax1 + margen)
     else:
         ax1.set_xlim(0, 10.0)
-    ax1.set_title(f"Vista Completa de Ventanas | BPM: {bpm_a_usar:.0f} | Toma: {med_rel_path}", fontsize=14, pad=15, color=fg_color)
-    ax1.set_xlabel("Tiempo Absoluto (segundos)", fontsize=11, labelpad=10, color=fg_color)
+    ax1.set_title(f"Vista Completa de Ventanas - BPM: {bpm_a_usar:.0f} - Toma: {med_rel_path}", fontsize=14, pad=15, color=fg_color)
+    ax1.set_xlabel("Tiempo Absoluto - Segundos", fontsize=11, labelpad=10, color=fg_color)
     ax1.set_ylabel(f"Amplitud Envolvente Filtrada {smooth_ms_val}ms", fontsize=11, labelpad=10, color=fg_color)
     ax1.grid(True, linestyle=':', alpha=0.4, color=grid_color)
     
@@ -350,7 +343,7 @@ def main():
         t_segment = np.linspace(current_time, current_time + duration, len(norm_segs[0]), endpoint=False)
         
         mic_seg = extracted_mic[idx_pulse]
-        label_mic = f'{mic_name} (Ch3)' if idx_pulse == 0 else ""
+        label_mic = f'{mic_name} - Ch3' if idx_pulse == 0 else ""
         ax2.plot(t_segment, mic_seg, color=mic_color, label=label_mic, linewidth=2.5, alpha=0.25)
         
         for ch_idx in range(3):
@@ -367,8 +360,8 @@ def main():
         ax2.set_xlim(0, current_time)
     else:
         ax2.set_xlim(0, 10.0)
-    ax2.set_title(f"Vista Concatenada de Ventanas Propuestas (±0.5) | Toma: {med_rel_path}", fontsize=14, pad=15, color=fg_color)
-    ax2.set_xlabel("Tiempo  (segundos)", fontsize=11, labelpad=10, color=fg_color)
+    ax2.set_title(f"Vista Concatenada de Ventanas Propuestas - Ventana 0.5 - Toma: {med_rel_path}", fontsize=14, pad=15, color=fg_color)
+    ax2.set_xlabel("Tiempo - Segundos", fontsize=11, labelpad=10, color=fg_color)
     ax2.set_ylabel(f"Amplitud Envolvente {smooth_ms_val}ms", fontsize=11, labelpad=10, color=fg_color)
     ax2.grid(True, linestyle=':', alpha=0.4, color=grid_color)
     
@@ -382,10 +375,38 @@ def main():
     for text in legend2.get_texts(): text.set_color(fg_color)
 
     plt.tight_layout(pad=1.5, h_pad=3.0)
-    out_path = os.path.join(med_path, "plot_paper_combined.png")
+    if out_path is None:
+        out_path = os.path.join(med_path, "plot_paper_combined.png")
     fig.savefig(out_path, dpi=200, bbox_inches='tight', facecolor=fig.get_facecolor())
     
-    plt.show()
+    if mostrar:
+        plt.show()
+    else:
+        plt.close(fig)
+    plt.style.use('default')
+        
+    return out_path
+
+def main():
+    if len(sys.argv) < 2:
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        med_path = filedialog.askdirectory(title="Selecciona la carpeta de la medición (ej: toma_1)")
+        if not med_path:
+            print("No se seleccionó ninguna medición.")
+            sys.exit(0)
+        theme = "light"
+        smooth_ms_val = 250.0
+        frac_pulsos = 0.5
+    else:
+        med_path = sys.argv[1]
+        theme = sys.argv[2] if len(sys.argv) > 2 else "light"
+        smooth_ms_val = float(sys.argv[3]) if len(sys.argv) > 3 else 250.0
+        frac_pulsos = float(sys.argv[4]) if len(sys.argv) > 4 else 0.5
+        
+    generar_plot_3_musculos(med_path, theme=theme, smooth_ms_val=smooth_ms_val, frac_pulsos=frac_pulsos, mostrar=True)
 
 if __name__ == "__main__":
     main()
