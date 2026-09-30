@@ -1,0 +1,186 @@
+{
+    "estetica_global": {
+        "tema_oscuro": true,
+        "color_fondo": "#050505",
+        "color_acento": "#00ffcc"
+    },
+    "adquisicion": {
+        "frecuencia_muestreo": 2000.0,
+        "ruido_segundos": 5.0,
+        "bpm": 30,
+        "tiempo_descanso": 10.0,
+        "nidaq_channels": [
+            "Dev1/ai0",
+            "Dev1/ai1",
+            "Dev1/ai2",
+            "Dev1/ai3"
+        ]
+    },
+    "analisis_extractor": {
+        "frecuencia_remuestreo": 500.0
+    },
+    "colores_musculos": {
+        "anterior belly": "#ff754b",
+        "vientre anterior": "#ff754b",
+        "vientre anterior del digastrico": "#ff754b",
+        "anterior belly of digastric": "#ff754b",
+        "digastrico": "#ff754b",
+        "zigomatico": "#00a896",
+        "zygomaticus": "#00a896",
+        "risorio": "#00cc44",
+        "risorius": "#00cc44",
+        "modiolo": "#a3e635",
+        "modiolus": "#a3e635",
+        "orbicularis": "#ffff00",
+        "orbicular": "#ffff00",
+        "orbicularis oris": "#ffff00",
+        "depresor": "#15803d",
+        "depresor anguli oris": "#15803d",
+        "depressor": "#15803d",
+        "milohioideo": "#ff7700",
+        "milohiode": "#ff7700",
+        "mylohyoid": "#ff7700",
+        "microfono": "#ff0000",
+        "micrófono": "#ff0000",
+        "mic": "#ff0000",
+        "audio": "#ff0000",
+        "musculo 5": "#00ffcc",
+        "musculo 6": "#00cc44",
+        "musculo 7": "#a3e635",
+        "musculo 8": "#ff7700",
+        "musculo 9": "#00bfff",
+        "musculo 10": "#ff00ff",
+        "musculo 11": "#ff69b4",
+        "musculo 12": "#8a2be2",
+        "musculo 13": "#ff7f50",
+        "musculo 14": "#00e5ff",
+        "musculo 15": "#ffd600"
+    },
+    "canales": {
+        "Canal 0": {
+            "musculo": "Anterior Belly of Digastric",
+            "color_hex": "#ff754b",
+            "factor_calibracion": 495.0,
+            "activo_por_defecto": false
+        },
+        "Canal 1": {
+            "musculo": "Depresor Anguli Oris",
+            "color_hex": "#15803d",
+            "factor_calibracion": 495.0,
+            "activo_por_defecto": false
+        },
+        "Canal 2": {
+            "musculo": "Orbicularis Oris",
+            "color_hex": "#ffff00",
+            "factor_calibracion": 495.0,
+            "activo_por_defecto": false
+        },
+        "Canal 3": {
+            "musculo": "Micrófono",
+            "color_hex": "#ff0000",
+            "factor_calibracion": 495.0,
+            "activo_por_defecto": false
+        },
+        "Canal 4": {
+            "musculo": "",
+            "factor_calibracion": 495.0,
+            "color_hex": "#00a896",
+            "activo_por_defecto": false
+        },
+        "Canal 5": {
+            "musculo": "Musculo 5",
+            "factor_calibracion": 495.0,
+            "color_hex": "#00ffcc",
+            "activo_por_defecto": false
+        },
+        "Canal 6": {
+            "musculo": "Musculo 6",
+            "factor_calibracion": 495.0,
+            "color_hex": "#00cc44",
+            "activo_por_defecto": false
+        },
+        "Canal 7": {
+            "musculo": "Musculo 7",
+            "factor_calibracion": 495.0,
+            "color_hex": "#a3e635",
+            "activo_por_defecto": false
+        },
+        "Canal 8": {
+            "musculo": "Musculo 8",
+            "factor_calibracion": 495.0,
+            "color_hex": "#ff7700",
+            "activo_por_defecto": false
+        },
+        "Canal 9": {
+            "musculo": "Musculo 9",
+            "factor_calibracion": 495.0,
+            "color_hex": "#00bfff",
+            "activo_por_defecto": false
+        },
+        "Canal 10": {
+            "musculo": "Musculo 10",
+            "factor_calibracion": 495.0,
+            "color_hex": "#ff00ff",
+            "activo_por_defecto": false
+        },
+        "Canal 11": {
+            "musculo": "Musculo 11",
+            "factor_calibracion": 495.0,
+            "color_hex": "#ff69b4",
+            "activo_por_defecto": false
+        },
+        "Canal 12": {
+            "musculo": "Musculo 12",
+            "factor_calibracion": 495.0,
+            "color_hex": "#8a2be2",
+            "activo_por_defecto": false
+        },
+        "Canal 13": {
+            "musculo": "Musculo 13",
+            "factor_calibracion": 495.0,
+            "color_hex": "#ff7f50",
+            "activo_por_defecto": false
+        },
+        "Canal 14": {
+            "musculo": "Musculo 14",
+            "factor_calibracion": 495.0,
+            "color_hex": "#00e5ff",
+            "activo_por_defecto": false
+        },
+        "Canal 15": {
+            "musculo": "Musculo 15",
+            "factor_calibracion": 495.0,
+            "color_hex": "#ffd600",
+            "activo_por_defecto": false
+        }
+    },
+    "csv_viewer": {
+        "notch": false,
+        "notch_q": 2.0,
+        "bandpass": true,
+        "lp": 500.0,
+        "hp": 20.0,
+        "env": "ninguna",
+        "env_ms": 100,
+        "env_offset": true,
+        "adaptive_filter": false,
+        "adaptive_mu": 0.005,
+        "adaptive_mode": "50 Hz (Cuadratura)",
+        "adaptive_view": "Señal Filtrada e[n]",
+        "inject_noise": false,
+        "inject_noise_amp": 50,
+        "inject_noise_harmonic": false
+    },
+    "plotter_config": {
+        "notch": true,
+        "bandpass": true,
+        "tipo_env": "ninguna",
+        "start_time": null,
+        "end_time": null,
+        "graficar_fft": false,
+        "tema_oscuro": true
+    },
+    "test_section": {
+        "foo": "bar"
+    }
+}

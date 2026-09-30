@@ -1068,22 +1068,24 @@ class AutoencoderEspectrograma2D(nn.Module):
 
 class OrthogonalAutoencoder2D(nn.Module):
     """
-    Autoencoder Ortogonal 2D para descubrimiento no supervisado de variedades latentes sEMG.
-    Arquitectura totalmente conexa simétrica sin sesgo (bias=False) con regularización ortogonal:
-    D -> hidden_dim (32) -> 16 -> latent_dim (2) -> 16 -> hidden_dim (32) -> D
+    Autoencoder Ortogonal totalmente conexo simétrico sin sesgo con regularización ortogonal:
+    Entrada: D -> hidden_dim -> inter_dim -> latent_dim -> inter_dim -> hidden_dim -> D.
     Admite entrada aplanada (N, D) o tridimensional (N, n_canales, target_len).
     """
-    def __init__(self, input_dim=60, hidden_dim=32, latent_dim=2):
+    def __init__(self, input_dim=60, hidden_dim=32, latent_dim=2, inter_dim=None):
         super(OrthogonalAutoencoder2D, self).__init__()
         self.input_dim = input_dim
         self.hidden_dim = hidden_dim
         self.latent_dim = latent_dim
+        if inter_dim is None:
+            inter_dim = 24 if latent_dim == 3 else 16
+        self.inter_dim = inter_dim
         self.fc1 = nn.Linear(input_dim, hidden_dim, bias=False)
-        self.fc2 = nn.Linear(hidden_dim, 16, bias=False)
-        self.fc3 = nn.Linear(16, latent_dim, bias=False)
+        self.fc2 = nn.Linear(hidden_dim, inter_dim, bias=False)
+        self.fc3 = nn.Linear(inter_dim, latent_dim, bias=False)
         self.act = nn.Tanh()
-        self.dfc1 = nn.Linear(latent_dim, 16, bias=False)
-        self.dfc2 = nn.Linear(16, hidden_dim, bias=False)
+        self.dfc1 = nn.Linear(latent_dim, inter_dim, bias=False)
+        self.dfc2 = nn.Linear(inter_dim, hidden_dim, bias=False)
         self.dfc3 = nn.Linear(hidden_dim, input_dim, bias=False)
 
     def encode(self, x):
@@ -1123,6 +1125,108 @@ class OrthogonalAutoencoder2D(nn.Module):
                 gram = torch.mm(W.t(), W)
                 I = torch.eye(W.shape[1], device=W.device)
             loss += torch.norm(gram - I, p='fro')**2
+        return loss
+
+class ConvOrthogonalAutoencoder(nn.Module):
+    """
+    Autoencoder Convolucional 1D Ortogonal para sEMG.
+    Combina extracción morfológica temporal vía Conv1d con regularización ortogonal en pesos y espacio latente.
+    Admite entrada tridimensional (N, n_canales, target_len) o aplanada (N, D).
+    """
+    def __init__(self, in_channels=3, time_pts=20, conv_channels=None, kernel_size=None, latent_dim=2, act="tanh"):
+        super().__init__()
+        self.in_channels = in_channels
+        self.time_pts = time_pts
+        self.latent_dim = latent_dim
+        if conv_channels is None:
+            conv_channels = (4, 12) if latent_dim == 3 else (6, 12)
+        if kernel_size is None:
+            kernel_size = 3 if latent_dim == 3 else 5
+        c1, c2 = conv_channels
+        self.c1 = c1
+        self.c2 = c2
+        self.kernel_size = kernel_size
+        pad = kernel_size // 2
+        
+        self.conv1 = nn.Conv1d(in_channels, c1, kernel_size=kernel_size, padding=pad, bias=False)
+        self.conv2 = nn.Conv1d(c1, c2, kernel_size=kernel_size, padding=pad, bias=False)
+        if str(act).lower() == "gelu":
+            self.act = nn.GELU()
+        else:
+            self.act = nn.Tanh()
+            
+        self.fc1 = nn.Linear(c2 * time_pts, 32, bias=False)
+        self.fc2 = nn.Linear(32, latent_dim, bias=False)
+        
+        self.dfc1 = nn.Linear(latent_dim, 32, bias=False)
+        self.dfc2 = nn.Linear(32, c2 * time_pts, bias=False)
+        self.deconv1 = nn.ConvTranspose1d(c2, c1, kernel_size=kernel_size, padding=pad, bias=False)
+        self.deconv2 = nn.ConvTranspose1d(c1, in_channels, kernel_size=kernel_size, padding=pad, bias=False)
+
+    def encode(self, x):
+        if x.dim() == 2:
+            x_3d = x.view(x.shape[0], self.in_channels, self.time_pts)
+        else:
+            x_3d = x
+        h1 = self.act(self.conv1(x_3d))
+        h2 = self.act(self.conv2(h1))
+        h_flat = h2.view(h2.shape[0], -1)
+        h3 = self.act(self.fc1(h_flat))
+        return self.fc2(h3)
+
+    def decode(self, z):
+        dh1 = self.act(self.dfc1(z))
+        dh2 = self.act(self.dfc2(dh1)).view(dh1.shape[0], self.c2, self.time_pts)
+        dh3 = self.act(self.deconv1(dh2))
+        recon_3d = self.deconv2(dh3)
+        return recon_3d
+
+    def forward(self, x):
+        orig_dim = x.dim()
+        if orig_dim == 2:
+            x_3d = x.view(x.shape[0], self.in_channels, self.time_pts)
+        else:
+            x_3d = x
+        h1 = self.act(self.conv1(x_3d))
+        h2 = self.act(self.conv2(h1))
+        h_flat = h2.view(h2.shape[0], -1)
+        h3 = self.act(self.fc1(h_flat))
+        z = self.fc2(h3)
+        
+        dh1 = self.act(self.dfc1(z))
+        dh2 = self.act(self.dfc2(dh1)).view(dh1.shape[0], self.c2, self.time_pts)
+        dh3 = self.act(self.deconv1(dh2))
+        recon_3d = self.deconv2(dh3)
+        
+        if orig_dim == 2:
+            recon = recon_3d.view(recon_3d.shape[0], -1)
+        else:
+            recon = recon_3d
+        return recon, z
+
+    def weight_orthogonality_loss(self):
+        loss = 0.0
+        for layer in [self.fc1, self.fc2, self.dfc1, self.dfc2]:
+            W = layer.weight
+            d0, d1 = W.shape
+            if d0 < d1:
+                gram = torch.mm(W, W.t())
+                I = torch.eye(d0, device=W.device)
+            else:
+                gram = torch.mm(W.t(), W)
+                I = torch.eye(d1, device=W.device)
+            loss = loss + torch.norm(gram - I, p='fro')**2
+            
+        for conv in [self.conv1, self.conv2, self.deconv1, self.deconv2]:
+            W = conv.weight.view(conv.weight.shape[0], -1)
+            d0, d1 = W.shape
+            if d0 < d1:
+                gram = torch.mm(W, W.t())
+                I = torch.eye(d0, device=W.device)
+            else:
+                gram = torch.mm(W.t(), W)
+                I = torch.eye(d1, device=W.device)
+            loss = loss + torch.norm(gram - I, p='fro')**2
         return loss
 
 def extraer_sesion_agnostica(toma_str):
@@ -1453,9 +1557,17 @@ def entrenar_autoencoder(archivo_npz=None, modalidad="envolvente", latent_dim=2,
             _log(f"  [Arquitectura Personalizada] Modelo instanciado: {modelo.__class__.__name__}")
         elif es_ortogonal:
             input_dim_total = in_ch * t_len
-            hidden_dim_orto = 64 if latent_dim == 3 else 32
-            modelo = OrthogonalAutoencoder2D(input_dim=input_dim_total, hidden_dim=hidden_dim_orto, latent_dim=latent_dim)
-            _log(f"  [Autoencoder Ortogonal Récord] Instanciado: {input_dim_total} -> {hidden_dim_orto} -> 16 -> {latent_dim} (Tanh, bias=False)")
+            if tipo_arq == "conv_ortogonal":
+                c_ch = (4, 12) if latent_dim == 3 else (6, 12)
+                k_sz = 3 if latent_dim == 3 else 5
+                act_str = "gelu" if latent_dim == 3 else "tanh"
+                modelo = ConvOrthogonalAutoencoder(in_channels=in_ch, time_pts=t_len, conv_channels=c_ch, kernel_size=k_sz, latent_dim=latent_dim, act=act_str)
+                _log(f"  [Conv-Ortogonal Récord] Instanciado: {in_ch}ch x {t_len}pts -> Ch={c_ch}, K={k_sz}, {act_str.upper()} -> {latent_dim}D")
+            else:
+                hidden_dim_orto = 48 if latent_dim == 3 else 32
+                inter_dim_orto = 24 if latent_dim == 3 else 16
+                modelo = OrthogonalAutoencoder2D(input_dim=input_dim_total, hidden_dim=hidden_dim_orto, latent_dim=latent_dim, inter_dim=inter_dim_orto)
+                _log(f"  [Autoencoder Ortogonal Récord] Instanciado: {input_dim_total} -> {hidden_dim_orto} -> {inter_dim_orto} -> {latent_dim} (Tanh, bias=False)")
         else:
             modelo = AutoencoderEnvolvente1D(in_channels=in_ch, latent_dim=latent_dim, target_len=t_len)
     elif modalidad == "cruda":
@@ -1757,9 +1869,17 @@ def evaluar_espacio_latente(archivo_npz=None, modelo=None, modalidad="envolvente
             _log("  Cargando arquitectura personalizada desde parámetros...")
             modelo = compilar_modelo_desde_codigo(codigo_custom_arch, modalidad=modalidad, latent_dim=latent_dim, target_len=t_len, in_channels=in_ch)
         elif es_orto:
-            hidden_dim_orto = 64 if latent_dim == 3 else 32
-            modelo = OrthogonalAutoencoder2D(input_dim=in_ch * t_len, hidden_dim=hidden_dim_orto, latent_dim=latent_dim)
-            _log(f"  [Autoencoder Ortogonal Récord] Instanciado para inferencia ({in_ch * t_len} -> {hidden_dim_orto} -> 16 -> {latent_dim})")
+            if tipo_arq == "conv_ortogonal":
+                c_ch = (4, 12) if latent_dim == 3 else (6, 12)
+                k_sz = 3 if latent_dim == 3 else 5
+                act_str = "gelu" if latent_dim == 3 else "tanh"
+                modelo = ConvOrthogonalAutoencoder(in_channels=in_ch, time_pts=t_len, conv_channels=c_ch, kernel_size=k_sz, latent_dim=latent_dim, act=act_str)
+                _log(f"  [Conv-Ortogonal Récord] Instanciado para inferencia ({in_ch}ch x {t_len}pts -> Ch={c_ch}, K={k_sz}, {act_str.upper()} -> {latent_dim}D)")
+            else:
+                hidden_dim_orto = 48 if latent_dim == 3 else 32
+                inter_dim_orto = 24 if latent_dim == 3 else 16
+                modelo = OrthogonalAutoencoder2D(input_dim=in_ch * t_len, hidden_dim=hidden_dim_orto, latent_dim=latent_dim, inter_dim=inter_dim_orto)
+                _log(f"  [Autoencoder Ortogonal Récord] Instanciado para inferencia ({in_ch * t_len} -> {hidden_dim_orto} -> {inter_dim_orto} -> {latent_dim})")
         elif os.path.exists(arch_guardada):
             try:
                 with open(arch_guardada, 'r', encoding='utf-8') as f_a:

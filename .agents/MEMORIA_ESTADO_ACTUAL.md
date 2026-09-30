@@ -2793,6 +2793,88 @@ El autoencoder convolucional 1D entrenado sin supervisión con regularización p
 - **Sincronización:**
   - Confirmación y subida íntegra a GitHub (`origin/master`) para habilitar la compilación nativa en entorno Windows mediante `build.bat`.
 
+### Hito 135 - 2026-09-30: Consolidación y Automatización de Configuraciones Récord en GUI y Motor Autoencoder
+
+- **Motivación y Corrección Integral:**
+  - El usuario requirió que al alternar o presionar los botones de configuración de las 4 arquitecturas récord (Convolucional 2D, Convolucional 3D, Ortogonal MLP 2D, Ortogonal MLP 3D), la interfaz (`ui_analysis.py`) cargue con exactitud matemática todos los hiperparámetros, topologías, activación y los porcentajes de ventana temporal (`pre_pct` y `post_pct`).
+  - Anteriormente, al cambiar entre 2D y 3D o presionar los botones, algunos parámetros permanecían desactualizados o con valores obsoletos de ensayos previos (ej. 800 épocas en 3D, ventanas desincronizadas, o núcleos convolucionales fijos).
+- **Implementación en el Motor (`motor_autoencoder_unificado.py`):**
+  - Se incorporó la clase nativa `ConvOrthogonalAutoencoder` para unificar arquitecturas convolucionales ortogonales 1D en 2D y 3D.
+  - Soporte flexible para tensores tridimensionales $(N, C, T)$ y aplanados $(N, C \cdot T)$ con cálculo exhaustivo de regularización ortogonal en pesos de capas lineales y filtros convolucionales (`weight_orthogonality_loss`).
+  - Se adaptó `OrthogonalAutoencoder2D` para recibir `inter_dim` dinámico (24 neuronas para 3D, 16 para 2D).
+  - Despacho robusto en `entrenar_autoencoder` y `evaluar_espacio_latente` según `tipo_arq == "conv_ortogonal"`.
+- **Implementación en la Interfaz Gráfica (`ui_analysis.py`):**
+  - **Valores por defecto al iniciar el programa:** Se inicializa directamente en **Ortogonal (MLP) 3D** con ventana 40/60 (`pre_pct=0.40`, `post_pct=0.60`), topología $(48, 24)$, $\text{lr}=0.0035$, $\lambda_W=1.80$, $\lambda_Z=0.30$, 350 épocas, batch 512, sin SO(2) (Récord 87.21% Media Armónica, 87.4% Lucas, 87.0% Candela P5).
+  - **Convolucional 2D:** Ventana 50/50 (`pre_pct=0.50`, `post_pct=0.50`), núcleo $K=5$, canales $(6, 12)$, activación Tanh, $\text{lr}=0.0030$, $\lambda_W=2.00$, $\lambda_Z=0.50$, 350 épocas, batch 512 (Récord 85.3% Media Armónica).
+  - **Convolucional 3D:** Ventana 50/50 (`pre_pct=0.50`, `post_pct=0.50`), núcleo $K=3$, canales $(4, 12)$, activación GELU, $\text{lr}=0.0030$, $\lambda_W=2.00$, $\lambda_Z=0.70$, 350 épocas, batch 512 (Récord 82.2% Media Armónica).
+  - **Ortogonal (MLP) 2D:** Ventana 50/50 (`pre_pct=0.50`, `post_pct=0.50`), topología $(32, 16)$, activación Tanh, 600 épocas, batch 512. Con $\text{lr}=0.0040$, $\lambda_W=0.60$, $\lambda_Z=0.15$ nativo (87.85%) o $\text{lr}=0.0020$, $\lambda_W=0.30$, $\lambda_Z=0.45$ con SO(2) (91.43%).
+  - **Sincronización Reactiva:** Se conectaron los callbacks `_on_tipo_red_changed()` y `on_modalidad_toggled()` para despachar directamente a `on_cargar_conv_orto()` y `on_cargar_orto()`, asegurando que cualquier cambio de selector en la interfaz actualice instantáneamente todos los campos y el editor de código.
+  - **Cumplimiento Estricto de Reglas:** Eliminación total de paréntesis en rótulos y botones de la GUI. Cero emojis.
+- **Validación Automatizada:**
+  - Se ejecutó el script de verificación integral `scratch/verificar_configuraciones_records.py`.
+  - Pasó el 100% de los 7 tests: inicialización predeterminada 3D, conmutación reactiva 2D/3D, carga convolucional 2D y 3D, clics directos, forward pass y backward de regularización ortogonal sin errores.
+
+### Hito 136 - 2026-09-30: Lanzamiento del Barrido Masivo Cuatrimodal con Ventana 60/60 (5.000 / 5.760 Combinaciones)
+
+- **Motivación:**
+  - El usuario solicitó realizar el barrido exhaustivo de hiperparámetros completo (tier 5000 / 5760 combinaciones) utilizando la ventana simétrica 60% pre / 60% post (`pre_pct=0.60`, `post_pct=0.60`) para evaluar si una ventana que capture la totalidad de la cola de relajación muscular permite optimizar la representación bioeléctrica frente a las ventanas previas (50/50 y 40/60).
+- **Implementación del Módulo (`grid_search_lucas_ventana6060.py`):**
+  - Extracción y almacenamiento en caché de datasets dedicados:
+    - `dataset_lucas_ventana6060.npz`: 500 ventanas purgadas con Isolation Forest (10%) a partir de las 35 tomas de Lucas (`2026-07-10`) con ventana 60% pre / 60% post y supresión de reposo/impedancia inter-sesión.
+    - `dataset_p5_ventana6060.npz`: 123 pulsos de Secuencia Continua P5 (`2026-06-10`) con ventana 1.20s pre / 1.20s post (2.4s totales).
+  - Espacio de búsqueda de 5.760 combinaciones (para Conv 2D y 3D) y 5.040 combinaciones (para MLP 2D y 3D):
+    - MLP: 12 arquitecturas $\times$ 2 activaciones (Tanh/GELU) $\times$ 5 tasas de aprendizaje $\times$ 7 regularizaciones $\lambda_W$ $\times$ 6 $\lambda_Z$ = 5.040 combinaciones por modo.
+    - Conv: 6 parejas de canales $\times$ 4 tamaños de kernel (3, 5, 7, 9) $\times$ 2 activaciones $\times$ 4 lrs $\times$ 6 $\lambda_W$ $\times$ 5 $\lambda_Z$ = 5.760 combinaciones por modo.
+  - Métrica de optimización: Media Armónica entre la Exactitud GMM no supervisada en Lucas y la transferencia directa *zero-shot* a Secuencia Continua P5.
+  - Persistencia resiliente: Guardado incremental muestra a muestra en CSV (`resultados_<modo>_5760.csv`), actualización en tiempo real de pesos `.pt`, configuración `.json` y gráfico de dispersión `.png` del modelo campeón.
+- **Estado de Ejecución y Avance (85.0% Completado - Bloque Final 8, 24):**
+  - Los barridos de las dos **Convolucionales Ortogonales** continúan avanzando en paralelo:
+    1. `conv_2d` (Convolucional Ortogonal 2D): 4.892 de 5.760 combinaciones evaluadas ($85.0\%$).
+       - Avanzando en el 6to y último bloque de canales: `(8, 24)` (combinaciones 4.801 a 5.760).
+       - **Exactitud en Lucas (cerca del 83%):** El máximo en Lucas hasta ahora es **82.8%** (idx 4837, Canales `(8, 24)`, Kernel 3, Tanh, lr 0.004, P5 83.7%), seguido por **82.4%** (idx 4807) y **82.2%** (idx 1467 y 4412). Todavía no cruzó el 83.0% en 2D, pero restan 868 combinaciones del bloque con mayor capacidad `(8, 24)`.
+       - **Campeón de Media Armónica vigente:** **84.75%** (Lucas: **81.2%**, P5 Continuo: **88.62%**, Piso P5: 68.0%, Silueta: $+0.314$, Davies-Bouldin: $0.96$).
+       - Configuración del campeón armónico: Canales $(8, 16)$, Kernel $K=7$, Activación Tanh, $\text{lr}=0.004$, $\lambda_W=1.5$, $\lambda_Z=0.5$.
+    2. `conv_3d` (Convolucional Ortogonal 3D): 4.882 de 5.760 combinaciones evaluadas ($84.8\%$).
+       - **Exactitud en Lucas (ampliamente superior al 83%):** Existen más de 60 configuraciones con Lucas $\ge 83.0\%$.
+         - Récord absoluto en Lucas para Conv 3D: **85.4%** (idx 4636, Canales `(8, 16)`, Kernel 9, Tanh, $\text{lr}=0.004$, $\lambda_W=1.2$, $\lambda_Z=0.15$, P5: 83.7%, armónica: 84.56%).
+         - Picos de **85.0%** en Lucas: idx 3607 y idx 4137 (Canales `(8, 16)`, Kernel 5, Tanh, $\text{lr}=0.003$, $\lambda_W=2.0$, $\lambda_Z=0.25$, P5: 86.2%).
+         - Picos de **84.8%** en Lucas: idx 3636 y idx 3637.
+         - Picos de **84.6%** en Lucas: idx 2978 y idx 3641.
+         - Picos de **84.2% - 84.4%**: idx 3666, idx 4107, idx 4131, idx 4161, idx 4168, idx 4646.
+         - Rango 83.0% - 83.8%: Más de 40 configuraciones (incluyendo el actual Campeón Armónico idx 3187 con Lucas **83.2%**, P5 **90.2%**, armónica **86.58%**, y en el bloque `(8, 24)` la combinación 4831 con Lucas **83.4%**).
+  - Ambos procesos guardan incrementalmente cada fila evaluada en sus respectivos CSVs.
+  - Tiempo estimado restante para completar las 5.760 combinaciones: ~1 hora y 5 minutos (alrededor de las 20:25 UTC-3).
+
+### Hito 137 - 2026-09-30: Reorganización Integral del Repositorio, Protección de Privacidad y Blindaje de `.gitignore`
+
+- **Motivación y Diagnóstico:**
+  - El usuario solicitó limpiar y organizar el repositorio, eliminando elementos residuales, imágenes sueltas, cuadernos de tesis y documentos fuera del flujo principal de `main_app.py` en `EMG_desarrollo/`.
+  - Se detectó que Git estaba rastreando información delicada y archivos de gran porte: cuadernos de tesis (`Cuaderno Tesis.docx` de 21.6 MB y `Cuaderno_Tesis.docx` de 47.8 MB), fotografías biométricas reales de rostros de sujetos con electrodos (`WhatsApp Image...jpeg`, `orbicularis_oris_candela_frontal.jpeg`), 18 artículos científicos en PDF (incluyendo libros de 41 MB) y reportes experimentales pesados.
+- **Acciones de Reorganización Física:**
+  - **Documentos de Tesis y Privados:** Se creó la carpeta `documentos_tesis/` (100% excluida de Git) y se trasladaron allí los cuadernos de tesis y los PDFs duplicados de la raíz.
+  - **Códigos de Prueba y Auxiliares:** Se trasladó `machine_learning/dl_data_pipeline.py` y los scripts experimentales `temp_*.py` y variantes de ablación (`grid_search_conv_ortogonal_3d_corregido.py`, `grid_search_lucas_ventana6060.py`) a `codigos_de_prueba/scripts/`. Se eliminó la carpeta vacía `machine_learning/`.
+  - **Imágenes Sueltas:** Se trasladaron figuras duplicadas residuales a `codigos_de_prueba/figuras/`.
+- **Desindexación Segura de Git (`git rm --cached`):**
+  - Se eliminaron del índice de seguimiento de Git todos los archivos sensibles (cuadernos de tesis, fotos faciales de Candela, papers y manuales en PDF), garantizando que permanezcan intactos en el disco local pero nunca más sean subidos a GitHub.
+- **Blindaje Exhaustivo de `.gitignore`:**
+  - Se actualizó el archivo `.gitignore` raíz con secciones explícitas:
+    1. Documentos de tesis y ofimática privada (`*.docx`, `*.doc`, `*.pptx`, `*.xlsx`, `documentos_tesis/`, `cuaderno_tesis/`).
+    2. Privacidad de sujetos: bases de datos (`base_de_datos_electrodos/`, `base_de_datos_letras/`, `*.wav`), fotos reales de rostros (`**/fotos/*.jpeg`, `**/fotos/*.jpg`, `**/fotos/WhatsApp*`, `**/fotos/*candela*`, `**/fotos/*lucas*`, etc.). Excepción exclusiva para diagramas anatómicos médicos genéricos (`!**/fotos/anatomia_*`, `!**/documentacion_hardware/imagenes/*`).
+    3. Documentos y reportes pesados: `*.pdf`, `reportes_experimentos/`, `**/papers/`, artefactos LaTeX (`*.aux`, `*.log`, `*.toc`, `*.out`, etc.).
+    4. Análisis y resultados: `analisis_comparativos/`, `analisis_de_sesiones/`, `resultados/`, `cache_datos/`, `*.npz`, `*.npy`, `*.csv`.
+    5. Códigos de prueba y temporales: `codigos_de_prueba/`, `temp_*.py`, `scratch/`, `respaldo_*/`.
+    6. Entornos, builds y checkpoints: `venv/`, `.pytest_cache/`, `build_linux/*`, `build_windows/*`, `EMG_Ejecutable_Build/`, `*.pth`, `*.pt`, `*.onnx`.
+- **Verificación:**
+  - Verificado con `git check-ignore -v` en múltiples rutas críticas (tesis, fotos de rostros, grabaciones WAV, papers, análisis comparativos) comprobando que el 100% de los archivos delicados están protegidos contra subidas accidentales a GitHub.
+
+
+
+
+
+
+
+
+
 
 
 

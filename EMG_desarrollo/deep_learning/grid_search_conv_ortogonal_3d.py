@@ -195,7 +195,82 @@ def cargar_datos_lucas():
     X_flat = X_norm.reshape(N, -1)
     return torch.tensor(X_flat, dtype=torch.float32), y, n_ch, n_pts, b_bw, a_bw
 
-def cargar_datos_p5(b_bw, a_bw):
+def detectar_picos_p5_continuo(sig_emg, sig_mic, fs, noise_sec=5.0, modo_deteccion="Gate Doble (sEMG Puro)", max_pulsos=None, after_window_seconds=1.0):
+    """Replica la lógica de detección del decodificador continuo para P5."""
+    n_samples = sig_emg.shape[1]
+    n_noise_samples = int(noise_sec * fs)
+
+    b_notch, a_notch = signal.iirnotch(50.0, 2.0, fs)
+    b_band, a_band = signal.butter(2, [20.0, 500.0], 'bandpass', fs=fs)
+    sig_filt = np.zeros_like(sig_emg)
+    for c in range(3):
+        s_n = signal.filtfilt(b_notch, a_notch, sig_emg[c])
+        sig_filt[c] = signal.filtfilt(b_band, a_band, s_n)
+
+    win_rms = int(0.090 * fs)
+    if win_rms % 2 == 0:
+        win_rms += 1
+    kernel_rms = np.ones(win_rms) / win_rms
+    env_emg = np.zeros_like(sig_filt)
+    for c in range(3):
+        env_emg[c] = np.sqrt(np.maximum(0, np.convolve(sig_filt[c]**2, kernel_rms, mode='same')))
+
+    ruido_base_emg = np.median(env_emg[:, :n_noise_samples], axis=1, keepdims=True)
+
+    if "gate doble" in str(modo_deteccion).lower():
+        env_clean = np.maximum(env_emg - ruido_base_emg, 0.0)
+        S_emg = np.sqrt(np.sum(env_clean**2, axis=0))
+
+        S_ruido = S_emg[:n_noise_samples]
+        med_base = np.median(S_ruido)
+        mad_base = np.median(np.abs(S_ruido - med_base))
+        sigma_rob = 1.4826 * mad_base + 1e-6
+        U_bajo = med_base + 3.0 * sigma_rob
+
+        p98_emg = np.percentile(S_emg[n_noise_samples:], 98) if n_samples > n_noise_samples else np.max(S_emg)
+        U_alto = min(1800.0, max(1300.0, p98_emg * 0.35))
+
+        T_refr = int(0.800 * fs)
+        max_lookback = int(0.350 * fs)
+
+        onsets_emg = []
+        en_pulso = False
+        ultimo_onset = -T_refr
+
+        for n in range(n_noise_samples, n_samples):
+            if not en_pulso:
+                if S_emg[n] >= U_alto and (n - ultimo_onset) >= T_refr:
+                    lb_st = max(n_noise_samples, n - max_lookback)
+                    sub_s = S_emg[lb_st:n]
+                    cruces = np.where(sub_s <= U_bajo)[0]
+                    n_on = lb_st + cruces[-1] if len(cruces) > 0 else lb_st
+                    onsets_emg.append(n_on)
+                    ultimo_onset = n_on
+                    en_pulso = True
+            else:
+                if S_emg[n] < U_bajo:
+                    en_pulso = False
+
+        if max_pulsos and len(onsets_emg) > max_pulsos:
+            onsets_emg = onsets_emg[:max_pulsos]
+
+        umbral_fin = max(1.0, after_window_seconds)
+        picos_fonacion = [int(on + 0.350 * fs) for on in onsets_emg if (on + 0.350 * fs) < (n_samples - int(umbral_fin * fs))]
+        return picos_fonacion
+
+    win_mic = int(0.050 * fs)
+    mic_env = np.convolve(np.abs(sig_mic), np.ones(win_mic) / win_mic, mode='same')
+    p98_mic = np.percentile(mic_env[n_noise_samples:], 98) if n_samples > n_noise_samples else np.max(mic_env)
+    umbral_altura = min(2000.0, max(500.0, p98_mic * 0.35))
+    picos_cand, _ = signal.find_peaks(mic_env, distance=int(1.2 * fs), height=umbral_altura)
+    umbral_fin = max(1.0, after_window_seconds)
+    picos_fonacion = [p for p in picos_cand if p >= 6.0 * fs and p < (n_samples - int(umbral_fin * fs))]
+    if max_pulsos and len(picos_fonacion) > max_pulsos:
+        picos_fonacion = picos_fonacion[:max_pulsos]
+    return picos_fonacion
+
+
+def cargar_datos_p5(b_bw, a_bw, before_window_seconds=1.0, after_window_seconds=1.0):
     toma_p5 = os.path.join(
         project_root,
         "EMG_desarrollo/base_de_datos_electrodos/2026-06-10/SecuenciaContinua_Prueba5_Sujeto1"
@@ -233,21 +308,28 @@ def cargar_datos_p5(b_bw, a_bw):
     for c in range(3):
         env_emg[c] = np.sqrt(np.maximum(0, np.convolve(sig_filt[c]**2, kernel_rms, mode='same')))
 
-    win_mic = int(0.050 * fs)
-    mic_env = np.convolve(np.abs(sig_mic), np.ones(win_mic) / win_mic, mode='same')
-    picos_candidatos, _ = signal.find_peaks(mic_env, distance=int(1.2 * fs), height=2000)
-    picos_fonacion = [p for p in picos_candidatos if p >= 6.0 * fs and p < (n_samples - int(1.0 * fs))]
+    picos_fonacion = detectar_picos_p5_continuo(
+        sig_emg,
+        sig_mic,
+        fs,
+        noise_sec=noise_sec,
+        modo_deteccion="Gate Doble (sEMG Puro)",
+        max_pulsos=len(palabras_ground) if len(palabras_ground) > 0 else None,
+        after_window_seconds=max(after_window_seconds, 1.0)
+    )
+
+    before_window_samples = max(1, int(before_window_seconds * fs))
+    after_window_samples = max(1, int(after_window_seconds * fs))
     if len(picos_fonacion) > 125:
         picos_fonacion = picos_fonacion[:125]
 
     ruido_base_emg = np.median(env_emg[:, :n_noise_samples], axis=1, keepdims=True)
-    half_win = int(1.0 * fs)
     pts_target = 20
     X_p5_list, y_p5_list = [], []
 
     for i, p in enumerate(picos_fonacion):
-        start = p - half_win
-        end = p + half_win
+        start = p - before_window_samples
+        end = p + after_window_samples
         if start < 0 or end > n_samples:
             continue
         seg_raw = np.maximum(env_emg[:, start:end] - ruido_base_emg, 0.0)
@@ -552,13 +634,26 @@ def anunciar_record_3d(cfg, res, total_comb, current_idx, records_count, prev_re
 # ==============================================================================
 def main():
     parser = argparse.ArgumentParser(description="Grid Search de Autoencoders Convolucionales Ortogonales en 3D")
-    parser.add_argument('--mode', type=str, default='3600', choices=['3600', '5760', 'quick', 'test'],
-                        help="Modo del barrido: 3600 (default), 5760 (max epic), quick (96) o test (4)")
+    parser.add_argument('--mode', type=str, default='3600', choices=['3600', '5760', '5000', 'quick', 'test'],
+                        help="Modo del barrido: 3600, 5760, 5000, quick (96) o test (4)")
     parser.add_argument('--epochs', type=int, default=350, help="Numero de epocas por configuracion (default: 350)")
     parser.add_argument('--seed', type=int, default=100, help="Semilla aleatoria (default: 100)")
+    parser.add_argument('--window-seconds', type=float, default=0.6,
+                        help="Ventana simetrica en segundos por lado (default: 0.6, para la version 60/60).")
+    parser.add_argument('--window-before-seconds', type=float, default=0.6,
+                        help="Ventana previa al pico en segundos (default: 0.6)")
+    parser.add_argument('--window-after-seconds', type=float, default=0.6,
+                        help="Ventana posterior al pico en segundos (default: 0.6)")
     parser.add_argument('--baseline-record', type=float, default=80.00, help="Record previo de media armonica a batir (default: 80.00)")
     parser.add_argument('--resume', action='store_true', help="Reanudar barrido si ya existe el CSV de resultados")
     args = parser.parse_args()
+
+    if hasattr(args, 'window_seconds') and args.window_seconds is not None:
+        args.window_before_seconds = args.window_seconds
+        args.window_after_seconds = args.window_seconds
+    elif args.window_before_seconds is None and args.window_after_seconds is None:
+        args.window_before_seconds = 0.6
+        args.window_after_seconds = 0.6
 
     os.makedirs(out_dir_default, exist_ok=True)
     csv_results = os.path.join(out_dir_default, f"resultados_grid_search_3d_{args.mode}.csv")
@@ -578,9 +673,15 @@ def main():
     print(f"  Lucas: {len(X_lucas_t)} muestras cargadas en {device}.")
 
     print("[Carga] Extrayendo ventanas continuas de SecuenciaContinua_Prueba5_Sujeto1...")
-    X_p5_t, y_p5 = cargar_datos_p5(b_bw, a_bw)
+    X_p5_t, y_p5 = cargar_datos_p5(
+        b_bw,
+        a_bw,
+        before_window_seconds=args.window_before_seconds,
+        after_window_seconds=args.window_after_seconds,
+    )
     X_p5_t = X_p5_t.to(device)
     print(f"  Secuencia Continua P5: {len(X_p5_t)} pulsos cargados en {device}.")
+    print(f"  Ventana activa: antes={args.window_before_seconds:.2f}s | despues={args.window_after_seconds:.2f}s | total={args.window_before_seconds + args.window_after_seconds:.2f}s.")
 
     # Definir espacio de busqueda segun modo
     if args.mode == 'test':
@@ -617,6 +718,15 @@ def main():
             'act': ['tanh', 'gelu'],
             'lr': [0.002, 0.003, 0.004, 0.006],
             'lambda_w': [0.6, 0.8, 1.0, 1.2, 1.5, 2.0],
+            'lambda_z': [0.15, 0.25, 0.35, 0.50, 0.70]
+        }
+    elif args.mode == '5000':
+        grid_params = {
+            'channels': [(3, 6), (4, 8), (4, 12), (6, 12), (8, 16)],
+            'kernel_size': [3, 5, 7, 9],
+            'act': ['tanh', 'gelu'],
+            'lr': [0.0015, 0.002, 0.003, 0.004, 0.006],
+            'lambda_w': [0.6, 0.8, 1.0, 1.2, 1.5],
             'lambda_z': [0.15, 0.25, 0.35, 0.50, 0.70]
         }
 
@@ -685,13 +795,13 @@ def main():
         # Guardado incremental inmediato
         pd.DataFrame(records).to_csv(csv_results, index=False)
 
-        # Deteccion de nuevo record historico
-        # Criterio: superar la media armonica y mantener un piso minimo equilibrado en P5 (>= 50%)
-        if res['harmonic_acc'] > best_harmonic and res['min_vocal_p5'] >= 50.0:
+        # Deteccion de nuevo record historico: avisar siempre que haya una mejora de media armonica
+        if res['harmonic_acc'] > best_harmonic:
             prev_record = best_harmonic
             best_harmonic = res['harmonic_acc']
             records_count += 1
             best_cfg = row
+            print(f"\n[RECORD] Nueva media armonica: {res['harmonic_acc']:.2f}% | anterior: {prev_record:.2f}% | combinacion {current_idx}/{total_comb}")
             guardar_campeon_3d(cfg, res, y_lucas, y_p5, out_dir_default, records_count, prev_record)
             anunciar_record_3d(cfg, res, total_comb, current_idx, records_count, prev_record, out_dir_default)
 

@@ -1939,19 +1939,19 @@ class AutoencoderNoSupervisadoTab(QWidget):
         self.btn_restablecer_arch.setStyleSheet("background-color: #1F2833; color: #45A29E; border: 1px solid #45A29E; font-size: 11px; padding: 4px;")
         bar_arch.addWidget(self.btn_restablecer_arch)
 
-        self.btn_cargar_convae = QPushButton("Cargar ConvAE (ConvTranspose1D)")
+        self.btn_cargar_convae = QPushButton("Cargar ConvAE: ConvTranspose1D")
         self.btn_cargar_convae.setStyleSheet("background-color: #1F2833; color: #66FCF1; border: 1px solid #66FCF1; font-size: 11px; font-weight: bold; padding: 4px;")
         self.btn_cargar_convae.setToolTip("Carga la arquitectura ConvAE con ConvTranspose1d y función de pérdida relativa + derivada.")
         bar_arch.addWidget(self.btn_cargar_convae)
 
-        self.btn_cargar_orto = QPushButton("Cargar OrthogonalAE: Récord 91%")
+        self.btn_cargar_orto = QPushButton("Cargar OrthogonalAE: Récord")
         self.btn_cargar_orto.setStyleSheet("background-color: #1F2833; color: #00FF88; border: 1px solid #00AA55; font-size: 11px; font-weight: bold; padding: 4px;")
         self.btn_cargar_orto.setToolTip("Carga la arquitectura de Autoencoder Ortogonal totalmente conexo simétrico sin sesgo con regularización de pesos.")
         bar_arch.addWidget(self.btn_cargar_orto)
 
-        self.btn_cargar_conv_orto = QPushButton("Cargar Conv-Ortogonal: Récord 85%")
+        self.btn_cargar_conv_orto = QPushButton("Cargar Conv-Ortogonal: Récord")
         self.btn_cargar_conv_orto.setStyleSheet("background-color: #1F2833; color: #FFE600; border: 1px solid #FFE600; font-size: 11px; font-weight: bold; padding: 4px;")
-        self.btn_cargar_conv_orto.setToolTip("Carga la arquitectura de Autoencoder Convolucional Ortogonal (K=5, Ch=(6, 12), Tanh, lw=2.0, lz=0.5).")
+        self.btn_cargar_conv_orto.setToolTip("Carga la arquitectura de Autoencoder Convolucional Ortogonal.")
         bar_arch.addWidget(self.btn_cargar_conv_orto)
 
         self.btn_verificar_arch = QPushButton("Verificar Sintaxis y Capas")
@@ -2291,99 +2291,52 @@ class AutoencoderPersonalizado(nn.Module):
         self.lbl_arch_status.setStyleSheet("background-color: #111111; color: #45A29E; border: 1px solid #333333; padding: 5px; font-family: monospace; font-size: 10px; border-radius: 4px;")
 
     def on_modalidad_toggled(self):
-        latent_dim = 3 if (self.rb_dim_3d.isChecked() if hasattr(self, 'rb_dim_3d') else self.rb_dim_3d_env.isChecked()) else 2
-        if "ortogonal" in self.cmb_tipo_red.currentText().lower():
-            if latent_dim == 3:
-                # Configuración Récord 88.45% en 3D
-                self.inp_epochs.setValue(800)
-                self.inp_batch.setValue(512)
-                self.inp_lr.setValue(0.0020)
-                self.inp_lambda_w.setValue(1.20)
-                self.inp_lambda_z.setValue(0.15)
-            elif self.chk_alineacion_so2.isChecked():
-                # Configuración Récord 91.43% con rotación rígida SO(2)
-                self.inp_epochs.setValue(600)
-                self.inp_batch.setValue(512)
-                self.inp_lr.setValue(0.0020)
-                self.inp_lambda_w.setValue(0.30)
-                self.inp_lambda_z.setValue(0.45)
-            else:
-                # Configuración Récord 87.85% nativo crudo sin SO(2)
-                self.inp_epochs.setValue(600)
-                self.inp_batch.setValue(512)
-                self.inp_lr.setValue(0.0040)
-                self.inp_lambda_w.setValue(0.60)
-                self.inp_lambda_z.setValue(0.15)
-            if self.chk_usar_custom.isChecked():
-                self.on_cargar_orto()
-        if not self.chk_usar_custom.isChecked():
-            self.txt_codigo_arch.setPlainText(self.get_plantilla_codigo())
-            self.lbl_arch_status.setText("[INFO]: Plantilla actualizada para la modalidad seleccionada.")
-            self.lbl_arch_status.setStyleSheet("background-color: #111111; color: #45A29E; border: 1px solid #333333; padding: 5px; font-family: monospace; font-size: 10px; border-radius: 4px;")
+        txt_tipo = self.cmb_tipo_red.currentText().lower()
+        if "convolucional" in txt_tipo and "ortogonal" in txt_tipo:
+            self.on_cargar_conv_orto()
+        elif "ortogonal" in txt_tipo:
+            self.on_cargar_orto()
+        else:
+            if not self.chk_usar_custom.isChecked():
+                self.txt_codigo_arch.setPlainText(self.get_plantilla_codigo())
+                self.lbl_arch_status.setText("[INFO]: Plantilla actualizada para la modalidad seleccionada.")
+                self.lbl_arch_status.setStyleSheet("background-color: #111111; color: #45A29E; border: 1px solid #333333; padding: 5px; font-family: monospace; font-size: 10px; border-radius: 4px;")
 
     def _on_so2_toggled(self, checked):
         latent_dim = 3 if (self.rb_dim_3d.isChecked() if hasattr(self, 'rb_dim_3d') else self.rb_dim_3d_env.isChecked()) else 2
         if latent_dim == 3:
-            return  # SO(2) aplica a 2D; se preserva la configuración récord de 3D
-        if checked:
-            # Configuración Récord 91.43% con rotación rígida SO(2)
-            self.inp_epochs.setValue(600)
-            self.inp_batch.setValue(512)
-            self.inp_lr.setValue(0.0020)
-            self.inp_lambda_w.setValue(0.30)
-            self.inp_lambda_z.setValue(0.45)
-        else:
-            # Configuración Récord 87.85% nativo crudo sin SO(2)
-            self.inp_epochs.setValue(600)
-            self.inp_batch.setValue(512)
-            self.inp_lr.setValue(0.0040)
-            self.inp_lambda_w.setValue(0.60)
-            self.inp_lambda_z.setValue(0.15)
-
-    def _on_tipo_red_changed(self, idx):
-        latent_dim = 3 if (self.rb_dim_3d.isChecked() if hasattr(self, 'rb_dim_3d') else self.rb_dim_3d_env.isChecked()) else 2
+            return  # SO(2) aplica a 2D; se preserva la configuracion record de 3D
         txt_tipo = self.cmb_tipo_red.currentText().lower()
-        if "convolucional" in txt_tipo and "ortogonal" in txt_tipo:
-            # Autoencoder Ortogonal Convolucional (Récord 89.0% Lucas - 81.3% Candela P5)
-            self.on_cargar_conv_orto()
-        elif "ortogonal" in txt_tipo:
-            if latent_dim == 3:
-                # Configuración Récord 88.45% en 3D
-                self.inp_epochs.setValue(800)
-                self.inp_batch.setValue(512)
-                self.inp_lr.setValue(0.0020)
-                self.inp_lambda_w.setValue(1.20)
-                self.inp_lambda_z.setValue(0.15)
-            elif self.chk_alineacion_so2.isChecked():
+        if "ortogonal" in txt_tipo and "convolucional" not in txt_tipo:
+            if checked:
+                # Configuracion Record 91.43% con rotacion rigida SO(2)
+                self.inp_pre_pct.setValue(0.50)
+                self.inp_post_pct.setValue(0.50)
                 self.inp_epochs.setValue(600)
                 self.inp_batch.setValue(512)
                 self.inp_lr.setValue(0.0020)
                 self.inp_lambda_w.setValue(0.30)
                 self.inp_lambda_z.setValue(0.45)
             else:
+                # Configuracion Record 87.85% nativo crudo sin SO(2)
+                self.inp_pre_pct.setValue(0.50)
+                self.inp_post_pct.setValue(0.50)
                 self.inp_epochs.setValue(600)
                 self.inp_batch.setValue(512)
                 self.inp_lr.setValue(0.0040)
                 self.inp_lambda_w.setValue(0.60)
                 self.inp_lambda_z.setValue(0.15)
-            self.cmb_align.setCurrentText("Pico Volumen Micrófono")
-            self.chk_impedancia_reposo.setChecked(True)
-            self.cmb_loss.setCurrentText("MSE (Error Cuadrático Medio)")
-            self.inp_smooth_ms.setValue(90)
-            self.inp_pts_env.setValue(20)
-            self.cmb_filtro_linea.setCurrentText("Notch (IIR en Cascada)")
-            self.inp_notch.setValue(2.0)
-            self.inp_alpha.setValue(0.50)
-            self.inp_snr.setValue(0.50)
-            self.inp_outliers.setValue(0.10)
-            self.chk_p95.setChecked(False)
-            self.chk_correccion_intersesion.setChecked(False)
+
+    def _on_tipo_red_changed(self, idx):
+        txt_tipo = self.cmb_tipo_red.currentText().lower()
+        if "convolucional" in txt_tipo and "ortogonal" in txt_tipo:
+            self.on_cargar_conv_orto()
+        elif "ortogonal" in txt_tipo:
+            self.on_cargar_orto()
         else:
-            self.inp_epochs.setValue(150)
-            self.inp_batch.setValue(32)
-            self.inp_lr.setValue(0.0020)
-            self.inp_lambda_w.setValue(0.0)
-            self.inp_lambda_z.setValue(0.0)
+            self.on_cargar_convae()
+            self.inp_pre_pct.setValue(0.50)
+            self.inp_post_pct.setValue(0.50)
 
     def on_cargar_conv_orto(self):
         latent_dim = 3 if (self.rb_dim_3d.isChecked() if hasattr(self, 'rb_dim_3d') else (self.rb_dim_3d_env.isChecked() if hasattr(self, 'rb_dim_3d_env') else False)) else 2
@@ -2396,21 +2349,34 @@ class AutoencoderPersonalizado(nn.Module):
             if len(ch_list) >= 2:
                 n_ch = len(ch_list)
 
-        if hasattr(self, 'inp_pts_env'):
-            if self.inp_pts_env.value() == 100:
-                self.inp_pts_env.setValue(20)
-            t_len = self.inp_pts_env.value()
-        else:
-            t_len = 20
+        self.inp_pts_env.setValue(20)
+        t_len = 20
 
         codigo = self.get_plantilla_codigo_conv_ortogonal(n_ch=n_ch, latent_dim=latent_dim, target_len=t_len)
         self.txt_codigo_arch.setPlainText(codigo)
         self.chk_usar_custom.setChecked(True)
-        self.inp_epochs.setValue(350)
-        self.inp_batch.setValue(512)
-        self.inp_lr.setValue(0.0030)
-        self.inp_lambda_w.setValue(2.00)
-        self.inp_lambda_z.setValue(0.50)
+
+        if latent_dim == 3:
+            # Convolucional 3D Record (Ventana 50/50, K=3, Ch=(4, 12), GELU, lr=0.0030, lw=2.00, lz=0.70)
+            self.inp_pre_pct.setValue(0.50)
+            self.inp_post_pct.setValue(0.50)
+            self.inp_epochs.setValue(350)
+            self.inp_batch.setValue(512)
+            self.inp_lr.setValue(0.0030)
+            self.inp_lambda_w.setValue(2.00)
+            self.inp_lambda_z.setValue(0.70)
+            desc_status = f"[OK]: Conv-Ortogonal 3D cargado: Record 82.2% Media Armonica - K=3, Ch=(4, 12), GELU, lr=0.003, lw=2.0, lz=0.7, Ventana 50/50."
+        else:
+            # Convolucional 2D Record (Ventana 50/50, K=5, Ch=(6, 12), Tanh, lr=0.0030, lw=2.00, lz=0.50)
+            self.inp_pre_pct.setValue(0.50)
+            self.inp_post_pct.setValue(0.50)
+            self.inp_epochs.setValue(350)
+            self.inp_batch.setValue(512)
+            self.inp_lr.setValue(0.0030)
+            self.inp_lambda_w.setValue(2.00)
+            self.inp_lambda_z.setValue(0.50)
+            desc_status = f"[OK]: Conv-Ortogonal 2D cargado: Record 85.3% Media Armonica - K=5, Ch=(6, 12), Tanh, lr=0.003, lw=2.0, lz=0.5, Ventana 50/50."
+
         self.cmb_align.setCurrentText("Pico Volumen Micrófono")
         self.chk_impedancia_reposo.setChecked(True)
         self.cmb_loss.setCurrentText("MSE (Error Cuadrático Medio)")
@@ -2425,7 +2391,7 @@ class AutoencoderPersonalizado(nn.Module):
         self.chk_correccion_intersesion.setChecked(False)
         self.chk_alineacion_so2.setChecked(False)
         self.on_verificar_arquitectura()
-        self.lbl_arch_status.setText(f"[OK]: Autoencoder Convolucional Ortogonal {latent_dim}D cargado ({n_ch}ch x {t_len}pts, K=5, Ch=(6, 12), Tanh).")
+        self.lbl_arch_status.setText(desc_status)
         self.lbl_arch_status.setStyleSheet("background-color: #002211; color: #FFE600; border: 1px solid #FFE600; padding: 5px; font-family: monospace; font-size: 10px; border-radius: 4px;")
 
     def on_pts_env_changed(self, new_val):
@@ -2453,16 +2419,31 @@ class AutoencoderPersonalizado(nn.Module):
 
     def get_plantilla_codigo_conv_ortogonal(self, n_ch=3, latent_dim=2, target_len=20):
         class_name = f"ConvOrthogonalAutoencoder{latent_dim}D"
+        if latent_dim == 3:
+            conv_channels = (4, 12)
+            kernel_size = 3
+            act_code = "nn.GELU()"
+            record_title = "Récord 82.2% Media Armónica - Lucas 82.3% - P5 82.1% - Ventana 50/50"
+            config_desc = "K=3, Canales=(4, 12), Activación=GELU, lr=0.003, lw=2.0, lz=0.7"
+        else:
+            conv_channels = (6, 12)
+            kernel_size = 5
+            act_code = "nn.Tanh()"
+            record_title = "Récord 85.3% Media Armónica - Lucas 87.8% - P5 82.9% - Ventana 50/50"
+            config_desc = "K=5, Canales=(6, 12), Activación=Tanh, lr=0.003, lw=2.0, lz=0.5"
+
+        c1, c2 = conv_channels
+        pad = kernel_size // 2
         return f'''import torch
 import torch.nn as nn
 
 class {class_name}(nn.Module):
     """
-    Autoencoder Convolucional Ortogonal {latent_dim}D: Récord 89.0% Lucas - 81.3% Candela P5 (Media Armónica 85.0%).
-    Configuración Óptima: K=5, Canales=(6, 12), Activación=Tanh, lr=0.003, lw=2.0, lz=0.5.
+    Autoencoder Convolucional Ortogonal {latent_dim}D: {record_title}.
+    Configuración Óptima: {config_desc}.
     Combina extracción morfológica temporal vía Conv1d con regularización ortogonal en pesos y espacio latente.
     """
-    def __init__(self, in_channels={n_ch}, time_pts={target_len}, conv_channels=(6, 12), kernel_size=5, latent_dim={latent_dim}):
+    def __init__(self, in_channels={n_ch}, time_pts={target_len}, conv_channels={conv_channels}, kernel_size={kernel_size}, latent_dim={latent_dim}):
         super().__init__()
         self.in_channels = in_channels
         self.time_pts = time_pts
@@ -2471,7 +2452,7 @@ class {class_name}(nn.Module):
         
         self.conv1 = nn.Conv1d(in_channels, c1, kernel_size=kernel_size, padding=pad, bias=False)
         self.conv2 = nn.Conv1d(c1, c2, kernel_size=kernel_size, padding=pad, bias=False)
-        self.act = nn.Tanh()
+        self.act = {act_code}
         
         self.fc1 = nn.Linear(c2 * time_pts, 32, bias=False)
         self.fc2 = nn.Linear(32, latent_dim, bias=False)
@@ -2550,7 +2531,7 @@ class {class_name}(nn.Module):
 '''
 
     def on_cargar_orto(self):
-        latent_dim = 3 if self.rb_dim_3d.isChecked() else 2
+        latent_dim = 3 if (self.rb_dim_3d.isChecked() if hasattr(self, 'rb_dim_3d') else self.rb_dim_3d_env.isChecked()) else 2
         n_ch = 3
         if hasattr(self, 'chk_canal_0') and hasattr(self, 'chk_canal_1') and hasattr(self, 'chk_canal_2'):
             ch_list = []
@@ -2560,24 +2541,69 @@ class {class_name}(nn.Module):
             if len(ch_list) >= 2:
                 n_ch = len(ch_list)
 
-        t_len = self.inp_pts_env.value() if hasattr(self, 'inp_pts_env') else 20
+        self.inp_pts_env.setValue(20)
+        t_len = 20
+
         codigo_orto = self.get_plantilla_codigo_ortogonal(n_ch=n_ch, latent_dim=latent_dim, target_len=t_len)
         self.txt_codigo_arch.setPlainText(codigo_orto)
         self.chk_usar_custom.setChecked(True)
+
         if latent_dim == 3:
-            self.inp_epochs.setValue(800)
+            # Ortogonal 3D Record: 87.21% Media Armonica (Lucas 87.4%, P5 87.0%, Piso P5 79.2%, Ventana 40/60)
+            self.inp_pre_pct.setValue(0.40)
+            self.inp_post_pct.setValue(0.60)
+            self.inp_epochs.setValue(350)
             self.inp_batch.setValue(512)
-            self.inp_lr.setValue(0.0020)
-            self.inp_lambda_w.setValue(1.20)
-            self.inp_lambda_z.setValue(0.15)
-        self.lbl_arch_status.setText(f"[OK]: Arquitectura OrthogonalAE {latent_dim}D cargada ({n_ch}ch x {t_len}pts = {n_ch*t_len}D).")
+            self.inp_lr.setValue(0.0035)
+            self.inp_lambda_w.setValue(1.80)
+            self.inp_lambda_z.setValue(0.30)
+            self.chk_alineacion_so2.setChecked(False)
+            desc_status = f"[OK]: OrthogonalAE 3D cargado: Record 87.21% Media Armonica - Topologia (48, 24), lr=0.0035, lw=1.8, lz=0.3, Ventana 40/60."
+        else:
+            # Ortogonal 2D Record (Ventana 50/50, Topologia (32, 16))
+            self.inp_pre_pct.setValue(0.50)
+            self.inp_post_pct.setValue(0.50)
+            self.inp_epochs.setValue(600)
+            self.inp_batch.setValue(512)
+            if self.chk_alineacion_so2.isChecked():
+                self.inp_lr.setValue(0.0020)
+                self.inp_lambda_w.setValue(0.30)
+                self.inp_lambda_z.setValue(0.45)
+                desc_status = f"[OK]: OrthogonalAE 2D cargado: Record 91.43% SO(2) - Topologia (32, 16), lr=0.0020, lw=0.3, lz=0.45, Ventana 50/50."
+            else:
+                self.inp_lr.setValue(0.0040)
+                self.inp_lambda_w.setValue(0.60)
+                self.inp_lambda_z.setValue(0.15)
+                desc_status = f"[OK]: OrthogonalAE 2D cargado: Record 87.85% nativo - Topologia (32, 16), lr=0.0040, lw=0.6, lz=0.15, Ventana 50/50."
+
+        self.cmb_align.setCurrentText("Pico Volumen Micrófono")
+        self.chk_impedancia_reposo.setChecked(True)
+        self.cmb_loss.setCurrentText("MSE (Error Cuadrático Medio)")
+        self.inp_smooth_ms.setValue(90)
+        self.cmb_filtro_linea.setCurrentText("Notch (IIR en Cascada)")
+        self.inp_notch.setValue(2.0)
+        self.inp_alpha.setValue(0.50)
+        self.inp_snr.setValue(0.50)
+        self.inp_outliers.setValue(0.10)
+        self.chk_p95.setChecked(False)
+        self.chk_correccion_intersesion.setChecked(False)
+        self.on_verificar_arquitectura()
+        self.lbl_arch_status.setText(desc_status)
         self.lbl_arch_status.setStyleSheet("background-color: #002211; color: #00FF88; border: 1px solid #00AA55; padding: 5px; font-family: monospace; font-size: 10px; border-radius: 4px;")
 
     def get_plantilla_codigo_ortogonal(self, n_ch=3, latent_dim=2, target_len=20):
         input_dim = n_ch * target_len
-        hidden_dim = 64 if latent_dim == 3 else 32
+        if latent_dim == 3:
+            hidden_dim = 48
+            inter_dim = 24
+            record_label = "Record 87.21% Media Armonica 3D - Lucas 87.4% - P5 87.0% - Ventana 40/60"
+            config_desc = f"Entrada: {n_ch} canales x {target_len} puntos = {input_dim} dimensiones -> {hidden_dim} -> {inter_dim} -> {latent_dim}."
+        else:
+            hidden_dim = 32
+            inter_dim = 16
+            record_label = "Record 87.85% nativo - 91.43% SO(2) - Ventana 50/50"
+            config_desc = f"Entrada: {n_ch} canales x {target_len} puntos = {input_dim} dimensiones -> {hidden_dim} -> {inter_dim} -> {latent_dim}."
         class_name = f"OrthogonalAutoencoder{latent_dim}D"
-        record_label = "Configuración Récord 88.45% 3D" if latent_dim == 3 else "Configuración Récord 87% - 91% 2D"
         return f'''import torch
 import torch.nn as nn
 
@@ -2585,16 +2611,16 @@ class {class_name}(nn.Module):
     """
     Autoencoder Ortogonal {latent_dim}D: {record_label}.
     Topología totalmente conexa simétrica sin sesgo (bias=False) con regularización ortogonal:
-    Entrada: {n_ch} canales x {target_len} puntos = {input_dim} dimensiones -> {hidden_dim} -> 16 -> {latent_dim}.
+    {config_desc}
     """
     def __init__(self, input_dim={input_dim}, hidden_dim={hidden_dim}, latent_dim={latent_dim}):
         super().__init__()
         self.fc1 = nn.Linear(input_dim, hidden_dim, bias=False)
-        self.fc2 = nn.Linear(hidden_dim, 16, bias=False)
-        self.fc3 = nn.Linear(16, latent_dim, bias=False)
+        self.fc2 = nn.Linear(hidden_dim, {inter_dim}, bias=False)
+        self.fc3 = nn.Linear({inter_dim}, latent_dim, bias=False)
         self.act = nn.Tanh()
-        self.dfc1 = nn.Linear(latent_dim, 16, bias=False)
-        self.dfc2 = nn.Linear(16, hidden_dim, bias=False)
+        self.dfc1 = nn.Linear(latent_dim, {inter_dim}, bias=False)
+        self.dfc2 = nn.Linear({inter_dim}, hidden_dim, bias=False)
         self.dfc3 = nn.Linear(hidden_dim, input_dim, bias=False)
 
     def encode(self, x):
