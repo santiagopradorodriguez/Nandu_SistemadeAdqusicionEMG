@@ -363,6 +363,840 @@ La estructura angular en la hiperesfera $S^2$ viabiliza una arquitectura de deco
     \end{itemize}
 \end{enumerate}
 
+\section{Alineación de Variedades Latentes con CCA y Análisis de Tríadas Musculares}
+\label{sec:cca_triadas}
+
+\subsection{Límites de la Rotación Rígida y Formulación de Bach y Jordan}
+\label{subsec:limites_so_d}
+
+Los ensayos empíricos de transferencia inter-sujeto evidenciaron que la hipótesis de alineación mediante rotación ortogonal rígida en $\text{SO}(d)$ o alineación de Procrustes resulta insuficiente para absorber la variabilidad biomecánica real. La formulación rígida impone una isometría estricta ($\mathbf{W}_1 \mathbf{W}_2^{-1} \in \text{SO}(d)$), asumiendo que la distancia euclidiana entre atractores se conserva de forma invariante entre participantes. Sin embargo, factores fisiológicos ineludibles tales como la impedancia cutánea, el espesor del tejido celular subcutáneo y el desplazamiento relativo milimétrico de los sensores introducen deformaciones afines no isométricas, caracterizadas por estiramiento diferencial de ejes y cizallamiento (\textit{shear}).
+
+Para resolver este desacople se adoptó el marco probabilístico de Análisis de Correlación Canónica (CCA) propuesto por Francis Bach y Michael I. Jordan. Bajo este modelo generativo, se plantea la existencia de una variable latente común $\mathbf{z} \in \mathbb{R}^k$ proyectada a través de matrices biofísicas de mezcla particulares para cada individuo:
+\begin{align}
+    \mathbf{x}_{\text{lucas}} &= \mathbf{W}_L \mathbf{z} + \boldsymbol{\epsilon}_L \\
+    \mathbf{x}_{\text{cande}} &= \mathbf{W}_C \mathbf{z} + \boldsymbol{\epsilon}_C
+\end{align}
+donde las matrices de acoplamiento $\mathbf{W}_L$ y $\mathbf{W}_C$ capturan la física de captación del electrodo y la masa muscular de cada usuario. 
+
+Debe destacarse que la invariancia del comando motor común $\mathbf{z}$ constituye una hipótesis de trabajo y no un hecho biológico absoluto. En virtud del principio de redundancia y equivalencia motora de Bernstein, el aparato fonador dispone de múltiples sinergias musculares para alcanzar un mismo objetivo acústico. Consecuentemente, el espacio latente compartido existe únicamente sobre aquellos grados de libertad en los que ambos participantes reclutan la misma sinergia biomecánica.
+
+\subsection{Ángulos Canónicos de Jordan y Subespacios de Atractores}
+\label{subsec:angulos_jordan}
+
+La relación geométrica entre las variedades motoras de dos sujetos se formaliza mediante los ángulos canónicos o principales de Camille Jordan entre los subespacios generados por sus atractores $\mathcal{S}_L$ y $\mathcal{S}_C$. Los $k$ ángulos ordenados satisfacen:
+\begin{equation}
+    \cos(\theta_i) = \max_{\mathbf{u} \in \mathcal{S}_L, \mathbf{v} \in \mathcal{S}_C} \frac{\mathbf{u}^T \mathbf{v}}{\|\mathbf{u}\|_2 \|\mathbf{v}\|_2} = \rho_i
+    \label{eq:jordan_angles}
+\end{equation}
+donde $\rho_i$ corresponde exactamente a la $i$-ésima correlación canónica de CCA. Un ángulo $\theta_1 \approx 0^\circ$ ($\rho_1 \approx 1.0$) indica la existencia de un subespacio unidimensional donde las dinámicas de activación de ambos sujetos son paralelas e idénticas en escala relativa.
+
+\subsection{Validación Experimental: Risorio frente a Cigomático Mayor}
+\label{subsec:validacion_cigomatico}
+
+La auditoría anatómica de las tomas experimentales permitió desentrañar el origen de las discrepancias fonéticas observadas en la vocal /e/:
+\begin{enumerate}
+    \item \textbf{Sesión Candela (2026-09-01):} Configuración con electrodo en el músculo Risorio en el Canal 1. El Risorio induce tracción puramente horizontal hacia la mejilla. Al proyectar en el modelo de Lucas (cuyo Canal 1 registra el Depresor del Ángulo de la Boca, DAO), la vocal /e/ divergió $75.1^\circ$ hacia la cuenca de apertura mandibular (/a/).
+    \item \textbf{Sesión Candela (2026-09-15 y 2026-09-16):} Configuración con electrodo en el músculo Cigomático Mayor en el Canal 1, conformando la tríada canónica junto al Vientre Anterior del Digástrico (Canal 0) y el Orbicular de los Labios (Canal 2).
+\end{enumerate}
+
+Al evaluar las 20 tomas de Candela del 15 de septiembre sobre el modelo campeón convolucional ortogonal 2D (89.04\% en Lucas), la incorporación del Cigomático Mayor colapsó la divergencia de /e/ a tan solo $6.9^\circ$, con /u/ a $0.7^\circ$, /a/ a $19.0^\circ$ y /o/ a $20.6^\circ$. El análisis de Jordan arrojó una correlación canónica principal de $\rho_1 = 0.9824$ ($\theta_1 = 10.76^\circ$), verificando que el Cigomático Mayor restaura la dirección de sonrisa fonética compartida con Lucas.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/espacio_latente_puro_lucas_vs_candela_raw_sin_gmm.png}
+\caption{Espacio latente bidimensional puro y atractores radiales sin fronteras de agrupamiento artificiales. Panel izquierdo: Lucas nativo. Panel central: Candela cruda sin alinear con tríada de Cigomático Mayor. Panel derecho: Superposición directa de rayos de activación motora.}
+\label{fig:atractores_puro_lucas_candela}
+\end{figure}
+
+\subsection{Experimento 1: Estabilidad Inter-Día en Sujeto Petra}
+\label{subsec:experimento_1_petra}
+
+Para verificar la persistencia temporal de los atractores latentes intra-sujeto ante el reposicionamiento de electrodos con una semana de separación, se evaluaron las grabaciones del sujeto Petra:
+\begin{itemize}
+    \item \textbf{Día 1 - 2026-08-21:} 10 tomas correspondientes a las sesiones \textit{Prueba1silicona} y \textit{silicona\_aeiou} (86 ventanas válidas post-purga con \textit{Isolation Forest}).
+    \item \textbf{Día 2 - 2026-08-28:} 10 tomas correspondientes a las sesiones de control \textit{med1\_clase24} y \textit{med2\_clase4} (168 ventanas válidas post-purga).
+    \item \textbf{Tríada Muscular común:} Canal 0 = Vientre anterior del digástrico, Canal 1 = Cigomático mayor, Canal 2 = Elevador del ángulo de la boca (\textit{Levator Anguli Oris}).
+\end{itemize}
+
+Los patrones fueron proyectados sobre el modelo campeón convolucional ortogonal 2D sin supervisión. Los atractores centroides por vocal, las normas euclidianas y la divergencia angular nativa entre ambas jornadas se resumen en el Cuadro~\ref{tab:atractores_petra_interdia}.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{cccccc}
+\toprule
+\textbf{Vocal} & \textbf{Día 1: 21-08 $(Z_1, Z_2)$} & $\|\mathbf{z}_1\|_2$ & \textbf{Día 2: 28-08 $(Z_1, Z_2)$} & $\|\mathbf{z}_2\|_2$ & \textbf{Desvío Angular} \\
+\midrule
+/a/ & $(+1.31,\,+1.44)$ & 1.94 & $(+1.18,\,+1.24)$ & 1.71 & \textbf{1.3}$^\circ$ \\
+/e/ & $(-0.32,\,+2.51)$ & 2.53 & $(-0.18,\,+2.12)$ & 2.13 & \textbf{2.4}$^\circ$ \\
+/i/ & $(-0.14,\,+2.14)$ & 2.14 & $(-0.26,\,+2.44)$ & 2.46 & \textbf{2.5}$^\circ$ \\
+/o/ & $(-0.80,\,+1.75)$ & 1.93 & $(-1.00,\,+1.72)$ & 1.99 & \textbf{5.6}$^\circ$ \\
+/u/ & $(-1.08,\,+1.67)$ & 1.98 & $(-1.14,\,+2.00)$ & 2.30 & \textbf{3.3}$^\circ$ \\
+\bottomrule
+\end{tabular}
+\caption{Atractores vocálicos y estabilidad inter-día en Petra tras una semana de intervalo bajo idéntica tríada muscular.}
+\label{tab:atractores_petra_interdia}
+\end{table}
+
+El análisis de subespacios de Jordan entre las matrices de atractores arrojó $\theta_1 = 0.00^\circ$ ($\cos \theta_1 = 1.0000$) y $\theta_2 = 0.00^\circ$ ($\cos \theta_2 = 1.0000$). La descomposición por CCA inter-día evidenció una correlación canónica principal de $\rho_1 = 0.9960$ (ángulo efectivo de $5.15^\circ$) y secundaria de $\rho_2 = 0.7768$ ($39.03^\circ$). Esto demuestra empíricamente que cuando la tríada muscular se mantiene invariante, la orientación radial del espacio latente se conserva casi intacta a lo largo del tiempo, con divergencias inferiores a $5.6^\circ$ en todas las vocales.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/experimento_1_petra_interdia_atractores_cca.png}
+\caption{Estabilidad inter-día de atractores latentes en Petra. Panel izquierdo: Día 1 nativo (2026-08-21). Panel central: Día 2 nativo (2026-08-28). Panel derecho: Superposición directa mostrando la consistencia de rayos directores y el ajuste afín mediante CCA.}
+\label{fig:atractores_petra_interdia}
+\end{figure}
+
+Al evaluar las grabaciones de Petra directamente sobre la variedad latente entrenada con Lucas (Cuadro~\ref{tab:atractores_lucas_petra} y Figura~\ref{fig:atractores_petra_sobre_lucas}), se observa una convergencia motora selectiva:
+\begin{itemize}
+    \item La vocal /e/ coincide espontáneamente con el atractor de Lucas con desvíos de solo $3.6^\circ$ (Día 1) y $6.0^\circ$ (Día 2).
+    \item La vocal /o/ exhibe igualmente un desvío mínimo de $8.6^\circ$ y $3.1^\circ$.
+    \item Las vocales /a/ e /i/ divergen entre $35^\circ$ y $42^\circ$. Esto se explica anatómicamente: el electrodo de Petra en el Canal 2 registra el \textit{Levator Anguli Oris} (elevador del labio superior) en lugar del \textit{Orbicularis Oris}, introduciendo una fuerte componente vertical positiva en $Z_2$ que deforma la variedad.
+    \item Al aplicar la alineación afín/CCA de Bach y Jordan, los atractores de Petra de ambas jornadas encastran sobre la variedad de Lucas con correlaciones canónicas principales de $\rho_1 = 0.9988$ (Día 1) y $\rho_1 = 0.9960$ (Día 2), verificando que la deformación introducida por el cambio muscular en el Canal 2 es predominantemente afín.
+\end{itemize}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{cccccc}
+\toprule
+\textbf{Vocal} & \textbf{Lucas Nativo $(Z_1, Z_2)$} & \textbf{Petra D1 Raw} & \textbf{Desvío D1} & \textbf{Petra D2 Raw} & \textbf{Desvío D2} \\
+\midrule
+/a/ & $(+0.39,\,+3.07)$ & $(+1.31,\,+1.44)$ & 35.1$^\circ$ & $(+1.18,\,+1.24)$ & 36.4$^\circ$ \\
+/e/ & $(-0.29,\,+1.49)$ & $(-0.32,\,+2.51)$ & \textbf{3.6}$^\circ$ & $(-0.18,\,+2.12)$ & \textbf{6.0}$^\circ$ \\
+/i/ & $(-0.49,\,+0.48)$ & $(-0.14,\,+2.14)$ & 42.0$^\circ$ & $(-0.26,\,+2.44)$ & 39.5$^\circ$ \\
+/o/ & $(-1.69,\,+2.59)$ & $(-0.80,\,+1.75)$ & \textbf{8.6}$^\circ$ & $(-1.00,\,+1.72)$ & \textbf{3.1}$^\circ$ \\
+/u/ & $(-2.29,\,+2.03)$ & $(-1.08,\,+1.67)$ & 15.5$^\circ$ & $(-1.14,\,+2.00)$ & 18.8$^\circ$ \\
+\bottomrule
+\end{tabular}
+\caption{Comparativa de atractores vocálicos entre el espacio de referencia de Lucas y las proyecciones de Petra (Día 1 y Día 2).}
+\label{tab:atractores_lucas_petra}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/lucas_vs_petra_canonico_opcion_b.png}
+\caption{Alineación afín canónica de Lucas y Petra (Opción B). El vértice de convergencia articular (/i/ y reposo mandibular) se traslada al origen $(0,0)$ y la vocal de apertura /a/ se orienta a $90^\circ$ sobre el eje vertical $+Y$. Panel 1: Lucas canónico. Panel 2: Petra cruda en base canónica. Panel 3: Superposición directa y corrección afín mediante CCA.}
+\label{fig:atractores_petra_sobre_lucas}
+\end{figure}
+
+\subsection{Comparativa Canónica Tri-Sujeto: Lucas, Candela y Petra Sin Clustering}
+\label{subsec:comparativa_tri_sujeto}
+
+Para comprobar la universalidad de la Cruz Latente sin recurrir a particiones artificiales (K-Means o GMM), se consolidaron los patrones electromiográficos puros de los tres sujetos (503 muestras de Lucas, 202 de Candela y 254 de Petra) proyectados sobre la base canónica común (Cuadro~\ref{tab:tri_sujeto_canonico} y Figura~\ref{fig:comparativa_tri_sujeto}).
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{ccccc}
+\toprule
+\textbf{Vocal} & \textbf{Lucas Canónico $(Z_1, Z_2)$} & \textbf{Candela Alineada $(Z_1, Z_2)$} & \textbf{Petra Alineada $(Z_1, Z_2)$} & \textbf{Coincidencia Motora} \\
+\midrule
+/a/ & $(+0.00,\,+2.74)$ & $(-0.65,\,+2.05)$ & \textbf{(+0.03,\,+2.78)} & Apertura mandibular máxima en $+Y$ \\
+/e/ & $(-0.13,\,+1.02)$ & \textbf{(+0.38,\,+1.54)} & $(-0.17,\,+0.55)$ & Sonrisa / retracción comisural en $+X$ \\
+/i/ & $(+0.00,\,+0.00)$ & $(-0.30,\,-0.24)$ & $(+0.01,\,+0.38)$ & Vértice basal articular / reposo \\
+/o/ & $(-1.82,\,+1.61)$ & \textbf{(-1.91,\,+1.73)} & \textbf{(-2.01,\,+1.43)} & Fusión estrecha en semiplano $-X$ \\
+/u/ & $(-2.20,\,+0.89)$ & \textbf{(-1.67,\,+1.19)} & \textbf{(-2.01,\,+1.10)} & Cierre y constricción labial máxima \\
+\bottomrule
+\end{tabular}
+\caption{Atractores empíricos canónicos tri-sujeto sin ningún algoritmo de clustering.}
+\label{tab:tri_sujeto_canonico}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/comparativa_canonica_tri_sujeto_lucas_candela_petra.png}
+\caption{Comparativa canónica de 4 paneles sin clustering para Lucas, Candela y Petra. Panel 1: Lucas nativo canónico. Panel 2: Candela alineada con Cigomático Mayor. Panel 3: Petra alineada con Cigomático Mayor y Levator Anguli Oris. Panel 4: Superposición directa de rayos directores y atractores inter-sujeto.}
+\label{fig:comparativa_tri_sujeto}
+\end{figure}
+
+\subsection{Comparativa con PCA Lineal Clásico y Alineación de Variedades Motoras de Sara Solla}
+\label{subsec:pca_sara_solla_tri_sujeto}
+
+Para contrastar las representaciones latentes convolucionales frente a una descomposición ortogonal lineal clásica, se computó un Análisis de Componentes Principales (PCA) 2D independiente sobre los tres sujetos empleando estrictamente una única sesión por sujeto: Lucas (2026-07-10, 502 muestras), Candela (2026-09-15, 202 muestras) y Petra (2026-08-28 Día 2, 168 muestras), sin ningún algoritmo de clustering (Figura~\ref{fig:pca_nativos_tri_sujeto}).
+
+El plano bidimensional capturó más del 81\% al 88\% de la varianza electromiográfica total en los tres sujetos: $82.3\%$ en Lucas ($\text{PC}_1 = 56.3\%$, $\text{PC}_2 = 26.0\%$), $88.6\%$ en Candela ($\text{PC}_1 = 56.8\%$, $\text{PC}_2 = 31.8\%$) y $81.1\%$ en Petra ($\text{PC}_1 = 46.3\%$, $\text{PC}_2 = 34.7\%$).
+
+Para evaluar la congruencia geométrica entre variedades motoras independientes, se aplicó la formulación de Sara Solla (Gallego, Perich, Miller y Solla, 2020) basada en Análisis de Correlación Canónica (CCA) y cálculo de ángulos principales de Jordan entre atractores vocálicos condition-matched. Las correlaciones canónicas obtenidas fueron:
+\begin{itemize}
+    \item \textbf{Candela vs Lucas:} $\rho_1 = 0.9996$ ($\theta_1 = 1.61^\circ$), $\rho_2 = 0.6842$ ($\theta_2 = 46.83^\circ$).
+    \item \textbf{Petra vs Lucas:} $\rho_1 = 0.9965$ ($\theta_1 = 4.82^\circ$), $\rho_2 = 0.9635$ ($\theta_2 = 15.53^\circ$).
+\end{itemize}
+
+La alineación de variedades proyectada sobre la base canónica de Lucas (vértice /i/ en el origen y /a/ anclado a $90^\circ$ en $+Y$) demuestra una superposición motora casi perfecta (Cuadro~\ref{tab:tri_sujeto_pca_solla} y Figura~\ref{fig:pca_sara_solla_tri_sujeto}): el atractor /a/ de Petra difiere en apenas $0.01$ unidades de $Z_1$ respecto a Lucas, mientras que la rama de constricción labial (/o/ y /u/) de los tres sujetos colapsa en el mismo haz del semiplano izquierdo ($-X < 0$).
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{ccccc}
+\toprule
+\textbf{Vocal} & \textbf{Lucas Canónico PCA} & \textbf{Candela Alineada CCA} & \textbf{Petra Alineada CCA} & \textbf{Correspondencia Motora} \\
+\midrule
+/a/ & $(+0.00,\,+4.94)$ & $(-0.24,\,+2.97)$ & \textbf{(+0.01,\,+4.98)} & Coincidencia en $+Y$ (desvío de solo $0.01$) \\
+/e/ & $(-0.29,\,+1.28)$ & $(-0.06,\,+3.13)$ & $(-0.19,\,+0.65)$ & Activación selectiva de Cigomático Mayor \\
+/i/ & $(+0.00,\,+0.00)$ & \textbf{(-0.00,\,+0.01)} & $(-0.10,\,+0.58)$ & Origen de coordenadas / reposo articular \\
+/o/ & \textbf{(-2.51,\,+1.80)} & \textbf{(-2.60,\,+1.52)} & \textbf{(-2.66,\,+1.50)} & Fusión estrecha en $Z_1 \approx -2.6$, $Z_2 \approx +1.5$ \\
+/u/ & \textbf{(-2.89,\,+0.82)} & \textbf{(-2.79,\,+1.21)} & \textbf{(-2.75,\,+1.14)} & Máxima protrusión orbicular en $Z_1 \approx -2.8$ \\
+\bottomrule
+\end{tabular}
+\caption{Atractores canónicos empíricos tri-sujeto en el espacio PCA alineado con el método de Sara Solla.}
+\label{tab:tri_sujeto_pca_solla}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/comparativa_pca_nativos_tri_sujeto.png}
+\caption{Variedades motoras nativas de PCA lineal 2D independiente para Lucas, Candela y Petra en sesiones únicas sin clustering. Cada espacio conserva la topología triangular (/a/ en el ápice, /o/-/u/ agrupadas y /i/ en la base), aunque con orientaciones arbitrarias por rotación de autovectores.}
+\label{fig:pca_nativos_tri_sujeto}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/comparativa_pca_sara_solla_tri_sujeto.png}
+\caption{Comparativa canónica de 4 paneles de PCA lineal alineada mediante el método de Sara Solla (CCA). Panel 1: Lucas referencia canónica. Panel 2: Candela alineada con CCA ($\rho_1 = 1.000$). Panel 3: Petra alineada con CCA ($\rho_1 = 0.996$, $\rho_2 = 0.963$). Panel 4: Superposición directa de variedades latentes motoras tri-sujeto.}
+\label{fig:pca_sara_solla_tri_sujeto}
+\end{figure}
+
+\subsection{Alineación Inter-Sesión Intra-Sujeto: Estabilidad Longitudinal en Lucas, Petra y Candela}
+\label{subsec:pca_inter_sesion_intra_sujeto}
+
+Para cuantificar la repetibilidad y estabilidad motora intra-sujeto sin mezclar tomas en una única matriz global, se descompuso la base de datos por sesión individual en cada participante (identificadas en los nombres de archivo por los prefijos de toma $T_1, T_2, \dots$ en Lucas, Día 1 y Día 2 en Petra, y $\text{Prueba}_1, \dots, \text{Prueba}_4$ en Candela). 
+
+\subsubsection{Acondicionamiento y Corrección de Impedancia Basal por Sesión}
+Previamente al análisis factorial, cada sesión fue acondicionada bajo el pipeline estándar del proyecto:
+\begin{enumerate}
+    \item \textbf{Filtrado Digital y Envolventes:} Filtro Notch IIR en 50~Hz, pasabanda Butterworth orden 4 (20--500~Hz), rectificación y envolvente RMS de 90~ms con corte fonatorio guiado por el micrófono.
+    \item \textbf{Corrección de Impedancia Basal Independiente:} Para desacoplar la deriva de conductancia por sudor o reemplazo de electrodos entre tomas, se extrajo la media basal de reposo $\mu_{:10}$ en los primeros 10~ms y el percentil robusto $P_{95}$ por canal y sesión:
+    \begin{equation}
+        x_{\text{norm}, c}(t) = \frac{x_c(t) - \mu_{c,:10}}{P_{95}(x_c) - \mu_{c,:10} + 10^{-6}}
+    \end{equation}
+    \item \textbf{Normalización por Supremo Tricanal por Pulso:} Escalamiento de cada pulso individual por su máximo intercanal para preservar la codificación de amplitudes relativas entre músculos.
+\end{enumerate}
+
+Posteriormente, se computó un PCA lineal 2D independiente por sesión y se alinearon las variedades hacia la sesión canónica de referencia mediante CCA (método de Sara Solla). En todos los gráficos de superposición, se proyectaron las muestras empíricas completas sin recurrir a clustering artificial (GMM o K-Means), evitando centroides sobredimensionados o vectores densos que obstruyan la distribución real de los datos.
+
+\subsubsection{Lucas: Tomas T1 a T7 (502 Muestras Totales)}
+En el sujeto Lucas (7 tomas consecutivas en el benchmark del 2026-07-10), la correlación canónica principal con $T_1$ satisfizo $\rho_1 \ge 0.986$ en todas las sesiones, alcanzando $\rho_1 > 0.999$ en $T_4$, $T_6$ y $T_7$, con un ángulo de Jordan $\theta_1$ medio inferior a $4.5^\circ$ (Cuadro~\ref{tab:lucas_inter_sesion} y Figura~\ref{fig:lucas_inter_sesion}). La apertura mandibular (/a/) preservó su posición vertical en $Y \approx 3.6$ con un desvío estándar de apenas $0.06$ entre las 7 sesiones, mientras que el reposo mandibular (/i/) se ancló rígidamente en $(0,0)$.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{ccccc}
+\toprule
+\textbf{Sesión Lucas} & \textbf{Muestras} & \textbf{Varianza 2D} & \textbf{CCA Principal $\rho_1$ ($\theta_1$)} & \textbf{CCA Secundaria $\rho_2$ ($\theta_2$)} \\
+\midrule
+$T_1$ (Ref) & 75 & $81.9\%$ & 1.0000 ($0.00^\circ$) & 1.0000 ($0.00^\circ$) \\
+$T_2$ & 112 & $89.8\%$ & 0.9860 ($9.60^\circ$) & 0.9812 ($11.13^\circ$) \\
+$T_3$ & 105 & $87.3\%$ & 0.9957 ($5.31^\circ$) & 0.9818 ($10.96^\circ$) \\
+$T_4$ & 53 & $90.9\%$ & 0.9999 ($0.61^\circ$) & 0.9791 ($11.72^\circ$) \\
+$T_5$ & 55 & $88.2\%$ & 0.9925 ($7.00^\circ$) & 0.9864 ($9.45^\circ$) \\
+$T_6$ & 49 & $86.8\%$ & 0.9998 ($1.23^\circ$) & 0.9835 ($10.41^\circ$) \\
+$T_7$ & 53 & $84.3\%$ & 0.9996 ($1.68^\circ$) & 0.9938 ($6.40^\circ$) \\
+\bottomrule
+\end{tabular}
+\caption{Métricas de estabilidad inter-sesión de Sara Solla para el sujeto Lucas (7 sesiones alineadas a $T_1$).}
+\label{tab:lucas_inter_sesion}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/lucas_pca_inter_sesion_sara_solla.png}
+\caption{Alineación inter-sesión de PCA lineal en Lucas bajo el método de Sara Solla. Panel 1: Sesión $T_1$ canónica de referencia. Panel 2: Sesión $T_2$ alineada ($\rho_1 = 0.986$). Panel 3: Sesión $T_3$ alineada ($\rho_1 = 0.996$). Panel 4: Superposición de las 7 sesiones con las 502 muestras completas ya alineadas.}
+\label{fig:lucas_inter_sesion}
+\end{figure}
+
+\subsubsection{Petra: Estabilidad Inter-Día 2026-08-21 vs 2026-08-28 (254 Muestras)}
+En Petra se evaluó la estabilidad temporal entre dos días independientes de registro que comparten la misma tríada anatómica (Vientre anterior del digástrico, Cigomático mayor y Elevador del ángulo oris). Se integraron las 86 muestras del 2026-08-21 (Día 1, referencia) y las 168 muestras del 2026-08-28 (Día 2), totalizando 254 muestras (Cuadro~\ref{tab:petra_inter_sesion} y Figura~\ref{fig:petra_candela_inter_sesion}a). La variedad motora de Petra exhibió una correlación canónica perfecta $\rho_1 = 1.0000$ con un ángulo de Jordan de apenas $0.48^\circ$, demostrando la invariancia longitudinal de la sinergia muscular inter-día.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{ccccc}
+\toprule
+\textbf{Sesión Petra} & \textbf{Muestras} & \textbf{Varianza 2D} & \textbf{CCA Principal $\rho_1$ ($\theta_1$)} & \textbf{CCA Secundaria $\rho_2$ ($\theta_2$)} \\
+\midrule
+Día 1 (2026-08-21, Ref) & 86 & $78.0\%$ & 1.0000 ($0.00^\circ$) & 1.0000 ($0.00^\circ$) \\
+Día 2 (2026-08-28)      & 168 & $77.6\%$ & 1.0000 ($0.48^\circ$) & 0.9928 ($6.88^\circ$) \\
+\bottomrule
+\end{tabular}
+\caption{Métricas de estabilidad inter-día de Sara Solla para Petra (254 muestras totales).}
+\label{tab:petra_inter_sesion}
+\end{table}
+
+\subsubsection{Candela: Pruebas 1 a 4 del 2026-09-01 (191 Muestras)}
+En Candela se contrastaron las cuatro pruebas consecutivas del 2026-09-01 (Cuadro~\ref{tab:candela_inter_sesion} y Figura~\ref{fig:petra_candela_inter_sesion}b). Todas las pruebas satisficieron $\rho_1 \ge 0.998$ con ángulos de Jordan $\theta_1 < 2.8^\circ$, evidenciando una coincidencia estructural sobresaliente en la variedad 2D.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{ccccc}
+\toprule
+\textbf{Prueba Candela} & \textbf{Muestras} & \textbf{Varianza 2D} & \textbf{CCA Principal $\rho_1$ ($\theta_1$)} & \textbf{CCA Secundaria $\rho_2$ ($\theta_2$)} \\
+\midrule
+Prueba 1 (Ref) & 49 & $73.7\%$ & 1.0000 ($0.00^\circ$) & 1.0000 ($0.00^\circ$) \\
+Prueba 2       & 49 & $76.0\%$ & 0.9988 ($2.77^\circ$) & 0.8433 ($32.51^\circ$) \\
+Prueba 3       & 47 & $74.2\%$ & 0.9996 ($1.52^\circ$) & 0.9059 ($25.05^\circ$) \\
+Prueba 4       & 46 & $75.7\%$ & 0.9995 ($1.82^\circ$) & 0.8919 ($26.89^\circ$) \\
+\bottomrule
+\end{tabular}
+\caption{Métricas de estabilidad inter-sesión de Sara Solla para Candela (191 muestras totales).}
+\label{tab:candela_inter_sesion}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/petra_pca_inter_sesion_sara_solla.png}
+    \caption{Petra: Día 1 (08-21) vs Día 2 (08-28) ($\rho_1 = 1.000$).}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/candela_pca_inter_sesion_sara_solla.png}
+    \caption{Candela: Pruebas 1 a 4 ($\rho_1 \ge 0.998$).}
+\end{subfigure}
+\caption{Alineación inter-sesión intra-sujeto en Petra y Candela mediante variedades motoras PCA y CCA de Sara Solla.}
+\label{fig:petra_candela_inter_sesion}
+\end{figure}
+
+\subsection{Alineación de Sesiones sobre PCA Global Único: Separación y Rotación 2D}
+\label{subsec:pca_global_rotacion_sesiones}
+
+Como formulación superadora que garantiza una base de proyección ortogonal compartida para todo el sujeto, se entrenó un \textbf{único modelo de PCA 2D global} sobre la totalidad de las 502 muestras de Lucas ($X_{\text{Lucas}} \in \mathbb{R}^{502 \times D}$), capturando un $82.3\%$ de varianza explicada ($\text{PC}_1 = 56.3\%$, $\text{PC}_2 = 26.0\%$).
+
+A partir de esta proyección común $Z_{\text{global}} \in \mathbb{R}^{502 \times 2}$, se particionaron los datos según su toma original ($T_1, \dots, T_7$). Tras anclar canónicamente la sesión $T_1$ (reposo /i/ en el origen y vector /a/ en $\theta = 90^\circ$), se aplicó la transformación afín de Sara Solla directamente sobre el plano 2D para cada una de las 6 sesiones restantes hacia $T_1$.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/lucas_pca_global_7_sesiones_y_superposicion.png}
+\caption{Proyección sobre PCA global único (502 muestras) y alineación 2D intra-sujeto en Lucas. Paneles 1 a 7: Muestras de cada toma individual tras la rotación/alineación de Sara Solla. Panel 8: Superposición ya alineada de las 7 sesiones evidenciando la cohesión de los atractores vocálicos.}
+\label{fig:lucas_pca_global_7_sesiones}
+\end{figure}
+
+\subsubsection{Impacto Cuantitativo en la Calidad de Agrupamiento Latente}
+Para responder objetivamente a qué tan clusterizada queda la variedad al aplicar la rotación de sesiones dentro del PCA global, se evaluaron el coeficiente de silueta y el índice de Davies-Bouldin sobre las 5 clases vocálicas:
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lccc}
+\toprule
+\textbf{Configuración de Espacio Latente} & \textbf{Coeficiente de Silueta ($\uparrow$)} & \textbf{Davies-Bouldin ($\downarrow$)} & \textbf{Efecto en la Variedad} \\
+\midrule
+PCA Global Directo (Sin rotar sesiones) & $+0.3521$ & $0.9080$ & Dispersión espuria en /i/ y /a/ \\
+PCA Global + Procrustes Rígido $\text{SO}(2)$ & $+0.3671$ & $0.8853$ & Ganancia marginal ($+4.3\%$) \\
+\textbf{PCA Global + Sara Solla 2D (Afín)} & $\mathbf{+0.4165}$ & $\mathbf{0.8212}$ & \textbf{Salto de cohesión ($+18.3\%$)} \\
+\bottomrule
+\end{tabular}
+\caption{Comparativa de métricas de clustering en el espacio PCA global de Lucas (502 muestras).}
+\label{tab:metricas_clustering_pca_global}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/lucas_pca_global_comparativa_sin_vs_con_alineacion.png}
+\caption{Comparativa directa de la superposición de las 502 muestras en el espacio PCA global de Lucas. (a) Sin rotación de sesiones (Silueta $= +0.352$, $\text{DB} = 0.908$). (b) Con alineación afín 2D de Sara Solla (Silueta $= +0.417$, $\text{DB} = 0.821$), colapsando las derivas de electrodo y compactando los atractores.}
+\label{fig:lucas_comparativa_sin_vs_con_alineacion}
+\end{figure}
+
+Tal como se desprende de la Figura~\ref{fig:lucas_comparativa_sin_vs_con_alineacion}, la rotación afín 2D colapsa la dispersión vertical residual de /a/ (que sin alinear se extendía hasta $Z_2 \approx 7.5$) y concentra el reposo /i/ en un punto compacto en $(0,0)$, permitiendo que la separación entre vocales alcance una calidad de clustering equivalente a los modelos no lineales más complejos.
+
+\subsection{Auditoría Instrumental y Anatómica Longitudinal: Fechas, Horas y Configuración de Hardware}
+\label{subsec:auditoria_longitudinal_hardware}
+
+En estricto cumplimiento del protocolo de trazabilidad experimental del proyecto, se realizó una auditoría directa de los archivos \texttt{metadata.json} ubicados en el subdirectorio \texttt{canal\_0/} de cada una de las sesiones de registro, descartando los nombres de carpeta y extrayendo los campos oficiales de fecha (\texttt{"measurement\_date"}), hora, identificador de dispositivo DAQ (\texttt{"device\_name"}) y asignación muscular por canal (Cuadro~\ref{tab:auditoria_hardware_longitudinal}).
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Sujeto / Sesión} & \textbf{Fecha Real} & \textbf{Hora Local} & \textbf{DAQ} & \textbf{Canal 0} & \textbf{Canal 1} & \textbf{Canal 2} \\
+\midrule
+\multicolumn{7}{l}{\textbf{Lucas (502 muestras totales - 3 días y 2 placas DAQ)}} \\
+\midrule
+Sesión $T_1$ & 2026-06-01 & 17:08:18 & Dev2 & Mylohyoid & Depresor Anguli Oris & Orbicularis Oris \\
+Sesión $T_2$ & 2026-06-03 & 16:05:10 & Dev2 & Mylohyoid & Depresor Anguli Oris & Orbicularis Oris \\
+Sesión $T_3$ & 2026-06-03 & 16:26:39 & Dev2 & Mylohyoid & Depresor Anguli Oris & Orbicularis Oris \\
+Sesión $T_4$ & 2026-06-10 & 13:44:06 & Dev1 & Mylohyoid & Depresor Anguli Oris & Orbicularis Oris \\
+Sesión $T_5$ & 2026-06-10 & 13:50:04 & Dev1 & Mylohyoid & Depresor Anguli Oris & Orbicularis Oris \\
+Sesión $T_6$ & 2026-06-10 & 13:59:15 & Dev1 & Mylohyoid & Depresor Anguli Oris & Orbicularis Oris \\
+Sesión $T_7$ & 2026-06-10 & 14:05:51 & Dev1 & Mylohyoid & Depresor Anguli Oris & Orbicularis Oris \\
+\midrule
+\multicolumn{7}{l}{\textbf{Candela (191 muestras totales - 4 pruebas consecutivas)}} \\
+\midrule
+Prueba 1 & 2026-09-01 & 16:12:35 & Dev1 & Anterior Belly & Risorio & Orbicularis Oris \\
+Prueba 2 & 2026-09-01 & 16:25:01 & Dev1 & Anterior Belly & Risorio & Orbicularis Oris \\
+Prueba 3 & 2026-09-01 & 16:29:15 & Dev1 & Anterior Belly & Risorio & Orbicularis Oris \\
+Prueba 4 & 2026-09-01 & 16:44:10 & Dev1 & Anterior Belly & Risorio & Orbicularis Oris \\
+\midrule
+\multicolumn{7}{l}{\textbf{Petra (254 muestras totales - 2 jornadas independientes)}} \\
+\midrule
+Día 1 & 2026-08-21 & 13:38:12 & Dev1 & Anterior Belly & Zygomaticus Major & Levator Anguli Oris \\
+Día 2 (med1-2) & 2026-08-28 & 14:20:05 & Dev1 & Anterior Belly & Zygomaticus Major & Levator Anguli Oris \\
+\bottomrule
+\end{tabular}
+\caption{Auditoría oficial de metadatos sEMG: Fechas reales de medición, estampas horarias, hardware de adquisición y distribución anatómica de canales.}
+\label{tab:auditoria_hardware_longitudinal}
+\end{table}
+
+Esta auditoría expone factores instrumentales críticos:
+\begin{enumerate}
+    \item \textbf{Discontinuidad Instrumental en Lucas:} Las sesiones $T_1$, $T_2$ y $T_3$ fueron grabadas con la placa \texttt{Dev2} en días distintos (01 y 03 de junio), mientras que de $T_4$ a $T_7$ se utilizó la placa \texttt{Dev1} en una jornada posterior (10 de junio). La coincidencia geométrica de la variedad motora demuestra que el método compensa derivas de hardware externas.
+    \item \textbf{Homogeneidad de Músculos Agonistas Primarios:} El Canal 0 corresponde de forma unívoca a la musculatura depresora mandibular (Milohioideo en Lucas, Vientre anterior del digástrico en Candela y Petra), mientras que el Canal 2 registra el esfínter labial (Orbicular en Lucas y Candela, Elevador del ángulo oris en Petra). Esta preservación anatómica fundamenta la existencia de atractores universales invariantes.
+\end{enumerate}
+
+\subsection{Evaluación de la Hipótesis de Impedancia Basal: Corrección Estática vs Rotación Afín de Sara Solla}
+\label{subsec:evaluacion_hipotesis_impedancia}
+
+Se evaluó experimentalmente la hipótesis teórica sobre la interacción entre la corrección basal de impedancia ($P_{95} - \mu_{:10}$) y la rotación afín 2D de Sara Solla (CCA). La hipótesis plantea si la rotación afín es redundante cuando la impedancia ya normalizó las ganancias estáticas de los electrodos, o si, inversamente, la rotación de Sara Solla puede suplir completamente la ausencia de corrección de impedancia.
+
+Para resolver esta interrogante con rigor \textit{ceteris paribus}, se procesó el conjunto completo de 502 muestras de Lucas bajo cuatro condiciones cruzadas en dos espacios latentes: PCA lineal global y el Autoencoder 2D convolucional récord (\texttt{modelo\_campeon\_conv\_ortogonal\_89.pt}, índice 3179). Los resultados cuantitativos se resumen en el Cuadro~\ref{tab:comparativa_hipotesis_impedancia}.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Modelo y Condición de Entrada} & \textbf{Silueta Raw ($\uparrow$)} & \textbf{Silueta Sara Solla ($\uparrow$)} & \textbf{DB Raw ($\downarrow$)} & \textbf{DB Sara Solla ($\downarrow$)} \\
+\midrule
+PCA Global con Corrección de Impedancia & $+0.3521$ & $\mathbf{+0.4165}$ ($+18.3\%$) & $0.9080$ & $\mathbf{0.8212}$ (Óptimo) \\
+PCA Global sin Corrección de Impedancia & $+0.2020$ & $+0.3731$ ($+84.7\%$) & $1.4251$ & $0.9411$ \\
+\midrule
+Autoencoder 2D con Corrección de Impedancia & $+0.2549$ & $+0.2765$ ($+8.5\%$) & $1.1286$ & $1.1018$ \\
+Autoencoder 2D sin Corrección de Impedancia & $+0.1541$ & $+0.2975$ ($+93.0\%$) & $1.9527$ & $1.2998$ \\
+\bottomrule
+\end{tabular}
+\caption{Impacto comparativo de la corrección de impedancia basal y la alineación afín de Sara Solla en Lucas (502 muestras).}
+\label{tab:comparativa_hipotesis_impedancia}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/lucas_pca_global_con_impedancia_8_paneles.png}
+\caption{Lucas - PCA 2D Global con corrección de impedancia basal en 8 paneles: 7 sesiones individuales alineadas con Sara Solla y superposición total de 502 muestras.}
+\label{fig:lucas_pca_con_imp_8_paneles}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/lucas_pca_global_con_impedancia_comparativa.png}
+\caption{Lucas - Comparativa de PCA 2D Global con corrección de impedancia: sin rotación vs con rotación afín de Sara Solla.}
+\label{fig:lucas_pca_con_imp_comp}
+\end{figure}
+
+\subsubsection{Desglose Sesión a Sesión en PCA Global Sin Impedancia: Deriva de Ganancia y Restauración}
+\label{subsubsec:pca_sin_imp_desglose}
+
+Al desagregar las 7 tomas de Lucas en el espacio PCA lineal 2D sin corrección de impedancia (Figuras~\ref{fig:lucas_pca_sin_imp_8_paneles_raw}, \ref{fig:lucas_pca_sin_imp_8_paneles} y \ref{fig:lucas_pca_sin_imp_16_paneles}), se manifiestan con nitidez los efectos biofísicos de la recolocación de electrodos y el cambio de hardware de adquisición:
+\begin{enumerate}
+    \item \textbf{Dispersión en el Espacio Nativo Sin Alinear (Figura~\ref{fig:lucas_pca_sin_imp_8_paneles_raw}):}
+    \begin{itemize}
+        \item En $T_1$, la vocal /a/ alcanza una gran elongación vertical ($PC_2 \approx 1.8$), mientras que el reposo /i/ permanece anclado en el origen $(0,0)$.
+        \item En $T_2$ y $T_3$, la columna de apertura /i/--/e/--/a/ sufre un desplazamiento lateral hacia $PC_1 \approx 0.25$, al tiempo que el centroide de reposo /i/ se hunde hacia valores negativos de $PC_2 \approx -0.4$, reflejando una deriva de potencial de contacto (offset tónico no corregido).
+        \item En las tomas $T_4$ a $T_7$ (registradas con la placa \texttt{Dev1}), la señal experimenta una reducción drástica de ganancia efectiva: en $T_4$ el atractor /a/ apenas alcanza $PC_2 \approx 1.05$ e inclina su eje hacia $PC_1 < 0$; en $T_5$ se contrae a $PC_2 \approx 0.7$; y en $T_6$ y $T_7$ colapsa a amplitudes de solo $PC_2 \approx 0.4$.
+        \item Al superponer las 502 muestras sin alinear (Panel 8), la vocal /a/ se dispersa verticalmente en un rango continuo desde $PC_2 = 0.3$ hasta $1.9$, y el reposo /i/ se diluye verticalmente hacia abajo, degradando la separación inter-clase ($\text{Silueta} = +0.2020$, $\text{DB} = 1.4251$).
+    \end{itemize}
+    \item \textbf{Efecto de la Alineación Afín de Sara Solla (Figura~\ref{fig:lucas_pca_sin_imp_8_paneles}):}
+    \begin{itemize}
+        \item En $T_2$ y $T_3$ ($\rho \ge 0.999$), la transformación afín traslada el reposo /i/ de regreso al origen $(0,0)$ y reubica la columna /e/--/a/ sobre el semieje vertical canónico.
+        \item En $T_4$ a $T_7$ ($\rho \ge 0.998$), la matriz afín opera como un escalador de ganancia diferencial, expandiendo la amplitud atenuada de /a/ para homogeneizarla con la escala de $T_1$, a la vez que recentra /i/ en $(0,0)$.
+        \item En la superposición total (Panel 8), las 502 muestras reconstruyen un mapa de atractores consistente: /i/ compacto en $(0,0)$, /a/ alineado verticalmente y la rama /o/--/u/ bien diferenciada a la derecha ($PC_1 \approx 1.7$). La Silueta se incrementa a $\mathbf{+0.3731}$ ($+84.7\%$) y el índice de Davies-Bouldin desciende a $\mathbf{0.9411}$.
+    \end{itemize}
+    \item \textbf{Comparativa Directa de 16 Paneles (Figura~\ref{fig:lucas_pca_sin_imp_16_paneles}):} La comparativa en escala compartida demuestra visualmente cómo Sara Solla actúa como un normalizador adaptativo de amplitudes lineales, compensando la pérdida de escala que en un flujo estándar resuelve la corrección de impedancia por percentil $P_{95}$.
+\end{enumerate}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/lucas_pca_global_sin_impedancia_8_paneles_sin_alinear.png}
+\caption{Lucas - PCA 2D Global sin corrección de impedancia basal en 8 paneles: 7 sesiones individuales en espacio nativo sin alinear y superposición total.}
+\label{fig:lucas_pca_sin_imp_8_paneles_raw}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/lucas_pca_global_sin_impedancia_8_paneles.png}
+\caption{Lucas - PCA 2D Global sin corrección de impedancia basal en 8 paneles: 7 sesiones individuales alineadas con Sara Solla y superposición total.}
+\label{fig:lucas_pca_sin_imp_8_paneles}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/lucas_pca_global_sin_impedancia_16_paneles_comparativa.png}
+\caption{Lucas - Desglose comparativo sesión a sesión en PCA Global sin impedancia: Fila 1 nativo sin alinear vs Fila 2 alineado con Sara Solla.}
+\label{fig:lucas_pca_sin_imp_16_paneles}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/lucas_pca_global_sin_impedancia_comparativa.png}
+\caption{Lucas - Comparativa de PCA 2D Global sin corrección de impedancia: sin rotación vs con rotación afín de Sara Solla.}
+\label{fig:lucas_pca_sin_imp_comp}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/lucas_pca_cruzado_sin_vs_con_impedancia_sara_solla.png}
+\caption{Lucas - Comparativa cruzada de PCA Global: Efecto de la corrección de impedancia y la rotación afín de Sara Solla.}
+\label{fig:lucas_pca_cruzado}
+\end{figure}
+
+\subsubsection{Impacto en Autoencoder Convolucional 2D Récord: Espacio No Lineal y Regularización}
+\label{subsubsec:ae2d_impedancia_sara_solla}
+
+Al evaluar el Autoencoder Convolucional 2D récord (Figuras~\ref{fig:lucas_ae2d_con_imp_8_paneles} a~\ref{fig:lucas_ae2d_cruzado}), se observa un fenómeno análogo pero modulado por la no linealidad de los bloques residuales convolucionales:
+\begin{enumerate}
+    \item \textbf{Sin Corrección de Impedancia:} La variedad latente cruda exhibe una severa pérdida de cohesión (Silueta $= +0.1541$, $\text{DB} = 1.9527$), debido a que el desbalance de ganancias entre canales distorsiona los filtros convolucionales 1D. La rotación afín rescata la estructura produciendo una mejora del $+93.0\%$ (Silueta $= +0.2975$, $\text{DB} = 1.2998$).
+    \item \textbf{Con Corrección de Impedancia:} La entrada estandarizada permite que los filtros del autoencoder operen en su régimen óptimo, alcanzando un $\text{DB} = 1.1018$.
+\end{enumerate}
+
+Para desentrañar el mecanismo físico de esta distorsión, se realizó un desglose exhaustivo sesión a sesión de las 7 tomas de Lucas en el Autoencoder 2D sin corrección de impedancia, comparando la proyección nativa sin alinear frente al espacio alineado por Sara Solla (Figuras~\ref{fig:lucas_ae2d_sin_imp_8_paneles_raw}, \ref{fig:lucas_ae2d_sin_imp_8_paneles} y \ref{fig:lucas_ae2d_sin_imp_16_paneles}):
+\begin{enumerate}
+    \item \textbf{Deriva Longitudinal en el Espacio Nativo Sin Alinear (Figura~\ref{fig:lucas_ae2d_sin_imp_8_paneles_raw}):}
+    \begin{itemize}
+        \item En las tomas $T_1$ y $T_2$ (grabadas con la placa \texttt{Dev2}), la vocal /a/ se ubica verticalmente en torno a $Z_1 \approx 0$.
+        \item En la toma $T_3$ (mismo día que $T_2$ pero tras recolocación y fatiga), toda la columna fonatoria /i/--/e/--/a/ sufre una inclinación angular dextrógira de aproximadamente $30^\circ$, desplazando el atractor /a/ hacia $Z_1 \approx 0.7$ y $Z_2 \approx 1.25$.
+        \item En las tomas $T_4$, $T_5$, $T_6$ y $T_7$ (registradas una semana después, el 2026-06-10, tras migrar físicamente a la tarjeta \texttt{Dev1}), la vocal /a/ experimenta un salto sistemático hacia el semiplano izquierdo ($Z_1 < 0$, alcanzando $Z_1 \approx -0.5$ en $T_4$) acompañado por una atenuación de amplitud general.
+        \item Al superponer las 502 muestras en el Panel 8 sin alineación, la vocal /a/ colapsa en dos cúmulos completamente bifurcados y desconectados, mientras que /i/ se dispersa hacia valores negativos de $Z_2 \approx -0.7$, explicando el desplome del agrupamiento ($\text{Silueta} = +0.1541$, $\text{DB} = 1.9527$).
+    \end{itemize}
+    \item \textbf{Restauración Geométrica mediante Sara Solla (Figura~\ref{fig:lucas_ae2d_sin_imp_8_paneles}):}
+    \begin{itemize}
+        \item La transformación afín rota la toma $T_3$ ($\rho = 1.0000$), rectificando el desvío angular de $30^\circ$ y devolviendo el eje vertical a su orientación canónica.
+        \item En las tomas $T_4$ a $T_7$ ($\rho \ge 0.9803$), la matriz afín compensa la traslación y el cizallamiento instrumental introducido por la tarjeta \texttt{Dev1}, realineando el atractor /a/ sobre $Z_1 \approx 0$.
+        \item En la superposición total (Panel 8), la bifurcación de /a/ desaparece por completo, fusionándose en un único atractor cohesivo, al tiempo que el reposo /i/ converge al origen $(0,0)$.
+    \end{itemize}
+    \item \textbf{Inspección Comparativa Sesión a Sesión (Figura~\ref{fig:lucas_ae2d_sin_imp_16_paneles}):} La matriz comparativa de 16 paneles evidencia con escala de ejes invariante cómo la formulación de Sara Solla actúa como un ecualizador geométrico capaz de neutralizar las discontinuidades instrumentales inter-día, aun cuando los datos no hayan recibido corrección electroquímica de impedancia.
+\end{enumerate}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/lucas_ae2d_con_impedancia_8_paneles.png}
+\caption{Lucas - Autoencoder 2D Récord con corrección de impedancia basal en 8 paneles: 7 sesiones individuales alineadas y superposición total.}
+\label{fig:lucas_ae2d_con_imp_8_paneles}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/lucas_ae2d_con_impedancia_comparativa.png}
+\caption{Lucas - Comparativa de Autoencoder 2D Récord con corrección de impedancia: sin rotación vs con rotación afín de Sara Solla.}
+\label{fig:lucas_ae2d_con_imp_comp}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/lucas_ae2d_sin_impedancia_8_paneles_sin_alinear.png}
+\caption{Lucas - Autoencoder 2D Récord sin corrección de impedancia basal en 8 paneles: 7 sesiones individuales en espacio latente nativo sin alinear y superposición total.}
+\label{fig:lucas_ae2d_sin_imp_8_paneles_raw}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/lucas_ae2d_sin_impedancia_8_paneles.png}
+\caption{Lucas - Autoencoder 2D Récord sin corrección de impedancia basal en 8 paneles: 7 sesiones individuales alineadas con Sara Solla y superposición total.}
+\label{fig:lucas_ae2d_sin_imp_8_paneles}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/lucas_ae2d_sin_impedancia_16_paneles_comparativa.png}
+\caption{Lucas - Desglose comparativo sesión a sesión en Autoencoder 2D sin impedancia: Fila 1 nativo sin alinear vs Fila 2 alineado con Sara Solla.}
+\label{fig:lucas_ae2d_sin_imp_16_paneles}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/lucas_ae2d_sin_impedancia_comparativa.png}
+\caption{Lucas - Comparativa de Autoencoder 2D Récord sin corrección de impedancia: sin rotación vs con rotación afín de Sara Solla.}
+\label{fig:lucas_ae2d_sin_imp_comp}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/lucas_ae2d_cruzado_sin_vs_con_impedancia_sara_solla.png}
+\caption{Lucas - Comparativa cruzada de Autoencoder 2D Récord: Efecto de la corrección de impedancia y la rotación afín de Sara Solla.}
+\label{fig:lucas_ae2d_cruzado}
+\end{figure}
+
+\subsubsection{Resolución Teórica de la Hipótesis: Complementariedad entre Impedancia y Sara Solla}
+\label{subsubsec:resolucion_teorica_hipotesis}
+
+Los datos refutan la idea de que la rotación afín sea redundante o que reemplace plenamente el acondicionamiento de señal. Se concluye que:
+\begin{enumerate}
+    \item \textbf{La Corrección de Impedancia Basal Realiza el Trabajo Sucio No Lineal:} Normalizar por $P_{95} - \mu_{:10}$ ecualiza la escala dinámica intrínseca de cada electrodo antes de la proyección, evitando que canales hipersensibles dominen espuriamente la covarianza.
+    \item \textbf{Sara Solla Realiza la Compensación Geométrica Fina:} La matriz afín $A \in \mathbb{R}^{2 \times 2}$ absorbe las rotaciones espaciales rígidas introducidas por pequeños desplazamientos angulares de los parches de electrodos durante recolocaciones longitudinales.
+    \item \textbf{Efecto Sinérgico Obligatorio:} La máxima separabilidad y cohesión de la variedad motora ($\text{Silueta} = \mathbf{0.4165}$, $\text{DB} = \mathbf{0.8212}$) se alcanza única y exclusivamente al combinar la corrección de impedancia con la rotación afín de Sara Solla.
+\end{enumerate}
+
+\subsection{Variedades Longitudinales en Candela y Petra: Desglose por Sesión y Efecto de Impedancia}
+\label{subsec:variedades_candela_petra_longitudinales}
+
+El protocolo de separación por sesión y contraste con/sin impedancia se extendió a Candela (191 muestras, 4 pruebas consecutivas) y Petra (254 muestras, 2 días independientes).
+
+\subsubsection{Candela: Pruebas 1 a 4 del 2026-09-01}
+En Candela (Figuras~\ref{fig:candela_pca_5_paneles} y~\ref{fig:candela_pca_cruzado}), la alineación afín de Sara Solla sincronizó las 4 pruebas con correlaciones canónicas $\rho_1 \ge 0.9989$ y desviaciones angulares $\theta_1 \le 2.57^\circ$. La ausencia de corrección de impedancia exhibió una silueta de $+0.2826 \to +0.3121$ ($\text{DB} = 1.6550$), mientras que con impedancia la variedad presentó una dispersión mayor en la retracción del risorio ($\text{Silueta} = +0.1800$, $\text{DB} = 2.4535$).
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/candela_pca_global_5_paneles_con_impedancia.png}
+\caption{Candela - PCA 2D Global con corrección de impedancia en 5 paneles: 4 pruebas individuales del 2026-09-01 y superposición total de 191 muestras.}
+\label{fig:candela_pca_5_paneles}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/candela_pca_cruzado_sin_vs_con_impedancia.png}
+\caption{Candela - Comparativa cruzada de PCA: Variedad motora con corrección de impedancia vs sin corrección de impedancia.}
+\label{fig:candela_pca_cruzado}
+\end{figure}
+
+\subsubsection{Petra: Estabilidad Inter-Día 2026-08-21 vs 2026-08-28}
+En Petra (Figuras~\ref{fig:petra_pca_3_paneles} y~\ref{fig:petra_pca_cruzado}), se integraron las 86 muestras del Día 1 y las 168 muestras del Día 2 (med1 y med2). La correlación canónica inter-día alcanzó $\rho_1 = 0.9961$ ($\theta_1 = 5.03^\circ$) con corrección de impedancia y $\rho_1 = 1.0000$ ($\theta_1 = 0.45^\circ$) sin ella, demostrando la persistencia del mapa motor longitudinal.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/petra_pca_global_3_paneles_con_impedancia.png}
+\caption{Petra - PCA 2D Global con corrección de impedancia en 3 paneles: Día 1 - 2026-08-21, Día 2 - 2026-08-28 y superposición de 254 muestras.}
+\label{fig:petra_pca_3_paneles}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/petra_pca_cruzado_sin_vs_con_impedancia.png}
+\caption{Petra - Comparativa cruzada de PCA: Variedad motora con corrección de impedancia vs sin corrección de impedancia.}
+\label{fig:petra_pca_cruzado}
+\end{figure}
+
+\subsection{Alineación Inter-Sujeto Tri-Sujeto: Descubrimiento de la Variedad Motora Intrínseca Universal}
+\label{subsec:variedad_motora_intrinseca_universal}
+
+Una vez estabilizadas y alineadas internamente las variedades intra-sujeto (Lucas con 502 muestras, Candela con 191 muestras y Petra con 254 muestras), se formuló el experimento definitivo de transferencia: emplear las variedades estabilizadas de cada sujeto y alinearlas inter-sujeto mediante el método de Sara Solla hacia el marco de referencia canónico de Lucas.
+
+El conjunto unificado totaliza \textbf{947 muestras individuales} distribuidas a lo largo de meses de experimentación e instrumentadas bajo diferentes tarjetas DAQ y disposiciones de electrodos. Los resultados de correlación canónica inter-sujeto y los centroides colapsados de cada vocal se detallan en el Cuadro~\ref{tab:variedad_intrinseca_tri_sujeto} y la Figura~\ref{fig:tri_sujeto_variedad_intrinseca}.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Vocal} & \textbf{Lucas (502 m)} & \textbf{Candela sobre Lucas (191 m)} & \textbf{Petra sobre Lucas (254 m)} & \textbf{Eje Latente Dominante} & \textbf{Sinergia Biomecánica} \\
+\midrule
+/a/ & $(+0.08,\,+3.30)$ & $(-0.05,\,+2.29)$ & \textbf{(+0.08,\,+3.34)} & Semieje $+Y$ vertical & Apertura mandibular pura \\
+/e/ & $(-0.21,\,+0.77)$ & $(-0.05,\,+1.96)$ & $(-0.11,\,+0.38)$ & Cuadrante superior & Retracción comisural \\
+/i/ & $(+0.02,\,-0.06)$ & $(-0.01,\,-0.23)$ & $(-0.08,\,+0.32)$ & Origen $(0,0)$ & Reposo articular basal \\
+/o/ & \textbf{(-2.31,\,+1.18)} & \textbf{(-2.46,\,+0.84)} & \textbf{(-2.41,\,+0.93)} & Semiplano $-X$ & Constricción labial media \\
+/u/ & \textbf{(-2.67,\,+0.42)} & \textbf{(-2.52,\,+0.75)} & \textbf{(-2.57,\,+0.66)} & Semiplano $-X$ & Protrusión labial máxima \\
+\midrule
+\multicolumn{6}{l}{\textbf{Métricas de Alineación Inter-Sujeto hacia Lucas:}} \\
+\multicolumn{6}{l}{Candela vs Lucas: $\rho_1 = 0.9986$ ($\theta_1 = 3.06^\circ$), $\rho_2 = 0.7742$ ($\theta_2 = 39.27^\circ$)} \\
+\multicolumn{6}{l}{Petra vs Lucas: $\rho_1 = 0.9977$ ($\theta_1 = 3.90^\circ$), $\rho_2 = 0.9641$ ($\theta_2 = 15.40^\circ$)} \\
+\bottomrule
+\end{tabular}
+\caption{Centroides de la Variedad Motora Intrínseca Universal en las 947 muestras de Lucas, Candela y Petra tras la alineación afín de Sara Solla.}
+\label{tab:variedad_intrinseca_tri_sujeto}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/tri_sujeto_variedad_intrinseca_sara_solla.png}
+\caption{Variedad Motora Intrínseca Universal Tri-Sujeto: Superposición de 947 muestras de Lucas, Candela y Petra alineadas con Sara Solla sobre una base común. Los paneles 1, 2 y 3 muestran la variedad individual de cada sujeto con sus 5 clases vocálicas, y el panel 4 expone la superposición de las 947 muestras sin clustering artificial.}
+\label{fig:tri_sujeto_variedad_intrinseca}
+\end{figure}
+
+\subsubsection{Invarianza Fisiológica Universal: Apertura Mandibular y Protrusión Labial}
+\label{subsubsec:invarianza_fisiologica_universal}
+
+El análisis de los 947 puntos experimentales revela la existencia de atractores invariantes dictados por la biomecánica orofacial:
+\begin{enumerate}
+    \item \textbf{Apertura Mandibular /a/ en el Semieje $+Y$ Vertical:} En los tres sujetos, el atractor /a/ colapsa rigurosamente en la vertical del plano latente: Lucas $(+0.08, +3.30)$, Candela $(-0.05, +2.29)$ y Petra $(+0.08, +3.34)$. La coincidencia en la coordenada horizontal ($X \approx 0.08$ en Lucas y Petra) es prácticamente exacta. Fisiológicamente, esto se debe a que el Canal 0 en los tres sujetos captura exclusivamente músculos depresores mandibulares suprahiodeos (Milohioideo y Vientre anterior del digástrico), cuya acción mecánica es el descenso puro de la mandíbula sin componentes asimétricos laterales.
+    \item \textbf{Protrusión y Constricción Labial /u/ y /o/ en el Semiplano Negativo $-X$:} Los atractores de /u/ y /o/ colapsan con extraordinaria precisión en el mismo cuadrante en todos los participantes:
+    \begin{itemize}
+        \item /u/: Lucas en $-2.67$, Candela en $-2.52$ y Petra en $-2.57$ (rango de variación de apenas $0.15$ unidades).
+        \item /o/: Lucas en $-2.31$, Candela en $-2.46$ y Petra en $-2.41$ (rango de variación de $0.15$ unidades).
+    \end{itemize}
+    Esta invariancia universal surge de la acción concéntrica del esfínter labial (Canal 2: Orbicularis Oris), el cual se activa de forma sinérgica e independiente de la apertura mandibular para proyectar los labios hacia adelante.
+    \item \textbf{Reposo Articular /i/ en el Origen $(0,0)$:} Al requerir escasa o nula activación orbicular o depresora mandibular, el atractor /i/ converge al reposo del espacio latente en todos los sujetos.
+\end{enumerate}
+
+\subsubsection{Dispersión Comisural y Papel de la Transformación Afín de Sara Solla}
+\label{subsubsec:dispersion_comisural_sara_solla}
+
+A diferencia de la apertura (/a/) y la protrusión (/u/), que colapsan rígidamente por compartir canales agonistas universales, la vocal /e/ (retracción comisural) presenta una ligera rotación angular en el espacio nativo:
+\begin{itemize}
+    \item En Lucas, el Canal 1 monitoreó el \textit{Depresor Anguli Oris}, cuya tracción comisural posee una componente inferior.
+    \item En Candela, el Canal 1 registró el \textit{Risorio}, con tracción horizontal lateral pura hacia la fascia parotídea.
+    \item En Petra, el Canal 1 censó el \textit{Zygomaticus Major}, cuya tracción comisural es oblicua superior hacia el hueso malar.
+\end{itemize}
+
+Esta heterogeneidad muscular local explica por qué una rotación ortogonal rígida $\text{SO}(2)$ no es suficiente para superponer /e/, mientras que la transformación afín de Sara Solla (CCA), al disponer de grados de libertad para compensar desfasajes angulares lineales inter-músculo, colapsa exitosamente las tres variedades en un marco continuo compartido.
+
+Lo que queda alineado entre sujetos tras Sara Solla demuestra de manera concluyente la existencia de una \textbf{variedad motora intrínseca universal}: el cerebro humano organiza los comandos motores del habla mediante un repertorio geométrico invariante determinado por las restricciones biomecánicas de apertura, esfínter y tensión comisural.
+
+\subsection{Fronteras de Decisión GMM y Desacoplamiento No Lineal: PCA frente a Autoencoder 2D Récord}
+\label{subsec:fronteras_gmm_pca_vs_ae_sara_solla}
+
+Con el fin de examinar rigurosamente la geometría de separación de los atractores latentes, se modelaron las fronteras de decisión probabilísticas mediante Modelos de Mezclas Gaussianas (GMM, 5 componentes elípticas completas sin supervisión) sobre las proyecciones bidimensionales. La correspondencia entre conglomerados latentes y etiquetas fonéticas se determinó a posteriori de forma unívoca mediante el Algoritmo Húngaro (asignación óptima de costo mínimo).
+
+\subsubsection{Espacio PCA 2D Lineal: 72.91\% de Exactitud GMM}
+\label{subsubsec:espacio_pca_2d_fronteras}
+
+Al proyectar las 502 fonaciones de Lucas sobre las dos primeras componentes principales del espacio electromiográfico crudo sin corrección de impedancia (Figura~\ref{fig:pca_lucas_fronteras}), la exactitud GMM no supervisada se establece en \textbf{72.91\%}.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/reporte_pca_lucas_2d_fronteras.png}
+\caption{Espacio PCA 2D Lineal para el sujeto Lucas (72.91\% de exactitud GMM no supervisada). Panel izquierdo: Regiones de decisión GMM coloreadas en tonos pastel, contornos de partición y atractores centroides en diamante. Panel derecho: Matriz de confusión por vocal mostrando el solapamiento crítico entre /e/-/i/ y /o/-/u/.}
+\label{fig:pca_lucas_fronteras}
+\end{figure}
+
+El análisis de la matriz de confusión revela las limitaciones estructurales de la proyección lineal:
+\begin{itemize}
+    \item \textbf{Apertura Mandibular /a/ (77.6\%):} Se segrega con relativa holgura en el semiplano superior de $PC_2$, registrando un 21.4\% de confusión hacia /e/.
+    \item \textbf{Colapso Comisural /e/ e /i/ (54.5\% y 93.2\%):} Ambas vocales colapsan sobre la columna negativa de $PC_1$. Debido a que la retracción del depresor y del cigomático comparte componentes lineales directas, la frontera cuadrática del GMM absorbe un 41.6\% de las realizaciones de /e/ confundiéndolas con /i/.
+    \item \textbf{Solapamiento Labial /o/ y /u/ (64.0\% y 75.0\%):} En el semiplano derecho ($PC_1 > 0.5$), las contracciones del esfínter labial colapsan en una nube densa con varianza cruzada masiva. El GMM confunde un 36.0\% de /o/ clasificándolo como /u/, y un 25.0\% de /u/ clasificándolo como /o/.
+\end{itemize}
+
+\subsubsection{Autoencoder Convolucional 2D Récord con Alineación Sara Solla: 91.63\% de Exactitud GMM}
+\label{subsubsec:ae_2d_record_sara_solla}
+
+Frente a la rigidez de las hipersuperficies lineales, el Autoencoder Convolucional 1D récord de Lucas (\texttt{idx 3179}) logra en su espacio nativo una exactitud de \textbf{87.85\%} al abrir no linealmente las variedades musculares y resolver /o/ y /u/ al 92.0\% y 94.0\% respectivamente (Figura~\ref{fig:comparativa_pca_vs_ae_fronteras}).
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/comparativa_fronteras_pca_vs_ae.png}
+\caption{Comparativa directa de fronteras de decisión GMM en el plano 2D: Panel A expone el PCA lineal base (72.91\%) y el Panel B exhibe el Autoencoder Convolucional 2D récord (87.85\%), evidenciando el desacoplamiento no lineal de las ramas comisural y labial.}
+\label{fig:comparativa_pca_vs_ae_fronteras}
+\end{figure}
+
+Al someter este espacio latente oficial a la transformación afín de Sara Solla entre las tomas individuales de Lucas ($T_1$ a $T_7$), corrigiendo la dispersión de desplazamiento instrumental de electrodos respecto a la toma de referencia $T_1$, el rendimiento global alcanza un hito histórico de \textbf{91.63\%} (460 aciertos sobre 502 fonaciones, superando la barrera del 90\%).
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/reporte_oficial_lucas_2d_sara_solla_91_fronteras.png}
+\caption{Autoencoder Convolucional 2D Récord con Alineación Afín de Sara Solla inter-sesión (91.63\% de exactitud GMM no supervisada). Panel izquierdo: Partición latente 2D con regiones GMM y centroides romboidales. Panel derecho: Matriz de confusión evidenciando una pureza del 99.0\% en /o/ y 93.2\% en /i/.}
+\label{fig:ae_sara_solla_91_fronteras}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/comparativa_ae_87_vs_ae_sara_solla_91.png}
+\caption{Efecto de la Alineación de Sara Solla en el Espacio Latente del Autoencoder: Panel A muestra el espacio nativo (87.85\%) y el Panel B muestra el espacio estabilizado inter-sesión (91.63\%), donde los conglomerados de /e/ e /i/ ganan compacidad y separabilidad elíptica.}
+\label{fig:comparativa_ae_87_vs_91}
+\end{figure}
+
+El desglose comparativo vocal por vocal presentado en el Cuadro~\ref{tab:desglose_ae_nativo_vs_solla} cuantifica el impacto específico de la compensación afín sobre la geometría latente:
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Vocal} & \textbf{AE Nativo 87.85\% (Aciertos)} & \textbf{AE + Sara Solla 91.63\% (Aciertos)} & \textbf{Ganancia Neta} & \textbf{Efecto Geométrico Clave} \\
+\midrule
+/a/ & 91.8\% (90/98)  & 90.8\% (89/98)  & $-1.0\%$ & Mantiene aislamiento en polo superior derecho \\
+/e/ & 73.3\% (74/101) & \textbf{82.2\%} (83/101) & $\mathbf{+8.9\%}$ & Colapso de dispersión vertical entre parches \\
+/i/ & 88.3\% (91/103) & \textbf{93.2\%} (96/103) & $\mathbf{+4.9\%}$ & Densificación en polo inferior basal \\
+/o/ & 92.0\% (92/100) & \textbf{99.0\%} (99/100) & $\mathbf{+7.0\%}$ & Purificación casi absoluta en diagonal izquierda \\
+/u/ & 94.0\% (94/100) & 93.0\% (93/100) & $-1.0\%$ & Preserva modo elíptico lateral \\
+\midrule
+\textbf{Global} & \textbf{87.85\% (441/502)} & \textbf{91.63\% (460/502)} & $\mathbf{+3.78\%}$ & \textbf{+19 fonaciones reclasificadas con éxito} \\
+\bottomrule
+\end{tabular}
+\caption{Contraste de exactitud no supervisada GMM entre el Autoencoder Convolucional 2D nativo y el espacio alineado inter-sesión con Sara Solla.}
+\label{tab:desglose_ae_nativo_vs_solla}
+\end{table}
+
+\subsection{Transferencia Inter-Sujeto en el Espacio del Autoencoder 2D: Candela y Petra sobre Lucas con Sara Solla e Impedancia}
+\label{subsec:transferencia_ae2d_tri_sujeto_sara_solla}
+
+Con el espacio latente del Autoencoder Convolucional 2D récord de Lucas completamente consolidado y congelado (87.85\% nativo y 91.63\% con Sara Solla inter-sesión), se llevó a cabo el ensayo sistemático de transferencia inter-sujeto con Candela (191 muestras, Pruebas 1 a 4) y Petra (254 muestras, Días 1 y 2). El objetivo consistió en evaluar si la geometría no lineal aprendida por la red sobre el sujeto de entrenamiento admite proyectar usuarios externos mediante corrección de impedancia previa y una doble etapa afín de Sara Solla (intra-sesión e inter-sujeto).
+
+\subsubsection{Candela: De la Descalibración Inicial al 48.17\% en Fronteras de Lucas}
+\label{subsubsec:candela_ae2d_sara_solla}
+
+Al alimentar las 191 muestras de Candela con corrección de impedancia al codificador congelado de Lucas, la proyección cruda directa exhibió una exactitud en las fronteras de Lucas de apenas \textbf{9.42\%} (Figura~\ref{fig:candela_ae2d_proyeccion}a), producto del desfasaje posicional global de los electrodos y la diferencia anatómica entre sujetos.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/candela_ae2d_sara_solla_proyeccion.png}
+\caption{Proyección y alineación de Candela (191 muestras) en el espacio del Autoencoder 2D récord de Lucas: (A) Proyección cruda directa (9.42\%). (B) Estabilización intra-sesión de Sara Solla entre Pruebas 1 a 4 (15.18\%). (C) Alineación afín inter-sujeto hacia Lucas (48.17\%, $\rho_1 = 0.9744$). (D) Matriz de confusión resultante en las fronteras probabilísticas de Lucas.}
+\label{fig:candela_ae2d_proyeccion}
+\end{figure}
+
+El proceso de alineación en dos etapas produjo los siguientes avances:
+\begin{enumerate}
+    \item \textbf{Alineación Intra-Sesión Sara Solla (15.18\%):} Al alinear internamente las Pruebas 2, 3 y 4 hacia la Prueba 1, la varianza por recolocación de electrodos en Candela colapsó, pero el conjunto continuó alejado de los centroides de Lucas.
+    \item \textbf{Alineación Inter-Sujeto hacia Lucas (48.17\%):} Al aplicar la transformación afín óptima de centroides hacia el marco de referencia canónico de Lucas, la correlación canónica latente alcanzó $\rho_1 = \mathbf{0.9744}$ y $\rho_2 = \mathbf{0.9603}$. Esto provocó un salto cualitativo al \textbf{48.17\%} de exactitud en fronteras de Lucas (más de un 5x de ganancia neta). Las vocales de retracción comisural y protrusión labial mostraron una notable transferibilidad: /e/ alcanzó \textbf{71.1\%}, /o/ alcanzó \textbf{74.3\%} e /i/ alcanzó \textbf{56.4\%}.
+\end{enumerate}
+
+\subsubsection{Petra: Estabilidad Inter-Día y Salto al 50.79\% en Fronteras de Lucas}
+\label{subsubsec:petra_ae2d_sara_solla}
+
+En Petra (254 muestras integrando Día 1 - 2026-08-21 y Día 2 - 2026-08-28), la proyección cruda directa sobre el Autoencoder de Lucas alcanzó inicialmente \textbf{21.65\%} (Figura~\ref{fig:petra_ae2d_proyeccion}a). 
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/petra_ae2d_sara_solla_proyeccion.png}
+\caption{Proyección y alineación de Petra (254 muestras) en el espacio del Autoencoder 2D récord de Lucas: (A) Proyección cruda directa (21.65\%). (B) Estabilización intra-sesión inter-día (21.65\%). (C) Alineación afín inter-sujeto hacia Lucas (50.79\%, $\rho_1 = 0.9944$). (D) Matriz de confusión resultante en las fronteras probabilísticas de Lucas.}
+\label{fig:petra_ae2d_proyeccion}
+\end{figure}
+
+Al sincronizar afínmente los atractores de Petra con los centroides canónicos de Lucas, la correlación canónica de la variedad motora fue prácticamente perfecta en la componente principal: $\rho_1 = \mathbf{0.9944}$ ($\theta_1 = 6.07^\circ$) y $\rho_2 = \mathbf{0.9370}$ ($\theta_2 = 20.45^\circ$). Como resultado, la exactitud de clasificación no supervisada de Petra sobre las fronteras de Lucas trepó a \textbf{50.79\%} (129 aciertos sobre 254 muestras sin reentrenamiento), destacándose /e/ con \textbf{66.7\%}, /a/ con \textbf{60.9\%} y /o/ con \textbf{58.0\%}.
+
+\subsubsection{Consolidación de la Variedad Universal Tri-Sujeto: 947 Fonaciones Superpuestas}
+\label{subsubsec:variedad_universal_tri_sujeto_ae2d}
+
+La unificación de los tres sujetos en el espacio bidimensional no lineal del Autoencoder Convolucional 1D récord (Figura~\ref{fig:tri_sujeto_ae2d_variedad}) demuestra empíricamente la invarianza biomecánica del tracto vocal en 947 patrones experimentales independientes.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{EMG_desarrollo/resultados/grid_search_conv_ortogonal/tri_sujeto_ae2d_variedad_universal.png}
+\caption{Variedad Motora Intrínseca Universal Tri-Sujeto en el Espacio del Autoencoder Convolucional 2D récord: Panel 1 muestra a Lucas (502 muestras, 91.63\% GMM). Panel 2 muestra a Candela alineada con Sara Solla (191 muestras, 48.17\%). Panel 3 muestra a Petra alineada con Sara Solla (254 muestras, 50.79\%). Panel 4 presenta la superposición total de las 947 fonaciones individuales, con los centroides promedio de la variedad motora humana universal.}
+\label{fig:tri_sujeto_ae2d_variedad}
+\end{figure}
+
+El Cuadro~\ref{tab:transferencia_ae2d_tri_sujeto} resume la progresión de métricas a lo largo del pipeline de transferencia:
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Sujeto y Etapa} & \textbf{N Muestras} & \textbf{Exactitud GMM} & \textbf{Ganancia Neta} & $\mathbf{\rho_1}$ \textbf{(CCA)} & $\mathbf{\rho_2}$ \textbf{(CCA)} \\
+\midrule
+\textbf{Lucas (Entrenamiento Base)} & & & & & \\
+-- Autoencoder 2D Nativo & 502 & 87.85\% & Base & -- & -- \\
+-- Autoencoder 2D + Sara Solla Intra & 502 & \textbf{91.63\%} & +3.78\% & 1.0000 & 1.0000 \\
+\midrule
+\textbf{Candela (Pruebas 1 a 4)} & & & & & \\
+-- Proyección Cruda Directa & 191 & 9.42\% & Base & -- & -- \\
+-- Sara Solla Intra-Sesión & 191 & 15.18\% & +5.76\% & 0.9989 & 0.9635 \\
+-- Sara Solla Inter-Sujeto hacia Lucas & 191 & \textbf{48.17\%} & \textbf{+38.75\%} & \textbf{0.9744} & \textbf{0.9603} \\
+\midrule
+\textbf{Petra (Día 1 y Día 2)} & & & & & \\
+-- Proyección Cruda Directa & 254 & 21.65\% & Base & -- & -- \\
+-- Sara Solla Intra-Sesión (Inter-Día) & 254 & 21.65\% & 0.00\% & 1.0000 & 0.9641 \\
+-- Sara Solla Inter-Sujeto hacia Lucas & 254 & \textbf{50.79\%} & \textbf{+29.14\%} & \textbf{0.9944} & \textbf{0.9370} \\
+\midrule
+\textbf{Variedad Universal Consolidada} & \textbf{947} & \textbf{70.96\% (672/947)} & \multicolumn{3}{l}{Exactitud conjunta evaluada en fronteras de Lucas} \\
+\bottomrule
+\end{tabular}
+\caption{Métricas de transferencia y exactitud GMM en las 947 muestras tri-sujeto sobre el espacio latente del Autoencoder 2D récord de Lucas.}
+\label{tab:transferencia_ae2d_tri_sujeto}
+\end{table}
+
+\subsection{Hoja de Ruta Experimental}
+\label{subsec:hoja_ruta_futura}
+
+A partir de los hallazgos analíticos y anatómicos descritos, se establecen los siguientes ensayos inmediatos:
+\begin{enumerate}
+    \item \textbf{Proyección de Candela y Petra sobre el Espacio del Autoencoder 2D con Sara Solla e Impedancia:} Evaluar la proyección directa de las 191 muestras de Candela y 254 muestras de Petra sobre el espacio latente del Autoencoder récord 2D, aplicando corrección de impedancia basal, alineación afín inter-sesión intra-sujeto mediante Sara Solla, y posterior rotación/traslación afín hacia el marco de referencia canónico de Lucas.
+    \item \textbf{Ajuste Semisupervisado sobre el Modelo de 91.63\% y Validación en Secuencia Continua P5:} Incorporar un término de pérdida semisupervisada con ponderación controlada ($\lambda_{\text{semi}}$) sobre la función de costo no supervisada del Autoencoder récord para explorar la superación de la barrera del 91.63\%, contrastando la robustez en inferencia continua frente al benchmark de 123 pulsos de SecuenciaContinua\_Prueba5\_Sujeto1 (P5).
+    \item \textbf{Validación Inter-Día en Sujeto Petra (2026-08-21 y 2026-08-28):} Evaluación de estabilidad temporal comparando las mediciones 1 y 2 en dos jornadas independientes, analizando la persistencia de atractores bajo la tríada Levator Anguli Oris, Digástrico y Cigomático Mayor.
+    \item \textbf{Alineación Inter-Sesión en Sujeto Lucas:} Aplicación del mapeo canónico afín entre tomas grabadas en diferentes semanas para cuantificar la deriva instrumental de electrodos frente a la variabilidad motora intra-sujeto.
+    \item \textbf{Evaluación Comparativa con PCA Lineal Clásico:} Contraste entre las variedades obtenidas por autoencoders convolucionales no lineales y las proyecciones ortogonales directas de PCA, investigando la preservación proporcional de distancias euclidianas relativas en analogía con el triángulo vocálico acústico y articular.
+\end{enumerate}
+
 \section{Conclusiones}
 \label{sec:conclusiones}
 

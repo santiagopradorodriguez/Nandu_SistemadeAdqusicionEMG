@@ -53,6 +53,8 @@ if getattr(sys, 'frozen', False) and len(sys.argv) > 1 and (sys.argv[1].endswith
       import acquisition.autoforge_daq as module
     elif module_name == 'acquisition.autoforge_daq_experimental':
       import acquisition.autoforge_daq_experimental as module
+    elif module_name == 'acquisition.autoforge_daq_decodificador':
+      import acquisition.autoforge_daq_decodificador as module
     elif module_name == 'acquisition.metronomo_visual':
       import acquisition.metronomo_visual as module
     elif module_name == 'acquisition.ventana_palabras':
@@ -902,6 +904,37 @@ class ReaperStyleHub(QMainWindow):
     """)
     btn_autoforge_staging.clicked.connect(lambda: self._launch_external("acquisition/autoforge_daq_experimental.py"))
     vbox_btn.addWidget(btn_autoforge_staging)
+    
+    btn_decoder_beta = QPushButton("DECODIFICADOR TIEMPO REAL - BETA\nAUTOENCODER + GATE DOBLE")
+    btn_decoder_beta.setStyleSheet("""
+      QPushButton {
+        font-family: 'Consolas', 'Courier New', monospace;
+        font-size: 18px; 
+        font-weight: 900; 
+        background-color: #120b1a; 
+        color: #d188ff; 
+        padding: 25px 15px;
+        border-radius: 4px;
+        border: 2px solid #d188ff;
+        border-right: 8px solid #00ffcc;
+        border-bottom: 8px solid #00ffcc;
+        margin-top: 10px;
+      }
+      QPushButton:hover {
+        background-color: #d188ff;
+        color: #0d0d1a;
+        border: 2px solid #00ffcc;
+        border-right: 8px solid #00ffcc;
+        border-bottom: 8px solid #00ffcc;
+      }
+      QPushButton:pressed {
+        background-color: #00ffcc;
+        color: #000000;
+        border: 2px solid #ffffff;
+      }
+    """)
+    btn_decoder_beta.clicked.connect(lambda: self._launch_external("acquisition/autoforge_daq_decodificador.py"))
+    vbox_btn.addWidget(btn_decoder_beta)
     
     vbox_btn.addStretch()
     

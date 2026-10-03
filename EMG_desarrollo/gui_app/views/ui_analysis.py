@@ -1786,8 +1786,23 @@ class AutoencoderNoSupervisadoTab(QWidget):
         g_par = QGroupBox("7. Parámetros de Optimización y Calibración")
         l_par = QGridLayout()
         
-        # Fila 0: Selección de Arquitectura Base
-        l_par.addWidget(QLabel("Tipo de Red:"), 0, 0)
+        # Fila 0: Selección de Preset Récord y Arquitectura Base
+        l_par.addWidget(QLabel("Preset Récord:"), 0, 0)
+        self.cmb_preset_record = QComboBox()
+        self.cmb_preset_record.addItems([
+            "-- Seleccionar Preset Récord --",
+            "Conv 2D Ortogonal (Ventana 50/50) - Récord Lucas 89.04%",
+            "MLP 3D Ortogonal (Ventana 50/50) - Récord Lucas 88.45%",
+            "MLP 3D Ortogonal (Ventana 40/60) - Récord Armónica 87.21% - Lucas 87.43%",
+            "Conv 2D Ortogonal (Ventana 60/60) - Récord Armónica 85.55% - Lucas 83.40%",
+            "Conv 3D Ortogonal (Ventana 60/60) - Pico Lucas 85.40% - Armónica 84.56%",
+            "Conv 3D Ortogonal (Ventana 50/50) - Récord (Barrido 5760)"
+        ])
+        self.cmb_preset_record.setStyleSheet("background-color: #0b1a24; color: #FFE600; border: 1px solid #FFE600; padding: 4px; font-weight: bold;")
+        self.cmb_preset_record.currentIndexChanged.connect(self.on_seleccionar_preset_record)
+        l_par.addWidget(self.cmb_preset_record, 0, 1, 1, 3)
+
+        l_par.addWidget(QLabel("Tipo Red:"), 0, 4)
         self.cmb_tipo_red = QComboBox()
         self.cmb_tipo_red.addItems([
             "Autoencoder Ortogonal: Récord 87% - 91%",
@@ -1796,7 +1811,7 @@ class AutoencoderNoSupervisadoTab(QWidget):
         ])
         self.cmb_tipo_red.setStyleSheet("background-color: #1F2833; color: #00FF88; border: 1px solid #00AA55; padding: 4px; font-weight: bold;")
         self.cmb_tipo_red.currentIndexChanged.connect(self._on_tipo_red_changed)
-        l_par.addWidget(self.cmb_tipo_red, 0, 1, 1, 5)
+        l_par.addWidget(self.cmb_tipo_red, 0, 5)
 
         # Fila 1: Parámetros numéricos base
         l_par.addWidget(QLabel("Épocas:"), 1, 0)
@@ -2052,8 +2067,11 @@ class AutoencoderNoSupervisadoTab(QWidget):
         scroll.setWidget(content)
         main_layout.addWidget(scroll)
 
-        # Configurar por defecto la arquitectura ortogonal récord (87.85% nativo / ~91% SO(2))
-        self._on_tipo_red_changed(0)
+        # Configurar por defecto el preset récord oficial verificado (Conv 2D Ortogonal 50/50 - 89.04%)
+        if hasattr(self, 'cmb_preset_record'):
+            self.cmb_preset_record.setCurrentIndex(1)
+        else:
+            self._on_tipo_red_changed(0)
         self.chk_alineacion_so2.toggled.connect(lambda: self._on_tipo_red_changed(0))
 
     def get_plantilla_codigo(self, modalidad=None):
@@ -2338,6 +2356,161 @@ class AutoencoderPersonalizado(nn.Module):
             self.inp_pre_pct.setValue(0.50)
             self.inp_post_pct.setValue(0.50)
 
+    def on_seleccionar_preset_record(self, idx):
+        if idx <= 0:
+            return
+
+        n_ch = 3
+        if hasattr(self, 'chk_canal_0') and hasattr(self, 'chk_canal_1') and hasattr(self, 'chk_canal_2'):
+            ch_list = []
+            if self.chk_canal_0.isChecked(): ch_list.append(0)
+            if self.chk_canal_1.isChecked(): ch_list.append(1)
+            if self.chk_canal_2.isChecked(): ch_list.append(2)
+            if len(ch_list) >= 2:
+                n_ch = len(ch_list)
+
+        self.inp_pts_env.setValue(20)
+        t_len = 20
+        self.chk_usar_custom.setChecked(True)
+        self.chk_alineacion_so2.setChecked(False)
+        self.chk_impedancia_reposo.setChecked(True)
+        self.chk_p95.setChecked(False)
+        self.chk_correccion_intersesion.setChecked(False)
+        self.cmb_align.setCurrentText("Pico Volumen Micrófono")
+        self.cmb_loss.setCurrentText("MSE (Error Cuadrático Medio)")
+        self.inp_smooth_ms.setValue(90)
+        self.cmb_filtro_linea.setCurrentText("Notch (IIR en Cascada)")
+        self.inp_notch.setValue(2.0)
+        self.inp_lp.setValue(500.0)
+        self.inp_alpha.setValue(0.50)
+        self.inp_snr.setValue(0.50)
+        self.inp_outliers.setValue(0.10)
+        self.inp_batch.setValue(512)
+
+        if idx == 1:
+            # 1. Conv 2D Ortogonal (50/50) - Record Lucas 89.04%
+            if hasattr(self, 'rb_dim_2d_env'):
+                self.rb_dim_2d_env.setChecked(True)
+            self.inp_pre_pct.setValue(0.50)
+            self.inp_post_pct.setValue(0.50)
+            self.inp_epochs.setValue(350)
+            self.inp_lr.setValue(0.0030)
+            self.inp_lambda_w.setValue(2.00)
+            self.inp_lambda_z.setValue(0.50)
+            codigo = self.get_plantilla_codigo_conv_ortogonal(
+                n_ch=n_ch, latent_dim=2, target_len=t_len,
+                conv_channels=(6, 12), kernel_size=5, act_code="nn.Tanh()",
+                record_title="Record Lucas GMM 89.04% - Media Armonica 85.3% - Ventana 50/50",
+                config_desc="K=5, Canales=(6, 12), Activacion=Tanh, lr=0.003, lw=2.0, lz=0.5"
+            )
+            self.txt_codigo_arch.setPlainText(codigo)
+            desc_status = "[OK]: Conv-Ortogonal 2D (50/50) cargado: Record Lucas GMM 89.04% (Silueta +0.425, DB 0.795) - K=5, Ch=(6, 12), Tanh, lr=0.003, lw=2.0, lz=0.5."
+            color_border = "#00FF88"
+
+        elif idx == 2:
+            # 2. MLP 3D Ortogonal (50/50) - Record Lucas 88.45%
+            if hasattr(self, 'rb_dim_3d_env'):
+                self.rb_dim_3d_env.setChecked(True)
+            self.inp_pre_pct.setValue(0.50)
+            self.inp_post_pct.setValue(0.50)
+            self.inp_epochs.setValue(800)
+            self.inp_lr.setValue(0.0020)
+            self.inp_lambda_w.setValue(1.20)
+            self.inp_lambda_z.setValue(0.15)
+            codigo = self.get_plantilla_codigo_ortogonal(
+                n_ch=n_ch, latent_dim=3, target_len=t_len,
+                hidden_dim=64, inter_dim=16,
+                record_label="Record Lucas GMM 88.45% - Ventana 50/50",
+                config_desc=f"Entrada: {n_ch}x{t_len}={n_ch*t_len} -> 64 -> 16 -> 3 -> 16 -> 64 -> {n_ch*t_len} (Tanh, bias=False, 800 epocas)"
+            )
+            self.txt_codigo_arch.setPlainText(codigo)
+            desc_status = "[OK]: MLP Ortogonal 3D (50/50) cargado: Record Lucas GMM 88.45% - Topologia (64, 16), lr=0.002, lw=1.2, lz=0.15, 800 epocas."
+            color_border = "#66FCF1"
+
+        elif idx == 3:
+            # 3. MLP 3D Ortogonal (40/60) - Record Armonica 87.21% - Lucas 87.43%
+            if hasattr(self, 'rb_dim_3d_env'):
+                self.rb_dim_3d_env.setChecked(True)
+            self.inp_pre_pct.setValue(0.40)
+            self.inp_post_pct.setValue(0.60)
+            self.inp_epochs.setValue(350)
+            self.inp_lr.setValue(0.0035)
+            self.inp_lambda_w.setValue(1.80)
+            self.inp_lambda_z.setValue(0.30)
+            codigo = self.get_plantilla_codigo_ortogonal(
+                n_ch=n_ch, latent_dim=3, target_len=t_len,
+                hidden_dim=48, inter_dim=24,
+                record_label="Record Media Armonica 87.21% - Lucas 87.43% - P5 86.99% - Ventana 40/60",
+                config_desc=f"Entrada: {n_ch}x{t_len}={n_ch*t_len} -> 48 -> 24 -> 3 -> 24 -> 48 -> {n_ch*t_len} (Tanh, bias=False, 350 epocas)"
+            )
+            self.txt_codigo_arch.setPlainText(codigo)
+            desc_status = "[OK]: MLP Ortogonal 3D (40/60) cargado: Record Armonica 87.21% - Lucas 87.43%, P5 86.99% (Piso P5 79.2%) - Topologia (48, 24), lr=0.0035, lw=1.8, lz=0.3."
+            color_border = "#66FCF1"
+
+        elif idx == 4:
+            # 4. Conv 2D Ortogonal (60/60) - Record Armonica 85.55% - Lucas 83.40%
+            if hasattr(self, 'rb_dim_2d_env'):
+                self.rb_dim_2d_env.setChecked(True)
+            self.inp_pre_pct.setValue(0.60)
+            self.inp_post_pct.setValue(0.60)
+            self.inp_epochs.setValue(350)
+            self.inp_lr.setValue(0.0030)
+            self.inp_lambda_w.setValue(0.60)
+            self.inp_lambda_z.setValue(0.70)
+            codigo = self.get_plantilla_codigo_conv_ortogonal(
+                n_ch=n_ch, latent_dim=2, target_len=t_len,
+                conv_channels=(8, 24), kernel_size=5, act_code="nn.Tanh()",
+                record_title="Campeon Armonica 85.55% - Lucas 83.40% - P5 87.80% - Ventana 60/60",
+                config_desc="K=5, Canales=(8, 24), Activacion=Tanh, lr=0.003, lw=0.6, lz=0.7"
+            )
+            self.txt_codigo_arch.setPlainText(codigo)
+            desc_status = "[OK]: Conv-Ortogonal 2D (60/60) cargado: Campeon Armonica 85.55% - Lucas 83.40%, P5 87.80% (Piso Lucas 71.0%) - K=5, Ch=(8, 24), Tanh, lr=0.003, lw=0.6, lz=0.7."
+            color_border = "#FFE600"
+
+        elif idx == 5:
+            # 5. Conv 3D Ortogonal (60/60) - Pico Lucas 85.40% - Armonica 84.56%
+            if hasattr(self, 'rb_dim_3d_env'):
+                self.rb_dim_3d_env.setChecked(True)
+            self.inp_pre_pct.setValue(0.60)
+            self.inp_post_pct.setValue(0.60)
+            self.inp_epochs.setValue(350)
+            self.inp_lr.setValue(0.0040)
+            self.inp_lambda_w.setValue(1.20)
+            self.inp_lambda_z.setValue(0.15)
+            codigo = self.get_plantilla_codigo_conv_ortogonal(
+                n_ch=n_ch, latent_dim=3, target_len=t_len,
+                conv_channels=(8, 16), kernel_size=9, act_code="nn.Tanh()",
+                record_title="Pico Lucas GMM 85.40% - Armonica 84.56% - P5 83.74% - Ventana 60/60",
+                config_desc="K=9, Canales=(8, 16), Activacion=Tanh, lr=0.004, lw=1.2, lz=0.15"
+            )
+            self.txt_codigo_arch.setPlainText(codigo)
+            desc_status = "[OK]: Conv-Ortogonal 3D (60/60) cargado: Pico Lucas GMM 85.40% - Armonica 84.56%, P5 83.74% - K=9, Ch=(8, 16), Tanh, lr=0.004, lw=1.2, lz=0.15."
+            color_border = "#FFE600"
+
+        elif idx == 6:
+            # 6. Conv 3D Ortogonal (50/50) - Record (Barrido 5760)
+            if hasattr(self, 'rb_dim_3d_env'):
+                self.rb_dim_3d_env.setChecked(True)
+            self.inp_pre_pct.setValue(0.50)
+            self.inp_post_pct.setValue(0.50)
+            self.inp_epochs.setValue(350)
+            self.inp_lr.setValue(0.0030)
+            self.inp_lambda_w.setValue(2.00)
+            self.inp_lambda_z.setValue(0.50)
+            codigo = self.get_plantilla_codigo_conv_ortogonal(
+                n_ch=n_ch, latent_dim=3, target_len=t_len,
+                conv_channels=(6, 12), kernel_size=5, act_code="nn.Tanh()",
+                record_title="Conv 3D Ortogonal - Ventana 50/50",
+                config_desc="K=5, Canales=(6, 12), Activacion=Tanh, lr=0.003, lw=2.0, lz=0.5"
+            )
+            self.txt_codigo_arch.setPlainText(codigo)
+            desc_status = "[OK]: Conv-Ortogonal 3D (50/50) cargado: Barrido masivo 5760 en curso para consolidar campeon definitivo."
+            color_border = "#FFE600"
+
+        self.on_verificar_arquitectura()
+        self.lbl_arch_status.setText(desc_status)
+        self.lbl_arch_status.setStyleSheet(f"background-color: #002211; color: {color_border}; border: 1px solid {color_border}; padding: 5px; font-family: monospace; font-size: 10px; border-radius: 4px;")
+
     def on_cargar_conv_orto(self):
         latent_dim = 3 if (self.rb_dim_3d.isChecked() if hasattr(self, 'rb_dim_3d') else (self.rb_dim_3d_env.isChecked() if hasattr(self, 'rb_dim_3d_env') else False)) else 2
         n_ch = 3
@@ -2417,20 +2590,20 @@ class AutoencoderPersonalizado(nn.Module):
             self.txt_codigo_arch.setPlainText(cod_mod)
             self.on_verificar_arquitectura()
 
-    def get_plantilla_codigo_conv_ortogonal(self, n_ch=3, latent_dim=2, target_len=20):
+    def get_plantilla_codigo_conv_ortogonal(self, n_ch=3, latent_dim=2, target_len=20, conv_channels=None, kernel_size=None, act_code=None, record_title=None, config_desc=None):
         class_name = f"ConvOrthogonalAutoencoder{latent_dim}D"
         if latent_dim == 3:
-            conv_channels = (4, 12)
-            kernel_size = 3
-            act_code = "nn.GELU()"
-            record_title = "Récord 82.2% Media Armónica - Lucas 82.3% - P5 82.1% - Ventana 50/50"
-            config_desc = "K=3, Canales=(4, 12), Activación=GELU, lr=0.003, lw=2.0, lz=0.7"
+            if conv_channels is None: conv_channels = (4, 12)
+            if kernel_size is None: kernel_size = 3
+            if act_code is None: act_code = "nn.GELU()"
+            if record_title is None: record_title = "Récord 82.2% Media Armónica - Lucas 82.3% - P5 82.1% - Ventana 50/50"
+            if config_desc is None: config_desc = "K=3, Canales=(4, 12), Activación=GELU, lr=0.003, lw=2.0, lz=0.7"
         else:
-            conv_channels = (6, 12)
-            kernel_size = 5
-            act_code = "nn.Tanh()"
-            record_title = "Récord 85.3% Media Armónica - Lucas 87.8% - P5 82.9% - Ventana 50/50"
-            config_desc = "K=5, Canales=(6, 12), Activación=Tanh, lr=0.003, lw=2.0, lz=0.5"
+            if conv_channels is None: conv_channels = (6, 12)
+            if kernel_size is None: kernel_size = 5
+            if act_code is None: act_code = "nn.Tanh()"
+            if record_title is None: record_title = "Récord 85.3% Media Armónica - Lucas 87.8% - P5 82.9% - Ventana 50/50"
+            if config_desc is None: config_desc = "K=5, Canales=(6, 12), Activación=Tanh, lr=0.003, lw=2.0, lz=0.5"
 
         c1, c2 = conv_channels
         pad = kernel_size // 2
@@ -2591,18 +2764,18 @@ class {class_name}(nn.Module):
         self.lbl_arch_status.setText(desc_status)
         self.lbl_arch_status.setStyleSheet("background-color: #002211; color: #00FF88; border: 1px solid #00AA55; padding: 5px; font-family: monospace; font-size: 10px; border-radius: 4px;")
 
-    def get_plantilla_codigo_ortogonal(self, n_ch=3, latent_dim=2, target_len=20):
+    def get_plantilla_codigo_ortogonal(self, n_ch=3, latent_dim=2, target_len=20, hidden_dim=None, inter_dim=None, record_label=None, config_desc=None):
         input_dim = n_ch * target_len
         if latent_dim == 3:
-            hidden_dim = 48
-            inter_dim = 24
-            record_label = "Record 87.21% Media Armonica 3D - Lucas 87.4% - P5 87.0% - Ventana 40/60"
-            config_desc = f"Entrada: {n_ch} canales x {target_len} puntos = {input_dim} dimensiones -> {hidden_dim} -> {inter_dim} -> {latent_dim}."
+            if hidden_dim is None: hidden_dim = 48
+            if inter_dim is None: inter_dim = 24
+            if record_label is None: record_label = "Record 87.21% Media Armonica 3D - Lucas 87.4% - P5 87.0% - Ventana 40/60"
+            if config_desc is None: config_desc = f"Entrada: {n_ch} canales x {target_len} puntos = {input_dim} dimensiones -> {hidden_dim} -> {inter_dim} -> {latent_dim}."
         else:
-            hidden_dim = 32
-            inter_dim = 16
-            record_label = "Record 87.85% nativo - 91.43% SO(2) - Ventana 50/50"
-            config_desc = f"Entrada: {n_ch} canales x {target_len} puntos = {input_dim} dimensiones -> {hidden_dim} -> {inter_dim} -> {latent_dim}."
+            if hidden_dim is None: hidden_dim = 32
+            if inter_dim is None: inter_dim = 16
+            if record_label is None: record_label = "Record 87.85% nativo - 91.43% SO(2) - Ventana 50/50"
+            if config_desc is None: config_desc = f"Entrada: {n_ch} canales x {target_len} puntos = {input_dim} dimensiones -> {hidden_dim} -> {inter_dim} -> {latent_dim}."
         class_name = f"OrthogonalAutoencoder{latent_dim}D"
         return f'''import torch
 import torch.nn as nn
