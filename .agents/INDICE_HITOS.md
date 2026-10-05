@@ -1,0 +1,61 @@
+# Índice de Hitos del Proyecto Ñandú EMG
+
+Para consultar el detalle de un hito, abrir  en la línea indicada.
+
+- L1215: Hito 86 - 2026-09-17: Ejecucion Final del Analisis Espectral Multimodal (Candela 2026-09-16)
+- L1230: Hito 87 - 2026-09-23: Integración de Reporte Espectral en la Interfaz Gráfica (GUI)
+- L1241: Hito 88 - 2026-09-23: Implementación de Correlación Espectral EMG-Audio (Canal 3)
+- L1255: Hito 89 - 2026-09-23: Generación de Figuras de Publicación (Mediciones 09-23)
+- L1277: Hito 87 - 2026-09-17: Ajuste de Títulos Directos y Purga de Vocabulario Pomposo en Datasheet
+- L1299: Hito 88 - 2026-09-17: Exportación de Base de Datos, Purga de Resultados Redundantes e Interfaz Gráfica
+- L1323: Hito 90 - 2026-09-17: Unificación de Código de Colores y Propagación Automática de Sinónimos Anatómicos
+- L1337: Hito 89 - 2026-09-17: Corrección Integral de Reporte de Sesión y Cubos 3D (2026-09-01)
+- L1360: Hito 91 - 2026-09-17: Reestructuración Integral del Datasheet (Circuitos al Inicio y Fusión Contextual de Características)
+- L1394: Hito 92 - 2026-09-17: Preparación y Auditoría Integral de la Infraestructura de Compilación (Windows y Linux)
+- L1864: Hito 89 - 2026-09-23: Limpieza y Reorganización Pre-Lanzamiento (Depuración de Scripts Auxiliares, Reorganización de Resultados y Configuración Git)
+- L1881: Hito 90 - 2026-09-23: Eliminación de Latencia Crítica en el Gestor de Sesiones y Modularización de Auditoría de Metadatos
+- L1902: Hito 90 - 2026-09-23: Generación Masiva de Figuras Multimodales Paper (4 Paneles) para Diego e Integración Automatizada en Generador de Reportes y GUI
+- L1923: Hito 92 - 2026-09-23: Integración Universal del Control de Corrección por Impedancia en PCA, UMAP y Autoencoder Supervisado
+- L1948: Hito 93 - 2026-09-23: Desactivación por Defecto de la Corrección Intersesión y Preservación como Parámetro Opcional
+- L1967: Hito 94 - 2026-09-23: Generador de Atlas Vectorial PDF de Activación sEMG e Integración en la GUI
+- L1995: Hito 95 - 2026-09-23: Auditoría y Diagnóstico Bioeléctrico de Tomas 21/09 y 22/09 (/O/ vs /U/)
+- L2014: Hito 96 - 2026-09-23: Redacción y Consolidación del Cuaderno de Tesis Oficial (DOCX)
+- L2037: Hito 97 - 2026-09-23: Redacción Individual de Epígrafes y Textos Específicos por Figura (Págs 40–41 y 52–54)
+- L2064: Hito 98 - 2026-09-23: Consolidación de Espectrogramas vs Envolventes, Autoencoder Ortogonal 91.43% y Reubicación de Rotación SO(2) en Página 45
+- L2079: Hito 99 - 2026-09-23: Detalle del Autoencoder Pre-Ortogonal GAP+GMP (87.8% 15 Sep) y PCA Multisesión (Rotación y Traslación del Espacio de Fases)
+- L2094: Hito 100 - 2026-09-23: Consolidación Exitosa del Cuaderno de Tesis Organizado (68 Elementos en 13 Puntos de Inserción)
+- L2113: Hito 101 - 2026-09-23: Aplicación de Filtro de Lenguaje Humano y Acomodación de Figuras de Rotación, Autoencoder Ortogonal y Récords
+- L2135: Hito 102 - 2026-09-24: Navegación y Conmutación de Chats de Antigravity vía Chrome DevTools Protocol (CDP) y WebApp Móvil TARS
+- L2166: Hito 105 - 2026-09-24: Reparación y Validación Exitosa de Formato OOXML en Cuaderno_Tesis_Organizado.docx
+- L2179: Hito 106 - 2026-09-24: Evaluación de Secuencia Continua de 125 Pulsos con Compuerta Acústica y Supremo Tricanal
+- L2201: Hito 107 - 2026-09-24: Comparativa de Fronteras de Decisión (Modelos 91% y 87%) frente a Secuencia Continua
+- L2220: Hito 108 - 2026-09-24: Corrección de Sincronización Fonatoria y Validación Fisiológica de la Secuencia Continua
+- L2247: Hito 109 - 2026-09-24: Corrección Definitiva del Cuaderno de Tesis: Desacople de Fotos Anatómicas y Unificación de Epígrafes
+- L2264: Hito 111 - 2026-09-24: Reproducción Exacta del Modelo Récord 87.85% sin SO(2) y Coincidencia Espacial en Secuencia Continua (77.24%)
+- L2301: Hito 113 - 2026-09-24: Código de Colores Universal, Visualizador de Ventanas Cortadas y Decodificador en la Interfaz
+- L2325: Hito 112 - 2026-09-24: Corrección de Figuras en Reportes, Agrupamiento por Vocal y Sección Multimodal Dedicada
+- L2346: Hito 114 - 2026-09-24: Ensayo Experimental de Capas Convolucionales en el Autoencoder Ortogonal
+- L2364: Hito 115 - 2026-09-24: Ensayo de Entropía Cruzada Supervisada y Módulo de Grid Search Convolucional
+- L2385: Hito 116 - 2026-09-24: Generación del Apunte Técnico PDF Consolidado
+- L2398: Hito 117 - 2026-09-24: Verificación y Réplica Exacta de los Modelos Récord (87.85% Nativo y 91.43% SO(2)) en el Motor Unificado y la GUI
+- L2409: Hito 118 - 2026-09-24: Corrección Integral de Gráficos 3D en Reporte y Adaptación Multimodal Compacta
+- L2424: Hito 119 - 2026-09-24: Resolución Definitiva de Extracción y Flujo Completo del Autoencoder Récord (87.85% y 91.43%)
+- L2442: Hito 120 - 2026-09-24: Robustecimiento y Sincronización del Decodificador de Secuencia Continua
+- L2458: Hito 121 - 2026-09-24: Actualización del Motor de Barrido Épico Convolucional (3600/5760 Configs) con Detección y Alerta de Récord en Tiempo Real
+- L2480: Hito 122 - 2026-09-24: Validación Empírica del Detector Gate Doble en Secuencia Continua P5 (100% EMG sin Micrófono)
+- L2495: Hito 123 - 2026-09-24: Superación de la Exactitud de Transferencia Directa en P5 con Gate Doble (81.30% vs 77.24% con Micrófono)
+- L2517: Hito 124 - 2026-09-24: Consolidación del Detector Gate Doble y Desfasajes Intermusculares en el Reporte Técnico LaTeX
+- L2535: Hito 125 - 2026-09-24: Integración de Gate Doble, Defaults 3D Récord 88.45%, Clasificador Supervisado LDA y Plan Decodificador DAQ
+- L2559: Hito 126 - 2026-09-24: Calibración Fina de Gate Doble, Selector Flexible para Probar en Otro Sujeto y Récord de Autoencoder Convolucional Ortogonal
+- L2595: Hito 127 - 2026-09-24: Verificación Empírica de la Configuración 3179 y Resolución de Discrepancias en la GUI
+- L2617: Hito 128 - 2026-09-24: Corrección de Detección de Pulsos en Espacio de Fases 3D Multisesión
+- L2628: Hito 129 - 2026-09-24: Selector Jerárquico de Mediciones, Corrección de Corte LP a 500 Hz, Decodificación Continua con Tira de Pulsos y Barrido Conv-Ortogonal en 3D
+- L2665: Hito 130 - 2026-09-24: Estudio Fisiológico de TKEO, Resolución Temporal y Descubrimiento del Autoencoder con Pérdida Compuesta Dual Head
+- L2679: Hito 131 - 2026-09-24: Integración Completa en el Reporte LaTeX: Autoencoder Convolucional Ortogonal Récord, TKEO, Resolución Temporal y Pérdida Compuesta Dual Head
+- L2704: Hito 132 - 2026-09-24: Evaluación Experimental en Candela (01/09 vs 15/09) y Corrección de Impedancia Inter-Toma
+- L2734: Hito 133 - 2026-09-25: Implementación de Ventana de Corte Variable en GUI y Lanzamiento de Barrido Masivo Cuatrimodal en Lucas
+- L2777: Hito 134 - 2026-09-25: Preparación de Build de Windows, Actualización de Spec de PyInstaller y Sincronización Git
+- L2796: Hito 135 - 2026-09-30: Consolidación y Automatización de Configuraciones Récord en GUI y Motor Autoencoder
+- L2817: Hito 136 - 2026-09-30: Lanzamiento del Barrido Masivo Cuatrimodal con Ventana 60/60 (5.000 / 5.760 Combinaciones)
+- L2848: Hito 137 - 2026-09-30: Reorganización Integral del Repositorio, Protección de Privacidad y Blindaje de `.gitignore`
+- L2870: Hito 138 - 2026-09-30: Diagnóstico de Consumo de Tokens y Estrategia de Optimización de AGENTS.md

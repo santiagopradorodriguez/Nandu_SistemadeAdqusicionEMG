@@ -1,6 +1,6 @@
 # Memoria Activa del Proyecto (Ñandú EMG)
 
-**Fecha de consolidación:** 2026-09-30  
+**Fecha de consolidación:** 2026-10-03  
 **Historial completo:** `.agents/historial/bitacora_completa_hitos_001_al_138.md`
 
 ---
@@ -64,6 +64,33 @@
      - **Lucas (502 m, 3 días, DAQ Dev1/Dev2):** Con impedancia + Sara Solla alcanza el récord de cohesión (Silueta $+0.4165$, DB $0.8212$). Sin impedancia, Sara Solla rescata la variedad ($+84.7\%$ en PCA, $+93.0\%$ en Autoencoder 2D récord). La corrección de impedancia realiza el trabajo sucio no lineal ecualizando ganancias y Sara Solla absorbe derivas angulares geométricas.
      - **Candela (191 m) y Petra (254 m):** Alineación intra-sujeto verificada con y sin impedancia.
      - **Variedad Motora Intrínseca Universal (947 muestras):** Alineación inter-sujeto con Sara Solla (Candela vs Lucas $\rho_1 = 0.9986$, Petra vs Lucas $\rho_1 = 0.9977$). Invarianza anatómica estricta: /a/ colapsa en $+Y$ (Ch0 depresor mandibular), /u/ y /o/ en $-X$ (Ch2 orbicular de labios) y /i/ en $(0,0)$. /e/ se desacopla ligeramente según Ch1 (DAO vs Risorio vs Cigomático) y es alineada afínmente.
+     - **Separabilidad Tri-Sujeto (947 m):** GMM ciego da 57.66% por solapamiento en /o/-/u/, pero LDA supervisado alcanza **78.04% (77.83% CV)**, probando que la variedad latente unificada es fuertemente cuasi-linealmente separable (/a/ 94.6%, /i/ 83.3%, /u/ 82.9%, /o/ 74.1%).
+  5. **Experimento 5 (Compensación Biofísica: Escala de Electrodos Pre-Encoder y Contracción Radial Latente) [COMPLETADO]:**
+     - Se demostró que la brecha de transferencia hacia el decodificador de Lucas (91.63%) se debía exclusivamente a:
+       1) Desbalance de ganancia de parches ($k_w$) antes del supremo tricanal (Candela $kw_1=0.5, kw_2=2.0 \implies 59.16\%$; Petra $kw_1=3.0, kw_2=1.0 \implies 64.17\%$).
+       2) Dilatación de radio de giro latente ($R \approx 0.50$ vs $0.25$ de Lucas).
+     - Al ecualizar la escala de dispersión radial ($\alpha = 0.40$), la exactitud sobre fronteras de Lucas salta a **92.67% en Candela** y **92.91% en Petra**, validando la universalidad total de la Cruz Latente sin reentrenamiento.
+
+   6. **Experimento 6 (Cálculo Analítico de $k_w$ y Variedad Latente Intrínseca Universal por GPA) [COMPLETADO]:**
+      - **Cálculo No Supervisado de $k_w$:** A partir de los ratios de amplitud relativa $P_{95}$ ($kw_c = \frac{P_{95}(x_c)/P_{95}(x_0)}{P_{95}^{\text{Lucas}}(x_c)/P_{95}^{\text{Lucas}}(x_0)}$), se eliminó la necesidad de barrido manual de hiperparámetros. Candela ($kw = [1.00, 0.44, 0.31]$) alcanza **93.19%** y Petra ($kw = [1.00, 0.30, 1.00]$) alcanza **92.91%** sobre el decodificador congelado de Lucas.
+      - **Variedad Intrínseca Universal por GPA:** Generalized Procrustes Analysis sobre los centroides de Lucas, Candela y Petra converge en 15 iteraciones. Cruz canónica universal con /a/ a $90.0^\circ$ ($+Y$), /e/ a $28.0^\circ$, /i/ a $350.1^\circ$ ($+X$), /o/ a $213.2^\circ$ y /u/ a $226.3^\circ$ ($-Y$).
+      - **Panel 2x3 con Fronteras GMM:** Generado en `EMG_desarrollo/resultados/grid_search_conv_ortogonal/variedad_intrinseca_tri_sujeto_completo.png` con regiones pastel, contornos negros y centroides diamante $\blacklozenge$, evidenciando el encastre de los tres sujetos en la misma variedad geométrica.
+   7. **Experimento 7 (Evaluación Definitiva de Tríadas con Corrección por Impedancia Pura y Fronteras LDA de Lucas) [COMPLETADO]:**
+      - **Pipeline Físico Puro:** 1) Corrección de impedancia basal por electrodo $(x_c - \mu)/P_{95}(c)$ + supremo tricanal. 2) Sara Solla intra-sujeto inter-sesión. 3) Sara Solla inter-sujeto hacia Lucas. 4) Clasificación directa en las fronteras fijas LDA de Lucas (sin $k_w$ forzado, sin $\alpha$ latente, sin líneas de contorno).
+      - **Resultados de Transferencia Zero-Shot sobre Lucas (Azar = 20.0%):** Lucas (91.04%), Petra (63.78%, /a/: 100%), Candela 09-01 (61.78%, /i/: 79.5%), Candela 09-18 (56.54%), Santi 06-22 (56.40%) y Candela 08-30 (50.00%).
+      - **Hallazgo Físico Fundamental:** La corrección por impedancia propia de cada sensor supera ampliamente a cualquier ecualización de ratios $k_w$ (+20% en Candela 09-01 y +9% en Petra). Al eliminar el reescalado latente $\alpha$, las fonaciones no se apiñan en el vértice central del LDA, preservando la separabilidad angular natural de los atractores.
+      - **Validación Fisiológica de Santi:** En Santi 06-22, el Ch0 midió Milohioideo profundo en vez de Digástrico anterior; la /a/ (65%) y la /i/ (42%) se confunden en el origen, demostrando que sin sensor de apertura no hay decodificación biomecánica posible.
+      - **Figuras Oficiales:** Generadas `panel_6_sujetos_triadas_fronteras_lda_lucas.png` y `deconstruccion_proceso_lda_lucas.png` limpias, sin líneas divisorias ni cortes de ejes.
+
+   8. **Experimento 8 (Variedad No Lineal Sara Solla, Sweet Spot 50-70 pts y Procrustes 91% en Streaming) [COMPLETADO]:**
+      - **Sweet Spot de Remuestreo Físico:** El barrido temporal de Isomap demostró que 50--70 puntos por canal es el óptimo físico de Shannon para sEMG facial (error residual geodésico mínimo en Lucas 2.42 y récord absoluto en Santi 06-23 de 86.38%). A 500 puntos ocurre colapso dimensional por hiperconcentración euclídea (error residual 22.59).
+      - **Alineación de Procrustes sobre Modelo 91% Congelado:** Frente al colapso de Deep CCA (~20%), congelar el encoder del 91% y alinear con Procrustes O(2) preserva la topología intacta.
+      - **Validación Causal en Tiempo Real:** En test out-of-sample estricto tras calibración rápida de 20 segundos (5 fonaciones por vocal), Santi 06-23 alcanza **71.56%** ($N=211$) y Petra 08-28 alcanza **62.88%** ($N=229$) sobre las fronteras fijas LDA de Lucas, con una latencia computacional $< 0.35\,\text{ms}$ por fonación.
+   9. **Experimento 9 (Pseudo HD-sEMG Facial de 9 y 12 Canales en Candela: Conv 1D 3D) [COMPLETADO]:**
+      - **Ensamble 9 Canales (630D):** 9 músculos ordenados anatómicamente. Con sustracción de ruido IQR y supremo tricanal, LDA directo da **89.33%** (azar = 20.0%), AE 2D rinde **78.00%**, PCA 2D: **78.00%**, Isomap 2D: **79.33%**.
+      - **Expansión a 12 Canales (840D) y $\alpha=0.5$:** Se incorporaron sub-zonas del masetero y submental lateral. LDA directo salta a un impresionante **97.33%**, probando la ortogonalidad articulatoria completa de la musculatura orofacial.
+      - **Autoencoder Convolucional 1D Ortogonal 3D:** Arquitectura récord adaptada a tensor $(N, 12, 70)$ con cuello de botella a $\mathbf{z} \in \mathbb{R}^3$ (MSE = $0.006710$). Separabilidad LDA en espacio latente $Z$ escala a **89.33%**, y PCA 3D alcanza **94.00%**.
+      - **Paneles Oficiales:** Guardados en `panel_pseudo_hd_emg_candela_autoencoder.png` (9CH 2D) y `panel_pseudo_hd_emg_candela_12ch_3d.png` (12CH 3D).
 
 ---
 

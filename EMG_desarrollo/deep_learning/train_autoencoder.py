@@ -31,7 +31,7 @@ except ImportError:
     from deep_learning.dataset_emg import EMGDataset
     from deep_learning.modelos import ConvAutoencoder1D
 
-def train_autoencoder(csv_path, epochs=80, batch_size=16, lr=1e-3, latent_dim=8, kernel_size=5, force_epochs=False, alpha=0.5, verbose=True, save_model=True, train_sessions=None, test_sessions=None, out_dir=None):
+def train_autoencoder(csv_path, epochs=80, batch_size=16, lr=1e-3, latent_dim=8, kernel_size=5, force_epochs=False, alpha=0.3, verbose=True, save_model=True, train_sessions=None, test_sessions=None, out_dir=None, lambda_w=0.1, lambda_z=0.1):
     def _set_seed(seed=42):
         random.seed(seed)
         np.random.seed(seed)
@@ -45,9 +45,9 @@ def train_autoencoder(csv_path, epochs=80, batch_size=16, lr=1e-3, latent_dim=8,
         
     if verbose:
         print(f"==================================================")
-        print(f"Iniciando entrenamiento del Autoencoder Convolucional...")
+        print(f"Iniciando entrenamiento del Autoencoder Convolucional Ortogonal...")
         print(f"Usando archivo de entrenamiento: {os.path.abspath(csv_path)}")
-        print(f"Parametros: Epochs={epochs}, BatchSize={batch_size}, LR={lr}, LatentDim={latent_dim}, KernelSize={kernel_size}, Alpha={alpha}")
+        print(f"Parametros: Epochs={epochs}, BatchSize={batch_size}, LR={lr}, LatentDim={latent_dim}, KernelSize={kernel_size}, Alpha={alpha}, LambdaW={lambda_w}, LambdaZ={lambda_z}")
         print(f"==================================================")
     
     dataset_train = EMGDataset(csv_path, apply_augmentation=True)
@@ -179,8 +179,11 @@ def train_autoencoder(csv_path, epochs=80, batch_size=16, lr=1e-3, latent_dim=8,
             reconstruction, latent, logits = model(inputs)
             
             loss_rec = criterion_mse(reconstruction, inputs)
+            loss_w = model.weight_orthogonality_loss()
+            loss_z = model.latent_covariance_loss(latent)
             loss_cls = criterion_ce(logits, labels_idx)
-            loss = (1 - alpha) * loss_rec + alpha * loss_cls
+            
+            loss = loss_rec + lambda_w * loss_w + lambda_z * loss_z + alpha * loss_cls
             
             loss.backward()
             optimizer.step()
@@ -193,7 +196,7 @@ def train_autoencoder(csv_path, epochs=80, batch_size=16, lr=1e-3, latent_dim=8,
             correct_train += (predicted == labels_idx).sum().item()
             
         epoch_loss = running_loss / len(train_loader.dataset)
-        train_acc = 100 * correct_train / total_train
+        train_acc = 100 * correct_train / total_train if total_train > 0 else 0.0
         train_losses.append(epoch_loss)
         train_accs.append(train_acc)
         
@@ -210,8 +213,11 @@ def train_autoencoder(csv_path, epochs=80, batch_size=16, lr=1e-3, latent_dim=8,
                 reconstruction, latent, logits = model(inputs)
                 
                 loss_rec = criterion_mse(reconstruction, inputs)
+                loss_w = model.weight_orthogonality_loss()
+                loss_z = model.latent_covariance_loss(latent)
                 loss_cls = criterion_ce(logits, labels_idx)
-                loss = (1 - alpha) * loss_rec + alpha * loss_cls
+                
+                loss = loss_rec + lambda_w * loss_w + lambda_z * loss_z + alpha * loss_cls
                 
                 val_loss += loss.item() * inputs.size(0)
                 
@@ -220,7 +226,7 @@ def train_autoencoder(csv_path, epochs=80, batch_size=16, lr=1e-3, latent_dim=8,
                 correct_val += (predicted == labels_idx).sum().item()
                 
         epoch_val_loss = val_loss / len(val_loader.dataset)
-        val_acc = 100 * correct_val / total_val
+        val_acc = 100 * correct_val / total_val if total_val > 0 else 0.0
         val_losses.append(epoch_val_loss)
         val_accs.append(val_acc)
         scheduler.step(epoch_val_loss)
@@ -267,13 +273,31 @@ def train_autoencoder(csv_path, epochs=80, batch_size=16, lr=1e-3, latent_dim=8,
         
         model_path = os.path.join(out_dir, f"autoencoder_emg_{latent_dim}d.pth")
         weights_to_save = best_model_wts if best_model_wts and not force_epochs else model.state_dict()
-        torch.save(weights_to_save, model_path)
         
-        # Guardar alias global en out_dir y en central_dir
+        # Checkpoint enriquecido con metadatos completos y retrocompatibilidad
+        ckpt_payload = {
+            'model_state_dict': weights_to_save,
+            'latent_dim': latent_dim,
+            'target_length': inferred_target_length,
+            'kernel_size': kernel_size,
+            'label_to_idx': dataset_train.label_to_idx,
+            'idx_to_label': {i: v for v, i in dataset_train.label_to_idx.items()},
+            'best_val_acc': best_val_acc,
+            'best_val_loss': best_val_loss,
+            'cfg': {
+                'latent_dim': latent_dim,
+                'kernel_size': kernel_size,
+                'lambda_w': lambda_w,
+                'lambda_z': lambda_z,
+                'alpha': alpha
+            }
+        }
+        
+        torch.save(ckpt_payload, model_path)
         alias_path = os.path.join(out_dir, "autoencoder_emg.pth")
-        torch.save(weights_to_save, alias_path)
-        torch.save(weights_to_save, os.path.join(central_dir, f"autoencoder_emg_{latent_dim}d.pth"))
-        torch.save(weights_to_save, os.path.join(central_dir, "autoencoder_emg.pth"))
+        torch.save(ckpt_payload, alias_path)
+        torch.save(ckpt_payload, os.path.join(central_dir, f"autoencoder_emg_{latent_dim}d.pth"))
+        torch.save(ckpt_payload, os.path.join(central_dir, "autoencoder_emg.pth"))
         
         # Guardar configuración de partición para ploteo y evaluación
         import json

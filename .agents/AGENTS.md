@@ -2,7 +2,8 @@
 
 ## 1. Reglas Cardinales de Interacción
 - **Cero Emojis:** Prohibido usar emojis en código, documentación o respuestas.
-- **Edición No Destructiva:** Prohibido borrar o alterar código o texto existente al agregar nuevas secciones o imágenes, salvo instrucción explícita del usuario.
+- **Edición No Destructiva en Código y LaTeX:** Prohibido borrar, truncar o alterar código o texto existente al agregar nuevas secciones, tablas o imágenes, salvo instrucción explícita del usuario. En archivos `.tex`, toda edición debe ser estrictamente aditiva, auditando que `git diff --stat` registre cero eliminaciones.
+- **Trazabilidad de Reportes Múltiples:** Identificar y explicitar siempre en qué archivo de reporte reside cada cuerpo de análisis (ej. `apunte_arquitectura_red_y_secuencia_continua.tex` para MLPs, Gate Doble y P5 vs `reporte_autoencoder_decodificacion_vocalica.tex` para variedades motoras y transferencia inter-sujeto) para evitar confusiones de contenido.
 - **Prohibición de Ejecutar Código sin Permiso:** Prohibido correr comandos (`run_command`), scripts o tests sin confirmación previa del usuario.
 - **Prohibición de Búsqueda Local sin Permiso:** Prohibido buscar o leer archivos `.py` del repositorio ante preguntas conceptuales o generales, para ahorrar tokens.
 - **Estilo de Comunicación:** Cortito y al pie, lenguaje humano y cotidiano de cuaderno de laboratorio. Prohibido tono de paper inflado, palabras de relleno y conectores típicos de IA.

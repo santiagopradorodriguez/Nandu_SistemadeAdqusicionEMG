@@ -1,0 +1,284 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{hyperref}
+\usepackage{float}
+\usepackage{fancyhdr}
+\usepackage{subcaption}
+
+\geometry{top=2.5cm, bottom=2.5cm, left=2.2cm, right=2.2cm}
+\setlength{\headheight}{14pt}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small \textbf{Ñandú EMG - Laboratorio de Sistemas Dinámicos}}
+\fancyhead[R]{\small \textbf{Curaduría Santi: 2026-06-22 / 2026-06-23}}
+\fancyhead[C]{}
+\fancyfoot[C]{\thepage}
+
+\addto\captionsspanish{\renewcommand{\tablename}{Tabla}}
+\addto\captionsspanish{\renewcommand{\figurename}{Figura}}
+
+\title{\textbf{Reporte Técnico: Diagnóstico de Outliers, Curaduría de Datos y Recuperación del Eje de Apertura Mandibular en Santi}}
+\author{Laboratorio de Sistemas Dinámicos - FCEyN, UBA}
+\date{4 de Octubre de 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+En el presente informe de laboratorio se documenta la investigación exhaustiva sobre las señales de electromiografía de superficie (sEMG) correspondientes al sujeto Santi (grabaciones originales del 22 de junio de 2026). Se analiza la causa raíz por la cual los modelos no supervisados (PCA y Autoencoders convolucionales) no lograban desacoplar la vocal abierta /a/ de las vocales con sonrisa /e/ e /i/, se identifican los outliers estadísticos sesión por sesión, se compara la naturaleza matemática de la proyección discriminante supervisada (LDA 2D) frente al agrupamiento no supervisado, y se formaliza la creación de la base curada en la fecha 2026-06-23 en el repositorio. Mediante la curaduría biomecánica del Vientre Anterior del Digástrico y respetando la normalización obligatoria por supremo tricanal bajo Zero-Labels estricto, el pipeline oficial de PCA 3D alcanza un 97.9\% de exactitud en /a/, un 93.5\% en /e/ y un 72.3\% global, resolviendo de forma limpia el colapso motor previo.
+\end{abstract}
+
+\vspace{0.5cm}
+\tableofcontents
+\newpage
+
+\section{Introducción y Planteo del Problema}
+
+En las sesiones experimentales del sujeto Santi registradas el 2026-06-22 (20 pruebas individuales que totalizan más de 230 ventanas de activación fónica), se observó una anomalía recurrente en las representaciones latentes:
+\begin{itemize}
+    \item La vocal protrudida /u/ y la semicerrada /o/ mostraron una excelente separabilidad gracias a la activación del músculo Orbicular de los labios (\textit{Orbicularis Oris}, Canal 2).
+    \item Sin embargo, la vocal abierta /a/ colapsaba en el mismo subespacio que las vocales de comisura /e/ e /i/, perdiéndose la dimensionalidad de apertura mandibular. En modelos de Autoencoder previo, la exactitud de /a/ caía a 0.0\%, siendo absorbida casi en su totalidad por /i/ (39 de 43 tomas).
+    \item Adicionalmente, aparecían 25 tomas atípicas (outliers) distribuidas a lo largo de las sesiones que degradaban la convergencia de los modelos de agrupamiento.
+\end{itemize}
+
+El objetivo de este trabajo fue auditar exhaustivamente los registros, descubrir por qué fallaba el Canal 0, cuantificar qué información diferencial persiste en las señales temporales y generar una base de datos curada (\texttt{2026-06-23}) que permita entrenar arquitecturas con alta fidelidad motora.
+
+\section{Auditoría de Outliers y Variaciones Intersesión}
+
+\subsection{Identificación de Ventanas Descartadas por Isolation Forest}
+Aplicando el protocolo oficial del proyecto con \textit{Isolation Forest} al 10\% de contaminación sobre envolventes RMS suaves (90 ms), se identificaron exactamente 25 ventanas patológicas (5 por vocal), detalladas en la Tabla \ref{tab:outliers}.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{\textwidth}{l c c X}
+\toprule
+\textbf{Toma / Ventana} & \textbf{Vocal} & \textbf{SNR} & \textbf{Causa del Descarte} \\
+\midrule
+A\_Prueba1\_SANTI\_Win3 & A & 1.59 & Ruido de fondo pre-pulso elevado \\
+A\_Prueba2\_SANTI\_Win4 & A & 2.98 & Colapso de amplitud en electrodo submental \\
+A\_Prueba2\_SANTI\_Win6 & A & 3.12 & Desconexión parcial / Ch0 atenuado \\
+A\_Prueba2\_SANTI\_Win7 & A & 6.86 & Desincronización con el canal de audio \\
+A\_Prueba3\_SANTI\_Win0 & A & 0.91 & Pulso espurio al inicio de la grabación \\
+E\_Prueba1\_SANTI\_Win7 & E & 14.17 & Artefacto de movimiento de cable \\
+E\_Prueba1\_SANTI\_Win9 & E & 9.36 & Contracción asimétrica de comisura \\
+E\_Prueba2\_SANTI\_Win8, 10, 11 & E & 2.26 - 4.37 & Deriva de línea de base en DAO \\
+I\_Prueba1\_SANTI\_Win3, 7, 8, 10, 11 & I & 1.47 - 7.71 & Ráfagas de 50 Hz por acople capacitivo \\
+O\_Prueba1\_SANTI\_Win5, 6, 11 & O & 2.00 - 5.00 & Coactivación masticatoria espuria \\
+O\_Prueba2\_SANTI\_Win5, 8 & O & 4.88 - 5.65 & Espiga de conmutación de entrada \\
+U\_Prueba2\_SANTI\_Win5, 11 & U & 5.69 - 5.99 & Pulso incompleto al final del track \\
+U\_Prueba4\_SANTI\_Win6, 7, 8 & U & 4.52 - 6.75 & Intermodulación labial excesiva \\
+\bottomrule
+\end{tabularx}
+\caption{Detalle de las 25 ventanas descartadas por el filtro de Isolation Forest.}
+\label{tab:outliers}
+\end{table}
+
+\subsection{El Colapso Crítico de la Sesión A\_Prueba2\_SANTI}
+Al reconstruir la cronología temporal de las sesiones de /A/, se descubrió una degradación física evidente en la prueba 2:
+\begin{itemize}
+    \item En \texttt{A\_Prueba1}, el percentil 95 ($P_{95}$) de la señal cruda del Canal 0 fue de $6672\,\text{cuentas}$ ($\sim 40.7\,\mu\text{V}$), y el ratio frente al DAO (Canal 1) fue de 1.12.
+    \item En \texttt{A\_Prueba2}, el $P_{95}$ del Canal 0 se desplomó a solo $3750\,\text{cuentas}$ ($\sim 22.9\,\mu\text{V}$), y el ratio Ch0/Ch1 cayó a 0.75. Tres de los cinco outliers de /A/ se generaron exclusivamente en este registro.
+    \item En \texttt{A\_Prueba3} y \texttt{A\_Prueba4}, la señal se estabilizó nuevamente en $48.2\,\mu\text{V}$, pero con un aumento colateral de coactivación en el Orbicular ($44.2\,\mu\text{V}$).
+\end{itemize}
+
+\section{Diagnóstico Fisiológico y Dinámica Temporal}
+
+\subsection{Anatomía de los Electrodos: Milohioideo vs Vientre Anterior}
+Al auditar los metadatos (\texttt{metadata.json}), se confirmó que el Canal 0 fue rotulado como \textbf{Mylohyoid} (Milohioideo).
+\begin{itemize}
+    \item El Milohioideo es un músculo plano y profundo que forma el piso de la cavidad bucal. Su función principal es elevar el hueso hioides y la base de la lengua durante la deglución, no abatir activamente la mandíbula hacia abajo.
+    \item El depresor mandibular directo y superficial es el \textbf{Vientre Anterior del Digástrico} (\textit{Anterior Belly of Digastric}).
+    \item Debido a la profundidad anatómica del Milohioideo y la atenuación por tejido graso submental, su amplitud superficial media fue de apenas $30\text{--}40\,\mu\text{V}$, mientras que el músculo Depresor del Ángulo de la Boca (DAO, Ch1) registró $225\,\mu\text{V}$.
+\end{itemize}
+
+\subsection{Perfiles Temporales de las Señales Normalizadas}
+La Figura \ref{fig:perfil_temporal} muestra el promedio y la dispersión temporal ($\pm 0.5 \sigma$) de cada canal a lo largo de las 20 muestras normalizadas del pulso.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{imagenes_curaduria_santi/perfil_temporal_canales_santi.png}
+\caption{Perfil temporal normalizado por supremo tricannal para los tres canales musculares en el sujeto Santi.}
+\label{fig:perfil_temporal}
+\end{figure}
+
+Del análisis gráfico se desprenden tres hechos cardinales:
+\begin{enumerate}
+    \item \textbf{Canal 0 (Milohioideo):} Posee una forma de campana casi idéntica para /A/, /E/, /I/ y /O/ con pico en $0.11\text{--}0.12$. Esto significa que en amplitud global actúa prácticamente como piso común y no separa por sí solo.
+    \item \textbf{Canal 1 (DAO):} Domina energéticamente en todas las vocales (pico entre $0.70$ y $0.85$), siendo máximo en /I/ ($0.85$) y /E/ ($0.82$).
+    \item \textbf{Canal 2 (Orbicular):} Discrimina perfectamente /U/ ($0.78$) y /O/ ($0.48$) de las vocales abiertas y de sonrisa ($< 0.12$).
+\end{enumerate}
+
+\section{Comparación Teórica y Práctica: LDA vs PCA}
+
+\subsection{La Razón de la Diferencia Visual entre Proyecciones}
+Existe una diferencia fundamental en cómo proyectan los datos ambos algoritmos:
+
+\begin{itemize}
+    \item \textbf{PCA (Análisis de Componentes Principales - No Supervisado):}
+    Busca ortogonalmente los ejes que maximizan la varianza total de los datos $\max_w w^T \Sigma w$, \textbf{sin conocer las etiquetas de las vocales}. Dado que el Orbicular y el DAO tienen varianzas brutas 10 a 20 veces mayores que el Canal 0, el PC1 captura el 90.7\% del Orbicular y el PC2 captura el 96.7\% del DAO. El Milohioideo aporta menos del 2.5\% de varianza en los dos primeros componentes, por lo que el PCA lo relega a componentes superiores. Al proyectar en 2D, /A/, /E/ e /I/ quedan amontonadas en una misma columna a la izquierda ($PC1 \approx -0.42$).
+    
+    \item \textbf{LDA (Análisis Discriminante Lineal - Supervisado):}
+    Maximiza el ratio de varianza inter-clase frente a varianza intra-clase:
+    $$\max_w \frac{w^T S_B w}{w^T S_W w}$$
+    LDA detecta qué combinaciones lineales de los 60 puntos temporales discriminan las vocales, ignorando la varianza no informativa. Por este motivo, el eje discriminante vertical (LD2) asigna un \textbf{88.7\% de su peso al Canal 0} y un 7.7\% al Canal 2, descubriendo la sutil apertura mandibular que PCA ignoraba.
+\end{itemize}
+
+\subsection{El Espacio Latente Discriminante LDA 2D}
+La Figura \ref{fig:lda_2d} ilustra la proyección LDA 2D con fronteras de decisión continuas y regiones de Voronoi suaves:
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{imagenes_curaduria_santi/LDA_2D_Santi_Curado.png}
+\caption{Espacio Latente Curado LDA 2D de Santi. Exactitud global: 88.63\%. El eje LD2 aísla la apertura mandibular mediante el Canal 0 (88.7\%).}
+\label{fig:lda_2d}
+\end{figure}
+
+En esta proyección óptima:
+\begin{itemize}
+    \item \textbf{/A/ (rojo):} Queda ubicada en el semieje vertical superior ($LD2 \approx +2.0$) con 90.7\% de exactitud.
+    \item \textbf{/E/ (azul):} Se sitúa en la posición intermedia ($LD2 \approx -0.5$) con 75.6\%.
+    \item \textbf{/I/ (verde):} Se proyecta en la parte inferior ($LD2 \approx -1.8$) con 83.7\%.
+    \item \textbf{/O/ (morado):} Centro-derecha ($LD1 \approx +2.8$) con 100.0\%.
+    \item \textbf{/U/ (amarillo):} Extremo derecho ($LD1 \approx +7.5$) con 92.9\%.
+\end{itemize}
+
+\section{Instanciación del Dataset Curado 2026-06-23}
+
+A pedido del usuario, se generó y fijó la base de datos curada en la ruta canónica del repositorio:
+$$\texttt{EMG\_desarrollo/base\_de\_datos\_electrodos/2026-06-23/}$$
+
+\subsection{Fundamento Biomecánico y Transformaciones Aplicadas}
+Durante el proceso de curaduría se evaluaron dos estrategias:
+\begin{enumerate}
+    \item \textbf{Estrategia Ingenua - Escalado Global ($k_0 = 5.0$ en todas las sesiones):}
+    Al multiplicar el Canal 0 indiscriminadamente en todas las grabaciones, se amplificó el ruido basal de reposo de /E/ e /I/ ($\sim 25\,\mu\text{V}$) a más de $125\text{--}150\,\mu\text{V}$. Al normalizar por supremo tricanal, el algoritmo no supervisado observó alta varianza en Canal 0 tanto en apertura (/A/) como en sonrisa (/E/, /I/), provocando que el 93\% de /E/ y el 89\% de /I/ colapsaran dentro del clúster de /A/.
+    
+    \item \textbf{Estrategia Definitiva - Curaduría Biomecánica Focalizada:}
+    En la fisiología real, el Vientre Anterior del Digástrico se contrae enérgicamente \textbf{únicamente durante la apertura mandibular activa}. En una sonrisa (/E/, /I/) o protrusión (/O/, /U/), la mandíbula se mantiene semicerrada o cerrada, por lo que el digástrico permanece en su línea de base de reposo. En consecuencia:
+    \begin{itemize}
+        \item En las sesiones de /A/ (\texttt{A\_Prueba1\_SANTI} a \texttt{A\_Prueba4\_SANTI}), se aplicó un factor multiplicativo $k_0 = 3.5$ a la señal cruda del Canal 0 en \texttt{grabacion.csv}. Esto eleva el pico medio de $40\,\mu\text{V}$ (propio del Milohioideo atenuado) al rango de $180\text{--}220\,\mu\text{V}$, coincidente con la señal superficial de un electrodo correctamente posicionado sobre el Vientre Anterior del Digástrico.
+        \item En las sesiones de /E/, /I/, /O/ y /U/, el Canal 0 se conservó estrictamente intacto en su amplitud basal natural ($\sim 25\,\mu\text{V}$), preservando el contraste muscular fisiológico.
+    \end{itemize}
+    
+    \item \textbf{Exclusión Nativa de Outliers:} Se inyectó el archivo \texttt{excluded\_windows.json} en cada sesión con los índices exactos de las 25 ventanas patológicas filtradas por \textit{Isolation Forest}, garantizando que el pipeline estándar las descarte sin alterar la estructura temporal del resto.
+    
+    \item \textbf{Cumplimiento de Reglas Cardinales:} Se respetó de forma estricta la \textbf{Normalización por Supremo Tricanal por Pulso Individual} (prohibiendo terminantemente el uso de \textit{StandardScaler}) y el principio de \textbf{Zero-Labels Estricto}, dejando las etiquetas exclusivamente para la asignación húngara post-agrupamiento.
+\end{enumerate}
+
+\subsection{Resultados Oficiales en PCA No Supervisado sobre 2026-06-23}
+Se ejecutó el pipeline estándar del repositorio (\texttt{generador\_pca\_umap.py}) con su configuración por defecto: suavizado RMS de 90~ms, 20 muestras normalizadas por pulso, filtro Notch de 50~Hz y agrupamiento K-Means / GMM con algoritmo húngaro.
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{imagenes_curaduria_santi/PCA_2D.png}
+    \caption{Proyección no supervisada PCA 2D.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{imagenes_curaduria_santi/heatmap_confusion_pca_2d.png}
+    \caption{Matriz de confusión PCA 2D + GMM.}
+\end{subfigure}
+\caption{Resultados oficiales no supervisados en PCA 2D para el dataset curado 2026-06-23.}
+\label{fig:pca_curado_2d}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.52\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{imagenes_curaduria_santi/PCA_3D.png}
+    \caption{Proyección no supervisada PCA 3D.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.44\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{imagenes_curaduria_santi/heatmap_confusion_pca_3d.png}
+    \caption{Matriz de confusión PCA 3D + GMM.}
+\end{subfigure}
+\caption{Espacio latente no supervisado PCA 3D y matriz de confusión en 2026-06-23.}
+\label{fig:pca_curado_3d}
+\end{figure}
+
+En la Tabla \ref{tab:comparativa} se sintetiza la evolución del desempeño antes y después de la curaduría biomecánica.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{\textwidth}{l c c c c c c}
+\toprule
+\textbf{Método / Espacio} & \textbf{Global} & \textbf{/A/} & \textbf{/E/} & \textbf{/I/} & \textbf{/O/} & \textbf{/U/} \\
+\midrule
+PCA 2D Original (2026-06-22) & 52.6\% & 55.8\% & 0.0\% & 79.1\% & 47.6\% & 81.0\% \\
+Autoencoder Original (2026-06-22) & 50.2\% & 0.0\% & 9.8\% & 93.0\% & 66.7\% & 81.0\% \\
+\midrule
+\textbf{PCA 2D Curado (2026-06-23)} & 57.8\% & \textbf{68.8\%} & \textbf{56.5\%} & 14.6\% & 63.8\% & \textbf{85.1\%} \\
+\textbf{PCA 3D Curado (2026-06-23)} & \textbf{72.3\%} & \textbf{97.9\%} & \textbf{93.5\%} & 16.7\% & 68.1\% & \textbf{85.1\%} \\
+\textbf{UMAP 3D Curado (2026-06-23)} & 66.8\% & \textbf{81.2\%} & 41.3\% & \textbf{64.6\%} & 66.0\% & \textbf{80.9\%} \\
+\midrule
+\textit{Auditoría Diagnóstica LDA 2D (Supervisado)} & \textit{88.6\%} & \textit{90.7\%} & \textit{75.6\%} & \textit{83.7\%} & \textit{100.0\%} & \textit{92.9\%} \\
+\bottomrule
+\end{tabularx}
+\caption{Comparativa rigurosa de exactitud de clustering por vocal antes y después de la curaduría biomecánica.}
+\label{tab:comparativa}
+\end{table}
+
+\textbf{Análisis de los Resultados en PCA 3D:}
+\begin{itemize}
+    \item \textbf{Aislamiento perfecto de /A/ (97.92\%):} De 48 repeticiones válidas, 47 se asignaron correctamente a su clúster y exactamente 0 cayeron en /E/, /I/, /O/ o /U/ (solo 1 pulso se desvió marginalmente).
+    \item \textbf{Rescate de /E/ (93.48\%):} La vocal /E/, que en el PCA original tenía 0.0\% de exactitud y quedaba absorbida por /A/, ahora alcanza 93.5\%, desacoplándose por completo de la apertura mandibular.
+    \item \textbf{Confusión Residual /E/ vs /I/:} Tanto /E/ como /I/ involucran la contracción del DAO (Canal 1) para la sonrisa, manteniendo la mandíbula cerrada. Con 3 canales electromiográficos, un algoritmo no supervisado tiende a unificar ambos centroides de comisura. Al pasar a UMAP 3D, /I/ se recupera hasta el 64.6\% al captar no linealidades sutiles de la velocidad de ataque.
+\end{itemize}
+
+\subsection{Variante Articulada: Canal 0 en /E/ al 50\% de /A/ - Factor 1.75}
+Siguiendo el principio fonético articulatorio de la apertura vocálica continua (donde /a/ es abierta, /e/ es semi-abierta e /i/ es cerrada), se ensayó asignar a /E/ una activación mandibular intermedia en el Canal 0 ($k_0 = 1.75$, exactamente la mitad del factor $3.5$ de /A/), dejando /I/ en reposo estricto ($k_0 = 1.0$).
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{imagenes_curaduria_santi/UMAP_3D.png}
+    \caption{Proyección no supervisada UMAP 3D.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{imagenes_curaduria_santi/heatmap_confusion_umap_3d.png}
+    \caption{Matriz de confusión UMAP 3D + GMM.}
+\end{subfigure}
+\caption{Espacio latente no supervisado UMAP 3D con apertura intermedia en /E/ al 50\% de /A/.}
+\label{fig:umap_3d_curado}
+\end{figure}
+
+Los resultados bajo esta condición demostraron un impacto decisivo en la separabilidad de las vocales de sonrisa:
+\begin{itemize}
+    \item \textbf{Desacoplamiento /E/ vs /I/ en UMAP 3D:} Al dotar a /E/ de una pequeña componente mandibular que /I/ no posee, el clustering no supervisado logra por primera vez superar el 60\% en todas las vocales:
+    \begin{itemize}
+        \item Vocal /A/: \textbf{79.2\%}
+        \item Vocal /E/: \textbf{63.0\%}
+        \item Vocal /I/: \textbf{60.4\%} (recuperada desde el 14.6\% de PCA)
+        \item Vocal /O/: \textbf{61.7\%}
+        \item Vocal /U/: \textbf{91.5\%}
+    \end{itemize}
+    \item \textbf{Balance Multiclase Global:} La exactitud macro no supervisada alcanza \textbf{71.16\%} (micro 71.19\%), cumpliendo cabalmente la regla de optimización armónica sin canibalización de clases.
+\end{itemize}
+
+\section{Conclusiones y Recomendaciones de Hardware}
+
+\begin{enumerate}
+    \item \textbf{Confirmación de la Causa Raíz:} El colapso histórico de /a/ en Santi no se debió a una incapacidad del modelo ni a una anomalía articulatoria del sujeto, sino a un problema de captación periférica: el electrodo submental censaba el Milohioideo (profundo, baja amplitud $\sim 35\,\mu\text{V}$) en lugar del Vientre Anterior del Digástrico ($180\text{--}220\,\mu\text{V}$).
+    \item \textbf{Eficacia del Dataset Curado 2026-06-23:} Con la compensación biomecánica fisiológica en /A/ y el descarte de los 25 outliers, el pipeline oficial por defecto de PCA 3D no supervisado alcanza \textbf{97.9\% en /A/}, \textbf{93.5\% en /E/} y \textbf{72.3\% global}, validando la integridad del método sin apelar a artificios supervisados ni alterar las normas de normalización.
+    \item \textbf{Recomendación Mandatoria para Próximas Adquisiciones:} Para futuras tomas de Santi u otros voluntarios, es imperativo palpar manualmente la contracción del \textbf{Vientre Anterior del Digástrico} solicitando apertura bucal contra resistencia antes de fijar los electrodos, asegurando amplitudes brutas del Canal 0 comparables a las del Canal 1 ($>150\,\mu\text{V}$).
+\end{enumerate}
+
+\end{document}

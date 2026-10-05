@@ -115,18 +115,35 @@ def decodificar_secuencia(carpeta_secuencia, modelo_path, alpha_ruido=1.0, smoot
     print(f"Cargando modelo en dispositivo: {device}")
     
     checkpoint = torch.load(modelo_path, map_location=device)
-    state_dict = checkpoint if isinstance(checkpoint, dict) else checkpoint.state_dict()
+    mapa_vocales = {0: 'A', 1: 'E', 2: 'I', 3: 'O', 4: 'U'}
     
-    inferred_latent_dim = 16
-    inferred_target_length = target_length
-    inferred_kernel_size = 5
-    
-    if 'encoder_fc.3.weight' in state_dict:
-        inferred_latent_dim = state_dict['encoder_fc.3.weight'].shape[0]
-    if 'encoder_fc.0.weight' in state_dict:
-        inferred_target_length = state_dict['encoder_fc.0.weight'].shape[1] // 32
-    if 'encoder_cnn.0.weight' in state_dict:
-        inferred_kernel_size = state_dict['encoder_cnn.0.weight'].shape[2]
+    if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+        state_dict = checkpoint['model_state_dict']
+        inferred_latent_dim = checkpoint.get('latent_dim', 2)
+        inferred_target_length = checkpoint.get('target_length', target_length)
+        inferred_kernel_size = checkpoint.get('kernel_size', 5)
+        if 'idx_to_label' in checkpoint:
+            mapa_vocales = {int(k): v for k, v in checkpoint['idx_to_label'].items()}
+    else:
+        state_dict = checkpoint if isinstance(checkpoint, dict) else checkpoint.state_dict()
+        inferred_latent_dim = 16
+        inferred_target_length = target_length
+        inferred_kernel_size = 5
+        
+        if 'fc2.weight' in state_dict:
+            inferred_latent_dim = state_dict['fc2.weight'].shape[0]
+        elif 'encoder_fc.3.weight' in state_dict:
+            inferred_latent_dim = state_dict['encoder_fc.3.weight'].shape[0]
+            
+        if 'fc1.weight' in state_dict:
+            inferred_target_length = state_dict['fc1.weight'].shape[1] // 12
+        elif 'encoder_fc.0.weight' in state_dict:
+            inferred_target_length = state_dict['encoder_fc.0.weight'].shape[1] // 32
+            
+        if 'conv1.weight' in state_dict:
+            inferred_kernel_size = state_dict['conv1.weight'].shape[2]
+        elif 'encoder_cnn.0.weight' in state_dict:
+            inferred_kernel_size = state_dict['encoder_cnn.0.weight'].shape[2]
         
     print(f"Arquitectura detectada en checkpoint -> Latent Dim: {inferred_latent_dim}D, Target Length por Canal: {inferred_target_length}, Kernel Size: {inferred_kernel_size}")
     
@@ -138,6 +155,10 @@ def decodificar_secuencia(carpeta_secuencia, modelo_path, alpha_ruido=1.0, smoot
     X_tensores = []
     ventanas_validas_grafico = [] # Guardar las formas de onda para plotear
     
+    from scipy.signal import butter, filtfilt
+    b_bw, a_bw = butter(3, 0.3, btype='low')
+    n_base = max(2, min(10, TARGET_LEN // 2))
+
     for win_idx, pico in enumerate(picos_mic):
         pre_samples = int(muestras_pulso * 0.4)
         post_samples = int(muestras_pulso * 0.6)
@@ -196,7 +217,24 @@ def decodificar_secuencia(carpeta_secuencia, modelo_path, alpha_ruido=1.0, smoot
             seg_rs[seg_rs < 0] = 0.0
             vector_concatenado.append(seg_rs)
             
-        tensor_sample = np.stack(vector_concatenado) # (3, TARGET_LEN)
+        tensor_raw = np.stack(vector_concatenado) # (3, TARGET_LEN)
+        
+        # Acondicionamiento Fisiológico Idéntico al Récord (Butterworth + Resta Reposo + P95)
+        tensor_filt = np.zeros_like(tensor_raw)
+        for c in range(3):
+            tensor_filt[c] = filtfilt(b_bw, a_bw, tensor_raw[c])
+            
+        tensor_sample = np.zeros_like(tensor_filt)
+        for c in range(3):
+            base_mean = np.mean(tensor_filt[c, :n_base])
+            p95 = np.percentile(tensor_filt[c], 95)
+            scale = p95 - base_mean
+            if scale < 1e-4:
+                scale = np.max(tensor_filt[c]) - base_mean
+            if scale < 1e-6:
+                scale = 1.0
+            tensor_sample[c] = (tensor_filt[c] - base_mean) / scale
+            
         X_tensores.append(tensor_sample)
         ventanas_validas_grafico.append(vector_concatenado)
 
@@ -207,7 +245,6 @@ def decodificar_secuencia(carpeta_secuencia, modelo_path, alpha_ruido=1.0, smoot
     # 4. Inferencia con la Red Neuronal
     X_torch = torch.tensor(np.array(X_tensores), dtype=torch.float32).to(device)
     
-    mapa_vocales = {0: 'A', 1: 'E', 2: 'I', 3: 'O', 4: 'U'}
     predicciones = []
     
     with torch.no_grad():

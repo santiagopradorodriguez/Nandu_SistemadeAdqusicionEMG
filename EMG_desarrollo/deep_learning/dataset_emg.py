@@ -26,14 +26,42 @@ class EMGDataset(Dataset):
             target_length = features.shape[1] // 3
             
         # Remodelamos a (N, 3, target_length)
-        self.tensors = features.reshape(-1, 3, target_length)
-        print(f"[Dataset EMG] Dataset convertido exitosamente a Tensor de forma: {self.tensors.shape}")
+        raw_tensors = features.reshape(-1, 3, target_length)
         
-        # Mapeo de vocales a enteros (opcional, para si queremos clasificar después)
+        # Acondicionamiento Fisiológico del Modelo Récord (Butterworth + Resta Reposo + P95)
+        self.tensors = self._acondicionar_tensores_record(raw_tensors)
+        print(f"[Dataset EMG] Dataset acondicionado según norma récord a Tensor: {self.tensors.shape}")
+        
+        # Mapeo de vocales a enteros
         vocales_unicas = sorted(list(set(self.labels)))
         self.label_to_idx = {v: i for i, v in enumerate(vocales_unicas)}
         
         self.apply_augmentation = apply_augmentation
+
+    def _acondicionar_tensores_record(self, tensors):
+        """Aplica el filtrado Butterworth 3 (Wn=0.3), sustracción de base inicial y división por P95 del récord."""
+        from scipy.signal import butter, filtfilt
+        N, n_ch, n_pts = tensors.shape
+        b_bw, a_bw = butter(3, 0.3, btype='low')
+        X_filt = np.zeros_like(tensors)
+        for i in range(N):
+            for c in range(n_ch):
+                X_filt[i, c, :] = filtfilt(b_bw, a_bw, tensors[i, c, :])
+
+        X_norm = np.zeros_like(X_filt)
+        n_base = max(2, min(10, n_pts // 2))
+        for i in range(N):
+            for c in range(n_ch):
+                base_mean = np.mean(X_filt[i, c, :n_base])
+                p95 = np.percentile(X_filt[i, c, :], 95)
+                scale = p95 - base_mean
+                if scale < 1e-4:
+                    scale = np.max(X_filt[i, c, :]) - base_mean
+                if scale < 1e-6:
+                    scale = 1.0
+                X_norm[i, c, :] = (X_filt[i, c, :] - base_mean) / scale
+
+        return X_norm
 
     def __len__(self):
         return len(self.tensors)
@@ -43,25 +71,14 @@ class EMGDataset(Dataset):
         y_str = self.labels[idx]
         y_idx = self.label_to_idx[y_str]
         
-        # Data Augmentation (Validado por el Agente Físico - Mundo Real)
+        # Data Augmentation suave (preserva la continuidad de atractores sin deformar el manifold)
         if self.apply_augmentation:
-            # 1. Escalamiento Proporcional (Variaciones de fuerza natural)
-            escala = np.random.uniform(0.85, 1.15)
+            # 1. Escalamiento Proporcional suave (0.92 a 1.08)
+            escala = np.random.uniform(0.92, 1.08)
             x = x * escala
             
-            # 2. Ruido Gaussiano (Simula ruido de piso del amplificador / piel)
-            # Acotado pero presente para forzar a la red a no memorizar valores exactos
-            noise = np.random.normal(0, 0.02, x.shape).astype(np.float32)
+            # 2. Ruido Gaussiano sutil
+            noise = np.random.normal(0, 0.005, x.shape).astype(np.float32)
             x = x + noise
             
-            # 3. Time Masking Abrupto (Simulación de fallas de contacto/ADC)
-            # Validado físicamente: enseña a la red a interpolar la inercia real del músculo
-            # frente a un dropout de telemetría o falso contacto.
-            if np.random.rand() > 0.5:
-                mask_len = np.random.randint(2, 6)
-                mask_start = np.random.randint(0, x.shape[1] - mask_len)
-                x[:, mask_start:mask_start+mask_len] = 0.0
-            
-            x = np.clip(x, 0, 3.0) # Clampeamos seguridad extrema
-            
-        return torch.tensor(x), torch.tensor(y_idx), y_str
+        return torch.tensor(x, dtype=torch.float32), torch.tensor(y_idx, dtype=torch.long), y_str

@@ -36,16 +36,31 @@ def plot_latent_space(csv_path, model_path, latent_dim=16, train_sessions=None, 
     
     # Cargar pesos del modelo y deducir dimensiones reales del archivo .pth
     checkpoint = torch.load(model_path, map_location=device)
-    state_dict = checkpoint if isinstance(checkpoint, dict) else checkpoint.state_dict()
-    
-    if 'encoder_fc.3.weight' in state_dict:
-        latent_dim = state_dict['encoder_fc.3.weight'].shape[0]
-    if 'encoder_fc.0.weight' in state_dict:
-        target_length = state_dict['encoder_fc.0.weight'].shape[1] // 32
+    if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+        state_dict = checkpoint['model_state_dict']
+        latent_dim = checkpoint.get('latent_dim', latent_dim)
+        target_length = checkpoint.get('target_length', inferred_target_length)
+        kernel_size = checkpoint.get('kernel_size', 5)
     else:
-        target_length = inferred_target_length
-        
-    kernel_size = state_dict['encoder_cnn.0.weight'].shape[2] if 'encoder_cnn.0.weight' in state_dict else 5
+        state_dict = checkpoint if isinstance(checkpoint, dict) else checkpoint.state_dict()
+        if 'fc2.weight' in state_dict:
+            latent_dim = state_dict['fc2.weight'].shape[0]
+        elif 'encoder_fc.3.weight' in state_dict:
+            latent_dim = state_dict['encoder_fc.3.weight'].shape[0]
+            
+        if 'fc1.weight' in state_dict:
+            target_length = state_dict['fc1.weight'].shape[1] // 12
+        elif 'encoder_fc.0.weight' in state_dict:
+            target_length = state_dict['encoder_fc.0.weight'].shape[1] // 32
+        else:
+            target_length = inferred_target_length
+            
+        if 'conv1.weight' in state_dict:
+            kernel_size = state_dict['conv1.weight'].shape[2]
+        elif 'encoder_cnn.0.weight' in state_dict:
+            kernel_size = state_dict['encoder_cnn.0.weight'].shape[2]
+        else:
+            kernel_size = 5
         
     print(f"Dimensiones activas -> Latent Dim: {latent_dim}D, Target Length por Canal: {target_length}, Kernel Size: {kernel_size}")
     
