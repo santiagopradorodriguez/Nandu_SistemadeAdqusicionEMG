@@ -42,6 +42,8 @@
 - **Reportes LaTeX (fancyhdr):** Configurar solo `\fancyhead[L]` y `\fancyhead[R]`. Dejar `\fancyhead[C]` vacío para evitar solapamientos.
 
 ## 6. Organización de Archivos y Memoria
+- **Contención de Códigos Experimentales en Libro de Experimentos IA:**
+  Todo nuevo script de prueba, barrido de hiperparámetros o experimento puntual de modelado debe guardarse obligatoriamente dentro de `reportes_experimentos/libro_experimentos_ia/scripts_experimentos/`. Prohibido dispersar scripts experimentales sueltos en `EMG_desarrollo/deep_learning/` o en la raíz del repositorio, preservando limpio el código fuente de producción de la aplicación.
 - **Jerarquía Oficial de Resultados:** Guardar modelos en `EMG_desarrollo/resultados/resultados_autoencoder/modelos_entrenados/`, figuras en `figuras_evaluacion/` y datasets en `cache_datasets/`. Prohibido dispersar archivos sueltos en la raíz o en `/tmp/`.
 - **Memoria del Proyecto:**
   - Al iniciar el chat, consultar `.agents/MEMORIA_ACTIVA.md` (resumen ejecutivo de ~50 líneas).

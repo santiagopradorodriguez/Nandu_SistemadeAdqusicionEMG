@@ -74,6 +74,11 @@ def export_cluster_data(output_path, algoritmo, model, centroids, vocales_unicas
             vocal = vocales_unicas[real_idx]
             cov = model.covariances_[kmeans_idx].tolist()
             data["covarianzas_mapeadas"][vocal] = cov
+    elif "lda" in str(algoritmo).lower() and hasattr(model, 'covariance_'):
+        data["covarianzas_mapeadas"] = {}
+        for kmeans_idx, real_idx in cluster_to_vocal_idx.items():
+            vocal = vocales_unicas[real_idx]
+            data["covarianzas_mapeadas"][vocal] = model.covariance_.tolist()
             
     with open(json_path, 'w') as f:
         json.dump(data, f, indent=4)
@@ -641,8 +646,15 @@ def evaluar_clustering_no_supervisado(X, Y, nombre, algoritmo="K-Means", verbose
         if verbose: print("Aviso: Solo hay una clase seleccionada. El clustering no tiene sentido.")
         n_clases = 2 # Evitar crash del modelo
 
-    # Encontrar clústeres ciegos
-    if algoritmo == "GMM":
+    # Encontrar clústeres / particiones
+    alg_str = str(algoritmo).lower().strip()
+    if "lda" in alg_str:
+        from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+        model = LinearDiscriminantAnalysis()
+        y_true_int = np.array([vocales_unicas.index(v) for v in Y])
+        model.fit(X, y_true_int)
+        y_pred_kmeans = model.predict(X)
+    elif algoritmo == "GMM" or alg_str == "gmm":
         from sklearn.mixture import GaussianMixture
         model = GaussianMixture(n_components=n_clases, covariance_type='full', random_state=42, n_init=100, max_iter=500)
         y_pred_kmeans = model.fit_predict(X)
@@ -925,14 +937,20 @@ def plot_analisis_errores_3d_proyecciones_2d(X_proj, Y, title, output_path, vari
         
         # Entrenar un modelo 2D para esta cara para dibujar el fondo
         n_clases = len(vocales)
-        if algoritmo == "GMM":
+        alg_str = str(algoritmo).lower().strip()
+        y_true_int = np.array([vocales.index(v) for v in Y])
+        if "lda" in alg_str:
+            from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+            model = LinearDiscriminantAnalysis()
+            model.fit(X_2d, y_true_int)
+        elif "gmm" in alg_str:
             from sklearn.mixture import GaussianMixture
             model = GaussianMixture(n_components=n_clases, covariance_type='full', random_state=42)
+            model.fit(X_2d)
         else:
             from sklearn.cluster import KMeans
             model = KMeans(n_clusters=n_clases, random_state=42, n_init=10)
-        
-        model.fit(X_2d)
+            model.fit(X_2d)
         
         x_min, x_max = X_2d[:, 0].min() - 0.5, X_2d[:, 0].max() + 0.5
         y_min, y_max = X_2d[:, 1].min() - 0.5, X_2d[:, 1].max() + 0.5
@@ -1075,7 +1093,15 @@ def plot_analisis_errores_2d(X, Y, Tomas, title, output_path, variance_ratios=No
     for k, v in sorted(collections.Counter(Y).items()):
         print(f"  {k}: {v} muestras")
 
-    if algoritmo in ["GMM", "GMM Jerárquico (PCA Local)"]:
+    alg_str = str(algoritmo).lower().strip()
+    if "lda" in alg_str:
+        from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+        model = LinearDiscriminantAnalysis()
+        y_true_int = np.array([vocales_unicas.index(v) for v in Y])
+        model.fit(X, y_true_int)
+        y_pred_kmeans = model.predict(X)
+        centroids = model.means_
+    elif algoritmo in ["GMM", "GMM Jerárquico (PCA Local)"] or "gmm" in alg_str:
         from sklearn.mixture import GaussianMixture
         model = GaussianMixture(n_components=n_clases, covariance_type='full', random_state=42, n_init=100, max_iter=500)
         y_pred_kmeans = model.fit_predict(X)
@@ -1112,7 +1138,7 @@ def plot_analisis_errores_2d(X, Y, Tomas, title, output_path, variance_ratios=No
     palette = sns.color_palette("Set1", n_colors=n_clases)
     
     # --- RENDERIZADO AVANZADO (Fondo) ---
-    if algoritmo in ["GMM", "GMM Jerárquico (PCA Local)"] and estilo_visual in ["Sombreado", "Fronteras"]:
+    if (algoritmo in ["GMM", "GMM Jerárquico (PCA Local)"] or "gmm" in alg_str or "lda" in alg_str) and estilo_visual in ["Sombreado", "Fronteras"]:
         x_min, x_max = X[:, 0].min() - (X[:, 0].max() - X[:, 0].min())*0.1, X[:, 0].max() + (X[:, 0].max() - X[:, 0].min())*0.1
         y_min, y_max = X[:, 1].min() - (X[:, 1].max() - X[:, 1].min())*0.1, X[:, 1].max() + (X[:, 1].max() - X[:, 1].min())*0.1
         ax.set_xlim(x_min, x_max)
@@ -1134,7 +1160,12 @@ def plot_analisis_errores_2d(X, Y, Tomas, title, output_path, variance_ratios=No
             for cluster_id in range(n_clases):
                 real_idx = cluster_to_vocal_idx.get(cluster_id, 0)
                 color = palette[real_idx]
-                cov = model.covariances_[cluster_id]
+                if hasattr(model, 'covariances_'):
+                    cov = model.covariances_[cluster_id]
+                elif hasattr(model, 'covariance_'):
+                    cov = model.covariance_
+                else:
+                    cov = np.eye(X.shape[1])
                 mean = model.means_[cluster_id]
                 rv = multivariate_normal(mean, cov)
                 Z = rv.pdf(grid).reshape(xx.shape)
@@ -1264,7 +1295,15 @@ def plot_analisis_errores_3d(X, Y, Tomas, title, output_path, variance_ratios=No
     vocales_unicas = sorted(list(set(Y)))
     n_clases = len(vocales_unicas)
     
-    if algoritmo == "GMM":
+    alg_str = str(algoritmo).lower().strip()
+    if "lda" in alg_str:
+        from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+        model = LinearDiscriminantAnalysis()
+        y_true_int = np.array([vocales_unicas.index(v) for v in Y])
+        model.fit(X, y_true_int)
+        y_pred_kmeans = model.predict(X)
+        centroids = model.means_
+    elif "gmm" in alg_str:
         from sklearn.mixture import GaussianMixture
         model = GaussianMixture(n_components=n_clases, covariance_type='full', random_state=42, n_init=100, max_iter=500)
         y_pred_kmeans = model.fit_predict(X)
@@ -2609,12 +2648,12 @@ class GeneradorPCAGUI:
         cluster_frame.pack(fill="x", pady=(0,5))
         
         tk.Label(cluster_frame, text="Evaluar PCA:", anchor="w", bg="#1F2833", fg="white").pack(side="left", padx=(0,5))
-        self.combo_cluster_pca = ttk.Combobox(cluster_frame, values=["GMM", "GMM Jerárquico (PCA Local)", "K-Means"], width=24)
+        self.combo_cluster_pca = ttk.Combobox(cluster_frame, values=["GMM", "GMM Jerárquico (PCA Local)", "K-Means", "LDA"], width=24)
         self.combo_cluster_pca.pack(side="left", padx=(0, 15))
         self.combo_cluster_pca.set("GMM")
         
         tk.Label(cluster_frame, text="Evaluar UMAP:", anchor="w", bg="#1F2833", fg="white").pack(side="left", padx=(0,5))
-        self.combo_cluster_umap = ttk.Combobox(cluster_frame, values=["K-Means", "GMM"], width=10)
+        self.combo_cluster_umap = ttk.Combobox(cluster_frame, values=["K-Means", "GMM", "LDA"], width=10)
         self.combo_cluster_umap.pack(side="left")
         self.combo_cluster_umap.set("K-Means")
         

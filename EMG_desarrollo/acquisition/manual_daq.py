@@ -83,6 +83,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Importar el logger centralizado
 from utils.logger import logger
 from utils.config_manager import ConfigManager
+from utils.path_utils import get_project_root
+
+METRONOME_CONFIG_PATH = os.path.join(get_project_root(), 'metronome_config.json')
 
 import json
 import subprocess # <-- NUEVO: para guardar el metadata
@@ -170,20 +173,16 @@ def acquisition_thread(device_channels, sample_rate, chunk_samples, num_canales,
     try:
         with nidaqmx.Task() as task:
             for canal in device_channels:
-                # --- CORRECCIÓN: Forzar rango de voltaje explícito para evitar auto-escalado de la DAQ ---
-                if terminal_config_val is not None:
-                    task.ai_channels.add_ai_voltage_chan(canal, terminal_config=TerminalConfiguration.RSE, min_val=-10.0, max_val=10.0)
+                # --- CORRECCIÓN: Respetar configuración de terminal (RSE, DIFF, NRSE) ---
+                t_cfg = terminal_config_val if terminal_config_val is not None else TerminalConfiguration.RSE
+                task.ai_channels.add_ai_voltage_chan(canal, terminal_config=t_cfg, min_val=-10.0, max_val=10.0)
             
             task.timing.cfg_samp_clk_timing(
                 rate=sample_rate,
                 sample_mode=AcquisitionType.CONTINUOUS,
                 # --- MEJORA: Aumentar el tamaño del búfer de la DAQ ---
-                # Un búfer pequeño (como chunk_samples * 2) puede causar un desbordamiento (overflow)
-                # a altas frecuencias de muestreo si el hilo de Python no lo vacía a tiempo.
-                # Al establecer un búfer grande (ej: 1 segundo de datos), le damos al sistema
-                # mucho más margen, evitando la pérdida de muestras y asegurando una adquisición continua.
-                # Esto soluciona el problema de que las señales reales se vean "triangulares" o mal definidas.
-                samps_per_chan=sample_rate 
+                # Un búfer grande (1 segundo de datos) previene desbordamiento y pérdida de muestras.
+                samps_per_chan=int(sample_rate) 
             )
             
             reader = AnalogMultiChannelReader(task.in_stream)
@@ -521,9 +520,8 @@ def generar_grafico_grabacion(datos_completos, sample_rate, output_dir, num_cana
                     md_ch = json.load(f_ch)
                     if 'musculo' in md_ch and md_ch['musculo']:
                         musculo = md_ch['musculo']
-                    if 'resistencia_ohm' in md_ch:
-                        res_ohm = float(md_ch['resistencia_ohm'])
-                        ganancia = 1.0 + (49400.0 / res_ohm)
+                    # Ganancia fija por hardware AD620 invariable (Rg=100 ohm soldada -> G=495)
+                    ganancia = 495.0
             except Exception:
                 pass
 
@@ -1132,9 +1130,9 @@ class RealTimePlotter(QtWidgets.QWidget):
         bpm = 60
         pulse_count = 30
         notch_enabled = True # Por defecto activado
-        if os.path.exists('metronome_config.json'):
+        if os.path.exists(METRONOME_CONFIG_PATH):
             try:
-                with open('metronome_config.json', 'r') as f:
+                with open(METRONOME_CONFIG_PATH, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     bpm = data.get('last_bpm', 60)
                     pulse_count = data.get('last_beat_count', 30)
@@ -1763,12 +1761,12 @@ class RealTimePlotter(QtWidgets.QWidget):
             current_bpm = self.spin_bpm.value()
             # Leemos la configuración existente para no perder el `last_beat_count`.
             config_data = {}
-            if os.path.exists('metronome_config.json'):
-                with open('metronome_config.json', 'r', encoding='utf-8') as f:
+            if os.path.exists(METRONOME_CONFIG_PATH):
+                with open(METRONOME_CONFIG_PATH, 'r', encoding='utf-8') as f:
                     config_data = json.load(f) # Asegurar que se lee como UTF-8
             
             config_data['last_bpm'] = current_bpm
-            with open('metronome_config.json', 'w', encoding='utf-8') as f:
+            with open(METRONOME_CONFIG_PATH, 'w', encoding='utf-8') as f:
                 json.dump(config_data, f, indent=4)
             print(f"Actualizado BPM en metronome_config.json a: {current_bpm}")
         except Exception as e:
@@ -2260,10 +2258,10 @@ class RealTimePlotter(QtWidgets.QWidget):
         
         # --- NUEVO: Leer el conteo de pulsos desde el archivo de config del metrónomo ---
         pulse_count_from_metronome = None
-        if os.path.exists('metronome_config.json'):
+        if os.path.exists(METRONOME_CONFIG_PATH):
             try:
                 print("Leyendo metronome_config.json para pulse_count...")
-                with open('metronome_config.json', 'r') as f:
+                with open(METRONOME_CONFIG_PATH, 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     pulse_count_from_metronome = data.get('last_beat_count')
                     if pulse_count_from_metronome is not None:
@@ -2717,8 +2715,20 @@ class RealTimePlotter(QtWidgets.QWidget):
         """
         print("Ventana de ploteo cerrada. Deteniendo hilos...")
         self.stop_event.set() # Envía la señal a TODOS los hilos
-        if hasattr(self, 'timer_plot'):
-            self.timer_plot.stop() # Detiene el timer de la GUI
+        if hasattr(self, 'timer') and self.timer:
+            self.timer.stop() # Detiene el timer de la GUI
+        if hasattr(self, 'acquisition_thread') and self.acquisition_thread and self.acquisition_thread.is_alive():
+            try:
+                self.acquisition_thread.join(timeout=1.0)
+            except Exception:
+                pass
+        if hasattr(self, 'metronome_process') and self.metronome_process:
+            try:
+                if self.metronome_process.poll() is None:
+                    self.metronome_process.kill()
+            except Exception:
+                pass
+            self.metronome_process = None
         
         # --- NUEVO: Guardar estado de la GUI al cerrar el programa ---
         try:
@@ -2730,12 +2740,12 @@ class RealTimePlotter(QtWidgets.QWidget):
             
             # Mantenemos esto por si alguna otra parte depende de metronome_config.json
             config_data = {}
-            if os.path.exists('metronome_config.json'):
-                with open('metronome_config.json', 'r', encoding='utf-8') as f:
+            if os.path.exists(METRONOME_CONFIG_PATH):
+                with open(METRONOME_CONFIG_PATH, 'r', encoding='utf-8') as f:
                     config_data = json.load(f)
             config_data['last_bpm'] = self.spin_bpm.value()
             config_data['notch_enabled'] = self.chk_notch_enable.isChecked()
-            with open('metronome_config.json', 'w', encoding='utf-8') as f:
+            with open(METRONOME_CONFIG_PATH, 'w', encoding='utf-8') as f:
                 json.dump(config_data, f, indent=4)
         except Exception as e:
             print(f"Error guardando configuración al cerrar: {e}")

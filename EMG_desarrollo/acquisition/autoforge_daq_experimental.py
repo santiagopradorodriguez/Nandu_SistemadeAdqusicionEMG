@@ -79,6 +79,10 @@ if logo_path and os.path.exists(logo_path):
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.config_manager import ConfigManager
+from utils.path_utils import get_project_root
+
+METRONOME_CONFIG_PATH = os.path.join(get_project_root(), 'metronome_config.json')
+PALABRAS_TXT_PATH = os.path.join(get_project_root(), 'palabras.txt')
 
 import json
 import subprocess
@@ -1129,6 +1133,68 @@ def generar_grafico_grabacion(datos_completos, sample_rate, output_dir, num_cana
 
 
 # =============================================================================
+# BLOQUE 3.3B: GENERADOR DE GRÁFICOS ESTADÍSTICOS
+# =============================================================================
+def generar_grafico_estadisticas(stats_time, stats_snr, stats_noise_mean, stats_noise_std, output_dir, num_canales, canales_daq, base_name="estadisticas_evolucion"):
+  """
+  Genera el gráfico de evolución temporal de estadísticas (SNR y Ruido inter-pulso).
+  """
+  hay_datos = any(len(t) > 0 for t in stats_time) if stats_time else False
+  if not hay_datos:
+    return False
+
+  try:
+    import matplotlib.pyplot as plt
+  except ImportError:
+    return False
+
+  fig, axs = plt.subplots(num_canales, 2, figsize=(15, 4 * num_canales), squeeze=False)
+  fig.suptitle("Evolución Temporal: SNR y Ruido Inter-pulso", fontsize=16)
+
+  for i in range(num_canales):
+    if i >= len(stats_time):
+      continue
+    t = stats_time[i]
+    if not t:
+      continue
+
+    t_arr = np.array(t)
+    mask = t_arr >= 20.0
+    if not np.any(mask):
+      mask = np.ones_like(t_arr, dtype=bool)
+
+    t_plot = t_arr[mask]
+    snr_plot = np.array(stats_snr[i])[mask]
+    noise_mean_plot = np.array(stats_noise_mean[i])[mask]
+    noise_std_plot = np.array(stats_noise_std[i])[mask]
+
+    daq_ch_name = canales_daq[i] if (canales_daq and i < len(canales_daq)) else f"CH{i}"
+
+    # Subplot Izquierdo: SNR
+    axs[i, 0].plot(t_plot, snr_plot, marker='o', linestyle='-', color='b', linewidth=2)
+    axs[i, 0].set_title(f"Canal {i} ({daq_ch_name}) - Evolución SNR Promedio")
+    axs[i, 0].set_xlabel("Tiempo de Señal (s)")
+    axs[i, 0].set_ylabel("SNR Promedio Acumulado")
+    axs[i, 0].grid(True, alpha=0.5)
+
+    # Subplot Derecho: Ruido
+    axs[i, 1].plot(t_plot, noise_mean_plot, marker='o', linestyle='-', color='r', label='Promedio (x̄)', linewidth=2)
+    axs[i, 1].plot(t_plot, noise_std_plot, marker='x', linestyle='--', color='orange', label='Desviación (σ)', linewidth=2)
+    axs[i, 1].set_title(f"Canal {i} ({daq_ch_name}) - Evolución Ruido Inter-pulso")
+    axs[i, 1].set_xlabel("Tiempo de Señal (s)")
+    axs[i, 1].set_ylabel("Amplitud (µV)")
+    axs[i, 1].legend()
+    axs[i, 1].grid(True, alpha=0.5)
+
+  nombre_archivo = os.path.join(output_dir, f"{base_name}.png")
+  plt.tight_layout(rect=[0, 0.03, 1, 0.96])
+  plt.savefig(nombre_archivo, dpi=200)
+  plt.close(fig)
+  print(f"  Gráfico de estadísticas guardado como: {nombre_archivo}")
+  return True
+
+
+# =============================================================================
 # BLOQUE 3.4: DIÁLOGO DE VISTA PREVIA POST-GRABACIÓN
 # =============================================================================
 class PreviewPlotDialog(QtWidgets.QDialog):
@@ -1414,9 +1480,7 @@ class AutoForgeDialog(QtWidgets.QDialog):
     Returns:
       Any: Resultado de la ejecución de la función.
     """
-    import os
-    root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    ruta_palabras = os.path.join(root_dir, "palabras.txt")
+    ruta_palabras = PALABRAS_TXT_PATH
     if not os.path.exists(ruta_palabras):
       with open(ruta_palabras, 'w', encoding='utf-8') as f:
         f.write("A\nE\nI\nO\nU\n")
@@ -1584,9 +1648,9 @@ class RealTimePlotter(QtWidgets.QWidget):
     bpm = 60
     pulse_count = 30
     notch_enabled = True # Por defecto activado
-    if os.path.exists('metronome_config.json'):
+    if os.path.exists(METRONOME_CONFIG_PATH):
       try:
-        with open('metronome_config.json', 'r') as f:
+        with open(METRONOME_CONFIG_PATH, 'r', encoding='utf-8') as f:
           data = json.load(f)
           bpm = data.get('last_bpm', 60)
           pulse_count = data.get('last_beat_count', 30)
@@ -2057,8 +2121,6 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.empty_recording_layout = QtWidgets.QHBoxLayout(self.empty_recording_widget)
     self.empty_recording_layout.setContentsMargins(6, 0, 6, 0)
     self.empty_recording_layout.addWidget(self.lbl_recording_space, stretch=4)
-    
-    self._setup_native_metronome()
     self.empty_recording_layout.addWidget(self.right_side_panel, stretch=1) # Añadir fijo al recuadro de arriba
     
     self.empty_recording_widget.setLayout(self.empty_recording_layout)
@@ -2401,12 +2463,12 @@ class RealTimePlotter(QtWidgets.QWidget):
       current_bpm = self.spin_bpm.value()
       # Leemos la configuración existente para no perder el `last_beat_count`.
       config_data = {}
-      if os.path.exists('metronome_config.json'):
-        with open('metronome_config.json', 'r', encoding='utf-8') as f:
+      if os.path.exists(METRONOME_CONFIG_PATH):
+        with open(METRONOME_CONFIG_PATH, 'r', encoding='utf-8') as f:
           config_data = json.load(f) # Asegurar que se lee como UTF-8
       
       config_data['last_bpm'] = current_bpm
-      with open('metronome_config.json', 'w', encoding='utf-8') as f:
+      with open(METRONOME_CONFIG_PATH, 'w', encoding='utf-8') as f:
         json.dump(config_data, f, indent=4)
       print(f"Actualizado BPM en metronome_config.json a: {current_bpm}")
     except Exception as e:
@@ -2749,7 +2811,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         "subdivisions": self.spin_metro_subdivs.value()
     }
     try:
-        with open('metronome_config.json', 'w') as f:
+        with open(METRONOME_CONFIG_PATH, 'w', encoding='utf-8') as f:
             json.dump(config, f, indent=4)
     except: pass
 
@@ -3351,6 +3413,10 @@ class RealTimePlotter(QtWidgets.QWidget):
       if self.chk_filter_enable.isChecked() and self.filter_sos is not None and self.filter_zi is not None:
         bandpass_filtered_data = np.zeros_like(processed_data)
         for i in range(self.NUM_CANALES):
+          if i == 3 and self.NUM_CANALES > 3:
+            # Canal 3 es micrófono/audio: preservar audio sin filtro pasa-banda muscular 20-500 Hz
+            bandpass_filtered_data[i, :] = processed_data[i, :]
+            continue
           # --- CORRECCIÓN: Indexar correctamente el array de estado del filtro 'zi' ---
           # La forma de self.filter_zi es (n_sections, 2, NUM_CANALES).
           bandpass_filtered_data[i, :], self.filter_zi[:, :, i] = signal.sosfilt(self.filter_sos, processed_data[i, :], zi=self.filter_zi[:, :, i])
@@ -3978,9 +4044,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         finally:
           QtWidgets.QApplication.restoreOverrideCursor()
         
-      import os
-      root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-      ruta_palabras = os.path.join(root_dir, "palabras.txt")
+      ruta_palabras = PALABRAS_TXT_PATH
       if not os.path.exists(ruta_palabras):
         with open(ruta_palabras, 'w', encoding='utf-8') as f:
           f.write("A\nE\nI\nO\nU\n")
@@ -4099,9 +4163,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         finally:
           QtWidgets.QApplication.restoreOverrideCursor()
         
-      import os
-      root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-      ruta_palabras = os.path.join(root_dir, "palabras.txt")
+      ruta_palabras = PALABRAS_TXT_PATH
       if not os.path.exists(ruta_palabras):
         with open(ruta_palabras, 'w', encoding='utf-8') as f:
           f.write("A\nE\nI\nO\nU\n")
@@ -5078,6 +5140,9 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.autoforge_overlay.show()
     self.lbl_recording_space.setText("<div align='center' style='color:#777777; font-size:40px;'>DESCANSO</div>")
     
+    local_recording = self.current_recording.copy()
+    self.current_recording = []
+    
     import threading
     def guardar_async():
       """
@@ -5195,21 +5260,19 @@ class RealTimePlotter(QtWidgets.QWidget):
         except: pass
 
       # 3. Guardar Datos Raw CSV y WAV (las funciones internas ya manejan la división por canales)
-      try: guardar_grabacion_csv(self.current_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion")
+      try: guardar_grabacion_csv(local_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion")
       except: pass
       
-      try: guardar_grabacion_wav(self.current_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion")
+      try: guardar_grabacion_wav(local_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion")
       except: pass
       
       # 4. Generar Gráficos
       try:
-        generar_grafico_grabacion(self.current_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, self.CANALES_DAQ)
+        generar_grafico_grabacion(local_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, self.CANALES_DAQ)
         ruta_photo = os.path.join(str(base_dir), "photo.png")
         if os.path.exists(ruta_photo):
           self.mostrar_preview_signal.emit(ruta_photo)
       except: pass
-      
-      self.current_recording = [] 
       
     threading.Thread(target=guardar_async, daemon=True).start()
     
@@ -5278,12 +5341,12 @@ class RealTimePlotter(QtWidgets.QWidget):
     # --- NUEVO: Guardar estado de la GUI al cerrar el programa ---
     try:
       config_data = {}
-      if os.path.exists('metronome_config.json'):
-        with open('metronome_config.json', 'r', encoding='utf-8') as f:
+      if os.path.exists(METRONOME_CONFIG_PATH):
+        with open(METRONOME_CONFIG_PATH, 'r', encoding='utf-8') as f:
           config_data = json.load(f)
       config_data['last_bpm'] = self.spin_bpm.value()
       config_data['notch_enabled'] = self.chk_notch_enable.isChecked()
-      with open('metronome_config.json', 'w', encoding='utf-8') as f:
+      with open(METRONOME_CONFIG_PATH, 'w', encoding='utf-8') as f:
         json.dump(config_data, f, indent=4)
     except Exception as e:
       print(f"Error guardando configuración al cerrar: {e}")

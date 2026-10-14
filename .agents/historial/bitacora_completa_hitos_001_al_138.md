@@ -2906,3 +2906,32 @@ El autoencoder convolucional 1D entrenado sin supervisión con regularización p
     6. Alternativas de palabras (`PCA/UMAP` -> "PCA o UMAP").
     7. **Purga estricta:** Reemplazo incondicional de cualquier barra (`/` y `\`) restante por espacio antes de enviar el texto al motor Edge-TTS.
   - Se replicó el parche en `tars_web_server.py`, `speak_response.py` (en `~/.gemini/config/` y en `Jarvis-Assistant/TARS/`) y como filtro de seguridad en `tars_voice_engine.py`.
+
+### Hito 139 - 2026-10-09: Variedad 3D Pseudo-HD de 12 Canales, Ensamble Monte Carlo N=1000 y Codo Geodésico de Tenenbaum en d=3
+
+- **Definición Canónica y Configuración de 12 Canales (Candela):**
+  - Depurado el ensamble a 12 canales anatómicos ordenados funcionalmente: 3 depresores mandibulares (Ch0 Anterior Belly central, Ch1 Anterior Belly lateral, Ch2 Milohioideo), 3 elevadores/retractores comisurales superiores (Ch3 Cigomático Mayor, Ch4 Risorio, Ch5 Elevador labio superior), 4 retractores comisurales inferiores/depresores (Ch6 Depresor ángulo oral, Ch7 Platisma, Ch8 Buccinador, Ch9 Modiolo), 2 esfínteres/mentón (Ch10 Orbicular de labios, Ch11 Mentoniano).
+  - Fechas reales auditadas desde `canal_0/metadata.json` (2026-09-01, 2026-09-16, 2026-09-18, 2026-09-26, 2026-09-27).
+  - Longitud uniforme normalizada de $T = 20$ puntos temporales por canal $\implies D = 12 \times 20 = 240$ dimensiones ambiente.
+- **Construcción del Vector de Features y Solución a la Disparidad Muestral:**
+  - Dado que la placa AD620 física solo adquiere 3 canales diferenciales simultáneos por toma, las sesiones de protocolo largo acumularon 45 pulsos por vocal mientras que sesiones exploratorias reunieron 8 a 13 pulsos.
+  - Para evitar descartar información o recortar al mínimo común, se diseñó el **Ensamble Pseudo HD por Bootstrap Monte Carlo Condicionado por Vocal**. Se muestrea con reemplazo de cada pool muscular fijando semilla universal 42, explorando el espacio combinatorio de $\sim 1.2 \times 10^{13}$ combinaciones posibles sin duplicación de vectores planos.
+- **Escalamiento del Ensamble a $N = 1000$ Muestras (200 por vocal):**
+  - Resuelve el régimen sub-determinado pasando de $N = 150 < D = 240$ a $N = 1000 > D = 240$, eliminando la singularidad de la matriz de covarianza y estabilizando los elipsoides.
+  - En el espacio ambiente 240D, LDA 5-Fold alcanza **99.60%** de separabilidad.
+- **Visualización de la Variedad en 2D y 3D:**
+  - En 2D (Isomap $k=35$): Cruz Latente limpia orientada canónicamente (/a/ en $+Y$, /i/ en $+X$, /e/ intermedio, /o/ y /u/ en $-X$).
+  - En 3D (PCA e Isomap): Nubes continuas densas. HTML interactivo generado (`variedad_3d_interactiva_montecarlo_1000.html`) para rotación 3D fluida.
+  - Demostración de saturación de separabilidad inter-canal: aumentar a 12 canales confirma la redundancia muscular biomecánica orofacial y que la variedad fonatoria es de baja dimensionalidad intrínseca.
+- **Evaluación de GMM No Supervisado (5 Componentes, Asignación Húngara):**
+  - PCA 2D: **55.70%** (colapso de /o/ y /u/ en el mismo atractor lineal).
+  - PCA 3D: **79.60%** (salto de $+23.90\%$ al liberar el eje perpendicular de protrusión).
+  - Isomap 2D ($k=35$): **72.10%** (desenredo en el plano).
+  - Isomap 3D ($k=35$): **73.50%** (LDA: 82.00%).
+- **Varianza Residual y Codo Geodésico de Tenenbaum ($d = 3$):**
+  - Isomap: $1 - R^2(D_G, D_Y)$ cae de $33.74\%$ ($d=1$) a $20.76\%$ ($d=2$) y toca el codo definitivo en **$d=3$ ($18.54\%$)**, entrando en una meseta horizontal asintótica ($15.89\% \to 14.13\% \to 12.87\% \dots$). Prueba matemática de que la variedad motora oral tiene **dimensión intrínseca 3**.
+  - PCA: $1 - R^2(D_X, D_Y)$ (Tenenbaum euclídeo) decae lentamente sin codo ($45.32\% \to 32.51\% \to 31.17\% \dots$), necesitando 7 a 8 componentes para aproximar la variedad. La varianza no explicada de PCA ($100 - \text{EVR}_{\text{cum}}$) en $d=3$ todavía deja un $58.31\%$ de varianza ambiental sin explicar ($36.00\%$ restante en $d=10$).
+- **Archivos Oficiales:**
+  - Scripts: `experimento_pseudo_hd_candela_multicanal_20pts.py`, `experimento_montecarlo_1000_candela_12ch.py`, `evaluar_gmm_y_curva_varianza_1000.py`.
+  - Figuras: `isomap_2d_montecarlo_1000.png`, `pca_isomap_3d_montecarlo_1000.png`, `variedad_3d_interactiva_montecarlo_1000.html`, `curva_varianza_residual_pca_vs_isomap.png`, `curva_varianza_dimensionalidad_pca_isomap_1000m.png`.
+  - Documentación: `reportes_experimentos/informe_variedad_3d_pseudo_hd_candela.tex` y `.pdf`.

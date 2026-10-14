@@ -288,7 +288,7 @@ def procesar_stft_calibrada(pulso_nch, fs=2000, nperseg=128, noverlap=120, umbra
 
 def extraer_dataset_unificado(
     rutas_tomas,
-    aplicar_correccion_intersesion=True,
+    aplicar_correccion_intersesion=False,
     usar_calibracion_p95=True,
     modo_alineacion="Pico Volumen Micrófono",
     carpeta_salida=None,
@@ -347,12 +347,12 @@ def extraer_dataset_unificado(
             'tipo_filtro_ruido': t_filtro,
             'highpass_cutoff_hz': hp_cut,
             'lowpass_cutoff_hz': lp_cut,
-            'gate_ratio_ruido': 0.0,
+            'gate_ratio_ruido': float(kwargs.get('gate_ratio_ruido', 0.0)),
             'tipo_envolvente': tipo_envolvente,
             'correccion_impedancia': False
         }
 
-        _log(f"Extrayendo y alineando con generador_pca_umap (pre={p_pre}, post={p_post}, LP={lp_cut}Hz, Notch Q={n_q})...")
+        _log(f"Extrayendo y alineando con generador_pca_umap (pre={p_pre}, post={p_post}, LP={lp_cut}Hz, Notch Q={n_q}, Intersesión P95={aplicar_correccion_intersesion})...")
         X_gpu, Y_gpu, Tomas_gpu, desc_gpu = gpu.extraer_y_filtrar(
             mediciones=meds_rel,
             base_dir=b_dir,
@@ -363,7 +363,7 @@ def extraer_dataset_unificado(
             post_pct=p_post,
             canales_features=canales_features,
             ignorar_ventana_cero=False,
-            aplicar_correccion_intersesion=False,
+            aplicar_correccion_intersesion=aplicar_correccion_intersesion,
             correccion_impedancia=False
         )
         if len(X_gpu) > 0:
@@ -373,7 +373,8 @@ def extraer_dataset_unificado(
             X_spec_clean = X_env_clean.copy()
             Y_clean = np.array(Y_gpu)
             Tomas_clean = np.array(Tomas_gpu)
-            Fechas_clean = np.array(['2026-07-10'] * N_gpu)
+            toma_to_fecha = {os.path.basename(p): os.path.basename(os.path.dirname(p)) for p in rutas_tomas}
+            Fechas_clean = np.array([toma_to_fecha.get(t.split('_Win')[0], '2026-07-10') for t in Tomas_clean])
 
             dir_salida_npz = carpeta_salida if carpeta_salida is not None else cache_dir
             os.makedirs(dir_salida_npz, exist_ok=True)
@@ -652,20 +653,7 @@ def extraer_dataset_unificado(
             if max_sup <= 1e-6:
                 continue
 
-            from scipy.signal import resample as sp_resample
-            env_i_list = []
-            for c in range(n_canales):
-                seg_norm = env_segs[c] / (max_sup + 1e-9)
-                if target_env_len < len(seg_norm):
-                    s_rs = sp_resample(seg_norm, target_env_len)
-                    s_rs[s_rs < 0.0] = 0.0
-                    env_i_list.append(s_rs.astype(np.float32))
-                else:
-                    env_i_list.append(np.interp(x_tgt_e, x_orig_w, seg_norm).astype(np.float32))
-            env_i = np.array(env_i_list, dtype=np.float32)
-
             raw_sup = max([float(np.max(seg)) for seg in rect_segs]) if rect_segs else 1.0
-            raw_i = np.array([np.interp(x_tgt_c, x_orig_w, rect_segs[c] / (raw_sup + 1e-9)) for c in range(n_canales)], dtype=np.float32)
 
             # Filtro SNR previo a la consolidación
             snr_min_val = float(kwargs.get('snr_min', 0.50))
@@ -676,8 +664,10 @@ def extraer_dataset_unificado(
 
             mediciones_datos.append({
                 'win_idx': win_idx,
-                'env_i': env_i,
-                'raw_i': raw_i,
+                'env_segs': env_segs,
+                'rect_segs': rect_segs,
+                'max_sup': max_sup,
+                'raw_sup': raw_sup,
                 'vocal': vocal,
                 'toma': f"{toma_name}_W{win_idx}",
                 'fecha': fecha_toma,
@@ -704,7 +694,7 @@ def extraer_dataset_unificado(
             s_fecha, s_tag = s_key
             V = []
             for c_idx in range(n_canales):
-                picos_ch = [float(np.max(w['env_i'][c_idx])) for w in wins_sesion]
+                picos_ch = [float(np.max(w['env_segs'][c_idx])) for w in wins_sesion]
                 p95 = float(np.percentile(picos_ch, 95)) if picos_ch else 1.0
                 V.append(p95)
             V = np.array(V, dtype=np.float32)
@@ -725,25 +715,45 @@ def extraer_dataset_unificado(
     # ------------------------------------------------------------------
     # 6. ESCALADO Y NORMALIZACIÓN POR SUPREMO POR PULSO INDIVIDUAL
     # ------------------------------------------------------------------
+    target_cruda_len = 1000
+    target_env_len = int(target_len) if target_len and target_len > 0 else 100
+    from scipy.signal import resample as sp_resample
+
     for w in mediciones_datos:
         s_key = (w['fecha'], w['session_key'])
         C = session_factors.get(s_key, np.ones(n_canales, dtype=np.float32)) if aplicar_correccion_intersesion else np.ones(n_canales, dtype=np.float32)
-        C_col = C.reshape(n_canales, 1)
 
-        env_scaled = w['env_i'] * C_col
-        raw_scaled = w['raw_i'] * C_col
-
-        supremo_pulso = max(float(np.max(env_scaled)), 1e-9)
-        if supremo_pulso <= 1e-6:
-            w['env_norm'] = np.zeros_like(env_scaled)
-            w['raw_norm'] = np.zeros_like(raw_scaled)
+        if aplicar_correccion_intersesion:
+            env_proc = [w['env_segs'][c] * C[c] for c in range(n_canales)]
+            rect_proc = [w['rect_segs'][c] * C[c] for c in range(n_canales)]
+            supremo_pulso = max([float(np.max(seg)) for seg in env_proc] + [1e-9])
+            raw_sup = max([float(np.max(seg)) for seg in rect_proc] + [1e-9])
         else:
-            w['env_norm'] = env_scaled / supremo_pulso
-            raw_norm = raw_scaled / supremo_pulso
-            max_raw = float(np.max(raw_norm))
-            if max_raw > 1.0:
-                raw_norm = raw_norm / max_raw
-            w['raw_norm'] = raw_norm
+            env_proc = w['env_segs']
+            rect_proc = w['rect_segs']
+            supremo_pulso = w['max_sup']
+            raw_sup = w['raw_sup']
+
+        x_orig_w = np.linspace(0.0, 1.0, len(env_proc[0]))
+        x_tgt_e = np.linspace(0.0, 1.0, target_env_len)
+        x_tgt_c = np.linspace(0.0, 1.0, target_cruda_len)
+
+        env_norm_list = []
+        for c in range(n_canales):
+            seg_norm = env_proc[c] / (supremo_pulso + 1e-9)
+            if target_env_len < len(seg_norm):
+                s_rs = sp_resample(seg_norm, target_env_len)
+                s_rs[s_rs < 0.0] = 0.0
+                env_norm_list.append(s_rs.astype(np.float32))
+            else:
+                env_norm_list.append(np.interp(x_tgt_e, x_orig_w, seg_norm).astype(np.float32))
+        w['env_norm'] = np.array(env_norm_list, dtype=np.float32)
+
+        raw_norm = np.array([np.interp(x_tgt_c, x_orig_w, rect_proc[c] / (raw_sup + 1e-9)) for c in range(n_canales)], dtype=np.float32)
+        max_raw = float(np.max(raw_norm))
+        if max_raw > 1.0:
+            raw_norm = raw_norm / max_raw
+        w['raw_norm'] = raw_norm
 
     # 7. Re-escalado Fisiológico por Promedio de Pulsos hacia 1.0 (Directiva del Usuario)
     # Todos los pulsos ya están normalizados por su supremo individual.

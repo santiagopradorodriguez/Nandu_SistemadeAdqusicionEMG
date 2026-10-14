@@ -147,6 +147,8 @@ if getattr(sys, 'frozen', False) and len(sys.argv) > 1 and (sys.argv[1].endswith
 
 
 import subprocess
+import json
+import matplotlib
 try:
   matplotlib.use('TkAgg') # Forzar TkAgg para que las ventanas de curación de Matplotlib pausen el script correctamente en PySide6
 except Exception:
@@ -440,6 +442,8 @@ class ReaperStyleHub(QMainWindow):
       Any: Resultado de la ejecución de la función.
     """
     super().__init__()
+    self.root_dir = get_project_root()
+    self.base_dir = get_database_path()
     self.setWindowTitle("Ñandú LSD - EMG Analytics Studio (DAW Edition)")
     
     # Modo de acoplamiento múltiple para los paneles
@@ -474,6 +478,17 @@ class ReaperStyleHub(QMainWindow):
     
     print(f"> Ñandu LSD Initialized...")
     print(f"> Motor de hilos listo. CPU Threads: {self.threadpool.maxThreadCount()}")
+
+  def closeEvent(self, event):
+    """Cierre ordenado de la aplicación principal."""
+    try:
+      sys.stdout = sys.__stdout__
+      if hasattr(self, 'threadpool') and self.threadpool:
+        self.threadpool.clear()
+        self.threadpool.waitForDone(1000)
+    except Exception:
+      pass
+    event.accept()
 
   def _write_to_console(self, text):
     """
@@ -715,7 +730,8 @@ class ReaperStyleHub(QMainWindow):
     mb = total_bytes / (1024 * 1024)
     self.log_console.append(f"> PURGA COMPLETADA: {total_eliminados} archivos eliminados ({gb:.2f} GB / {mb:.2f} MB liberados en disco).")
 
-    self.actualizar_combos_canales()
+    if hasattr(self, '_on_explorer_selection_changed'):
+      self._on_explorer_selection_changed()
 
     QMessageBox.information(
       self,
@@ -1961,10 +1977,12 @@ finally:
             import pandas as pd
             df = pd.read_csv(filepath)
             self.tbl_metricas_visor.clear()
-            self.tbl_metricas_visor.setRowCount(df.shape[0])
+            max_rows = min(100, df.shape[0])
+            self.tbl_metricas_visor.setRowCount(max_rows)
             self.tbl_metricas_visor.setColumnCount(df.shape[1])
-            self.tbl_metricas_visor.setHorizontalHeaderLabels([str(c) for c in df.columns])
-            for r in range(df.shape[0]):
+            col_labels = [f"{c} (Vista previa {max_rows}/{df.shape[0]} filas)" if idx == 0 and df.shape[0] > max_rows else str(c) for idx, c in enumerate(df.columns)]
+            self.tbl_metricas_visor.setHorizontalHeaderLabels(col_labels)
+            for r in range(max_rows):
                 for c in range(df.shape[1]):
                     val = df.iat[r, c]
                     item = QTableWidgetItem(f"{val:.3f}" if isinstance(val, float) else str(val))
@@ -2008,13 +2026,13 @@ finally:
         parts = p.parts
         if "base_de_datos_electrodos" in parts:
             idx = parts.index("base_de_datos_electrodos")
-            base_dir_global = os.path.join(*parts[:idx+1])
+            base_dir_global = os.path.join(*parts[:idx+1]).replace('\\', '/')
             if len(parts) > idx + 2:
-                med_str = os.path.join(parts[idx+1], parts[idx+2])
+                med_str = f"{parts[idx+1]}/{parts[idx+2]}"
                 if med_str not in mediciones_lista:
                     mediciones_lista.append(med_str)
         else:
-            base_dir_global = os.path.dirname(os.path.dirname(ruta))
+            base_dir_global = os.path.dirname(os.path.dirname(ruta)).replace('\\', '/')
             med_str = f"{os.path.basename(os.path.dirname(ruta))}/{os.path.basename(ruta)}"
             if med_str not in mediciones_lista:
                 mediciones_lista.append(med_str)
@@ -2897,7 +2915,7 @@ df_res, campeon = gsa.run_grid_search(
       return
 
     kwargs = self.tab_dl_ml.get_autoencoder_kwargs()
-    carpeta_clean = carpeta.replace("\\\\", "/")
+    carpeta_clean = carpeta.replace("\\", "/")
     template = f'''
 import json
 import sys
@@ -2996,7 +3014,7 @@ print("="*70 + "\\n")
 
 npz_path, n_pulsos = motor.extraer_dataset_unificado(
     rutas,
-    aplicar_correccion_intersesion=kwargs.get('aplicar_correccion_intersesion', True),
+    aplicar_correccion_intersesion=kwargs.get('aplicar_correccion_intersesion', False),
     usar_calibracion_p95=kwargs.get('usar_calibracion_p95', True),
     modo_alineacion=kwargs.get('modo_alineacion', 'Pico Volumen Micrófono'),
     carpeta_salida=carpeta_exp,
@@ -3250,7 +3268,7 @@ smooth_ms = kwargs.get('smooth_ms', 100)
 
 npz_path, n_pulsos = motor.extraer_dataset_unificado(
     rutas,
-    aplicar_correccion_intersesion=kwargs.get('aplicar_correccion_intersesion', True),
+    aplicar_correccion_intersesion=kwargs.get('aplicar_correccion_intersesion', False),
     usar_calibracion_p95=p95,
     modo_alineacion=modo_align,
     carpeta_salida=carpeta_exp,
@@ -3580,6 +3598,7 @@ if metricas.get('fig_path') and os.path.exists(metricas['fig_path']):
     
     self.log_console = QTextEdit()
     self.log_console.setReadOnly(True)
+    self.log_console.document().setMaximumBlockCount(3000)
     self.log_console.setStyleSheet("""
       QTextEdit {
         background-color: #050505;
