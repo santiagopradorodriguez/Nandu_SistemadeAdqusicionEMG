@@ -63,10 +63,10 @@ class ModuloEntrenamiento(QWidget):
         layout.addLayout(form)
 
         btn_layout = QHBoxLayout()
-        self.btn_start = QPushButton("▶ INICIAR")
+        self.btn_start = QPushButton("INICIAR")
         self.btn_start.clicked.connect(self.start_training)
 
-        self.btn_pause = QPushButton("⏸ PAUSAR")
+        self.btn_pause = QPushButton("PAUSAR")
         self.btn_pause.setCheckable(True)
         self.btn_pause.setEnabled(False)
         self.btn_pause.setStyleSheet("""
@@ -77,7 +77,7 @@ class ModuloEntrenamiento(QWidget):
         """)
         self.btn_pause.toggled.connect(self.toggle_pause_training)
 
-        self.btn_stop = QPushButton("⏹ DETENER")
+        self.btn_stop = QPushButton("DETENER")
         self.btn_stop.setStyleSheet("""
             QPushButton { border-color: #FF0055; color: #FF0055; }
             QPushButton:hover { background-color: #FF0055; color: #FFFFFF; }
@@ -155,7 +155,7 @@ class ModuloEntrenamiento(QWidget):
         self.is_paused = False
         self.btn_pause.blockSignals(True)
         self.btn_pause.setChecked(False)
-        self.btn_pause.setText("⏸ PAUSAR")
+        self.btn_pause.setText("PAUSAR")
         self.btn_pause.blockSignals(False)
 
         self.btn_start.setEnabled(False)
@@ -166,7 +166,7 @@ class ModuloEntrenamiento(QWidget):
     def toggle_pause_training(self, paused: bool):
         self.is_paused = paused
         if paused:
-            self.btn_pause.setText("▶ REANUDAR")
+            self.btn_pause.setText("REANUDAR")
             for t in (self.timer_prepare, self.timer_word, self.timer_rest):
                 if t.isActive():
                     self._paused_timer = t
@@ -179,11 +179,11 @@ class ModuloEntrenamiento(QWidget):
                     self.metronome_process.stdin.flush()
                 except Exception:
                     pass
-            self.launch_word_window("⏸ PAUSA")
-            self.lbl_status.setText("⏸ Entrenamiento en PAUSA (Presiona REANUDAR)")
+            self.launch_word_window("PAUSA")
+            self.lbl_status.setText("Entrenamiento en PAUSA (Presiona REANUDAR)")
             self.lbl_status.setStyleSheet("margin-top: 15px; font-size: 14px; color: #FFCC00;")
         else:
-            self.btn_pause.setText("⏸ PAUSAR")
+            self.btn_pause.setText("PAUSAR")
             if self.metronome_process and self.metronome_process.poll() is None:
                 try:
                     self.metronome_process.stdin.write("UNMUTE\n")
@@ -220,7 +220,7 @@ class ModuloEntrenamiento(QWidget):
         self.btn_pause.setEnabled(False)
         self.btn_pause.blockSignals(True)
         self.btn_pause.setChecked(False)
-        self.btn_pause.setText("⏸ PAUSAR")
+        self.btn_pause.setText("PAUSAR")
         self.btn_pause.blockSignals(False)
         self.btn_stop.setEnabled(False)
 

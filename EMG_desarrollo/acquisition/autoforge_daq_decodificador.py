@@ -442,7 +442,7 @@ class RealTimeDecoderPlotter(QtWidgets.QWidget):
         self.lbl_sesion_actual = QLabel(f"Sesión: {os.path.basename(self.ruta_sesion_wav)}")
         self.lbl_sesion_actual.setStyleSheet("color: #AAAAAA; font-size: 11px;")
 
-        self.btn_pause_decoder = QPushButton("⏸ Pausar")
+        self.btn_pause_decoder = QPushButton("Pausar")
         self.btn_pause_decoder.setCheckable(True)
         self.btn_pause_decoder.setStyleSheet(
             "QPushButton { background-color: #1F2833; color: #FFCC00; font-weight: bold; padding: 6px; border: 2px solid #FFCC00; border-radius: 4px; }"
@@ -1262,9 +1262,9 @@ class RealTimeDecoderPlotter(QtWidgets.QWidget):
     def toggle_pause_stream(self, paused: bool):
         """Pausa o reanuda la reproducción del WAV o el monitoreo en vivo."""
         self.is_paused = paused
-        self.btn_pause_decoder.setText("▶ Reanudar" if paused else "⏸ Pausar")
+        self.btn_pause_decoder.setText("Reanudar" if paused else "Pausar")
         if paused:
-            self.autoforge_overlay.setText("⏸ EN PAUSA")
+            self.autoforge_overlay.setText("EN PAUSA")
             self.autoforge_overlay.show()
         else:
             self.autoforge_overlay.hide()

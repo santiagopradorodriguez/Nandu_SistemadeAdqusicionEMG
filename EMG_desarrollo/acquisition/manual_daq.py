@@ -1380,7 +1380,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.chk_autoscroll = QtWidgets.QCheckBox("Auto-scroll (Armar Trigger)")
         self.chk_autoscroll.setChecked(True)
         
-        self.btn_pause = QtWidgets.QPushButton("⏸ PAUSAR")
+        self.btn_pause = QtWidgets.QPushButton("PAUSAR")
         self.btn_pause.setCheckable(True)
         self.btn_pause.setEnabled(False)
         self.btn_pause.setStyleSheet("""
@@ -2221,13 +2221,13 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.is_paused = paused
         if paused:
             self.pause_start_perf = time.perf_counter()
-            self.btn_pause.setText("▶ REANUDAR")
+            self.btn_pause.setText("REANUDAR")
             if hasattr(self, 'metro_timer') and self.metro_timer.isActive():
                 self.metro_timer.stop()
             if hasattr(self, 'session_timer') and self.session_timer.isActive():
                 self.session_timer.stop()
             if hasattr(self, 'autoforge_overlay'):
-                self.autoforge_overlay.setText("<div align='center' style='color:#FFCC00;'>⏸ EN PAUSA<br><span style='font-size:24px;'>Presiona REANUDAR para seguir</span></div>")
+                self.autoforge_overlay.setText("<div align='center' style='color:#FFCC00;'>EN PAUSA<br><span style='font-size:24px;'>Presiona REANUDAR para seguir</span></div>")
                 self.autoforge_overlay.show()
         else:
             if self.pause_start_perf > 0:
@@ -2236,7 +2236,7 @@ class RealTimePlotter(QtWidgets.QWidget):
                 if self.recording_start_time is not None:
                     self.recording_start_time += paused_delta
                 self.pause_start_perf = 0.0
-            self.btn_pause.setText("⏸ PAUSAR")
+            self.btn_pause.setText("PAUSAR")
             if hasattr(self, 'metro_is_running') and self.metro_is_running:
                 bpm = max(1, self.spin_bpm.value())
                 subdivs = max(1, getattr(self, 'spin_metro_subdivs', None).value() if hasattr(self, 'spin_metro_subdivs') else 1)
