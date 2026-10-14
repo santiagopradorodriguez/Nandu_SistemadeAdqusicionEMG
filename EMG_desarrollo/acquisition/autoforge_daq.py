@@ -274,17 +274,31 @@ def simulador_thread(chunk_samples, sample_rate, num_canales, data_queue, stop_e
   datos_archivo = None
   total_samples_archivo = 0
   
-  if "Archivo" in tipo_prueba:
+  if "Cande" in tipo_prueba or "Archivo" in tipo_prueba:
     try:
       import pandas as pd
-      import os
-      script_dir = os.path.dirname(os.path.abspath(__file__))
-      # --- MODIFICADO: Usar señal trenzada de prueba ---
-      test_dir = os.path.join(script_dir, "base_de_datos_electrodos", "2026-05-18", "_E0_1_TRENZADOMALLADOGND_Sujeto1")
-      csv_path = os.path.join(test_dir, "grabacion.csv")
+      from utils.path_utils import get_database_path, get_project_root
       
-      if os.path.exists(csv_path):
-        print(f"Cargando archivo de prueba {csv_path}...")
+      db_path = get_database_path()
+      csv_path = None
+
+      if "Secuencia Continua" in tipo_prueba:
+        csv_path = os.path.join(db_path, "2026-09-01", "SecuenciaContinua_Prueba1_Candela", "grabacion.csv")
+      elif "Cande" in tipo_prueba:
+        # Medición normal estándar de Cande (A_Prueba1_Candela: 4 canales, 12 pulsos de /a/)
+        csv_path = os.path.join(db_path, "2026-09-01", "A_Prueba1_Candela", "grabacion.csv")
+      else:
+        candidates = [
+            os.path.join(db_path, "2026-09-01", "A_Prueba1_Candela", "grabacion.csv"),
+            os.path.join(get_project_root(), "grabacion.csv"),
+        ]
+        for c in candidates:
+          if os.path.exists(c):
+            csv_path = c
+            break
+
+      if csv_path and os.path.exists(csv_path):
+        print(f"[SIMULADOR] Cargando medición de prueba real: {csv_path}")
         df = pd.read_csv(csv_path)
         canales_cols = [c for c in df.columns if "Canal" in c]
         if canales_cols:
@@ -295,13 +309,14 @@ def simulador_thread(chunk_samples, sample_rate, num_canales, data_queue, stop_e
           else:
             datos_archivo = datos_archivo[:num_canales, :]
           total_samples_archivo = datos_archivo.shape[1]
-          print(f"Archivo de prueba cargado correctamente ({total_samples_archivo} muestras).")
+          dur_s = total_samples_archivo / sample_rate
+          print(f"[SIMULADOR] Medición de prueba cargada ({total_samples_archivo} muestras, {dur_s:.1f} s, {num_canales} canales).")
         else:
-          print("El CSV no tiene columnas de 'Canal'. Usando Senoidal.")
+          print("[SIMULADOR] El CSV no tiene columnas de 'Canal'. Usando Senoidal.")
       else:
-        print(f"Archivo no encontrado en {csv_path}. Asegúrate de crearlo. Usando Senoidal.")
+        print(f"[SIMULADOR] Archivo no encontrado en {csv_path}. Usando Senoidal.")
     except Exception as e:
-      print(f"Error al cargar el archivo de prueba: {e}. Usando Senoidal.")
+      print(f"[SIMULADOR] Error al cargar el archivo de prueba: {e}. Usando Senoidal.")
 
   # --- MEJORA: Usar el tiempo real para una simulación más fluida ---
   # En lugar de un tiempo_acumulado propenso a errores por la imprecisión de time.sleep(),
@@ -331,6 +346,9 @@ def simulador_thread(chunk_samples, sample_rate, num_canales, data_queue, stop_e
     sleep_duration = next_time - time.perf_counter()
     if sleep_duration > 0:
       time.sleep(sleep_duration)
+    elif sleep_duration < -0.2:
+      # Sincronizar referencia temporal para evitar desbordes por lag del sistema
+      start_time = time.perf_counter() - (samples_generados / sample_rate)
   print("Cerrando hilo de simulación.")
 
 # =============================================================================
@@ -1291,6 +1309,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     init_w = min(1200, int(self.screen_w * 0.95))
     init_h = min(750, int(self.screen_h * 0.92))
     self.resize(init_w, init_h)
+    self.setMinimumSize(850, 550)
     
     # --- REFACTOR: Dividir la configuración de la UI en métodos ---
     self._setup_ui_layouts()
@@ -1344,13 +1363,28 @@ class RealTimePlotter(QtWidgets.QWidget):
       Any: Resultado de la ejecución de la función.
     """
     self.main_layout = QtWidgets.QVBoxLayout()
+    if getattr(self, 'is_compact_screen', False):
+      self.main_layout.setContentsMargins(6, 6, 6, 6)
+      self.main_layout.setSpacing(4)
     self.setLayout(self.main_layout)
     
     self.config_layout = QtWidgets.QGridLayout()
+    if getattr(self, 'is_compact_screen', False):
+      self.config_layout.setContentsMargins(6, 4, 6, 4)
+      self.config_layout.setHorizontalSpacing(6)
+      self.config_layout.setVerticalSpacing(4)
     self.config_groupbox = QtWidgets.QGroupBox("Configuración de Adquisición")
     self.config_groupbox.setLayout(self.config_layout)
     
-    self.filter_layout = QtWidgets.QHBoxLayout()
+    self.filter_layout = QtWidgets.QGridLayout()
+    if getattr(self, 'is_compact_screen', False):
+      self.filter_layout.setContentsMargins(6, 3, 6, 3)
+      self.filter_layout.setHorizontalSpacing(8)
+      self.filter_layout.setVerticalSpacing(3)
+    else:
+      self.filter_layout.setContentsMargins(8, 4, 8, 4)
+      self.filter_layout.setHorizontalSpacing(10)
+      self.filter_layout.setVerticalSpacing(4)
     self.filter_groupbox = QtWidgets.QGroupBox("Filtro Digital (Pasa-Banda)")
     self.filter_groupbox.setLayout(self.filter_layout)
 
@@ -1379,9 +1413,14 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.chk_modo_prueba.setToolTip("Usa datos simulados en lugar de la tarjeta NI-DAQ.")
     
     self.cmb_fuente_prueba = QtWidgets.QComboBox()
-    self.cmb_fuente_prueba.addItems(["Senoidal", "Archivo 'senal_de_prueba'"])
+    self.cmb_fuente_prueba.addItems([
+        "Cande 09-01 (/a/ normal)",
+        "Cande 09-01 (Secuencia Continua)",
+        "Senoidal (50 Hz Sintética)",
+        "Archivo 'grabacion.csv'"
+    ])
     self.cmb_fuente_prueba.setEnabled(False)
-    self.cmb_fuente_prueba.setToolTip("Elige si simular con onda senoidal o cargar 'grabacion.csv' de la carpeta 'senal_de_prueba'")
+    self.cmb_fuente_prueba.setToolTip("Elige la señal de prueba: Medición real normal de Cande 09-01 (/a/ 4 canales), Secuencia Continua o Senoidal.")
 
     # --- NUEVO: Checkbox para el Metrónomo ---
     self.chk_use_metronome = QtWidgets.QCheckBox("Usar Metrónomo")
@@ -1492,20 +1531,27 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.spin_high_cut.setFixedWidth(80)
     self.label_filter_order = QtWidgets.QLabel(f"Orden: {self.FILTER_ORDER} (Butterworth)")
 
-    self.filter_layout.addWidget(self.chk_notch_enable)
-    self.filter_layout.addSpacing(20)
-    self.filter_layout.addWidget(self.chk_filter_enable)
-    self.filter_layout.addSpacing(15)
+    # Fila 0: Filtro Notch
+    row0_layout = QtWidgets.QHBoxLayout()
+    row0_layout.setContentsMargins(0, 0, 0, 0)
+    row0_layout.setSpacing(8)
+    row0_layout.addWidget(self.chk_notch_enable)
+    row0_layout.addStretch(1)
 
-    self.filter_layout.addSpacing(15)
-    self.filter_layout.addWidget(self.label_low_cut)
-    self.filter_layout.addWidget(self.spin_low_cut)
-    self.filter_layout.addSpacing(10)
-    self.filter_layout.addWidget(self.label_high_cut)
-    self.filter_layout.addWidget(self.spin_high_cut)
-    self.filter_layout.addSpacing(15)
-    self.filter_layout.addWidget(self.label_filter_order)
-    self.filter_layout.addStretch(1)
+    # Fila 1: Filtro Pasa-Banda
+    row1_layout = QtWidgets.QHBoxLayout()
+    row1_layout.setContentsMargins(0, 0, 0, 0)
+    row1_layout.setSpacing(8)
+    row1_layout.addWidget(self.chk_filter_enable)
+    row1_layout.addWidget(self.label_low_cut)
+    row1_layout.addWidget(self.spin_low_cut)
+    row1_layout.addWidget(self.label_high_cut)
+    row1_layout.addWidget(self.spin_high_cut)
+    row1_layout.addWidget(self.label_filter_order)
+    row1_layout.addStretch(1)
+
+    self.filter_layout.addLayout(row0_layout, 0, 0)
+    self.filter_layout.addLayout(row1_layout, 1, 0)
 
   def _setup_ui_controls(self):
     """Configura los controles de grabación, trigger y mediciones."""

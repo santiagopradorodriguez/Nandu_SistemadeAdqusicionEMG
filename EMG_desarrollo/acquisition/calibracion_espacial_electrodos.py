@@ -658,6 +658,45 @@ class AntigravityAgent:
             sys.stderr.write(f"Error al inyectar metadatos en CSV: {e}\n")
             return False
 
+    def close(self) -> None:
+        """Libera recursos C++ de MediaPipe."""
+        if getattr(self, "detector", None) is not None and hasattr(self.detector, "close"):
+            self.detector.close()
+        if hasattr(self, "face_mesh") and self.face_mesh is not None:
+            self.face_mesh.close()
+
+    def __enter__(self) -> "AntigravityAgent":
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.close()
+
+    @staticmethod
+    def proyectar_en_base_anatomica_intrinsica(
+        vertice_3d: np.ndarray,
+        nariz_3d: np.ndarray,
+        ojo_izq_3d: np.ndarray,
+        ojo_der_3d: np.ndarray,
+        dist_ip_3d: float,
+    ) -> np.ndarray:
+        """
+        Proyecta el vector relativo del electrodo sobre la base ortonormal del cráneo
+        para lograr invarianza frente a inclinaciones o giros 3D de la cabeza (SO(3)).
+        """
+        e_x = ojo_der_3d - ojo_izq_3d
+        e_x = e_x / max(1e-9, float(np.linalg.norm(e_x)))
+
+        mid_ojos = 0.5 * (ojo_izq_3d + ojo_der_3d)
+        u_y = nariz_3d - mid_ojos
+        v_y = u_y - float(np.dot(u_y, e_x)) * e_x
+        e_y = v_y / max(1e-9, float(np.linalg.norm(v_y)))
+
+        e_z = np.cross(e_x, e_y)
+        rot_craneo = np.vstack((e_x, e_y, e_z))
+
+        delta_norm = (vertice_3d - nariz_3d) / max(1e-6, dist_ip_3d)
+        return rot_craneo @ delta_norm
+
 
 # Alias semántico del agente
 TrianguladorElectrodosFaciales = AntigravityAgent
@@ -751,6 +790,7 @@ def main() -> None:
     print("Iniciando captura en tiempo real desde la camara web...")
     print("Controles de teclado:")
     print("  'q' - Salir")
+    print("  'p' - Pausar o reanudar video")
     print("  's' - Guardar instantanea de calibracion (snapshot.json y snapshot.png)")
     print("  'm' - Conmutar entre marcadores HSV y broches metalicos")
 
@@ -760,12 +800,18 @@ def main() -> None:
         sys.exit(1)
 
     usar_metal = args.modo_metal
+    video_pausado = False
+    ultimo_frame = None
 
     while True:
-        ret, frame = cap.read()
-        if not ret:
-            print("Aviso: Cuadro de video no disponible.")
-            break
+        if not video_pausado or ultimo_frame is None:
+            ret, frame = cap.read()
+            if not ret:
+                print("Aviso: Cuadro de video no disponible.")
+                break
+            ultimo_frame = frame.copy()
+        else:
+            frame = ultimo_frame.copy()
 
         resultado = agente.triangular_electrodos(
             frame,
@@ -788,6 +834,9 @@ def main() -> None:
 
         if key == ord("q"):
             break
+        elif key == ord("p"):
+            video_pausado = not video_pausado
+            print(f"Video {'PAUSADO' if video_pausado else 'REANUDADO'}")
         elif key == ord("m"):
             usar_metal = not usar_metal
             print(f"Modo de deteccion cambiado a: {'Broches metalicos' if usar_metal else 'Marcadores HSV'}")

@@ -218,7 +218,7 @@ def nidaq_acquisition_thread(device_channels, sample_rate, chunk_samples, num_ca
             stop_event.set()
 
 
-def wav_playback_thread(wav_paths, sample_rate, chunk_samples, data_queue, stop_event, loop=False):
+def wav_playback_thread(wav_paths, sample_rate, chunk_samples, data_queue, stop_event, loop=False, is_paused_fn=None):
     """
     Hilo de reproducción de tomas grabadas (WAVs) a velocidad de tiempo real (2000 Hz).
     Carga los 4 canales completos (3 sEMG + 1 micrófono) para visualización simultánea.
@@ -249,6 +249,9 @@ def wav_playback_thread(wav_paths, sample_rate, chunk_samples, data_queue, stop_
     t_chunk_s = chunk_samples / sample_rate
 
     while not stop_event.is_set():
+        if is_paused_fn is not None and is_paused_fn():
+            time.sleep(0.05)
+            continue
         t_start = time.perf_counter()
         if idx + chunk_samples <= total_muestras:
             chunk = sig_all[:, idx:idx+chunk_samples]
@@ -328,6 +331,7 @@ class RealTimeDecoderPlotter(QtWidgets.QWidget):
         # Estado DAQ
         self.is_acquiring = False
         self.is_playback = False
+        self.is_paused = False
         self.data_queue = queue.Queue()
         self.stop_event = threading.Event()
         self.acquisition_thread = None
@@ -438,11 +442,18 @@ class RealTimeDecoderPlotter(QtWidgets.QWidget):
         self.lbl_sesion_actual = QLabel(f"Sesión: {os.path.basename(self.ruta_sesion_wav)}")
         self.lbl_sesion_actual.setStyleSheet("color: #AAAAAA; font-size: 11px;")
 
-        self.chk_modo_simulado = QCheckBox("Modo Señal Sintética")
+        self.btn_pause_decoder = QPushButton("⏸ Pausar")
+        self.btn_pause_decoder.setCheckable(True)
+        self.btn_pause_decoder.setStyleSheet(
+            "QPushButton { background-color: #1F2833; color: #FFCC00; font-weight: bold; padding: 6px; border: 2px solid #FFCC00; border-radius: 4px; }"
+            "QPushButton:checked { background-color: #FFCC00; color: #000000; }"
+        )
+        self.btn_pause_decoder.toggled.connect(self.toggle_pause_stream)
 
         lay_ctrl.addWidget(self.btn_iniciar_daq, 0, 0)
         lay_ctrl.addWidget(self.btn_play_wav, 0, 1)
         lay_ctrl.addWidget(self.btn_cargar_wav, 0, 2)
+        lay_ctrl.addWidget(self.btn_pause_decoder, 0, 3)
         lay_ctrl.addWidget(self.chk_modo_simulado, 1, 0)
         lay_ctrl.addWidget(self.lbl_sesion_actual, 1, 1, 1, 2)
 
@@ -1223,7 +1234,7 @@ class RealTimeDecoderPlotter(QtWidgets.QWidget):
             chunk_samples = int(self.SAMPLE_RATE * 0.05)
             self.acquisition_thread = threading.Thread(
                 target=wav_playback_thread,
-                args=(wav_paths, self.SAMPLE_RATE, chunk_samples, self.data_queue, self.stop_event, False),
+                args=(wav_paths, self.SAMPLE_RATE, chunk_samples, self.data_queue, self.stop_event, False, lambda: getattr(self, 'is_paused', False)),
                 daemon=True
             )
             self.acquisition_thread.start()
@@ -1247,6 +1258,16 @@ class RealTimeDecoderPlotter(QtWidgets.QWidget):
             if flushed:
                 for ev in flushed:
                     self._mostrar_evento_decodificado(ev)
+
+    def toggle_pause_stream(self, paused: bool):
+        """Pausa o reanuda la reproducción del WAV o el monitoreo en vivo."""
+        self.is_paused = paused
+        self.btn_pause_decoder.setText("▶ Reanudar" if paused else "⏸ Pausar")
+        if paused:
+            self.autoforge_overlay.setText("⏸ EN PAUSA")
+            self.autoforge_overlay.show()
+        else:
+            self.autoforge_overlay.hide()
 
     def reset_test_score(self):
         """Reinicia el contador de aciertos y estadísticas por vocal para la prueba."""
@@ -1307,6 +1328,15 @@ class RealTimeDecoderPlotter(QtWidgets.QWidget):
 
     def actualizar_ciclo(self):
         """Bucle principal de lectura de cola, actualización de gráficos e inferencia."""
+        if getattr(self, 'is_paused', False):
+            if self.is_acquiring:
+                while not self.data_queue.empty():
+                    try:
+                        self.data_queue.get_nowait()
+                    except queue.Empty:
+                        break
+            return
+
         chunks = []
         while not self.data_queue.empty():
             try:

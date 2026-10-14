@@ -7,7 +7,7 @@
     "adquisicion": {
         "frecuencia_muestreo": 2000.0,
         "ruido_segundos": 5.0,
-        "bpm": 30,
+        "bpm": 40,
         "tiempo_descanso": 10.0,
         "nidaq_channels": [
             "Dev1/ai0",

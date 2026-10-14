@@ -226,17 +226,31 @@ def simulador_thread(chunk_samples, sample_rate, num_canales, data_queue, stop_e
     datos_archivo = None
     total_samples_archivo = 0
     
-    if "Archivo" in tipo_prueba:
+    if "Cande" in tipo_prueba or "Archivo" in tipo_prueba:
         try:
             import pandas as pd
-            import os
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            # --- MODIFICADO: Usar señal trenzada de prueba ---
-            test_dir = os.path.join(os.path.dirname(script_dir), "base_de_datos_electrodos", "2026-05-22", "_E4_1_NONE _Sujeto2")
-            csv_path = os.path.join(test_dir, "grabacion.csv")
+            from utils.path_utils import get_database_path, get_project_root
             
-            if os.path.exists(csv_path):
-                print(f"Cargando archivo de prueba {csv_path}...")
+            db_path = get_database_path()
+            csv_path = None
+
+            if "Secuencia Continua" in tipo_prueba:
+                csv_path = os.path.join(db_path, "2026-09-01", "SecuenciaContinua_Prueba1_Candela", "grabacion.csv")
+            elif "Cande" in tipo_prueba:
+                # Medición normal estándar de Cande (A_Prueba1_Candela: 4 canales, 12 pulsos de /a/)
+                csv_path = os.path.join(db_path, "2026-09-01", "A_Prueba1_Candela", "grabacion.csv")
+            else:
+                candidates = [
+                    os.path.join(db_path, "2026-09-01", "A_Prueba1_Candela", "grabacion.csv"),
+                    os.path.join(get_project_root(), "grabacion.csv"),
+                ]
+                for c in candidates:
+                    if os.path.exists(c):
+                        csv_path = c
+                        break
+
+            if csv_path and os.path.exists(csv_path):
+                print(f"[SIMULADOR] Cargando medición de prueba real: {csv_path}")
                 df = pd.read_csv(csv_path)
                 canales_cols = [c for c in df.columns if "Canal" in c]
                 if canales_cols:
@@ -247,13 +261,14 @@ def simulador_thread(chunk_samples, sample_rate, num_canales, data_queue, stop_e
                     else:
                         datos_archivo = datos_archivo[:num_canales, :]
                     total_samples_archivo = datos_archivo.shape[1]
-                    print(f"Archivo de prueba cargado correctamente ({total_samples_archivo} muestras).")
+                    dur_s = total_samples_archivo / sample_rate
+                    print(f"[SIMULADOR] Medición de prueba cargada ({total_samples_archivo} muestras, {dur_s:.1f} s, {num_canales} canales).")
                 else:
-                    print("El CSV no tiene columnas de 'Canal'. Usando Senoidal.")
+                    print("[SIMULADOR] El CSV no tiene columnas de 'Canal'. Usando Senoidal.")
             else:
-                print(f"Archivo no encontrado en {csv_path}. Asegúrate de crearlo. Usando Senoidal.")
+                print(f"[SIMULADOR] Archivo no encontrado en {csv_path}. Usando Senoidal.")
         except Exception as e:
-            print(f"Error al cargar el archivo de prueba: {e}. Usando Senoidal.")
+            print(f"[SIMULADOR] Error al cargar el archivo de prueba: {e}. Usando Senoidal.")
 
     # --- MEJORA: Usar el tiempo real para una simulación más fluida ---
     # En lugar de un tiempo_acumulado propenso a errores por la imprecisión de time.sleep(),
@@ -283,6 +298,9 @@ def simulador_thread(chunk_samples, sample_rate, num_canales, data_queue, stop_e
         sleep_duration = next_time - time.perf_counter()
         if sleep_duration > 0:
             time.sleep(sleep_duration)
+        elif sleep_duration < -0.2:
+            # Sincronizar referencia temporal para evitar desbordes por lag del sistema
+            start_time = time.perf_counter() - (samples_generados / sample_rate)
     print("Cerrando hilo de simulación.")
 
 # =============================================================================
@@ -1028,6 +1046,12 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.BTN_REC_STOP_STYLE = "background-color: #FF0000; color: #000000; font-weight: bold; font-family: 'Courier New'; font-size: 14px; padding: 8px; border: 2px solid #FF0000; border-radius: 4px;"
 
         # --- Estado interno ---
+        from core.preroll_and_filters import PreRollRecordingBuffer, ConfigurableFilterChain
+        self.preroll_buffer = PreRollRecordingBuffer(sample_rate=2000, preroll_seconds=1.0)
+        self.is_paused = False
+        self.pause_start_perf = 0.0
+        self.total_paused_duration = 0.0
+
         self.is_recording = False
         self.counting_started = False # NUEVO: Bandera para controlar el inicio del conteo del metrónomo
         self.current_recording = []
@@ -1100,6 +1124,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         init_w = min(1200, int(self.screen_w * 0.95))
         init_h = min(750, int(self.screen_h * 0.92))
         self.resize(init_w, init_h)
+        self.setMinimumSize(850, 550)
         
         # --- REFACTOR: Dividir la configuración de la UI en métodos ---
         self._setup_ui_layouts()
@@ -1150,13 +1175,28 @@ class RealTimePlotter(QtWidgets.QWidget):
             Any: Resultado de la ejecución de la función.
         """
         self.main_layout = QtWidgets.QVBoxLayout()
+        if getattr(self, 'is_compact_screen', False):
+            self.main_layout.setContentsMargins(6, 6, 6, 6)
+            self.main_layout.setSpacing(4)
         self.setLayout(self.main_layout)
         
         self.config_layout = QtWidgets.QGridLayout()
+        if getattr(self, 'is_compact_screen', False):
+            self.config_layout.setContentsMargins(6, 4, 6, 4)
+            self.config_layout.setHorizontalSpacing(6)
+            self.config_layout.setVerticalSpacing(4)
         self.config_groupbox = QtWidgets.QGroupBox("Configuración de Adquisición")
         self.config_groupbox.setLayout(self.config_layout)
         
-        self.filter_layout = QtWidgets.QHBoxLayout()
+        self.filter_layout = QtWidgets.QGridLayout()
+        if getattr(self, 'is_compact_screen', False):
+            self.filter_layout.setContentsMargins(6, 3, 6, 3)
+            self.filter_layout.setHorizontalSpacing(8)
+            self.filter_layout.setVerticalSpacing(3)
+        else:
+            self.filter_layout.setContentsMargins(8, 4, 8, 4)
+            self.filter_layout.setHorizontalSpacing(10)
+            self.filter_layout.setVerticalSpacing(4)
         self.filter_groupbox = QtWidgets.QGroupBox("Filtro Digital (Pasa-Banda)")
         self.filter_groupbox.setLayout(self.filter_layout)
 
@@ -1181,9 +1221,14 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.chk_modo_prueba.setToolTip("Usa datos simulados en lugar de la tarjeta NI-DAQ.")
         
         self.cmb_fuente_prueba = QtWidgets.QComboBox()
-        self.cmb_fuente_prueba.addItems(["Senoidal", "Archivo 'senal_de_prueba'"])
+        self.cmb_fuente_prueba.addItems([
+            "Cande 09-01 (/a/ normal)",
+            "Cande 09-01 (Secuencia Continua)",
+            "Senoidal (50 Hz Sintética)",
+            "Archivo 'grabacion.csv'"
+        ])
         self.cmb_fuente_prueba.setEnabled(False)
-        self.cmb_fuente_prueba.setToolTip("Elige si simular con onda senoidal o cargar 'grabacion.csv' de la carpeta 'senal_de_prueba'")
+        self.cmb_fuente_prueba.setToolTip("Elige la señal de prueba: Medición real normal de Cande 09-01 (/a/ 4 canales), Secuencia Continua o Senoidal.")
 
         # --- NUEVO: Checkbox para el Metrónomo ---
         self.chk_use_metronome = QtWidgets.QCheckBox("Usar Metrónomo")
@@ -1286,18 +1331,42 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.spin_high_cut.setFixedWidth(80)
         self.label_filter_order = QtWidgets.QLabel(f"Orden: {self.FILTER_ORDER} (Butterworth)")
 
-        self.filter_layout.addWidget(self.chk_notch_enable)
-        self.filter_layout.addSpacing(20)
-        self.filter_layout.addWidget(self.chk_filter_enable)
-        self.filter_layout.addSpacing(15)
-        self.filter_layout.addWidget(self.label_low_cut)
-        self.filter_layout.addWidget(self.spin_low_cut)
-        self.filter_layout.addSpacing(10)
-        self.filter_layout.addWidget(self.label_high_cut)
-        self.filter_layout.addWidget(self.spin_high_cut)
-        self.filter_layout.addSpacing(15)
-        self.filter_layout.addWidget(self.label_filter_order)
-        self.filter_layout.addStretch(1)
+        self.label_notch_q = QtWidgets.QLabel("Q Notch:")
+        self.spin_notch_q = SpinBox(value=2.0, step=1.0, bounds=(1.0, 50.0), dec=True)
+        self.spin_notch_q.setFixedWidth(60)
+        self.spin_notch_q.setToolTip("Factor de calidad Q del Notch (Default: 2.0 clásico. Usa 30-50 para corte quirúrgico opcional).")
+
+        self.chk_notch_comb = QtWidgets.QCheckBox("Peine Armónico (150/250/350 Hz)")
+        self.chk_notch_comb.setChecked(False)
+        self.chk_notch_comb.setToolTip("Opcional: Filtra también los armónicos impares de 50 Hz.")
+
+        self.spin_notch_q.valueChanged.connect(self.on_filter_settings_changed)
+        self.chk_notch_comb.clicked.connect(self.on_filter_settings_changed)
+
+        # Fila 0: Notch y Peine Armónico
+        row0_layout = QtWidgets.QHBoxLayout()
+        row0_layout.setContentsMargins(0, 0, 0, 0)
+        row0_layout.setSpacing(8)
+        row0_layout.addWidget(self.chk_notch_enable)
+        row0_layout.addWidget(self.label_notch_q)
+        row0_layout.addWidget(self.spin_notch_q)
+        row0_layout.addWidget(self.chk_notch_comb)
+        row0_layout.addStretch(1)
+
+        # Fila 1: Filtro Pasa-Banda
+        row1_layout = QtWidgets.QHBoxLayout()
+        row1_layout.setContentsMargins(0, 0, 0, 0)
+        row1_layout.setSpacing(8)
+        row1_layout.addWidget(self.chk_filter_enable)
+        row1_layout.addWidget(self.label_low_cut)
+        row1_layout.addWidget(self.spin_low_cut)
+        row1_layout.addWidget(self.label_high_cut)
+        row1_layout.addWidget(self.spin_high_cut)
+        row1_layout.addWidget(self.label_filter_order)
+        row1_layout.addStretch(1)
+
+        self.filter_layout.addLayout(row0_layout, 0, 0)
+        self.filter_layout.addLayout(row1_layout, 1, 0)
 
     def _setup_ui_controls(self):
         """Configura los controles de grabación, trigger y mediciones."""
@@ -1311,8 +1380,36 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.chk_autoscroll = QtWidgets.QCheckBox("Auto-scroll (Armar Trigger)")
         self.chk_autoscroll.setChecked(True)
         
+        self.btn_pause = QtWidgets.QPushButton("⏸ PAUSAR")
+        self.btn_pause.setCheckable(True)
+        self.btn_pause.setEnabled(False)
+        self.btn_pause.setStyleSheet("""
+          QPushButton {
+            background-color: #1a1400; color: #ffcc00; font-weight: bold;
+            font-family: 'Courier New'; font-size: 14px; padding: 8px 14px;
+            border: 2px solid #ffcc00; border-radius: 4px;
+          }
+          QPushButton:checked {
+            background-color: #ffcc00; color: #000000; border: 2px solid #ffffff;
+          }
+          QPushButton:disabled { border-color: #444; color: #444; }
+        """)
+        self.btn_pause.toggled.connect(self.on_pause_toggled)
+
+        self.lbl_preroll = QtWidgets.QLabel("Pre-Roll (s):")
+        self.spin_preroll = SpinBox(value=1.0, step=0.5, bounds=(0.0, 5.0), dec=True)
+        self.spin_preroll.setFixedWidth(65)
+        self.spin_preroll.setToolTip("Segundos previos rescatados automáticamente al iniciar grabación manual o saltar el Trigger.")
+        self.spin_preroll.valueChanged.connect(
+            lambda val: self.preroll_buffer.set_config(max(2000, self.SAMPLE_RATE), val)
+        )
+
         # --- Armar layout de botones ---
         self.button_layout.addWidget(self.btn_record)
+        self.button_layout.addWidget(self.btn_pause)
+        self.button_layout.addSpacing(10)
+        self.button_layout.addWidget(self.lbl_preroll)
+        self.button_layout.addWidget(self.spin_preroll)
         self.button_layout.addWidget(self.label_rec_time)
         self.button_layout.addSpacing(20)
         self.button_layout.addStretch(1) # Espaciador
@@ -1973,14 +2070,22 @@ class RealTimePlotter(QtWidgets.QWidget):
         if is_notch_enabled and self.is_acquiring and SCIPY_DISPONIBLE:
             # Diseñar filtro Notch para 50 Hz
             f0 = 50.0  # Frecuencia a remover
-            Q = 2.0    # Factor de calidad
+            Q = float(self.spin_notch_q.value()) if hasattr(self, 'spin_notch_q') else 2.0
             
             # --- CORRECCIÓN DE COMPATIBILIDAD ---
             # La versión de SciPy del usuario no soporta `output='sos'`.
             # Se genera el filtro en formato (b, a) y se convierte a SOS.
             b, a = signal.iirnotch(f0, Q, fs=self.SAMPLE_RATE)
-            self.notch_sos = signal.tf2sos(b, a)
+            sos_list = [signal.tf2sos(b, a)]
 
+            if hasattr(self, 'chk_notch_comb') and self.chk_notch_comb.isChecked():
+                nyquist = 0.5 * self.SAMPLE_RATE
+                for harmonic in [150.0, 250.0, 350.0]:
+                    if harmonic < nyquist:
+                        b_h, a_h = signal.iirnotch(harmonic, Q, fs=self.SAMPLE_RATE)
+                        sos_list.append(signal.tf2sos(b_h, a_h))
+
+            self.notch_sos = np.vstack(sos_list)
             zi_notch_single = signal.sosfilt_zi(self.notch_sos)
             self.notch_zi = np.stack([zi_notch_single] * self.NUM_CANALES, axis=1)
         else:
@@ -2111,6 +2216,36 @@ class RealTimePlotter(QtWidgets.QWidget):
             self.plot.getViewBox().enableAutoRange(pg.ViewBox.XAxis)
             self.plot.getViewBox().enableAutoRange(axis=pg.ViewBox.YAxis) # Auto-escala todo al congelar
 
+    def on_pause_toggled(self, paused: bool):
+        """Pausa o reanuda la grabación, el metrónomo y los timers sin perder datos ni desbordar la DAQ."""
+        self.is_paused = paused
+        if paused:
+            self.pause_start_perf = time.perf_counter()
+            self.btn_pause.setText("▶ REANUDAR")
+            if hasattr(self, 'metro_timer') and self.metro_timer.isActive():
+                self.metro_timer.stop()
+            if hasattr(self, 'session_timer') and self.session_timer.isActive():
+                self.session_timer.stop()
+            if hasattr(self, 'autoforge_overlay'):
+                self.autoforge_overlay.setText("<div align='center' style='color:#FFCC00;'>⏸ EN PAUSA<br><span style='font-size:24px;'>Presiona REANUDAR para seguir</span></div>")
+                self.autoforge_overlay.show()
+        else:
+            if self.pause_start_perf > 0:
+                paused_delta = time.perf_counter() - self.pause_start_perf
+                self.total_paused_duration += paused_delta
+                if self.recording_start_time is not None:
+                    self.recording_start_time += paused_delta
+                self.pause_start_perf = 0.0
+            self.btn_pause.setText("⏸ PAUSAR")
+            if hasattr(self, 'metro_is_running') and self.metro_is_running:
+                bpm = max(1, self.spin_bpm.value())
+                subdivs = max(1, getattr(self, 'spin_metro_subdivs', None).value() if hasattr(self, 'spin_metro_subdivs') else 1)
+                self.metro_timer.start(int(60000 / bpm) // subdivs)
+            if hasattr(self, 'session_timer') and getattr(self, 'is_autoforge_running', False):
+                self.session_timer.start(1000)
+            if hasattr(self, 'autoforge_overlay'):
+                self.autoforge_overlay.hide()
+
     def on_record_click(self):
         """
         Ejecuta la funcionalidad de on_record_click.
@@ -2122,7 +2257,14 @@ class RealTimePlotter(QtWidgets.QWidget):
             # --- EMPEZAR A GRABAR ---
             self.is_recording = True
             self.counting_started = False # Reiniciar la bandera de conteo
-            self.current_recording.clear()
+            # En lugar de self.current_recording.clear(), cargar el Pre-Roll si no es AutoForge:
+            if not getattr(self, 'is_autoforge_running', False):
+                self.current_recording = self.preroll_buffer.dump_preroll_for_recording()
+            else:
+                self.current_recording.clear()
+
+            if hasattr(self, 'btn_pause'):
+                self.btn_pause.setEnabled(True)
             self.cmb_terminal_config.setEnabled(False) # <-- NUEVO: Bloquear cambio en plena grabación
             
             # --- NUEVO: Reiniciar variables de ruido ---
@@ -2176,6 +2318,10 @@ class RealTimePlotter(QtWidgets.QWidget):
         else:
             # --- DETENER GRABACIÓN ---
             self.is_recording = False
+            if hasattr(self, 'btn_pause'):
+                self.btn_pause.setEnabled(False)
+                if self.btn_pause.isChecked():
+                    self.btn_pause.setChecked(False)
             self.btn_record.setText("Empezar a Grabar")
             self.btn_record.setStyleSheet(self.BTN_REC_START_STYLE)
             self.label_rec_time.setVisible(False)
@@ -2363,9 +2509,14 @@ class RealTimePlotter(QtWidgets.QWidget):
             all_new_data = np.concatenate(chunks, axis=1)
             total_muestras_leidas = all_new_data.shape[1]
 
-            # 3. Grabar si es necesario (GUARDAR DATOS CRUDOS EN VOLTIOS)
+            # Dentro de actualizar_plot, justo después de all_new_data = np.concatenate(chunks, axis=1):
+            if self.is_paused:
+                return  # La cola ya fue drenada (evita overflow en NIDAQ), pero congelamos grabación y pantalla
+
             if self.is_recording:
                 self.current_recording.append(all_new_data.copy())
+            else:
+                self.preroll_buffer.push_raw_chunk(all_new_data)
 
             # 4. Calibrar para la visualización y análisis en tiempo real
             
