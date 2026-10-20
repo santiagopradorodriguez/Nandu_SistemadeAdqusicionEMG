@@ -155,11 +155,14 @@
           - **Teoría del Operador Sándwich y Desconvolución Espaciotemporal:** La inversión espacial estática $3 \times 3$ corrige la quiralidad ($\det = +1.000$) y centra las distancias baricéntricas ($\beta_E \to 0.493, \beta_O \to 0.488$), pero satura en 68% porque distintos músculos introducen desfasajes electromecánicos ($\Delta t = 3\text{--}4\text{ bines}$) y las vocales intermedias `/e/` y `/o/` requieren el modo bifásico ortogonal $g_1(t) = \dot{g}_0(t)$ (apertura mandibular seguida de retracción comisural o protrusión).
           - **Resultado en un Único Autoencoder Conv1D Ortogonal Unificado (100% Zero-Labels, $N = 1,683$):** Con Desconvolución Espaciotemporal de Wiener y blanqueo fraccionario ($\beta = 0.38$) *out-of-sample*, el único `ConvOrthogonalAutoencoder` salta de **47.71% GMM** (crudo) a **80.51% GMM Húngaro / 79.44%—82.89% KNN** sin canibalizar ninguna vocal (`/a/: 91%, /e/: 74%, /i/: 80%, /o/: 77%, /u/: 77%`). Script: `experimento_reconstruccion_ejes_puros_biorthogonal.py`, modelo: `autoencoder_conv1d_ortogonal_ejes_puros_biorthogonal.pt`, figura: `reconstruccion_biorthogonal_ejes_puros_multisensor.png`.
 
-       20. **Hito 20 - Compilación Nativa Windows Pro Suite y Actualización de Release en GitHub [COMPLETADO]:**
-           - **Sincronización:** Repositorio actualizado y posicionado en la rama `feat/nandu-pro-suite` con los últimos cambios de DAQ (`autoforge_daq_experimental.py` +2500 líneas, arquitectura `core/`, osciloscopio Reaper y teleprompter HUD).
-           - **Compilación PyInstaller y C# Multihilo:** Ejecución exitosa de `build.bat` en Windows acelerado en los 16 hilos de CPU con prioridad Alta. Generado `NanduLsd_Core.exe` (43.6 MB) y launcher C# `NanduLsd.exe` en `build_windows/NanduLsd/`.
-           - **Empaquetado de Distribución:** Generado `build_windows/NanduLsd_Windows_v5.1.zip` (382.36 MB) y `NanduLsd_Windows.zip`.
-           - **Actualización Oficial en GitHub:** Subido exitosamente por `curl` nativo a GitHub Releases reemplazando el binario anterior en el tag oficial `v5.1-estable`.
+       20. **Hito 20 - Compilación Nativa Windows Pro Suite, Corrección de Colisión de Imports y Release v5.1 Funcional [COMPLETADO]:**
+           - **Sincronización:** Repositorio actualizado en la rama `feat/nandu-pro-suite` con la suite Pro de DAQ (`autoforge_daq_experimental.py`, `core/`, osciloscopio Reaper y HUD).
+           - **Diagnóstico y Corrección de Crash en Ejecutable:**
+             1) En `aplicar_parches_ejecutable.py`, la inyección de funciones base se insertaba antes de `from __future__ import annotations`, provocando `SyntaxError` que hacía que PyInstaller descartara silenciosamente módulos de `core/`. Corregido para inyectar estrictamente tras declaraciones `__future__`.
+             2) Al agregarse las carpetas `core/` y `views/` en la raíz de `EMG_desarrollo`, Python enmascaraba los submódulos de `gui_app/core` y `gui_app/views`. `main_app.py` crasheaba en inicio con `ModuleNotFoundError: No module named 'core.threads'` y `views.session_explorer`.
+             3) Creados módulos puente en `core/threads.py` y `views/*.py` (`session_explorer.py`, `ui_analysis.py`, `config_dialog.py`, etc.), y añadidos a `crear_spec_ejecutable.py` y `aplicar_parches_ejecutable.py`.
+           - **Prueba Empírica en Vivo:** Compilado con `build.bat` y ejecutado en el entorno de usuario. El launcher C# (`NanduLsd.exe`) levantó el splash screen y detectó la ventana principal, y `NanduLsd_Core.exe` permaneció en ejecución continua con 520 MB de memoria asignada sin tracebacks.
+           - **Publicación Oficial en GitHub:** Empaquetado `NanduLsd_Windows_v5.1.zip` (382.48 MB) y subido exitosamente a GitHub Releases en el tag oficial `v5.1-estable`. Commits enviados a `feat/nandu-pro-suite`.
 
 ---
 
