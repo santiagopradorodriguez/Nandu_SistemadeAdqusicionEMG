@@ -72,12 +72,18 @@ def lanzar_script(script_name, args=[]):
     def parchear_archivo(ruta_absoluta, reemplazos_texto, reemplazos_regex=None):
         if reemplazos_regex is None:
             reemplazos_regex = []
-        with open(ruta_absoluta, 'r', encoding='utf-8') as f:
+        with open(ruta_absoluta, 'r', encoding='utf-8-sig') as f:
             contenido = f.read()
 
         # Inyectar las funciones al inicio del archivo si no existen
         if "def resource_path" not in contenido:
-            if contenido.startswith("# -*- coding: utf-8 -*-"):
+            # Si hay importaciones from __future__, la inyección DEBE ir después de ellas
+            future_matches = list(re.finditer(r'^(?:[ \t]*)from[ \t]+__future__[ \t]+import[ \t]+[^\n]+', contenido, re.MULTILINE))
+            if future_matches:
+                last_future = future_matches[-1]
+                end_pos = last_future.end()
+                contenido = contenido[:end_pos] + "\n" + inyeccion_base + contenido[end_pos:]
+            elif contenido.startswith("# -*- coding: utf-8 -*-"):
                 contenido = contenido.replace("# -*- coding: utf-8 -*-", "# -*- coding: utf-8 -*-\n" + inyeccion_base, 1)
             else:
                 contenido = inyeccion_base + contenido
@@ -196,6 +202,8 @@ def lanzar_script(script_name, args=[]):
         "core/protocol_fsm.py",
         "core/process_runner.py",
         "core/latent_bci_utils.py",
+        "views/widgets/reaper_oscilloscope.py",
+        "views/widgets/session_teleprompter_hud.py",
         "analysis/plotter_calibrado.py", 
         "analysis/electrode_viewer_4.py", 
         "utils/editor_mediciones.py", 

@@ -1584,7 +1584,8 @@ class ReportEngine:
             doc.append(r"\centering")
             for idx, f_path in enumerate(fotos[:4]):
                 doc.append(r"\begin{subfigure}{0.45\textwidth}")
-                doc.append(f"    \\includegraphics[width=\\textwidth]{{{f_path.replace('\\', '/')}}}")
+                f_path_tex = f_path.replace('\\', '/')
+                doc.append(f"    \\includegraphics[width=\\textwidth]{{{f_path_tex}}}")
                 doc.append(f"    \\caption{{Montaje {idx + 1}}}")
                 doc.append(r"\end{subfigure}")
                 if idx % 2 == 1 and idx + 1 < len(fotos):

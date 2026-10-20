@@ -131,6 +131,8 @@ additional_modules = [
     'utils.metadata_auditor',
     'instrucciones_uso',
     'views.config_dialog',
+    'views.widgets.reaper_oscilloscope',
+    'views.widgets.session_teleprompter_hud',
     'gui_app.core.threads',
     'gui_app.views.calibrated_viewer_widget',
     'gui_app.views.comparative_explorer_widget',
