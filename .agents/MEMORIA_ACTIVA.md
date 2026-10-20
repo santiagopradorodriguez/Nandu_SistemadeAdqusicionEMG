@@ -150,6 +150,12 @@
           - **Purga de Residuos y Respaldos Externos:** Eliminados `.pytest_cache/`, logos duplicados, imágenes sueltas de gráficos y la carpeta redundante `EMG_desarrollo/views/`. Respaldados `respaldo_pre_release_2026-09-23/` y el tarball de distribución Linux (`NanduLsd_Linux_x64.tar.gz`, 362 MB) en `/home/santiago/repositorios/Nandu_Backup_Local/`.
           - **Verificación de Inferencia y GUI:** Verificada la importación limpia y autónoma de `main_app.py` con código de salida 0.
 
+       19. **Hito 19 - Compilación Nativa Windows v5.1 y Publicación en GitHub Releases [COMPLETADO]:**
+           - **Sincronización:** Repositorio actualizado con `git pull` sincronizando los últimos cambios de master (commits de octubre con visor 3D, autoencoder semi-supervisado 3179).
+           - **Compilación PyInstaller y C#:** Ejecución exitosa de `build.bat` en Windows. PyInstaller 6.20.0 empaquetó `NanduLsd_Core.exe` (43.7 MB) con todas las dependencias y se compiló el launcher nativo C# `NanduLsd.exe` con icono oficial en `build_windows/NanduLsd/`.
+           - **Empaquetado de Distribución:** Generado `build_windows/NanduLsd_Windows_v5.1.zip` (382.46 MB) y `NanduLsd_Windows.zip`.
+           - **Publicación Oficial en GitHub:** Creado Release oficial con tag `v5.1-estable` en `santiagopradorodriguez/Nandu_SistemadeAdqusicionEMG` con el archivo binario subido y disponible para descarga pública directa.
+
 ---
 
 ## 6. Infraestructura de Memoria y Tokens
