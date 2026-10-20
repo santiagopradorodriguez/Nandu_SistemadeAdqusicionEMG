@@ -155,6 +155,12 @@
           - **Teoría del Operador Sándwich y Desconvolución Espaciotemporal:** La inversión espacial estática $3 \times 3$ corrige la quiralidad ($\det = +1.000$) y centra las distancias baricéntricas ($\beta_E \to 0.493, \beta_O \to 0.488$), pero satura en 68% porque distintos músculos introducen desfasajes electromecánicos ($\Delta t = 3\text{--}4\text{ bines}$) y las vocales intermedias `/e/` y `/o/` requieren el modo bifásico ortogonal $g_1(t) = \dot{g}_0(t)$ (apertura mandibular seguida de retracción comisural o protrusión).
           - **Resultado en un Único Autoencoder Conv1D Ortogonal Unificado (100% Zero-Labels, $N = 1,683$):** Con Desconvolución Espaciotemporal de Wiener y blanqueo fraccionario ($\beta = 0.38$) *out-of-sample*, el único `ConvOrthogonalAutoencoder` salta de **47.71% GMM** (crudo) a **80.51% GMM Húngaro / 79.44%—82.89% KNN** sin canibalizar ninguna vocal (`/a/: 91%, /e/: 74%, /i/: 80%, /o/: 77%, /u/: 77%`). Script: `experimento_reconstruccion_ejes_puros_biorthogonal.py`, modelo: `autoencoder_conv1d_ortogonal_ejes_puros_biorthogonal.pt`, figura: `reconstruccion_biorthogonal_ejes_puros_multisensor.png`.
 
+       20. **Hito 20 - Compilación Nativa Windows Pro Suite y Actualización de Release en GitHub [COMPLETADO]:**
+           - **Sincronización:** Repositorio actualizado y posicionado en la rama `feat/nandu-pro-suite` con los últimos cambios de DAQ (`autoforge_daq_experimental.py` +2500 líneas, arquitectura `core/`, osciloscopio Reaper y teleprompter HUD).
+           - **Compilación PyInstaller y C# Multihilo:** Ejecución exitosa de `build.bat` en Windows acelerado en los 16 hilos de CPU con prioridad Alta. Generado `NanduLsd_Core.exe` (43.6 MB) y launcher C# `NanduLsd.exe` en `build_windows/NanduLsd/`.
+           - **Empaquetado de Distribución:** Generado `build_windows/NanduLsd_Windows_v5.1.zip` (382.36 MB) y `NanduLsd_Windows.zip`.
+           - **Actualización Oficial en GitHub:** Subido exitosamente por `curl` nativo a GitHub Releases reemplazando el binario anterior en el tag oficial `v5.1-estable`.
+
 ---
 
 ## 6. Infraestructura de Memoria y Tokens
