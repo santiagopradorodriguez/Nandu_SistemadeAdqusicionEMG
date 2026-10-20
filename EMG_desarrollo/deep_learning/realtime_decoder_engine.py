@@ -13,8 +13,16 @@ import time
 import numpy as np
 from scipy import signal
 from sklearn.mixture import GaussianMixture
-import torch
-import torch.nn as nn
+try:
+    import torch
+    import torch.nn as nn
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+    torch = None
+    class _DummyNN:
+        Module = object
+    nn = _DummyNN()
 
 VOCALES = ['A', 'E', 'I', 'O', 'U']
 VOCAL_A_COLOR_HEX = {
@@ -397,6 +405,8 @@ class RealtimeDecoderEngine:
 
     def load_model(self, pt_path):
         """Carga el modelo PyTorch entrenado y reconstruye el clasificador GMM."""
+        if not TORCH_AVAILABLE:
+            raise RuntimeError("PyTorch no está disponible en este entorno.")
         if not os.path.exists(pt_path):
             raise FileNotFoundError(f"No existe el archivo de modelo: {pt_path}")
 

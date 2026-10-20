@@ -150,6 +150,11 @@
           - **Purga de Residuos y Respaldos Externos:** Eliminados `.pytest_cache/`, logos duplicados, imágenes sueltas de gráficos y la carpeta redundante `EMG_desarrollo/views/`. Respaldados `respaldo_pre_release_2026-09-23/` y el tarball de distribución Linux (`NanduLsd_Linux_x64.tar.gz`, 362 MB) en `/home/santiago/repositorios/Nandu_Backup_Local/`.
           - **Verificación de Inferencia y GUI:** Verificada la importación limpia y autónoma de `main_app.py` con código de salida 0.
 
+      19. **Experimento 19 - Reconstrucción Biorthogonal y Desconvolución Espaciotemporal de Wiener de los 3 Ejes Musculares Puros desde CSVs Curados [COMPLETADO]:**
+          - **Auditoría de Datasets CSV vs NPZ:** Se identificó que `Candela_2026-09-04` en el `.npz` histórico correspondía a `2026-09-04_Candela_Frankenstein` (`canal_0` donado de otra fecha). Al trabajar desde los 7 archivos `caracteristicas_exportadas.csv` curados ($N = 1,683$ pulsos reales de Lucas, Santi, Candela en 4 montajes y Petra en 2 días), cada sesión individual presenta separabilidad nativa entre 76.3% y 88.2% (media ponderada 83.8%).
+          - **Teoría del Operador Sándwich y Desconvolución Espaciotemporal:** La inversión espacial estática $3 \times 3$ corrige la quiralidad ($\det = +1.000$) y centra las distancias baricéntricas ($\beta_E \to 0.493, \beta_O \to 0.488$), pero satura en 68% porque distintos músculos introducen desfasajes electromecánicos ($\Delta t = 3\text{--}4\text{ bines}$) y las vocales intermedias `/e/` y `/o/` requieren el modo bifásico ortogonal $g_1(t) = \dot{g}_0(t)$ (apertura mandibular seguida de retracción comisural o protrusión).
+          - **Resultado en un Único Autoencoder Conv1D Ortogonal Unificado (100% Zero-Labels, $N = 1,683$):** Con Desconvolución Espaciotemporal de Wiener y blanqueo fraccionario ($\beta = 0.38$) *out-of-sample*, el único `ConvOrthogonalAutoencoder` salta de **47.71% GMM** (crudo) a **80.51% GMM Húngaro / 79.44%—82.89% KNN** sin canibalizar ninguna vocal (`/a/: 91%, /e/: 74%, /i/: 80%, /o/: 77%, /u/: 77%`). Script: `experimento_reconstruccion_ejes_puros_biorthogonal.py`, modelo: `autoencoder_conv1d_ortogonal_ejes_puros_biorthogonal.pt`, figura: `reconstruccion_biorthogonal_ejes_puros_multisensor.png`.
+
 ---
 
 ## 6. Infraestructura de Memoria y Tokens

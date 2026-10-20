@@ -5217,4 +5217,221 @@ $\mathbf{1.0}$ & \textbf{73.75\%} & \textbf{65.50\%} & 56.10\% & \textbf{Récord
     \item Gower, J. C. (1975). \textit{Generalized Procrustes analysis}. \textbf{Psychometrika}, 40(1), 33--51. DOI: \href{https://doi.org/10.1007/BF02291478}{10.1007/BF02291478}.
 \end{enumerate}
 
+% ==============================================================================
+% CAPITULO ADICIONAL: RECONSTRUCCION BIORTHOGONAL Y DESCONVOLUCION DE WIENER
+% ==============================================================================
+\chapter{Reconstrucción de los 3 Ejes Musculares Puros y Desconvolución Espaciotemporal de Wiener}
+\label{chap:reconstruccion_ejes_puros_wiener}
+
+\section{Planteo del Problema Físico: Modos Musculares vs Ubicación de Electrodos}
+\label{sec:planteo_ejes_puros}
+
+En la electromiografía superficial facial de tres canales existe una diferencia estructural entre los \textbf{tres modos musculares anatómicos puros} y las \textbf{tres señales eléctricas medidas por los parches cutáneos}:
+\begin{equation}
+\mathbf{m}(t) = \begin{bmatrix} m_A(t) \\ m_I(t) \\ m_U(t) \end{bmatrix} \in \mathbb{R}_+^{3 \times T}
+\quad \xrightarrow{\text{Conducción de Volumen } \mathbf{P}_s} \quad
+\mathbf{x}_{\text{raw}}^{(s)}(t) = \mathbf{P}_s \, \mathbf{m}(t) + \boldsymbol{\eta}_s(t)
+\end{equation}
+donde $m_A(t)$ es el modo de apertura mandibular (vientre anterior del digástrico), $m_I(t)$ es el modo de retracción comisural o sonrisa (DAO, risorio, cigomático mayor o modíolo según el montaje $s$) y $m_U(t)$ es el modo de protrusión labial (orbicular de los labios).
+
+\subsection{El Operador Sándwich No Lineal y la Distorsión de Vocales Intermedias}
+Dado que el pipeline aplica la normalización por Supremo Tricanal $\mathcal{N}_\infty(\mathbf{v}) = \mathbf{v} / \|\mathbf{v}\|_\infty$ sobre la señal cruda del sensor, la señal normalizada que ingresa a la red neuronal obedece la ley proyectiva:
+\begin{equation}
+\tilde{\mathbf{x}}^{(s)}(t) = \mathcal{N}_\infty\!\left(\mathbf{P}_s \, \mathbf{m}(t)\right) = \frac{\mathbf{P}_s \, \mathbf{m}(t)}{\|\mathbf{P}_s \, \mathbf{m}(t)\|_\infty} \neq \mathbf{P}_s \, \mathcal{N}_\infty\!\left(\mathbf{m}(t)\right)
+\end{equation}
+La falta de conmutatividad entre la matriz de mezcla oblicua $\mathbf{P}_s \in \text{GL}(3, \mathbb{R})$ y la normalización no lineal $\mathcal{N}_\infty$ produce dos fenómenos geométricos acoplados:
+\begin{enumerate}
+    \item \textbf{Corrimiento Baricéntrico de /e/ y /o/:} Para una vocal intermedia como /e/, cuyo comando motor puro combina apertura y sonrisa $\mathbf{m}_E = \alpha_A \mathbf{e}_A + \alpha_I \mathbf{e}_I$, la distancia relativa hacia los polos cardinales /a/ e /i/ queda gobernada por el cociente de normas proyectivas $\|\mathbf{p}_I^{(s)}\|_\infty / \|\mathbf{p}_A^{(s)}\|_\infty$. Al cambiar el electrodo del canal de sonrisa desde el DAO hacia el cigomático a $45^\circ$ o el risorio, la coordenada baricéntrica $\beta_E$ oscila entre $0.23$ y $0.84$.
+    \item \textbf{Inversión de Quiralidad:} Cuando el montaje permuta la dominancia relativa entre los canales 1 y 2 o introduce ángulos obtusos de captura, el determinante orientado $\det([\mathbf{u}_A, \mathbf{u}_I, \mathbf{u}_U])$ invierte su signo ($\det < 0$), reflejando especularmente el espacio latente de la sesión.
+\end{enumerate}
+
+\section{De la Desmezcla Estática 3x3 a la Desconvolución Espaciotemporal de Wiener}
+\label{sec:wiener_espaciotemporal}
+
+Al auditar los 7 conjuntos de datos curados exportados en \texttt{caracteristicas\_exportadas.csv} ($N = 1,683$ pulsos reales distribuidos en Lucas, Santi, Candela en 4 ubicaciones de electrodos y Petra en 2 días), se demostró que cada sesión individual posee una separabilidad nativa elevada ($76.3\%$ a $88.2\%$, media ponderada $83.8\%$).
+
+Sin embargo, la inversión espacial instantánea $3 \times 3$ ($\mathbf{W}_{\text{dual}} = \mathbf{P}_s^{-1}$) alcanza un techo de $\sim 74.4\%$ en KNN y $\sim 68.0\%$ en prototipos lineales al unificar todas las sesiones en un único Autoencoder Convolucional 1D Ortogonal. El análisis de los tensores crudos reveló dos causas físicas precisas:
+\begin{enumerate}
+    \item \textbf{Desfasaje Electromecánico entre Sesiones:} En Lucas y Santi la cúspide de activación se ubica en los bines temporales $t \in [8, 9]$, mientras que en las exportaciones \texttt{.csv} de Candela y Petra el pico ocurre en $t \in [5, 6]$ ($150\text{ ms}$ antes). En un espacio de $D = 60$ dimensiones ($3 \times 20$), un corrimiento de $3$ bines rota los vectores de señal en $\approx 69^\circ$.
+    \item \textbf{Subespacio Bifásico de las Vocales Intermedias /e/ y /o/:} Si las 5 vocales compartieran una única envolvente temporal monofásica $g_0(t)$, el conjunto completo de plantillas residiría en $\text{span}\{\mathbf{e}_A, \mathbf{e}_I, \mathbf{e}_U\} \otimes g_0(t)$, cuyo rango lineal es a lo sumo $3$. En las señales reales, /e/ y /o/ se desacoplan de la combinación lineal estática gracias al modo bifásico ortogonal $g_1(t) = \dot{g}_0(t)$ ($\langle g_0, g_1 \rangle = 0$), que captura la transición secuencial mandíbula-comisura en /e/ y mandíbula-orbicular en /o/.
+\end{enumerate}
+
+\subsection{Formulación del Filtro de Wiener Espaciotemporal con Blanqueo Fraccionario}
+Modelando los patrones canónicos puros en el subespacio fisiológico de 6 dimensiones $\{\mathbf{e}_A, \mathbf{e}_I, \mathbf{e}_U\} \otimes \{g_0(t), g_1(t)\} \subset \mathbb{R}^{3 \times 20}$ con sus 4 valores singulares centrados ecualizados sobre la base ortonormal $\mathbf{B}_4 \in \mathbb{R}^{4 \times 60}$, el operador de reconstrucción para cada sesión $s$ se obtiene mediante regresión de Wiener regularizada acoplada a un blanqueo fraccionario de covarianza:
+\begin{equation}
+\mathbf{W}_4^{(s)} = \left(\mathbf{X}_{\text{tr}}^{(s)T} \mathbf{X}_{\text{tr}}^{(s)} + \lambda \mathbf{I}_{60}\right)^{-1} \mathbf{X}_{\text{tr}}^{(s)T} \mathbf{Z}_{\text{tr}}^{(s)},
+\qquad
+\mathbf{W}_{\text{iso}}^{(s)} = \mathbf{W}_4^{(s)} \left(\hat{\boldsymbol{\Sigma}}_{ZZ}^{(s)}\right)^{-\beta / 2}
+\end{equation}
+El factor $\left(\hat{\boldsymbol{\Sigma}}_{ZZ}^{(s)}\right)^{-\beta / 2}$ ($\beta = 0.38$) compensa la atenuación por \textit{shrinkage} de mínimos cuadrados sobre el tercer y cuarto eje canónico (donde residen /e/ y /o/), evitando que el clustering no supervisado por GMM o K-Means colapse /o/ con /u/ o /e/ con /i/.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{reconstruccion_biorthogonal_ejes_puros_multisensor.png}
+\caption{Evaluación unificada sobre los 7 datasets CSV curados ($N = 1,683$ pulsos, 4 sujetos, 6 montajes anatómicos) en un único Autoencoder Convolucional 1D Ortogonal entrenado bajo régimen 100\% Zero-Labels. Panel A: Sensor crudo sin desmezcla (GMM $47.7\%$). Panel B: Ejes musculares puros reconstruidos por desconvolución espaciotemporal de Wiener (GMM $80.5\%$, KNN $79.4\%$). Panel C: Eliminación de la canibalización de /e/ y /o/. Panel D: Rendimiento por sesión dentro de la misma red unificada.}
+\label{fig:reconstruccion_wiener_csv}
+\end{figure}
+
+\section{Auditoría Rigurosa de Fuga de Datos: Protocolos de Validación}
+\label{sec:auditoria_fuga_datos}
+
+Para evaluar con rigor científico si existe fuga de información (\textit{data leakage}) en la reconstrucción de los ejes puros y en el entrenamiento de la red neuronal, es indispensable distinguir dos niveles ortogonales de auditoría: la \textbf{fuga muestral entre entrenamiento y prueba} y el \textbf{grado de supervisión empleado durante la calibración física de cada sesión}.
+
+\subsection{Nivel 1: Auditoría de Fuga Muestral - Holdout Ciego Estricto 80/20}
+En una primera instancia, si los pliegues out-of-sample generados por el filtro de Wiener se concatenan para entrenar el Autoencoder sobre las $N = 1,683$ muestras antes de evaluar el clasificador, el Autoencoder observa la distribución sin etiquetas del conjunto de prueba. Para descartar por completo cualquier contaminación muestral, se ejecutó el \textbf{Protocolo de Holdout Ciego Estricto}:
+\begin{enumerate}
+    \item Se particionó el corpus completo ($N = 1,683$) de forma estratificada por sesión y vocal en un conjunto de entrenamiento estricto $\mathcal{D}_{\text{train}}$ ($80\%$, $N_{\text{train}} = 1,346$ pulsos) y un conjunto de prueba completamente ciego $\mathcal{D}_{\text{test}}$ ($20\%$, $N_{\text{test}} = 337$ pulsos).
+    \item Las medias $\boldsymbol{\mu}_X^{(s)}$, las matrices de Wiener $\mathbf{W}_{\text{iso}}^{(s)}$ y las medianas de saturación radial se calcularon \textbf{exclusivamente sobre $\mathcal{D}_{\text{train}}$}.
+    \item El \texttt{ConvOrthogonalAutoencoder} ($250$ épocas, $\eta = 0.008$, semilla $42$, $100\%$ Zero-Labels) se entrenó \textbf{únicamente con los $1,346$ pulsos de $\mathcal{D}_{\text{train}}$}, sin observar jamás $\mathcal{D}_{\text{test}}$.
+    \item Los modelos de evaluación externa (GMM de 5 componentes con asignación húngara, Prototipos \texttt{NearestCentroid}, LDA y KNN) se ajustaron \textbf{únicamente sobre las coordenadas latentes $\mathbf{Z}_{\text{train}}$} y se evaluaron en frío sobre $\mathbf{Z}_{\text{test}}$.
+\end{enumerate}
+
+\begin{table}[H]
+\centering
+\small
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Protocolo de Evaluación sobre el Espacio Latente} & \textbf{GMM Húngaro} & \textbf{Prototipos NC} & \textbf{LDA} & \textbf{KNN} & \textbf{Desglose /a/ - /e/ - /i/ - /o/ - /u/} \\
+\midrule
+\textbf{Pool OOF (Wiener OOF + AE en Pool $N=1,683$)} & 80.51\% & 78.97\% & 81.28\% & 79.44\% & 91\% / 74\% / 80\% / 77\% / 77\% \\
+\textbf{Holdout Ciego Estricto ($\text{Train}=1,346 \to \text{Test}=337$)} & \textbf{79.53\%} & \textbf{78.64\%} & \textbf{81.60\%} & \textbf{77.45\%} & \textbf{92\% / 73\% / 79\% / 60\% / 93\%} \\
+\bottomrule
+\end{tabular}%
+}
+\caption{Auditoría muestral: comparación entre evaluación sobre el pool out-of-fold y el protocolo de Holdout Ciego Estricto donde ni el filtro de Wiener, ni el Autoencoder, ni el GMM/LDA observan el conjunto de prueba $\mathcal{D}_{\text{test}}$.}
+\label{tab:auditoria_muestral}
+\end{table}
+
+Como demuestra la Tabla~\ref{tab:auditoria_muestral}, cuando el Autoencoder, el filtro de Wiener y los clasificadores se confinan de manera absoluta a $\mathcal{D}_{\text{train}}$, la exactitud en el conjunto ciego $\mathcal{D}_{\text{test}}$ se mantiene en \textbf{79.53\% para GMM Húngaro} (apenas $-0.98\%$ respecto al pool) y \textbf{81.60\% para LDA}. Esto confirma que \textbf{no existe sobreajuste ni fuga desde el conjunto de prueba $\mathcal{D}_{\text{test}}$}.
+
+\subsection{Nivel 2: Auditoría de Supervisión en la Calibración - 3 Polos vs 5 Vocales}
+El segundo punto crítico de auditoría metodológica radica en qué información del conjunto de calibración $\mathcal{D}_{\text{train}}^{(s)}$ utiliza el operador de preprocesamiento de cada sesión:
+\begin{itemize}
+    \item \textbf{Calibración Física de 3 Polos Cardinales (/a/, /i/, /u/ únicamente):} Si la matriz de desmezcla se estima usando \textbf{exclusivamente las 3 vocales puras /a/, /i/, /u/} de $\mathcal{D}_{\text{train}}^{(s)}$ (sin observar jamás las etiquetas de /e/ ni de /o/) junto con una alineación temporal ciega del centro de masa de energía del pulso, el operador invierte con éxito la matriz física $\mathbf{P}_s \in \text{GL}(3, \mathbb{R})$: la exactitud out-of-fold por prototipos lineales salta de $57.40\%$ (crudo) a \textbf{67.97\%} ($73.38\%$ en KNN), alcanzando \textbf{94\% de acierto en /a/ y 94\% en /i/}. Sin embargo, la vocal intermedia /e/ permanece en $22\%$ en prototipos lineales ($52\%$ en KNN) porque los 3 polos estáticos no informan cuál es la ley de reclutamiento no lineal ni el desfase dinámico mandíbula-comisura específico de ese músculo para /e/.
+    \item \textbf{Calibración Espaciotemporal de 5 Vocales (Filtro de Wiener en $\mathcal{D}_{\text{train}}^{(s)}$):} El filtro de Wiener $\mathbf{W}_{\text{iso}}^{(s)} \in \mathbb{R}^{60 \times 4}$ utiliza pulsos de calibración de las 5 vocales dentro de $\mathcal{D}_{\text{train}}^{(s)}$ para proyectar cada sesión al subespacio canónico de 4 dimensiones. Matemáticamente, esto significa que $\mathbf{W}_{\text{iso}}^{(s)}$ actúa como un \textbf{adaptador lineal supervisado por sesión (calibración guiada de 5 clases en entrenamiento)} que estandariza tanto los 3 ejes espaciales como la fase articulatoria de /e/ y /o/ antes de ingresar al Autoencoder no supervisado. Gracias a esta calibración sobre $\mathcal{D}_{\text{train}}^{(s)}$, la vocal /e/ sube de $22\%$ a \textbf{73\%--75\%} en datos nuevos $\mathcal{D}_{\text{test}}^{(s)}$ de esa sesión, llevando el rendimiento global unificado al \textbf{79.5\%--82.9\%}.
+\end{itemize}
+
+\begin{table}[H]
+\centering
+\small
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Régimen de Calibración en $\mathcal{D}_{\text{train}}$ (Evaluado Estricto OOF en $\mathcal{D}_{\text{test}}$)} & \textbf{Prototipos NC} & \textbf{LDA} & \textbf{KNN} & \textbf{Desglose NC /a/ - /e/ - /i/ - /o/ - /u/} \\
+\midrule
+\textbf{1. Señal Cruda CSV (Cero Calibración Inter-Sesión)} & 57.40\% & 71.90\% & 81.34\% & 70\% / 26\% / 89\% / 59\% / 46\% \\
+\textbf{2. Calibración Física 3 Polos (/a/, /i/, /u/ en Train + $\Delta t$ Ciego)} & 67.97\% & 72.01\% & 73.38\% & \textbf{94\%} / 22\% / \textbf{94\%} / 64\% / 70\% \\
+\textbf{3. Calibración Wiener 5 Vocales (5 Clases en Train)} & \textbf{79.62\%} & \textbf{81.28\%} & \textbf{81.05\%} & \textbf{91\% / 75\% / 84\% / 75\% / 73\%} \\
+\bottomrule
+\end{tabular}%
+}
+\caption{Desglose del aporte físico de los 3 polos puros (/a/, /i/, /u/) frente a la calibración espaciotemporal de las 5 vocales bajo validación cruzada out-of-fold estricta ($N = 1,683$).}
+\label{tab:auditoria_3polos_vs_5v}
+\end{table}
+
+\subsection{Nivel 3: Aislamiento Cronológico por Día y por Sujeto Completo - Protocolo LOSO en Base Física 12D}
+Para uso real en un decodificador de tiempo real, una partición aleatoria $80/20$ dentro del mismo día sigue siendo optimista porque pulsos consecutivos comparten la misma deriva de impedancia cutánea. El protocolo definitivo exige dos condiciones simultáneas:
+\begin{enumerate}
+    \item \textbf{Aislamiento de Día Completo o Sujeto Completo fuera del Autoencoder:} La red neuronal (\texttt{ConvOrthogonalAutoencoder}) y las fronteras del clasificador se entrenan excluyendo por completo el día evaluado (\textit{Leave-One-Session-Out}) o excluyendo todas las sesiones de ese sujeto (\textit{Leave-One-Subject-Out}, LOSO) y luego \textbf{se congelan sus pesos}.
+    \item \textbf{Calibración Cronológica de Bajo Rango en $12\text{D}$ al Inicio de Cada Sesión:} Al comenzar una sesión o día nuevo con los electrodos recién colocados, solo se dispone de los primeros $k \le 7$ pulsos por vocal ($N_{\text{cal}} \approx 21\text{--}35$). Ajustar una matriz libre sobre $D = 60$ bines crudos con $35$ muestras resulta sub-determinado ($N_{\text{cal}} < 60$). Proyectando cada canal sobre las $K = 4$ ondeletas ortonormales de Hermite-Gauss $\{\psi_0(t), \psi_1(t), \psi_2(t), \psi_3(t)\}$ centradas de forma no supervisada en el pico de energía $t_0^{(s)}$ de la sesión, el espacio del sensor se reduce a $D_{\text{físico}} = 3 \times 4 = 12\text{D}$, permitiendo estimar la matriz de proyección sensor $\to$ músculo sin sobreajuste y evaluar causalmente el resto del día hacia adelante sobre la red congelada.
+\end{enumerate}
+
+\begin{table}[H]
+\centering
+\small
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llcccc}
+\toprule
+\textbf{Sujeto / Día Evaluado en Futuro Causal} & \textbf{Montaje Anatómico} & \textbf{$N_{\text{test}}$} & \textbf{1. Crudo Zero-Shot} & \textbf{2. Día Aislado Causal} & \textbf{3. Sujeto Aislado LOSO} \\
+\midrule
+\textbf{Lucas (T1 a T7 calibrado por sesión)} & Digástrico + DAO + Orbicular & 350 & 35.71\% & \textbf{87.71\%} & \textbf{83.71\%} \\
+\textbf{Candela 2026-08-30} & Digástrico + Nudo Sonrisa + Orbicular & 66 & 16.67\% & \textbf{80.30\%} & \textbf{81.82\%} \\
+\textbf{Petra Día 2 (2026-08-28)} & Digástrico + Cigomático + Elevador & 106 & 20.75\% & \textbf{72.64\%} & \textbf{74.53\%} \\
+\textbf{Candela 2026-09-18} & Digástrico + Modíolo + Orbicular & 177 & 30.51\% & \textbf{74.01\%} & \textbf{72.88\%} \\
+\textbf{Petra Día 1 (2026-08-21)} & Digástrico + Cigomático + Elevador & 105 & 52.38\% & \textbf{66.67\%} & \textbf{71.43\%} \\
+\textbf{Candela 2026-09-01} & Digástrico + Risorio + Orbicular & 178 & 36.52\% & \textbf{73.03\%} & \textbf{69.10\%} \\
+\textbf{Candela 2026-09-16} & Digástrico + Cigomático $45^\circ$ + Orbicular & 159 & 18.24\% & \textbf{67.30\%} & \textbf{66.04\%} \\
+\textbf{Santi 2026-06-23} & Digástrico + Risorio/DAO + Orbicular & 178 & 39.33\% & \textbf{65.17\%} & \textbf{64.04\%} \\
+\midrule
+\textbf{Media Ponderada Global ($N_{\text{test}} = 1,319$)} & \textbf{Todas las Posiciones Faciales} & \textbf{1,319} & \textbf{32.68\%} & \textbf{75.13\%} & \textbf{73.69\%} \\
+\bottomrule
+\end{tabular}%
+}
+\caption{Evaluación causal estricta hacia el futuro sobre la red neuronal congelada: comparación entre aislar el día evaluado (\textit{Leave-One-Session-Out}, $75.13\%$) y aislar el sujeto completo con todos sus días fuera del entrenamiento de la red (\textit{Leave-One-Subject-Out} LOSO, $73.69\%$).}
+\label{tab:auditoria_loso_interdia}
+\end{table}
+
+\section{Conclusión General del Experimento de Ejes Puros}
+\begin{enumerate}
+    \item \textbf{Cero Fuga Muestral de Test:} Evaluando con partición ciega estricta ($\mathcal{D}_{\text{train}} \cap \mathcal{D}_{\text{test}} = \emptyset$ en todas las etapas: Wiener, Autoencoder y clasificador), el modelo unificado mantiene \textbf{79.53\% en GMM Húngaro} y \textbf{81.60\% en LDA} sobre datos nunca vistos.
+    \item \textbf{Generalización Causal Inter-Día (75.13\%) e Inter-Sujeto LOSO (73.69\%):} Incluso cuando se excluye a un sujeto completo del entrenamiento del Autoencoder (por ejemplo, excluyendo las 4 sesiones de Candela o los 2 días de Petra) y se calibra la proyección sensor $\to$ músculo únicamente con los primeros pulsos cronológicos de cada sesión en la base de Hermite-Gauss $12\text{D}$, la red congelada decodifica el resto futuro de las sesiones al \textbf{73.69\% global} (\textbf{83.71\% en Lucas}, \textbf{72.99\% en Petra}, \textbf{70.86\% en Candela}), frente a $32.68\%$ sin reconstrucción de ejes puros.
+    \item \textbf{Qué resuelve la calibración de 3 polos vs 5 vocales:} Calibrar únicamente con los 3 ejes extremos (/a/, /i/, /u/) rectifica al $100\%$ la quiralidad ($\det = +1$) y lleva los polos /a/ e /i/ al $94\%$ de exactitud lineal universal, pero requiere incluir pulsos de calibración de /e/ y /o/ al inicio de la sesión para fijar la ganancia de co-activación y la derivada bifásica $g_1(t)$ que elevan a /e/ y /o/ al rango $66\%\text{--}75\%$.
+\end{enumerate}
+
+\section{Explicación Paso a Paso en Lenguaje Simple: Qué Hace el Método y Por Qué No Hay Fuga de Datos}
+\label{sec:explicacion_intuitiva_sin_fuga}
+
+Para auditar de un vistazo qué hace el algoritmo físicamente y verificar que no existe ninguna trampa ni fuga de información desde los datos de prueba hacia el modelo, a continuación se describe el flujo completo en lenguaje cotidiano.
+
+\subsection{El Problema Físico en Cuatro Ideas Simples}
+\begin{enumerate}
+    \item \textbf{El músculo hace siempre lo mismo, pero el parche cambia de lugar:} Cuando cualquier persona pronuncia las 5 vocales, su cara ejecuta tres gestos motores básicos: abrir la mandíbula para /a/, estirar la comisura en sonrisa para /i/, fruncir los labios en trompita para /u/, o mezclar mandíbula con sonrisa para /e/ y mandíbula con trompita para /o/. El problema es que al pegar los 3 electrodos en distintas partes de la cara —por ejemplo en el DAO abajo, en el risorio al costado o en el cigomático a $45^\circ$ arriba—, cada parche ve una mezcla distinta de esos músculos, y en algunos sujetos los canales 1 y 2 quedan invertidos como en un espejo.
+    \item \textbf{Diferencia de tiempos y movimiento en dos tiempos de /e/ y /o/:} En las grabaciones de Lucas y Santi el pico del pulso ocurre a mitad de la ventana temporal, mientras que en Candela y Petra ocurre antes. Además, /a/, /i/ y /u/ son gestos simples de prender y apagar un músculo, mientras que /e/ y /o/ tienen un movimiento en dos tiempos: primero abre la mandíbula y un instante después tira la comisura o cierra el labio.
+    \item \textbf{El Espacio Muscular Puro Universal:} Antes de entrar al Autoencoder, definimos un molde estándar de 3 canales universales: Canal 0 = Mandíbula pura, Canal 1 = Sonrisa pura y Canal 2 = Trompita pura, siempre centrados en el mismo instante temporal.
+    \item \textbf{Por qué resumimos cada canal en 4 números simples al calibrar un día nuevo:} Cada pulso tiene $3 \text{ canales} \times 20 \text{ puntos de tiempo} = 60 \text{ números}$. Al empezar un día nuevo, solo queremos pedirle al usuario unos $6$ o $7$ pulsos por vocal —unos $30$ pulsos en total, que toman 20 segundos—. Si intentamos calibrar $60$ números libres usando solo $30$ pulsos, hay más incógnitas que datos y la cuenta memoriza ruido. En cambio, resumimos la curva de 20 puntos de cada canal con solo \textbf{4 medidas físicas alrededor de su pico}:
+    \begin{itemize}
+        \item Medida 1: Qué tan alto llega el pulso en ese canal.
+        \item Medida 2: Si sube temprano o sube tarde —captura el movimiento en dos tiempos de /e/ y /o/—.
+        \item Medida 3: Qué tan ancho o angosto es el pulso.
+        \item Medida 4: Si el pulso se inclina hacia el inicio o hacia el final.
+    \end{itemize}
+    Así, cada pulso queda descripto por $3 \text{ canales} \times 4 \text{ medidas} = 12 \text{ números}$. Con $30$ pulsos de calibración al inicio del día sobra información para calcular una tabla de traducción de $12$ números sin memorizar ruido.
+\end{enumerate}
+
+\subsection{Auditoría Paso a Paso: Cómo Garantizamos Cero Fuga de Datos}
+En las Figuras~\ref{fig:panel_test_aislado_interdia} y~\ref{fig:panel_test_aislado_loso} se muestran los puntos del conjunto de prueba de cada día siguiendo tres reglas de aislamiento estricto:
+\begin{enumerate}
+    \item \textbf{Paso 1 - Aislar el día o el sujeto entero bajo llave antes de entrenar la red:}
+    \begin{itemize}
+        \item En la prueba de \textbf{Día Aislado} —Figura~\ref{fig:panel_test_aislado_interdia}—, antes de entrenar la red neuronal sacamos por completo el día que queremos probar.
+        \item En la prueba de \textbf{Sujeto Aislado LOSO} —Figura~\ref{fig:panel_test_aislado_loso}—, somos todavía más estrictos: sacamos \textbf{todos los días de esa persona} —por ejemplo, sacamos las 4 sesiones completas de Candela o los 2 días completos de Petra—.
+    \end{itemize}
+    Entrenamos el Autoencoder y pintamos las 5 zonas de colores del mapa usando \textbf{únicamente los datos de las demás sesiones/personas}. Una vez entrenados, \textbf{congelamos la red neuronal y congelamos las fronteras de colores}. Nadie vuelve a tocar la red ni las zonas.
+    \item \textbf{Paso 2 - Calibración de 20 segundos al principio del día nuevo y descarte:}
+    Tomamos el día nuevo que estaba guardado bajo llave y miramos \textbf{solamente los primeros pulsos grabados al inicio de esa toma} —los primeros $N_{\text{cal}} \approx 30\text{--}35$ pulsos en orden cronológico, es decir, las ventanas \texttt{Win0} a \texttt{Win6} de cada vocal—. Con esos primeros pulsos calculamos la matriz de traducción de $12$ números que endereza los parches de ese día hacia el Espacio Muscular Puro. \textbf{Inmediatamente descartamos esos $N_{\text{cal}}$ pulsos de calibración}: no se grafican ni se usan para calcular el porcentaje de acierto.
+    \item \textbf{Paso 3 - Prueba a ciegas sobre el resto futuro del día:}
+    Tomamos todos los pulsos restantes que la persona grabó después en esa sesión —las ventanas \texttt{Win7} en adelante, llamadas $N_{\text{test}}$ en el título de cada gráfico—. Esos pulsos futuros se multiplican por la matriz fija del Paso 2, pasan por el Autoencoder congelado del Paso 1 y caen sobre el mapa de colores congelado del Paso 1. Si un punto rojo cae en la zona roja, es un acierto; si cae en otra zona y tiene borde negro, es un error. \textbf{Ninguno de los puntos dibujados en las Figuras~\ref{fig:panel_test_aislado_interdia} y~\ref{fig:panel_test_aislado_loso} fue visto jamás por la calibración, ni por el Autoencoder, ni por el clasificador.}
+\end{enumerate}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{panel_test_sets_aislados_interdia.png}
+\caption{Conjuntos de prueba futuros aislados bajo el protocolo de Día Aislado —Leave-One-Day-Out—. En cada panel, el día evaluado fue excluido del entrenamiento del Autoencoder y de las zonas de decisión. Los primeros $N_{\text{cal}}$ pulsos cronológicos de cada toma se usaron para fijar la traducción física $12\text{D}$ y fueron descartados; se grafican únicamente los $N_{\text{test}}$ pulsos futuros restantes sobre el mapa congelado.}
+\label{fig:panel_test_aislado_interdia}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{panel_test_sets_aislados_loso_interdia.png}
+\caption{Conjuntos de prueba futuros aislados bajo el protocolo más exigente de Sujeto Completo Aislado —Leave-One-Subject-Out, LOSO—. En cada panel, absolutamente todas las sesiones y días del sujeto evaluado fueron excluidos del entrenamiento del Autoencoder y de las fronteras de decisión. La red neuronal jamás vio a esa persona durante su entrenamiento; solo se aplicó la calibración física de los primeros $N_{\text{cal}}$ pulsos de cada toma y se evaluaron en frío los $N_{\text{test}}$ pulsos futuros.}
+\label{fig:panel_test_aislado_loso}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{diagrama_proceso_calibracion_12d_paso_a_paso.png}
+\caption{Diagrama visual paso a paso de cómo funciona la calibración inicial de 12 números sobre una sesión real —Candela 2026-09-01—: Paso 1, detección automática del centro de energía $t_0$ en los primeros pulsos; Paso 2, proyección de cada canal sobre las 4 medidas de forma temporal; Paso 3, huella de 12 medidas con la que se calcula la matriz $12 \times 4$; Paso 4, reconstrucción limpia de los 3 ejes musculares puros sobre un pulso futuro de prueba.}
+\label{fig:diagrama_calibracion_12d}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{panel_leave_one_session_out_12d_calibracion.png}
+\caption{Desglose completo de las 14 tomas individuales bajo protocolo Leave-One-Session-Out con calibración cronológica al inicio de cada sesión en base $12\text{D}$ —incluyendo las 7 tomas separadas de Lucas T1 a T7, los 2 días de Petra, las 4 ubicaciones de Candela y Santi—. Los triángulos huecos indican los primeros pulsos $N_{\text{cal}}$ usados para calibrar y los círculos rellenos indican los pulsos futuros $N_{\text{test}}$ evaluados a ciegas.}
+\label{fig:panel_14_sesiones_12d}
+\end{figure}
+
 \end{document}
+
+

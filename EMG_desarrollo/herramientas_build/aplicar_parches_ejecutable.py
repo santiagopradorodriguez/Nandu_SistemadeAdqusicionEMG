@@ -117,7 +117,7 @@ def lanzar_script(script_name, args=[]):
         (r"\[\s*python_executable,\s*script_path,\s*(.*?)\]", r"lanzar_script('acquisition/metronomo_visual.py', [\1])"),
         (r"\[\s*python_executable,\s*word_script_path,\s*(.*?)\]", r"lanzar_script('acquisition/ventana_palabras.py', [\1])")
     ]
-    for archivo in ["acquisition/manual_daq.py", "acquisition/autoforge_daq.py", "acquisition/autoforge_daq_experimental.py"]:
+    for archivo in ["acquisition/manual_daq.py", "acquisition/autoforge_daq.py", "acquisition/autoforge_daq_experimental.py", "acquisition/autoforge_daq_decodificador.py"]:
         ruta = os.path.join(build_dir, archivo)
         if os.path.exists(ruta):
             parchear_archivo(ruta, reemplazos_daq, reemplazos_regex_daq)
@@ -187,8 +187,15 @@ def lanzar_script(script_name, args=[]):
         "acquisition/manual_daq.py",
         "acquisition/autoforge_daq.py",
         "acquisition/autoforge_daq_experimental.py",
+        "acquisition/autoforge_daq_decodificador.py",
         "acquisition/calibracion_espacial_electrodos.py",
         "acquisition/modulo_de_entrenamiento.py",
+        "core/daq_engine.py",
+        "core/preroll_and_filters.py",
+        "core/dsp_engine.py",
+        "core/protocol_fsm.py",
+        "core/process_runner.py",
+        "core/latent_bci_utils.py",
         "analysis/plotter_calibrado.py", 
         "analysis/electrode_viewer_4.py", 
         "utils/editor_mediciones.py", 
@@ -226,6 +233,7 @@ def lanzar_script(script_name, args=[]):
         "deep_learning/soft_dtw.py",
         "deep_learning/autoencoder_no_supervisado_gui.py",
         "deep_learning/corregir_canales_2026_09_16.py",
+        "deep_learning/realtime_decoder_engine.py",
     ]
     for archivo in archivos_auxiliares:
         ruta = os.path.join(build_dir, archivo)

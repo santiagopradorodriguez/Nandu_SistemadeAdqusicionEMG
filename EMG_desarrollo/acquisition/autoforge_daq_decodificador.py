@@ -20,10 +20,14 @@ from datetime import datetime
 from scipy import signal
 import scipy.io.wavfile as wavfile
 
-# Asegurar path del proyecto
-project_root = "/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG"
+# Asegurar path del proyecto (dinámico y compatible con Windows y Linux)
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(os.path.dirname(current_dir))
+emg_desarrollo_dir = os.path.dirname(current_dir)
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
+if emg_desarrollo_dir not in sys.path:
+    sys.path.insert(0, emg_desarrollo_dir)
 
 from PySide6 import QtWidgets, QtCore, QtGui
 from PySide6.QtWidgets import (
@@ -57,9 +61,14 @@ except Exception:
     NIDAQMX_DISPONIBLE = False
 
 # Importar motor de decodificación en tiempo real
-from EMG_desarrollo.deep_learning.realtime_decoder_engine import (
-    RealtimeDecoderEngine, VOCALES, VOCAL_A_COLOR_HEX, VOCAL_A_RGBA
-)
+try:
+    from deep_learning.realtime_decoder_engine import (
+        RealtimeDecoderEngine, VOCALES, VOCAL_A_COLOR_HEX, VOCAL_A_RGBA
+    )
+except ImportError:
+    from EMG_desarrollo.deep_learning.realtime_decoder_engine import (
+        RealtimeDecoderEngine, VOCALES, VOCAL_A_COLOR_HEX, VOCAL_A_RGBA
+    )
 
 try:
     from numba import jit
@@ -361,11 +370,19 @@ class RealTimeDecoderPlotter(QtWidgets.QWidget):
         if not os.path.exists(pt_model_default):
             pt_model_default = MODELOS_PRESETS[1]['path']
 
-        self.engine = RealtimeDecoderEngine(
-            model_path=pt_model_default,
-            sample_rate=self.SAMPLE_RATE,
-            emd_delay_ms=350
-        )
+        try:
+            self.engine = RealtimeDecoderEngine(
+                model_path=pt_model_default if os.path.exists(pt_model_default) else None,
+                sample_rate=self.SAMPLE_RATE,
+                emd_delay_ms=350
+            )
+        except Exception as e:
+            print(f"[DECODER] Advertencia al iniciar RealtimeDecoderEngine: {e}")
+            self.engine = RealtimeDecoderEngine(
+                model_path=None,
+                sample_rate=self.SAMPLE_RATE,
+                emd_delay_ms=350
+            )
 
         # Sesión WAV de prueba por defecto (P5)
         self.ruta_sesion_wav = os.path.join(

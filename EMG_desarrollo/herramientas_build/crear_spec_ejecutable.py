@@ -51,6 +51,8 @@ def generar_spec():
 
     spec_content = f"""# -*- mode: python ; coding: utf-8 -*-
 
+import sys
+sys.setrecursionlimit(10000)
 import os
 from PyInstaller.utils.hooks import collect_all, copy_metadata
 
@@ -86,10 +88,17 @@ additional_modules = [
     'acquisition.manual_daq',
     'acquisition.autoforge_daq',
     'acquisition.autoforge_daq_experimental',
+    'acquisition.autoforge_daq_decodificador',
     'acquisition.calibracion_espacial_electrodos',
     'acquisition.metronomo_visual',
     'acquisition.modulo_de_entrenamiento',
     'acquisition.ventana_palabras',
+    'core.daq_engine',
+    'core.preroll_and_filters',
+    'core.dsp_engine',
+    'core.protocol_fsm',
+    'core.process_runner',
+    'core.latent_bci_utils',
     'analysis.analisis_por_track_integrado',
     'analysis.segmentador_secuencias',
     'analysis.electrode_viewer_4',
@@ -158,6 +167,7 @@ additional_modules = [
     'deep_learning.soft_dtw',
     'deep_learning.autoencoder_no_supervisado_gui',
     'deep_learning.corregir_canales_2026_09_16',
+    'deep_learning.realtime_decoder_engine',
 ]
 
 # Librerías y módulos que PyInstaller requiere explícitamente
@@ -191,6 +201,7 @@ a = Analysis(
         'deep_learning/pca_umap_clustering',
         'acquisition',
         'analysis',
+        'core',
         'utils',
         'views'
     ],

@@ -64,14 +64,14 @@
             "activo_por_defecto": false
         },
         "Canal 1": {
-            "musculo": "Depresor Anguli Oris",
-            "color_hex": "#15803d",
+            "musculo": "Canal 1",
+            "color_hex": "#00ffcc",
             "factor_calibracion": 495.0,
             "activo_por_defecto": false
         },
         "Canal 2": {
-            "musculo": "Orbicularis Oris",
-            "color_hex": "#ffff00",
+            "musculo": "Canal 2",
+            "color_hex": "#00a896",
             "factor_calibracion": 495.0,
             "activo_por_defecto": false
         },
@@ -155,7 +155,7 @@
         }
     },
     "csv_viewer": {
-        "notch": true,
+        "notch": false,
         "notch_q": 2.0,
         "bandpass": true,
         "lp": 500.0,
