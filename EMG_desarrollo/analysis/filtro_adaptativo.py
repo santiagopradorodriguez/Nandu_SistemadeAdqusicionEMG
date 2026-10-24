@@ -57,7 +57,7 @@ import numpy as np
 try:
     from numba import njit
     HAS_NUMBA = True
-except ImportError:
+except Exception:
     HAS_NUMBA = False
 
 

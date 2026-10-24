@@ -14,8 +14,8 @@ def generar_spec():
     repo_root = os.path.dirname(base_dir)
     
     if not os.path.exists(build_dir):
-        print("[ERROR] Carpeta 'EMG_Ejecutable_Build' no encontrada.")
-        return
+        os.makedirs(build_dir, exist_ok=True)
+        print(f"[INFO] Carpeta 'EMG_Ejecutable_Build' creada en: {build_dir}")
 
     # Validar qué recursos y assets existen para empaquetarlos
     candidate_assets = [
@@ -27,6 +27,13 @@ def generar_spec():
         ('archivos_md', 'archivos_md'),
         ('papers', 'papers'),
         ('DataConfig', 'DataConfig'),
+        ('DataConfig/modelos_vision', 'DataConfig/modelos_vision'),
+        ('DataConfig/modelos_vision/face_landmarker.task', 'DataConfig/modelos_vision'),
+        ('EMG_desarrollo/DataConfig/modelos_vision/face_landmarker.task', 'DataConfig/modelos_vision'),
+        ('acquisition/calibracion_espacial_electrodos.py', 'acquisition'),
+        ('acquisition/fotometria_webcam.py', 'acquisition'),
+        ('EMG_desarrollo/acquisition/calibracion_espacial_electrodos.py', 'acquisition'),
+        ('EMG_desarrollo/acquisition/fotometria_webcam.py', 'acquisition'),
         ('fotos', 'fotos'),
         ('logo_nandu_lsd.png', '.'),
         ('logo_nandu_lsd.png', 'gui_app/assets'),
@@ -38,29 +45,40 @@ def generar_spec():
     ]
     
     datas_tuples = []
+    seen_pairs = set()
     for src, dst in candidate_assets:
         local_path = os.path.join(build_dir, os.path.normpath(src))
         base_path = os.path.join(base_dir, os.path.normpath(src))
         root_path = os.path.join(repo_root, os.path.normpath(src))
+        resolved_src = None
         if os.path.exists(local_path):
-            datas_tuples.append(f"('{src}', '{dst}')")
+            resolved_src = src
         elif os.path.exists(base_path):
-            datas_tuples.append(f"('{base_path}', '{dst}')")
+            resolved_src = base_path
         elif os.path.exists(root_path):
-            datas_tuples.append(f"('{root_path}', '{dst}')")
+            resolved_src = root_path
+        if resolved_src is not None and (resolved_src, dst) not in seen_pairs:
+            datas_tuples.append(f"('{resolved_src}', '{dst}')")
+            seen_pairs.add((resolved_src, dst))
             
     datas_str = ",\n        ".join(datas_tuples)
 
     spec_content = f"""# -*- mode: python ; coding: utf-8 -*-
 
 import os
-from PyInstaller.utils.hooks import collect_all, copy_metadata
+from PyInstaller.utils.hooks import collect_all, collect_data_files, copy_metadata
 
 def _safe_collect(pkg):
     try:
         return collect_all(pkg)
     except Exception:
         return [], [], []
+
+def _safe_collect_data(pkg):
+    try:
+        return collect_data_files(pkg)
+    except Exception:
+        return []
 
 def _safe_metadata(pkg):
     try:
@@ -78,6 +96,10 @@ numba_datas, numba_binaries, numba_hiddenimports = _safe_collect('numba')
 pynndescent_datas, pynndescent_binaries, pynndescent_hiddenimports = _safe_collect('pynndescent')
 tqdm_datas, tqdm_binaries, tqdm_hiddenimports = _safe_collect('tqdm')
 mp_datas, mp_binaries, mp_hiddenimports = _safe_collect('mediapipe')
+try:
+    mp_extra_datas = collect_data_files('mediapipe')
+except Exception:
+    mp_extra_datas = []
 cv2_datas, cv2_binaries, cv2_hiddenimports = _safe_collect('cv2')
 torch_datas, torch_binaries, torch_hiddenimports = _safe_collect('torch')
 nitypes_metadata = _safe_metadata('nitypes')
@@ -91,6 +113,11 @@ additional_modules = [
     'acquisition.autoforge_daq_experimental',
     'acquisition.autoforge_daq_decodificador',
     'acquisition.calibracion_espacial_electrodos',
+    'acquisition.fotometria_webcam',
+    'EMG_desarrollo.acquisition.calibracion_espacial_electrodos',
+    'EMG_desarrollo.acquisition.fotometria_webcam',
+    'calibracion_espacial_electrodos',
+    'fotometria_webcam',
     'acquisition.metronomo_visual',
     'acquisition.modulo_de_entrenamiento',
     'acquisition.ventana_palabras',
@@ -173,16 +200,29 @@ hidden_imports = [
     'tzlocal', 'hightime', 'sklearn', 'sklearn.utils._typedefs',
     'sklearn.neighbors._quad_tree',
     'sklearn.tree._utils', 'pynndescent', 'cv2', 'mediapipe', 'torch',
+    'EMG_desarrollo.acquisition.calibracion_espacial_electrodos',
+    'EMG_desarrollo.acquisition.fotometria_webcam',
+    'calibracion_espacial_electrodos',
+    'fotometria_webcam',
 ] + additional_modules + nidaqmx_hiddenimports + sd_hiddenimports + sf_hiddenimports + umap_hiddenimports + sns_hiddenimports + tly_hiddenimports + numba_hiddenimports + pynndescent_hiddenimports + tqdm_hiddenimports + mp_hiddenimports + cv2_hiddenimports + torch_hiddenimports
 
 datas = [
         {datas_str}
-] + nidaqmx_datas + sd_datas + sf_datas + umap_datas + sns_datas + tly_datas + numba_datas + pynndescent_datas + tqdm_datas + mp_datas + cv2_datas + torch_datas + nitypes_metadata
+] + nidaqmx_datas + sd_datas + sf_datas + umap_datas + sns_datas + tly_datas + numba_datas + pynndescent_datas + tqdm_datas + mp_datas + mp_extra_datas + cv2_datas + torch_datas + nitypes_metadata
 
 binaries = nidaqmx_binaries + sd_binaries + sf_binaries + umap_binaries + sns_binaries + tly_binaries + numba_binaries + pynndescent_binaries + tqdm_binaries + mp_binaries + cv2_binaries + torch_binaries
 
+a_scripts = [
+    s for s in [
+        'gui_app/main_app.py',
+        'acquisition/calibracion_espacial_electrodos.py',
+        'acquisition/fotometria_webcam.py',
+    ]
+    if os.path.exists(s) or s == 'gui_app/main_app.py'
+]
+
 a = Analysis(
-    ['gui_app/main_app.py'],
+    a_scripts,
     pathex=[
         '.',
         'gui_app',
@@ -244,6 +284,12 @@ coll = COLLECT(
     spec_path = os.path.join(build_dir, "EMG_Studio.spec")
     with open(spec_path, "w", encoding="utf-8") as f:
         f.write(spec_content)
+    base_spec = os.path.join(base_dir, "EMG_Studio.spec")
+    try:
+        with open(base_spec, "w", encoding="utf-8") as f_base:
+            f_base.write(spec_content)
+    except Exception:
+        pass
     print(f"[OK] Archivo Multipaquete .spec generado exitosamente en: {spec_path}")
 
 if __name__ == "__main__":

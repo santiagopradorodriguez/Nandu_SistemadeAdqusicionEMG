@@ -64,8 +64,8 @@
             "activo_por_defecto": false
         },
         "Canal 1": {
-            "musculo": "Canal 1",
-            "color_hex": "#00ffcc",
+            "musculo": "Zygomaticus Major",
+            "color_hex": "#00a896",
             "factor_calibracion": 495.0,
             "activo_por_defecto": false
         },
@@ -76,8 +76,8 @@
             "activo_por_defecto": false
         },
         "Canal 3": {
-            "musculo": "Micrófono",
-            "color_hex": "#ff0000",
+            "musculo": "Risorio",
+            "color_hex": "#00cc44",
             "factor_calibracion": 495.0,
             "activo_por_defecto": false
         },
@@ -160,7 +160,7 @@
         "bandpass": true,
         "lp": 500.0,
         "hp": 20.0,
-        "env": "rms",
+        "env": "ninguna",
         "env_ms": 50,
         "env_offset": false,
         "adaptive_filter": false,
