@@ -1191,10 +1191,15 @@ class ReaperStyleHub(QMainWindow):
       csv_path = None
       try:
         if os.path.isdir(path):
-          for file in os.listdir(path):
-            if file.lower().endswith('.csv'):
-              csv_path = os.path.join(path, file)
-              break
+          candidatos = [f for f in os.listdir(path) if f.lower().endswith('.csv')]
+          if 'grabacion.csv' in candidatos:
+            csv_path = os.path.join(path, 'grabacion.csv')
+          else:
+            senales = [f for f in candidatos if not f.lower().startswith(('calibracion', 'estadisticas', 'features', 'resumen'))]
+            if senales:
+              csv_path = os.path.join(path, senales[0])
+            elif candidatos:
+              csv_path = os.path.join(path, candidatos[0])
       except Exception as e:
         print(f"Error al buscar CSV: {e}")
       if csv_path:
@@ -2941,10 +2946,20 @@ model_candidates = [
     os.path.join(out_dir, "autoencoder_emg.pth"),
     os.path.join(out_dir, "autoencoder_emg_2d.pth"),
     os.path.join(out_dir, "autoencoder_emg_8d.pth"),
+    os.path.join(project_root, "modelos", f"autoencoder_emg_{{l_dim}}d.pth"),
+    os.path.join(project_root, "modelos", "autoencoder_campeon.pth"),
+    os.path.join(project_root, "modelos", "modelo_optimo.pt"),
 ]
+if getattr(sys, 'frozen', False):
+    exe_dir = os.path.dirname(sys.executable)
+    model_candidates.extend([
+        os.path.join(exe_dir, "modelos", f"autoencoder_emg_{{l_dim}}d.pth"),
+        os.path.join(exe_dir, "modelos", "autoencoder_campeon.pth"),
+        os.path.join(exe_dir, "resultados", "resultados_autoencoder", f"autoencoder_emg_{{l_dim}}d.pth"),
+    ])
 model_path = next((m for m in model_candidates if os.path.exists(m)), None)
 if not model_path:
-    print("> ERROR: No se encontró ningún modelo (.pth) entrenado.")
+    print("> ERROR: No se encontró ningún modelo (.pth/.pt) entrenado en las rutas conocidas.")
     sys.exit(1)
 
 import deep_learning.decodificador_continuo as dc

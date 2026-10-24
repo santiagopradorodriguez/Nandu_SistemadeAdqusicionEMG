@@ -32,7 +32,7 @@ def crear_entorno_seguro():
         for a in archivos:
             if a in ('__pycache__', 'resultados_pca_umap', 'resultados_umap_supervisado', 'resultados_autoencoder', '.pytest_cache', '.git', 'codigos_de_prueba'):
                 ignorar.add(a)
-            elif a.endswith(('.pyc', '.pth', '.tar', '.zip', '.tmp')):
+            elif a.endswith(('.pyc', '.tar', '.zip', '.tmp')):
                 ignorar.add(a)
         return ignorar
 

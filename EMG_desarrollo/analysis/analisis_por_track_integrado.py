@@ -1389,7 +1389,11 @@ def procesar_wavs_promedio(
             if not csv_files:
                 raise FileNotFoundError("No se encontró archivo CSV en la carpeta padre.")
             
-            csv_path = os.path.join(parent_dir, csv_files[0])
+            if 'grabacion.csv' in csv_files:
+                csv_path = os.path.join(parent_dir, 'grabacion.csv')
+            else:
+                senales = [f for f in csv_files if not f.lower().startswith(('calibracion', 'estadisticas', 'features', 'resumen'))]
+                csv_path = os.path.join(parent_dir, senales[0]) if senales else os.path.join(parent_dir, csv_files[0])
             
             # 2. Leer el CSV y encontrar el factor de calibración
             df_csv = pd.read_csv(csv_path)

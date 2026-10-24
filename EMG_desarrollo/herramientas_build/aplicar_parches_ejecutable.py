@@ -187,6 +187,7 @@ def lanzar_script(script_name, args=[]):
         "acquisition/manual_daq.py",
         "acquisition/autoforge_daq.py",
         "acquisition/autoforge_daq_experimental.py",
+        "acquisition/autoforge_daq_decodificador.py",
         "acquisition/calibracion_espacial_electrodos.py",
         "acquisition/modulo_de_entrenamiento.py",
         "analysis/plotter_calibrado.py", 
@@ -216,7 +217,6 @@ def lanzar_script(script_name, args=[]):
         "deep_learning/binarizacion/analisis_trevisan_bandas.py",
         "deep_learning/binarizacion/analisis_binario.py",
         "deep_learning/pca_umap_clustering/generador_pca_umap.py",
-        "deep_learning/generador_umap_supervisado.py",
         "deep_learning/pca_analysis.py",
         "deep_learning/umap_analysis.py",
         "deep_learning/pipeline_autoencoder_gui.py",
@@ -225,7 +225,8 @@ def lanzar_script(script_name, args=[]):
         "deep_learning/motor_autoencoder_unificado.py",
         "deep_learning/soft_dtw.py",
         "deep_learning/autoencoder_no_supervisado_gui.py",
-        "deep_learning/corregir_canales_2026_09_16.py",
+        "deep_learning/realtime_decoder_engine.py",
+        "deep_learning/decodificador_continuo.py",
     ]
     for archivo in archivos_auxiliares:
         ruta = os.path.join(build_dir, archivo)

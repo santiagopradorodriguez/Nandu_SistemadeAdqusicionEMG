@@ -364,7 +364,12 @@ def plotear_medicion_secuencial(nombre_medicion, config, limits_cache=None, most
 
     # 1. Cargar CSV
     path_medicion = os.path.join(BASE_DIR, nombre_medicion)
-    archivo_csv = next((os.path.join(path_medicion, f) for f in os.listdir(path_medicion) if f.lower().endswith('.csv')), None)
+    candidatos_csv = [f for f in os.listdir(path_medicion) if f.lower().endswith('.csv')]
+    if 'grabacion.csv' in candidatos_csv:
+        archivo_csv = os.path.join(path_medicion, 'grabacion.csv')
+    else:
+        senales = [f for f in candidatos_csv if not f.lower().startswith(('calibracion', 'estadisticas', 'features', 'resumen'))]
+        archivo_csv = os.path.join(path_medicion, senales[0]) if senales else (os.path.join(path_medicion, candidatos_csv[0]) if candidatos_csv else None)
     
     if not archivo_csv:
         print(f"[WARN] Saltando {nombre_medicion}: No hay CSV.")
