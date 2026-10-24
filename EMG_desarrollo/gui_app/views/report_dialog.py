@@ -12,11 +12,11 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox,
     QLabel, QLineEdit, QTextEdit, QPushButton, QCheckBox,
     QMessageBox, QScrollArea, QWidget, QFileDialog, QListWidget,
-    QProgressBar
+    QProgressBar, QComboBox
 )
 from PySide6.QtCore import Qt, QThread, Signal
 
-# Importar el motor de reportes
+# Importar el motor de reportes y la cola programable
 script_dir = os.path.dirname(os.path.abspath(__file__))
 gui_app_dir = os.path.dirname(script_dir)
 emg_root = os.path.dirname(gui_app_dir)
@@ -24,6 +24,7 @@ if emg_root not in sys.path:
     sys.path.append(emg_root)
 
 from analysis.report_engine import ReportEngine
+from analysis.report_queue import ReportTask, ReportQueueManager
 
 class ReportWorker(QThread):
     progress_signal = Signal(str)
@@ -48,6 +49,12 @@ class ReportWorker(QThread):
                     self.notes_dict,
                     logger=lambda msg: self.progress_signal.emit(str(msg))
                 )
+            elif self.mode == 'espectral':
+                result = engine.generate_spectral_report(
+                    self.session_paths,
+                    self.notes_dict,
+                    logger=lambda msg: self.progress_signal.emit(str(msg))
+                )
             elif self.mode == 'multimodal':
                 gen_list = engine.generate_multimodal_paper_figures(
                     self.session_paths,
@@ -69,6 +76,40 @@ class ReportWorker(QThread):
                 'error': str(e)
             })
 
+
+class QueueWorker(QThread):
+    progress_signal = Signal(str)
+    task_status_signal = Signal(int, str)
+    finished_signal = Signal(dict)
+
+    def __init__(self, queue_manager):
+        super().__init__()
+        self.queue_manager = queue_manager
+
+    def run(self):
+        try:
+            def on_start(idx, task):
+                self.task_status_signal.emit(idx, "EN PROCESO")
+
+            def on_finish(idx, task, res):
+                st = "COMPLETADO" if res.get("status") == "success" else "ERROR"
+                self.task_status_signal.emit(idx, st)
+
+            summary = self.queue_manager.execute_queue(
+                logger=lambda msg: self.progress_signal.emit(str(msg)),
+                callback_task_start=on_start,
+                callback_task_finish=on_finish,
+                continuar_en_error=True
+            )
+            self.finished_signal.emit(summary)
+        except Exception as e:
+            self.finished_signal.emit({
+                "total": self.queue_manager.count(),
+                "exitosas": 0,
+                "fallidas": self.queue_manager.count(),
+                "error": str(e)
+            })
+
 class ReportDialog(QDialog):
     def __init__(self, session_paths, parent=None):
         super().__init__(parent)
@@ -76,6 +117,7 @@ class ReportDialog(QDialog):
         self.engine = ReportEngine()
         self.meta_info = self.engine.extract_session_metadata(session_paths)
         self.fotos_seleccionadas = []
+        self.queue_manager = ReportQueueManager()
         
         self.setWindowTitle("Generador de Reporte Integral de Sesión (LaTeX / PDF)")
         self.setMinimumSize(720, 750)
@@ -245,6 +287,57 @@ class ReportDialog(QDialog):
         l_notes.addWidget(self.txt_observaciones)
         form_layout.addWidget(gb_notes)
 
+        # 5. Cola Programable de Reportes por Lotes
+        gb_queue = QGroupBox("5. Cola Programable de Procesamiento por Lotes")
+        l_queue = QVBoxLayout(gb_queue)
+
+        h_q_cfg = QHBoxLayout()
+        h_q_cfg.addWidget(QLabel("Tipo:"))
+        self.cmb_queue_type = QComboBox()
+        self.cmb_queue_type.addItems(["pca", "base", "snr", "espectral", "multimodal", "todos"])
+        h_q_cfg.addWidget(self.cmb_queue_type)
+
+        h_q_cfg.addWidget(QLabel("Etiqueta:"))
+        self.inp_queue_tag = QLineEdit()
+        self.inp_queue_tag.setPlaceholderText("Ej: Exp1_Masetero")
+        h_q_cfg.addWidget(self.inp_queue_tag)
+
+        h_q_cfg.addWidget(QLabel("Pesos C0,C1,C2:"))
+        self.inp_queue_weights = QLineEdit("1.0, 1.0, 1.0")
+        self.inp_queue_weights.setFixedWidth(105)
+        h_q_cfg.addWidget(self.inp_queue_weights)
+
+        h_q_cfg.addWidget(QLabel("LP Hz:"))
+        self.inp_queue_lp = QLineEdit("500.0")
+        self.inp_queue_lp.setFixedWidth(60)
+        h_q_cfg.addWidget(self.inp_queue_lp)
+        l_queue.addLayout(h_q_cfg)
+
+        self.list_queue = QListWidget()
+        self.list_queue.setFixedHeight(85)
+        l_queue.addWidget(self.list_queue)
+
+        h_q_btns = QHBoxLayout()
+        self.btn_q_add = QPushButton("Agregar a la Cola")
+        self.btn_q_add.clicked.connect(self.agregar_tarea_a_cola)
+        self.btn_q_del = QPushButton("Quitar Seleccionada")
+        self.btn_q_del.clicked.connect(self.quitar_tarea_de_cola)
+        self.btn_q_load = QPushButton("Cargar Cola JSON...")
+        self.btn_q_load.clicked.connect(self.cargar_cola_json)
+        self.btn_q_save = QPushButton("Guardar Cola JSON...")
+        self.btn_q_save.clicked.connect(self.guardar_cola_json)
+        self.btn_q_run = QPushButton("Ejecutar Cola Completa")
+        self.btn_q_run.setStyleSheet("background-color: #005577; color: #00ffcc; border: 1px solid #00ffcc;")
+        self.btn_q_run.clicked.connect(self.ejecutar_cola_ui)
+
+        h_q_btns.addWidget(self.btn_q_add)
+        h_q_btns.addWidget(self.btn_q_del)
+        h_q_btns.addWidget(self.btn_q_load)
+        h_q_btns.addWidget(self.btn_q_save)
+        h_q_btns.addWidget(self.btn_q_run)
+        l_queue.addLayout(h_q_btns)
+        form_layout.addWidget(gb_queue)
+
         scroll.setWidget(form_container)
         main_layout.addWidget(scroll)
 
@@ -358,6 +451,128 @@ class ReportDialog(QDialog):
     def limpiar_fotos(self):
         self.fotos_seleccionadas.clear()
         self.list_photos.clear()
+
+    def recopilar_notas(self):
+        return {
+            'fecha': self.inp_fecha.text().strip(),
+            'sujeto': self.inp_sujeto.text().strip(),
+            'baterias': self.inp_baterias.text().strip(),
+            'tierra': self.inp_tierra.text().strip(),
+            'electrodos_nota': self.txt_electrodos.toPlainText().strip(),
+            'secuencia': self.txt_secuencia.toPlainText().strip(),
+            'notas': self.txt_observaciones.toPlainText().strip(),
+            'fotos': list(self.fotos_seleccionadas),
+            'canales': {
+                0: self.inp_ch0.text().strip(),
+                1: self.inp_ch1.text().strip(),
+                2: self.inp_ch2.text().strip(),
+                3: self.inp_ch3.text().strip()
+            }
+        }
+
+    def actualizar_lista_cola(self):
+        self.list_queue.clear()
+        for idx, t in enumerate(self.queue_manager.tasks):
+            st = t.estado.upper()
+            self.list_queue.addItem(f"[{idx + 1}] [{st}] {t.nombre} ({t.tipo_reporte.upper()})")
+
+    def agregar_tarea_a_cola(self):
+        notas = self.recopilar_notas()
+        tag = self.inp_queue_tag.text().strip() or None
+        tipo = self.cmb_queue_type.currentText().strip()
+        try:
+            pesos = [float(x.strip()) for x in self.inp_queue_weights.text().split(",") if x.strip()]
+            if len(pesos) != 3:
+                pesos = [1.0, 1.0, 1.0]
+        except Exception:
+            pesos = [1.0, 1.0, 1.0]
+        try:
+            lp_val = float(self.inp_queue_lp.text().strip())
+        except Exception:
+            lp_val = 500.0
+
+        opciones = {
+            "report_tag": tag,
+            "pesos_canales": pesos,
+            "lowpass_cutoff_hz": lp_val,
+            "highpass_cutoff_hz": 20.0,
+            "correccion_impedancia": False,
+            "aplicar_correccion_intersesion": False,
+            "ejecutar_grid": True
+        }
+        nombre_t = f"Reporte {notas['fecha']} ({tag or 'General'})"
+        task = ReportTask(
+            nombre=nombre_t,
+            sesion=list(self.session_paths),
+            tipo_reporte=tipo,
+            notas_dict=notas,
+            fotos=list(self.fotos_seleccionadas),
+            opciones_analisis=opciones
+        )
+        self.queue_manager.add_task(task)
+        self.actualizar_lista_cola()
+        self.lbl_status.setText(f"Tarea agregada a la cola ({self.queue_manager.count()} en total).")
+
+    def quitar_tarea_de_cola(self):
+        row = self.list_queue.currentRow()
+        if row >= 0:
+            self.queue_manager.remove_task(row)
+            self.actualizar_lista_cola()
+
+    def guardar_cola_json(self):
+        if self.queue_manager.count() == 0:
+            QMessageBox.warning(self, "Cola Vacía", "No hay tareas en la cola para guardar.")
+            return
+        path, _ = QFileDialog.getSaveFileName(self, "Guardar Cola de Reportes", "", "JSON (*.json)")
+        if path:
+            if not path.endswith(".json"):
+                path += ".json"
+            self.queue_manager.save_to_json(path)
+            self.lbl_status.setText(f"Cola guardada en: {os.path.basename(path)}")
+
+    def cargar_cola_json(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Cargar Cola de Reportes", "", "JSON (*.json)")
+        if path and os.path.exists(path):
+            self.queue_manager.clear()
+            self.queue_manager.load_from_json(path)
+            self.actualizar_lista_cola()
+            self.lbl_status.setText(f"Cola cargada ({self.queue_manager.count()} tareas).")
+
+    def ejecutar_cola_ui(self):
+        if self.queue_manager.count() == 0:
+            QMessageBox.warning(self, "Cola Vacía", "Agregue o cargue tareas antes de ejecutar la cola.")
+            return
+        self.btn_base.setEnabled(False)
+        self.btn_pca.setEnabled(False)
+        self.btn_cancel.setEnabled(False)
+        self.btn_q_run.setEnabled(False)
+        self.lbl_status.setText(f"Ejecutando cola de {self.queue_manager.count()} tareas...")
+
+        self.q_worker = QueueWorker(self.queue_manager)
+        self.q_worker.progress_signal.connect(self.on_progress)
+        self.q_worker.task_status_signal.connect(self.on_queue_task_status)
+        self.q_worker.finished_signal.connect(self.on_queue_finished)
+        self.q_worker.start()
+
+    def on_queue_task_status(self, idx, status_str):
+        if 0 <= idx < self.queue_manager.count():
+            self.queue_manager.tasks[idx].estado = status_str.lower()
+            self.actualizar_lista_cola()
+
+    def on_queue_finished(self, summary):
+        self.btn_base.setEnabled(True)
+        self.btn_pca.setEnabled(True)
+        self.btn_cancel.setEnabled(True)
+        self.btn_q_run.setEnabled(True)
+        self.actualizar_lista_cola()
+        ok = summary.get("exitosas", 0)
+        tot = summary.get("total", 0)
+        self.lbl_status.setText(f"Cola finalizada: {ok}/{tot} tareas exitosas.")
+        QMessageBox.information(
+            self,
+            "Cola de Reportes Finalizada",
+            f"Procesamiento por lotes completado.\nTareas exitosas: {ok} de {tot}."
+        )
 
     def lanzar_generacion(self, incluir_pca=False):
         notes_dict = {

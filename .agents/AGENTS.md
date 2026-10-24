@@ -9,6 +9,7 @@
 - **Estilo de Comunicación:** Cortito y al pie, lenguaje humano y cotidiano de cuaderno de laboratorio. Prohibido tono de paper inflado, palabras de relleno y conectores típicos de IA.
 - **Corrección Literal:** Al aplicar correcciones del usuario ("correccion: ..."), no alterar la estructura ni inventar palabras; corregir solo ortografía y espacios.
 - **Títulos Limpios:** Prohibido usar paréntesis `(...)` en títulos y encabezados de texto, diagramas o gráficos. Usar `:` o `-`.
+- **Reporte de Estado Cada 5 Minutos y Ahorro de Tokens:** Durante tareas largas o ejecuciones en segundo plano, reportar al usuario cada 5 minutos qué se está haciendo y el estado de avance (usando temporizadores `schedule` de 300 s en tareas de fondo). Prohibido encadenar decenas de lecturas o llamadas a herramientas en silencio sin avisar al usuario, para ahorrar tokens.
 
 ## 2. Base de Datos y Metadatos sEMG
 - **Estructura de Canales:** Los archivos residen obligatoriamente en subcarpetas `canal_0/`, `canal_1/`, `canal_2/`, `canal_3/` dentro de cada sesión. El `metadata.json` principal está en `canal_0/`.

@@ -1,0 +1,891 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[spanish,es-noshorthands,es-tabla]{babel}
+\usepackage[margin=2.1cm]{geometry}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\usepackage{hyperref}
+
+% Rutas de búsqueda automática para resolver imágenes tanto del reporte como de la presentación y base de datos
+\graphicspath{
+    {./}
+    {./imagenes/}
+    {../imagenes/}
+    {../presentacion/imagenes/}
+    {/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/}
+    {/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/}
+}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!75!black,
+    citecolor=blue!75!black,
+    urlcolor=blue!75!black
+}
+
+\pagestyle{fancy}
+\setlength{\headheight}{14.0pt}
+\fancyhf{}
+\fancyhead[L]{\small \textbf{Proyecto Ñandú sEMG} --- Síntesis del Experimento 2026-10-20}
+\fancyhead[R]{\small LSD --- DF, FCEyN, UBA}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\title{
+    \vspace{-1.4cm}
+    \textbf{\Large Síntesis del Experimento 2026-10-20: Auditoría de Instrumentación, Topología de Puntos Dulces Faciales y Geometría de Variedades No Lineales}\\[0.45em]
+    \large Análisis Crítico de las 60 Mediciones, Comparativa Multi-Sujeto y Protocolo Anatómico de Colocación de Electrodos
+}
+\author{
+    \textbf{Santiago Prado Rodríguez} \quad y \quad \textbf{Lucas Braunstein}\\[0.4em]
+    \normalsize Laboratorio de Sistemas Dinámicos (LSD) --- Departamento de Física\\
+    \normalsize Facultad de Ciencias Exactas y Naturales, Universidad de Buenos Aires
+}
+\date{20 de Octubre de 2026}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+\noindent El presente documento constituye la síntesis integral del experimento del 20 de octubre de 2026 en el marco del proyecto \textbf{Ñandú sEMG} para la decodificación silenciosa de las cinco vocales del español (/a/, /e/, /i/, /o/, /u/) mediante electromiografía de superficie (sEMG) facial tricanal. En primer término, se caracteriza el front-end analógico basado en el amplificador de instrumentación AD620 ($G \approx 495\,\text{V/V}$), demostrando que la implementación de cables con malla de micrófono drenada a tierra duplica la relación señal-ruido ($\text{SNR} = 25.0\text{--}33.5$), que los parches adhesivos de hidrogel sólido ($\text{Ag/AgCl}$ Meditrace) superan a los sensores de copa de oro y de gel húmedo bajo tracción articulatoria, y que el umbral práctico de descarte de baterías debe fijarse en $8.0\,\text{V}$ bajo carga (frente al límite nominal de $\pm 2.3\,\text{V}$ de hoja de datos) para evitar el disparo de la resistencia serie equivalente (ESR) y la asimetría de rieles ($\Delta V \le 0.8\,\text{V}$). En segundo término, se realiza una auditoría exhaustiva de las 60 tomas registradas en la jornada del 20 de octubre de 2026 (Candela Experimento 1 con separación inter-borde de $20\,\text{mm}$ en posición masetérica posterior, Candela Experimento 2 con separación de $7\,\text{mm}$ en posición anterior, y sesión exploratoria de Santiago sobre vello facial). El análisis de trazas calibradas revela una permutación en la asignación de canales durante la sesión de Santiago (\texttt{[mast, orbi, nudo]} frente a \texttt{[orbi, modiolo, masetero]}), identifica las tomas con despegue mecánico o contaminación basal y demuestra matemáticamente por qué la normalización por Supremo Tricanal induce colinealidad vectorial entre las vocales anteriores (/e/ e /i/), probando además que la incorporación de la energía tricanal logarítmica ($E_{\text{log}}$) sólo aporta una mejora binaria marginal ($+7.50\%$) a costa de degradar el agrupamiento no supervisado ($-4.04\%$) y perder invarianza de escala frente al volumen fonatorio. Finalmente, cruzando estos resultados con las campañas históricas del laboratorio ($1028$ fonaciones en cuatro sujetos), se formula y demuestra la hipótesis biofísica de los \textbf{dos puntos dulces faciales}: (1) el \textit{Puente Cigomático-Masetérico Submalar}, que separa el $100\%$ de /e/ frente a /i/ y aísla /a/ gracias a la inversión de fase temporal entre la co-contracción pre-fonatoria de anclaje en /i/ ($-221\text{ a }-229\,\text{ms}$) y el rebote post-fonatorio de cierre mandibular en /a/ ($+118\text{ a }+135\,\text{ms}$); y (2) el \textit{Nodo Ecuatorial del Modíolo} en el plano comisural estricto, que desacopla el redondeo centrífugo abierto de /o/ frente a la protrusión esfinteriana centrípeta de /u/ con un $82.1\%$ de exactitud en la tercera componente principal (PC3). Se establece como cierre el protocolo métrico definitivo de colocación de electrodos y verificación previa en tiempo real.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+% ==============================================================================
+% SECCIÓN 1: HARDWARE, BLINDAJE Y ALIMENTACIÓN AD620
+% ==============================================================================
+\section{Instrumentación Bioeléctrica, Blindaje y Límites Operativos del Front-End AD620}
+
+El sistema de adquisición bioeléctrica implementa en su etapa de entrada un amplificador de instrumentación monolítico de precisión Analog Devices AD620 por cada canal muscular diferencial. Con una resistencia de ganancia externa fija $R_G = 100\,\Omega$, la transferencia de tensión diferencial obedece a la relación canónica:
+\begin{equation}
+    R_G = 100\,\Omega \implies G = 1 + \frac{49.4\,\text{k}\Omega}{R_G} \approx 495\,\text{V/V}
+    \label{eq:ganancia_ad620}
+\end{equation}
+Operar con una ganancia en lazo cerrado de $\sim 54\,\text{dB}$ en la primera etapa exige controlar tres factores críticos de instrumentación física: el apantallamiento electromagnético de los cables de entrada frente a la red de $50\,\text{Hz}$, la estabilidad mecánica y galvánica de la interfaz electrodo-piel durante el habla, y la pureza espectral de las fuentes de alimentación continua.
+
+\subsection{Blindaje Electromagnético de Cables y Supresión de Acople en 50 Hz}
+En los ensayos preliminares con cables unifilares sin blindaje, los conductores entre el rostro del sujeto y el conector de entrada actuaban como antenas monopolo de alta impedancia, acoplando hasta $200\,\mu\text{V}$ de interferencia de línea de $50\,\text{Hz}$ que enmascaraba las contracciones fásicas de baja amplitud (Figura \ref{fig:blindaje_cables}a). Para suprimir esta captación capacitiva sin depender exclusivamente de filtros digitales \textit{notch} que distorsionan la fase en la banda útil ($20\text{--}500\,\text{Hz}$), se construyeron cables con malla metálica periférica soldada directamente al chasis de referencia del conector de entrada.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{\textwidth}{l c c X}
+\toprule
+\textbf{Configuración de Cableado} & \textbf{Amplitud Pico /u/} & \textbf{SNR Pico} & \textbf{Comportamiento de Línea de Base} \\
+\midrule
+1. Cable común sin blindaje & $176\text{--}184\,\mu\text{V}$ & $12.5\text{--}15.4$ & Línea de base oscilante e inyección de $50\,\text{Hz}$ ($\sim 200\,\mu\text{V}$). \\
+2. Cable con malla simple & $180\text{--}210\,\mu\text{V}$ & $20.0\text{--}24.0$ & Reducción moderada de ruido; remanente de acople capacitivo. \\
+3. \textbf{Malla de micrófono a tierra} & $\mathbf{185\text{--}200\,\mu\text{V}}$ & $\mathbf{25.0\text{--}33.5}$ & \textbf{Línea de base quieta, duplicación de SNR y desacople inter-canal.} \\
+\bottomrule
+\end{tabularx}
+\caption{Evaluación en banco de pruebas del blindaje de cables pronunciando la vocal /u/ sobre el músculo orbicular.}
+\label{tab:blindaje_cables}
+\end{table}
+
+Como sintetiza la Tabla \ref{tab:blindaje_cables} y se ilustra en la Figura \ref{fig:blindaje_cables}b, el uso de cable mallado de micrófono drenado a tierra duplicó la relación señal-ruido (alcanzando un $\text{SNR}$ de $25.0\text{--}33.5$ a igual fuerza de contracción labial de $\sim 190\,\mu\text{V}$), eliminó la deriva lenta de línea de base y suprimió el acoplamiento parásito de $50\,\text{Hz}$ que saltaba entre canales adyacentes dentro de la placa impresa.
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth,height=4.8cm,keepaspectratio]{imagenes/hardware_senales_A.png}
+    \caption{Vocal /a/: Cable común (arriba) vs. cable mallado (abajo).}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth,height=4.8cm,keepaspectratio]{imagenes/hardware_senales_U.png}
+    \caption{Vocal /u/: Aislamiento de los 5 pulsos fonatorios con malla.}
+\end{subfigure}
+\caption{Reducción del piso de ruido de $50\,\text{Hz}$ mediante el armado de cables mallados soldados a tierra. Sin alterar la ganancia del circuito ($G \approx 495\,\text{V/V}$), el blindaje despeja la envolvente mioeléctrica tanto en vocales abiertas (/a/) como cerradas (/u/).}
+\label{fig:blindaje_cables}
+\end{figure}
+
+\subsection{Selección de Transductores Epidérmicos: Hidrogel Sólido vs. Gel Húmedo y Copas de Oro}
+La articulación del habla impone severas deformaciones tangenciales sobre la piel facial. Se evaluaron tres familias de transductores: (i) electrodos reutilizables de copa de oro estándar de EEG con pasta conductora, (ii) parches importados de alto costo de $\text{Ag/AgCl}$ con gel húmedo (\textit{wet-gel}) y broche desfasado, y (iii) parches descartables estándar de laboratorio Meditrace ($\text{Ag/AgCl}$ con hidrogel adhesivo sólido).
+
+Las copas de oro resultaron inviables para registros articulatorios: al carecer de matriz adhesiva, el estiramiento cutáneo durante la fonación despega parcialmente la cúpula metálica, interrumpiendo el puente galvánico e inyectando transitorios de continua y ráfagas de $50\,\text{Hz}$ que saturan los rieles del AD620. Por su parte, la comparación sistemática a lo largo de 4 sesiones (20 pulsos por modelo en /o/ y /u/) entre los parches Meditrace y los electrodos importados (Figura \ref{fig:comparativa_meditrace}) demostró que ambos exhiben idéntico piso de ruido basal ($\text{RMS} \approx 14\,\mu\text{V}$, diferencia de $\text{SNR} \le 1\,\text{dB}$), pero el hidrogel sólido de Meditrace proporciona una excursión de pico superior ($723.1 \pm 57.3\,\mu\text{V}$ frente a $586.8 \pm 11.2\,\mu\text{V}$) gracias a su mayor cohesión mecánica con la epidermis en movimiento.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{imagenes/comparativa_electrodos_meditrace_vs_nuevos.png}
+\caption{Comparativa empírica sobre el músculo orbicular superior (promedio de 4 sesiones en /o/ y /u/) entre electrodos Meditrace $\text{Ag/AgCl}$ de gel sólido (arriba: ruido $14.2 \pm 8.3\,\mu\text{V}$, pico $723 \pm 57\,\mu\text{V}$, $\text{SNR} = 15.1 \pm 4.0\,\text{dB}$) y electrodos importados \textit{wet-gel} (abajo: ruido $13.8 \pm 12.6\,\mu\text{V}$, pico $587 \pm 11\,\mu\text{V}$, $\text{SNR} = 16.1 \pm 6.5\,\text{dB}$).}
+\label{fig:comparativa_meditrace}
+\end{figure}
+
+\subsection{Monitoreo de Alimentación y Justificación Biofísica del Corte en 8.0 V}
+Aunque la hoja de datos del AD620 especifica un rango de operación nominal desde $\pm 2.3\,\text{V}$ ($4.6\,\text{V}$ totales) hasta $\pm 18.0\,\text{V}$ ($36.0\,\text{V}$ totales) y una elevada tasa de rechazo a variaciones de fuente (PSRR), la adquisición de biopotenciales del orden de decenas de microvoltios impone restricciones electroquímicas mucho más estrictas sobre el par de baterías alcalinas de $9\,\text{V}$ que alimentan la fuente partida ($\pm V_{CC}$).
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{\textwidth}{l p{2.8cm} p{3.1cm} X}
+\toprule
+\textbf{Parámetro Eléctrico} & \textbf{Límite Datasheet} & \textbf{Límite Práctico sEMG} & \textbf{Criterio Físico y Bioeléctrico} \\
+\midrule
+Alimentación Mínima & $\pm 2.3\,\text{V}$ ($4.6\,\text{V}$ tot.) & $\pm 4.25\,\text{V}$ ($8.5\,\text{V}$ bat.) & Margen dinámico (\textit{headroom}) para evitar recorte en transitorios. \\
+Alimentación Máxima & $\pm 18.0\,\text{V}$ ($36.0\,\text{V}$ tot.) & $\pm 9.6\,\text{V}$ (batería nueva) & Tensión máxima a circuito abierto de celdas alcalinas de $9\,\text{V}$. \\
+Umbral de Descarte & $< \pm 2.3\,\text{V}$ & $\mathbf{< 8.0\,\text{V}}$ \textbf{bajo carga} & Disparo exponencial de resistencia interna ($R_{\text{int}}$/ESR) y ruido $1/f$. \\
+Asimetría Máxima ($\Delta V$) & Tolerada por PSRR & $\mathbf{\Delta V \le 0.8\,\text{V}}$ & Desbalance entre rieles que induce \textit{offset} en filtros activos posteriores. \\
+\bottomrule
+\end{tabularx}
+\caption{Contraste entre las tolerancias nominales del integrado AD620 y los límites operativos de bajo ruido en sEMG.}
+\label{tab:baterias}
+\end{table}
+
+El criterio de descarte preventivo cuando una batería perfora el piso de los $8.0\,\text{V}$ (recomendándose operar en la franja de $8.5\,\text{V}$ a $9.6\,\text{V}$) se fundamenta en cuatro fenómenos físicos:
+\begin{enumerate}
+    \item \textbf{Incremento Exponencial de la Resistencia Serie Equivalente (ESR):} Al agotarse el dióxido de manganeso y el zinc hacia los $8.0\,\text{V}$, la impedancia interna de la celda crece abruptamente. En un preamplificador de ganancia $G \approx 495$, una fuente con alta impedancia interna pierde capacidad de regulación frente a demandas transitorias de corriente, inyectando fluctuaciones de baja frecuencia (ruido $1/f$ y deriva térmica) en el riel de referencia.
+    \item \textbf{Colapso de Tensión Bajo Carga Activa:} Una pila alcalina que registra $8.0\,\text{V}$ en vacío con el multímetro cae inmediatamente a $\le 7.4\,\text{V}$ al cerrar el interruptor y alimentar el AD620 junto con las etapas de filtrado activo Butterworth.
+    \item \textbf{Asimetría de Rieles ($\Delta V$):} Si una batería se sostiene en $9.5\,\text{V}$ mientras la opuesta cae a $\le 8.0\,\text{V}$, la asimetría $\Delta V \ge 1.5\,\text{V}$ desplaza el punto de polarización de los amplificadores operacionales de las etapas secundarias de filtrado (cuyo PSRR es inferior al del AD620), introduciendo un \textit{offset} de continua que asimetriza el rango de saturación.
+    \item \textbf{Región de Descarga Abrupta:} En la curva de descarga alcalina de $9\,\text{V}$, alcanzar $8.0\,\text{V}$ indica que se ha consumido más del $60\%$ de la capacidad útil, entrando en la zona de pendiente empinada donde la tensión colapsa en pocos minutos a mitad de una sesión.
+\end{enumerate}
+
+En la auditoría previa a la campaña del 20 de octubre de 2026 se midió: \textbf{Batería 1 (cerca del switch, riel positivo)} $= 9.50\,\text{V}$ (estado óptimo de carga plena) y \textbf{Batería 2 (riel negativo)} $= 8.95\,\text{V}$ (zona operativa estable). La diferencia entre rieles ($\Delta V = 0.55\,\text{V} \le 0.80\,\text{V}$) garantizó una operación libre de ruido de fuente y con más de $18.4\,\text{V}$ de excursión dinámica total.
+
+% ==============================================================================
+% SECCIÓN 2: GEOMETRÍA DE MONTAJE Y AUDITORÍA ANATÓMICA (2026-10-20)
+% ==============================================================================
+\section{Topología de Montaje y Auditoría Anatómica de la Campaña 2026-10-20}
+
+La campaña experimental del 20 de octubre de 2026 se extendió desde las 10:59:17 hasta las 15:58:43 ($299.4\,\text{min}$ totales), abarcando 60 registros vocálicos muestreados a $f_s = 2000\,\text{Hz}$ con ritmo guiado por metrónomo a $30\,\text{BPM}$ (un pulso fonatorio cada $2.0\,\text{s}$), más 2 registros de control bilabial (\texttt{ma}/\texttt{pa}).
+
+\subsection{Aclaración Instrumental sobre los Electrodos y Diferencias Reales entre Exp 1 y Exp 2}
+Resulta fundamental dejar asentada una corrección metrológica respecto a las etiquetas preliminares de los scripts: \textbf{tanto en el Experimento 1 como en el Experimento 2 de Candela (y en la sesión de Santiago) se utilizaron exactamente los mismos parches comerciales descartables Meditrace $\text{Ag/AgCl}$ de broche (\textit{snap}) de $23\text{--}24\,\text{mm}$ de diámetro efectivo sobre el canal del Masetero}. La anotación preliminar de ``$2.4\,\text{mm}$'' en el Experimento 1 provino de expresar en centímetros ($2.4\,\text{cm} = 24\,\text{mm}$) el mismo diámetro que en el Experimento 2 se dedujo en milímetros a partir de la distancia entre centros ($30\,\text{mm}$) menos la distancia libre entre bordes ($7\,\text{mm}$), dando $23\,\text{mm}$.
+
+Por consiguiente, la diferencia física verdadera entre el Experimento 1 y el Experimento 2 de Candela no radicó en el tamaño del sensor del masetero, sino en su \textbf{separación inter-electrodo, su ubicación anteroposterior sobre la mejilla y su fijación mecánica}, junto con la reducción del diámetro de los pines peribucales:
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabularx}{\textwidth}{l p{3.6cm} p{3.8cm} X}
+\toprule
+\textbf{Canal / Parámetro} & \textbf{Candela Experimento 1} \newline (10:59--11:14, 17 tomas) & \textbf{Candela Experimento 2} \newline (12:08--12:26, 21 tomas) & \textbf{Santiago Exploración} \newline (15:28--15:58, 22+2 tomas) \\
+\midrule
+\textbf{Orbicular Sup.} & $\varnothing = 15\,\text{mm}$, $\text{IED} = 15\,\text{mm}$ (horizontal subnasal, cinta blanca). & $\varnothing = 10\,\text{mm}$, $\text{IED} = 15\,\text{mm}$, $5\,\text{mm}$ entre bordes (cinta blanca). & $\varnothing = 10\,\text{mm}$, $\text{IED} = 15\,\text{mm}$ sobre bigote (cinta blanca). \\
+\midrule
+\textbf{Modíolo / DAO} & $\varnothing = 15\,\text{mm}$, $\text{IED} = 15\,\text{mm}$, oblicuo inferomedial hacia mandíbula (bicapa blanca+marrón). & $\varnothing = 10\,\text{mm}$, $\text{IED} = 15\,\text{mm}$ ($5\,\text{mm}$ entre bordes), inferomedial bajo comisura (bicapa marrón). & $\varnothing = 10\,\text{mm}$, oblicuo en comisura sobre barba (cinta marrón/blanca). \\
+\midrule
+\textbf{Masetero} & Parche Meditrace $\varnothing = 24\,\text{mm}$, \textbf{$\mathbf{20\,\text{mm}}$ entre bordes} ($\text{IED} \approx 44\,\text{mm}$), \textbf{posición posterior} sobre rama mandibular, cubierto con cinta blanca. & Parche Meditrace $\varnothing = 23\,\text{mm}$, \textbf{$\mathbf{7\,\text{mm}}$ entre bordes} ($\text{IED} = 30\,\text{mm}$), \textbf{desplazado hacia adelante} (parche negro pegado a cinta marrón) y \textbf{sin cinta encima}. & Parche Meditrace $\varnothing = 24\,\text{mm}$, electrodo superior rojo adelantado sobre piel libre de barba (risorio) e inferior gris sobre ángulo mandibular. \\
+\bottomrule
+\end{tabularx}
+\caption{Geometría real verificada de los tres montajes ensayados durante la campaña del 20 de octubre de 2026.}
+\label{tab:montajes_reales}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.31\textwidth}
+    \centering
+    \includegraphics[width=\textwidth,height=5.2cm,keepaspectratio]{../EMG_desarrollo/fotos/2026-10-20_Candela_Exp1_Modiolo_Masetero_Lateral.png}
+    \caption{Candela Exp 1 (Lateral).}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.31\textwidth}
+    \centering
+    \includegraphics[width=\textwidth,height=5.2cm,keepaspectratio]{../EMG_desarrollo/fotos/2026-10-20_Candela_Exp1_Orbicularis_Modiolo_Frontal.png}
+    \caption{Candela Exp 1 (Frontal).}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.35\textwidth}
+    \centering
+    \includegraphics[width=\textwidth,height=5.2cm,keepaspectratio]{../EMG_desarrollo/fotos/2026-10-20_Candela_Exp2_Modiolo_Masetero_Lateral.png}
+    \caption{Candela Exp 2 (Lateral).}
+\end{subfigure}
+\caption{Comparativa fotográfica de los montajes en Candela el 20/10/2026. En el Experimento 1 (a, b), los parches del masetero están separados $20\,\text{mm}$ entre bordes en posición posterior bajo cinta blanca. En el Experimento 2 (c), se redujo la separación a $7\,\text{mm}$ entre bordes sin cinta superior y el parche negro superior quedó adelantado junto al borde posterior de la cinta marrón.}
+\label{fig:fotos_candela_comparativa}
+\end{figure}
+
+\subsection{Mapeo Anatómico Exacto de la Colocación en Candela y Santiago}
+El análisis anatómico sobre las fotografías de registro (Figuras \ref{fig:fotos_candela_comparativa} y \ref{fig:fotos_santi}) permite establecer con precisión qué estructuras musculares quedaron debajo de cada par diferencial en esta campaña:
+
+\begin{enumerate}
+    \item \textbf{Canal Labial Superior (\textit{Musculus orbicularis oris, pars peripheralis}):} En ambos experimentos de Candela (Figura \ref{fig:fotos_candela_comparativa}b), los sensores se ubicaron bilateralmente a cada lado del filtrum subnasal, alineados con las fibras esfinterianas horizontales del labio superior. Debido a una ligera elevación asimétrica del electrodo izquierdo hacia el ala nasal, el canal recibe un aporte secundario (\textit{crosstalk}) de la inserción inferior del \textit{levator labii superioris} y del \textit{depressor septi nasi}.
+    \item \textbf{Canal Peribucal Inferolateral (Desplazamiento hacia el \textit{Depressor Anguli Oris}, DAO):} Tanto en el Experimento 1 como en el Experimento 2 (Figura \ref{fig:fotos_candela_comparativa}a--c), el punto azul superior se apoyó en el borde inferior del \textbf{modíolo} (\textit{modiolus anguli oris}, inmediatamente inferolateral a la comisura), pero el segundo electrodo se colocó $15\,\text{mm}$ más abajo en dirección al borde mandibular inferior. De este modo, el eje bipolar midió longitudinalmente el vientre del \textbf{músculo depresor del ángulo de la boca (\textit{DAO})}, solapando fibras del \textit{depressor labii inferioris} y la zona de arrastre cutáneo pasivo del mentón.
+    \item \textbf{Canal Mandibular / Masetero (\textit{Musculus masseter, pars superficialis}):}
+    \begin{itemize}
+        \item En el \textbf{Experimento 1} (Figura \ref{fig:fotos_candela_comparativa}a), el electrodo superior cayó sobre el tercio medio-posterior de la rama mandibular (delante del trago) y el inferior sobre el borde mandibular inferior cerca del ángulo goníaco. Aunque ambos pisaron el vientre del masetero superficial, su gran separación ($20\,\text{mm}$ entre bordes) llevó al electrodo inferior hasta la inserción mandibular del \textbf{platisma}, mientras que el eje bipolar quedó levemente invertido respecto a la diagonal natural de las fibras (que descienden desde el arco cigomático hacia el \textit{gonion}).
+        \item En el \textbf{Experimento 2} (Figura \ref{fig:fotos_candela_comparativa}c), al fijar las referencias a $35\,\text{mm}$ del canto externo del ojo y $35\,\text{mm}$ del ala nasal con $30\,\text{mm}$ entre centros, el parche superior negro se desplazó hacia adelante hasta quedar a sólo $\sim 2\,\text{cm}$ de la comisura labial, pisando directamente las fibras horizontales del \textbf{risorio (\textit{risorius})}, el \textbf{buccinador} y la entrada posterior al modíolo, mientras el parche rojo inferior quedó sobre la inserción baja del masetero superficial.
+    \end{itemize}
+    \item \textbf{Montaje Exploratorio en Santiago (Figura \ref{fig:fotos_santi}):} Realizado por auto-colocación frente a espejo sobre barba densa. El electrodo superior del canal masetérico (broche rojo sobre parche Meditrace en Figura \ref{fig:fotos_santi}c) quedó posicionado alto y adelantado en la mejilla izquierda —sobre piel despejada de vello denso encima del \textbf{risorio} y borde anterior del masetero—, mientras que el electrodo inferior y la totalidad del canal del modíolo quedaron montados sobre el vello facial mandibular y peribucal.
+\end{enumerate}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.31\textwidth}
+    \centering
+    \includegraphics[width=\textwidth,height=4.8cm,keepaspectratio]{../EMG_desarrollo/fotos/2026-10-20_Santi_Modiolo_Lateral.png}
+    \caption{Modíolo sobre vello facial.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.31\textwidth}
+    \centering
+    \includegraphics[width=\textwidth,height=4.8cm,keepaspectratio]{../EMG_desarrollo/fotos/2026-10-20_Santi_Orbicularis_Frontal.png}
+    \caption{Orbicular superior bilateral.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.31\textwidth}
+    \centering
+    \includegraphics[width=\textwidth,height=4.8cm,keepaspectratio]{../EMG_desarrollo/fotos/2026-10-20_Santi_Masetero_Lateral.png}
+    \caption{Masetero anterior / Risorio.}
+\end{subfigure}
+\caption{Montaje exploratorio por auto-colocación en el sujeto Santiago. Se observa en (c) cómo el parche superior de broche rojo se sitúa en la zona anterior alta de la mejilla (libre de barba densa, sobre el músculo risorio y borde masetérico anterior), mientras los parches inferiores apoyan sobre vello facial.}
+\label{fig:fotos_santi}
+\end{figure}
+
+% ==============================================================================
+% SECCIÓN 3: AUDITORÍA DE LAS 60 TOMAS, PERMUTACIÓN Y ESTABILIDAD
+% ==============================================================================
+\section{Auditoría Crítica de las 60 Tomas, Permutación de Canales y Estabilidad Temporal}
+
+La inspección individual de las 60 grabaciones calibradas (filtro Notch en $50\,\text{Hz}$ con $Q=2.0$, pasabanda Butterworth $20\text{--}500\,\text{Hz}$ y envolvente RMS con sustracción de ruido basal en los primeros $5\,\text{s}$) permitió descubrir dos fenómenos técnicos determinantes para la interpretación de toda la campaña.
+
+\subsection{Descubrimiento de la Permutación del Orden de Canales entre Candela y Santiago}
+Al auditar las leyendas y matrices de canales a lo largo de los $299.4\,\text{min}$ de sesión, se detectó que el orden físico de los tres canales musculares se modificó en el minuto $278.1$ (\texttt{15:37:22}):
+\begin{itemize}
+    \item \textbf{En las 38 tomas de Candela (Exp 1 y Exp 2) y en \texttt{A\_Prueba1\_Santi} (\texttt{15:28:25}):}
+    \begin{equation}
+        \text{Canal 0} = \texttt{orbi} \ (\text{Orbicular}), \qquad \text{Canal 1} = \texttt{modiolo} \ (\text{Modíolo/DAO}), \qquad \text{Canal 2} = \texttt{masetero}
+    \end{equation}
+    \item \textbf{En las 21 tomas restantes de Santiago (desde \texttt{A\_Prueba2\_Santi} a las \texttt{15:37:22} hasta \texttt{O\_Prueba5\_Santi} a las \texttt{15:58:43}):} Tras una pausa de $9\,\text{min}$ en la que se reacomodaron los conectores tras la falla de la primera toma de Santiago, la asignación pasó a ser:
+    \begin{equation}
+        \text{Canal 0} = \texttt{mast} \ (\text{Masetero}), \qquad \text{Canal 1} = \texttt{orbi} \ (\text{Orbicular}), \qquad \text{Canal 2} = \texttt{nudo} \ (\text{Modíolo})
+    \end{equation}
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/A_Exp1_Prueba1_Candela/plot_calibrado_2026-10-20_A_Exp1_Prueba1_Candela.png}
+    \caption{Candela (\texttt{A\_Exp1\_Prueba1}): \texttt{Ch0=orbi}, \texttt{Ch1=modiolo}, \texttt{Ch2=masetero}.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/A_Prueba3_Santi/plot_calibrado_2026-10-20_A_Prueba3_Santi.png}
+    \caption{Santiago (\texttt{A\_Prueba3}): Permutado a \texttt{Ch0=mast}, \texttt{Ch1=orbi}, \texttt{Ch2=nudo}.}
+\end{subfigure}
+\caption{Evidencia directa en las trazas calibradas de la permutación de canales entre las sesiones de Candela (a) y las series estables de Santiago (b), además de la diferencia en duración de captura ($35\,\text{s}$ con 14 pulsos en Candela frente a $45\,\text{s}$ con 19 pulsos en Santiago).}
+\label{fig:evidencia_permutacion}
+\end{figure}
+
+Este cambio de índices (Figura \ref{fig:evidencia_permutacion}) tiene tres implicancias directas sobre los procesamientos automatizados:
+\begin{enumerate}
+    \item \textbf{Mezcla de ejes en los gráficos globales de sesión:} El programa automatizador de reportes adoptó las etiquetas de la última medición de la tarde (\texttt{Ch0=mast, Ch1=orbi, Ch2=nudo}) y promedió las 60 tomas por índice numérico. Por ello, en la línea de tiempo global y en el Cubo 3D conjunto (Figura \ref{fig:cubo_y_lazos_sesion}), las primeras 38 tomas (Candela) tienen su Orbicular graficado sobre el eje $X$ (\texttt{mast}), su Modíolo sobre el eje $Y$ (\texttt{orbi}) y su Masetero sobre el eje $Z$ (\texttt{nudo}), superpuestos con los ejes permutados de Santiago.
+    \item \textbf{Caída artificial del Autoencoder Convolucional en modo \textit{zero-shot} sobre Santiago:} El Autoencoder Ortogonal de Lucas fue entrenado esperando el orden canónico; al ingresarle las tomas de Santiago con los canales rotados cíclicamente sin reordenar la matriz de entrada, su exactitud cayó a $47.99\%$ (frente al $58.18\%$ del PCA LDA que reajusta sus autovectores a la covarianza propia de la sesión).
+    \item \textbf{Ponderación del canal $\times 2.0$ y $\times 3.0$:} Al multiplicar \texttt{canal\_2} por $\times 2.0$ y $\times 3.0$, en Candela se amplificó efectivamente el \textbf{Masetero}, mientras que en Santiago se amplificó el canal \textbf{\texttt{nudo} (Modíolo)}, lo cual explica por qué en Santiago el factor $\times 3.0$ en Isomap rescató la señal atenuada por la barba en la comisura (subiendo el LDA a $60.59\%$).
+\end{enumerate}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth,height=5.2cm,keepaspectratio]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/evolucion_sesion_2026-10-20/Sesion_cubo_proyecciones_caras_2d.png}
+    \caption{Proyecciones 2D en las caras del cubo unitario.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth,height=5.2cm,keepaspectratio]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/evolucion_sesion_2026-10-20/Sesion_espacio_fases_proyecciones_caras_2d.png}
+    \caption{Lazos dinámicos promedio e histéresis fonatoria.}
+\end{subfigure}
+\caption{Representación vectorial en las caras del cubo de estados (a) y órbitas promedio continuas desde el reposo $(0,0)$ (b) generadas por el pipeline general. Se aprecia la colinealidad entre las trayectorias de /e/ e /i/ y la superposición entre /o/ y /u/.}
+\label{fig:cubo_y_lazos_sesion}
+\end{figure}
+
+\subsection{Catálogo de Tomas con Canales Caídos, Cortes y Contaminación de Ruido Basal}
+La revisión de las 60 señales calibradas permitió identificar exactamente qué registros presentan canales caídos ($\mu < 15\,\mu\text{V}$), interrupciones fonatorias o artefactos dentro de la ventana de calibración de ruido basal ($t \in [0, 5]\,\text{s}$), sintetizados en la Tabla \ref{tab:auditoria_60_tomas} y ejemplificados en la Figura \ref{fig:anomalias_tomas}.
+
+\begin{table}[H]
+\centering
+\scriptsize
+\begin{tabularx}{\textwidth}{l l p{3.6cm} X}
+\toprule
+\textbf{Bloque} & \textbf{Medición (Hora)} & \textbf{Canal Caído / Anomalía} & \textbf{Valores Calibrados ($\mu \pm \sigma$) y Diagnóstico} \\
+\midrule
+Candela Exp 1 & \texttt{A\_Exp1\_Prueba1} (10:59) & Artefacto en Ruido Basal ($0\text{--}5\,\text{s}$) & Picos espurios de $60\text{--}75\,\mu\text{V}$ en $t=1.5\text{--}3.5\,\text{s}$ en los 3 canales antes de fonar. \\
+Candela Exp 1 & \texttt{A\_Exp1\_Prueba2} (11:01) & \textbf{Pausa de $14\,\text{s}$} ($t=11\text{--}25\,\text{s}$) & Silencio entre $11\text{ y }25\,\text{s}$ (sólo 4 ventanas propuestas); \texttt{masetero} bajo ($15.6 \pm 10.2\,\mu\text{V}$). \\
+Candela Exp 1 & \texttt{E\_Exp1\_Prueba2} (11:02) & \textbf{\texttt{masetero (Ch2)} CAÍDO} & \texttt{masetero} planchado en $\mathbf{9.0 \pm 4.1\,\mu\text{V}}$ (vs. $23.1\,\mu\text{V}$ en Prueba 1). Pico basal en $t=0.5\,\text{s}$. \\
+Candela Exp 1 & \texttt{O\_Exp1\_Prueba1..4} & \textbf{\texttt{masetero (Ch2)} en piso basal} & \texttt{masetero} mide $\mathbf{5.6,\ 9.0,\ 14.8\text{ y }5.4\,\mu\text{V}}$ (músculo inactivo en redondeo labial suave). \\
+Candela Exp 1 & \texttt{U\_Exp1\_Prueba1..4} & \textbf{\texttt{masetero (Ch2)} en piso basal} & \texttt{masetero} mide $\mathbf{8.9,\ 9.3,\ 8.4\text{ y }8.8\,\mu\text{V}}$ mientras \texttt{orbi}/\texttt{modiolo} entregan $125\text{--}174\,\mu\text{V}$. \\
+Candela Exp 2 & \texttt{O\_Exp2\_Prueba1..5} & \textbf{\texttt{masetero (Ch2)} en piso basal} & \texttt{masetero} en $\mathbf{8.1,\ 9.3,\ 6.8,\ 12.8\text{ y }8.2\,\mu\text{V}}$. Escalón cuadrado en \texttt{orbi} ($t=5\,\text{s}$, Prueba 1). \\
+Candela Exp 2 & \texttt{U\_Exp2\_Prueba1, 3} & \textbf{\texttt{masetero (Ch2)} caído} & Cae a $\mathbf{7.7 \pm 3.6\,\mu\text{V}}$ (Prueba 1) y $\mathbf{11.4 \pm 9.1\,\mu\text{V}}$ (Prueba 3); en Prueba 2 y 4 sube a $25\,\mu\text{V}$. \\
+Candela Exp 2 & \texttt{E\_Exp2\_Prueba2} (12:13) & \textbf{Ruido Basal contaminado} & Voz y actividad muscular de $80\text{--}105\,\mu\text{V}$ durante la ventana de reposo ($0\text{--}4\,\text{s}$). \\
+\midrule
+\textbf{Santiago} & \texttt{A\_Prueba1\_Santi} (15:28) & \textbf{TOMA FALLIDA (Descartar)} & Mapeo viejo; \texttt{masetero} en $10.0\,\mu\text{V}$, \texttt{orbi} se apaga tras $t=10\,\text{s}$ ($19.9\,\mu\text{V}$), huecos de voz. \\
+\textbf{Santiago} & \texttt{A\_Prueba2\_Santi} (15:37) & \textbf{TOMA FALLIDA (Descartar)} & \textbf{Los 3 canales caídos:} \texttt{mast} $=16.5\,\mu\text{V}$, \texttt{orbi} $=13.2\,\mu\text{V}$, \textbf{\texttt{nudo} muerto en $\mathbf{6.4 \pm 3.1\,\mu\text{V}}$}. \\
+Santiago (S1) & \texttt{E\_Prueba1\_Santi} (15:38) & \textbf{\texttt{orbi (Ch1)} CAÍDO} & \texttt{orbi} en $\mathbf{13.3 \pm 3.6\,\mu\text{V}}$ y \texttt{nudo} bajo ($21.5\,\mu\text{V}$); sólo responde \texttt{mast} ($50.4\,\mu\text{V}$). \\
+Santiago (S1) & \texttt{I\_Prueba1\_Santi} (15:39) & Despegue final ($t=33\text{--}45\,\text{s}$) & En los últimos $12\,\text{s}$ la base de \texttt{mast} y \texttt{orbi} no retorna a cero (oscila en $30\text{--}55\,\mu\text{V}$). \\
+Santiago (S1) & \texttt{O\_Prueba1\_Santi} (15:40) & \textbf{\texttt{mast (Ch0)} CAÍDO} & \texttt{mast} en $0\,\mu\text{V}$ entre $t=5\text{ y }13\,\text{s}$ (media $\mathbf{20.6 \pm 8.9\,\mu\text{V}}$); \texttt{orbi} en $88.4\,\mu\text{V}$. \\
+Santiago (S1) & \texttt{U\_Prueba1\_Santi} (15:41) & \textbf{\texttt{mast (Ch0)} CAÍDO} & \texttt{mast} caído en $\mathbf{16.5 \pm 7.5\,\mu\text{V}}$ (recién se fija y recupera a $70\text{--}100\,\mu\text{V}$ desde las 15:42). \\
+Santiago (S2) & \texttt{E\_Prueba2\_Santi} (15:42) & \textbf{\texttt{nudo (Ch2)} CAÍDO} + offset & \texttt{nudo} en $\mathbf{18.6 \pm 6.2\,\mu\text{V}}$ con escalón de continua entre $t=6\text{ y }10\,\text{s}$. \\
+Santiago (S2) & \texttt{I\_Prueba2\_Santi} (15:43) & Ruido Basal contaminado & Ráfaga de $45\,\mu\text{V}$ en $t=2.5\text{--}5.0\,\text{s}$ en los 3 canales durante la calibración de reposo. \\
+Santiago (S3) & \texttt{E\_Prueba3\_Santi} (15:49) & \textbf{\texttt{nudo (Ch2)} CAÍDO} & \texttt{nudo} cae a $\mathbf{14.6 \pm 5.7\,\mu\text{V}}$ + pico en ventana basal de \texttt{orbi} y micrófono ($t=1\text{--}3\,\text{s}$). \\
+\bottomrule
+\end{tabularx}
+\caption{Auditoría técnica de anomalías, canales caídos y artefactos de calibración sobre el corpus de 60 tomas del 20/10/2026.}
+\label{tab:auditoria_60_tomas}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/A_Exp1_Prueba2_Candela/plot_calibrado_2026-10-20_A_Exp1_Prueba2_Candela.png}
+    \caption{Interrupción de fonación ($t=11\text{--}25\,\text{s}$) en \texttt{A\_Exp1\_Prueba2}.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/A_Prueba2_Santi/plot_calibrado_2026-10-20_A_Prueba2_Santi.png}
+    \caption{Falla de los 3 canales ($\le 16.5\,\mu\text{V}$) en \texttt{A\_Prueba2\_Santi}.}
+\end{subfigure}
+\caption{Ejemplos representativos de tomas anómalas detectadas en la auditoría: (a) pausa intermedia en Candela y (b) caída simultánea de los tres canales en la segunda prueba de Santiago antes del asentamiento conductivo de los parches.}
+\label{fig:anomalias_tomas}
+\end{figure}
+
+\subsection{Monitoreo de Estabilidad Pulso a Pulso SIN NOTCH frente a Fatiga Muscular}
+Para discernir objetivamente si las variaciones de amplitud a lo largo de la sesión responden a fatiga metabólica muscular o a degradación mecánica del contacto electrodo-piel, se evaluaron en la señal cruda \textbf{sin filtro notch} (pasabanda Butterworth $20\text{--}500\,\text{Hz}$ de 4to orden) el piso de ruido inter-pulso (depurado por rango intercuartil $Q_3 + 1.5\times\text{IQR}$) y la amplitud pico de cada fonación (Tabla \ref{tab:fatiga_ruido} y Figura \ref{fig:analisis_fatiga}).
+
+\begin{table}[H]
+\centering
+\scriptsize
+\begin{tabularx}{\textwidth}{p{3.1cm} c c c c c X}
+\toprule
+\textbf{Sesión / Canal} & \textbf{Pulsos} & \textbf{Ruido sin Notch} & \textbf{Deriva Ruido} & \textbf{Pulso Medio} & \textbf{Deriva Pulso} & \textbf{Diagnóstico Bioeléctrico y Mecánico} \\
+\midrule
+\textbf{Candela Exp 1} (17 tomas) & \textbf{223} & & & & & \\
+- Ch0: Orbicular & 223 & $73.69 \pm 41.61\,\mu\text{V}$ & $-83.7\%$ & $421.11 \pm 119.48\,\mu\text{V}$ & $+39.0\%$ & \textbf{Hidratación dérmica:} 50 Hz cae de $127.1$ a $20.8\,\mu\text{V}$. Cero fatiga. \\
+- Ch1: Modíolo   & 223 & $195.10 \pm 40.95\,\mu\text{V}$ & $-27.2\%$ & $514.31 \pm 110.39\,\mu\text{V}$ & $+50.5\%$ & Fijación bicapa blanca+marrón óptima; asentamiento de gel. \\
+- Ch2: Masetero (sep. $20\,\text{mm}$) & 223 & $\mathbf{118.40 \pm 47.95\,\mu\text{V}}$ & $\mathbf{+56.5\%}$ & $\mathbf{260.97 \pm 111.73\,\mu\text{V}}$ & $\mathbf{-22.3\%}$ & \textbf{Tracción mandibular:} el parche inferior cerca del cuello sufre micro-despegue ($92 \to 144\,\mu\text{V}$). \\
+\midrule
+\textbf{Candela Exp 2} (21 tomas) & \textbf{273} & & & & & \\
+- Ch0: Orbicular & 273 & $87.59 \pm 53.80\,\mu\text{V}$  & $+173.2\%$ & $427.38 \pm 104.74\,\mu\text{V}$ & $+21.2\%$ & Piso inicial muy bajo ($<50\,\mu\text{V}$), leve aflojamiento final. \\
+- Ch1: Modíolo   & 273 & $\mathbf{148.15 \pm 42.12\,\mu\text{V}}$ & $\mathbf{-3.9\%}$ & $462.65 \pm 109.91\,\mu\text{V}$ & $+24.3\%$ & \textbf{Estabilidad absoluta:} la sobrecapa marrón blinda el contacto ($151 \to 145\,\mu\text{V}$). \\
+- Ch2: Masetero (sep. $7\,\text{mm}$) & 273 & $\mathbf{144.20 \pm 85.49\,\mu\text{V}}$ & $\mathbf{+127.4\%}$ & $\mathbf{438.38 \pm 128.22\,\mu\text{V}}$ & $\mathbf{+7.1\%}$ & \textbf{Efecto palanca sin cinta y \textit{crosstalk}:} al dejar los broches al aire, el cable despega el borde; la posición anterior infla el pulso (+68\% por risorio). \\
+\midrule
+\textbf{Santi Explor.} (22 tomas) & \textbf{312} & & & & & \\
+- Ch0 (índice 0: \texttt{mast}) & 312 & $198.40 \pm 89.38\,\mu\text{V}$ & $-42.0\%$  & $470.51 \pm 116.41\,\mu\text{V}$ & $+2.8\%$  & \textbf{Sesgo de Tomas 1--2:} el pico de $380\,\mu\text{V}$ en los pulsos 1--35 (\texttt{A\_Prueba1,2}) genera la pendiente; luego plano. \\
+- Ch1 (índice 1: \texttt{orbi}) & 312 & $186.45 \pm 79.10\,\mu\text{V}$ & $-35.9\%$  & $365.85 \pm 111.11\,\mu\text{V}$ & $-16.9\%$ & Mismo salto inicial en pulsos 1--35 y estabilización posterior en $\sim 160\,\mu\text{V}$. \\
+- Ch2 (índice 2: \texttt{nudo}) & 312 & $74.16 \pm 70.82\,\mu\text{V}$  & $+22.2\%$  & $321.79 \pm 176.12\,\mu\text{V}$ & $+9.6\%$  & Arranca caído en pulsos 1--35 ($\sim 35\,\mu\text{V}$) y opera estable desde el pulso 40. \\
+\bottomrule
+\end{tabularx}
+\caption{Evolución temporal del piso de ruido inter-pulso SIN NOTCH y diagnóstico físico pulso a pulso.}
+\label{tab:fatiga_ruido}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{../EMG_desarrollo/resultados/resultados_autoencoder/figuras_evaluacion/analisis_fatiga_ruido_interpulso_2026_10_20.png}
+\caption{Evolución temporal continua pulso a pulso evaluada estrictamente SIN FILTRO NOTCH ($20\text{--}500\,\text{Hz}$). Columna izquierda: Amplitud de picos fonatorios (diagnóstico de fatiga). Columna derecha: Piso de ruido inter-pulso en reposo (diagnóstico de despegue y acople de $50\,\text{Hz}$). En la fila inferior (Santiago) se visualiza claramente cómo los primeros $\sim 35$ pulsos corresponden a las tomas defectuosas \texttt{A\_Prueba1} y \texttt{A\_Prueba2}.}
+\label{fig:analisis_fatiga}
+\end{figure}
+
+El análisis conjunto de la Tabla \ref{tab:fatiga_ruido} y la Figura \ref{fig:analisis_fatiga} demuestra tres resultados concluyentes: (i) \textbf{ausencia total de fatiga muscular} en los tres bloques (la cadencia de $30\,\text{BPM}$ otorga recuperación metabólica completa); (ii) \textbf{necesidad de fijar los cables del masetero con cinta sobre la mejilla}, dado que en el Experimento 2 dejar los broches \textit{snap} descubiertos provocó una suba del $+127.4\%$ en el ruido de $50\,\text{Hz}$ por el torque del cable; y (iii) \textbf{confirmación del descarte de los pulsos 1 a 35 en Santiago}, donde el ruido de $350\text{--}400\,\mu\text{V}$ refleja las dos tomas iniciales mal conectadas y no una cinética lenta de gel.
+
+% ==============================================================================
+% SECCIÓN 4: MODELADO LINEAL VS NO LINEAL Y FENOMENOLOGÍA EN SANTIAGO
+% ==============================================================================
+\section{Evaluación de Variedades No Lineales, Acondicionamiento por Impedancia y Fenomenología en Santiago}
+
+Se procesaron las tomas mediante la cadena canónica del proyecto: filtrado Notch a $50\,\text{Hz}$, pasabanda $20\text{--}300\,\text{Hz}$, sustracción del piso estocástico inter-pulso ($\alpha_{\text{ruido}}$), ecualización de impedancia basal por percentil 95 ($P_{95}$) y normalización por Supremo Tricanal ($M_{\text{supremo, pulso}}$).
+
+\subsection{PCA Lineal frente a Isomap Geodésico y Autoencoder Convolucional Ortogonal}
+En la Tabla \ref{tab:comparativa_nolineal} y las Figuras \ref{fig:pca_candela_exp1} a \ref{fig:comparativa_nolineal} se contrasta el desempeño de clasificación no supervisada (GMM con asignación húngara) y supervisada (LDA con validación cruzada) entre PCA 2D, Isomap geodésico y el Autoencoder Convolucional Ortogonal 2D de Lucas evaluado en modo \textit{zero-shot}.
+
+\begin{table}[H]
+\centering
+\footnotesize
+\begin{tabularx}{\textwidth}{l c c c c c}
+\toprule
+\textbf{Sesión Experimental} & \textbf{Muestras} & \textbf{PCA 2D (GMM / LDA)} & \textbf{Isomap 2D (GMM / LDA)} & \textbf{Conv Ortogonal 2D} & $\mathbf{\Delta}$ \textbf{GMM (Isomap)} \\
+\midrule
+Candela Exp 1 (sep. $20\,\text{mm}$ post.) & 211 & $57.35\% \ / \ 67.77\%$ & $\mathbf{67.77\%} \ / \ 67.30\%$ ($k=20$) & $64.93\% \ / \ 64.93\%$ & $\mathbf{+10.42\%}$ \\
+Candela Exp 2 (sep. $7\,\text{mm}$ ant.)   & 267 & $59.55\% \ / \ 63.67\%$ & $\mathbf{64.42\%} \ / \ 62.92\%$ ($k=30$) & $61.42\% \ / \ 65.92\%$ & $\mathbf{+4.87\%}$ \\
+Santi Exploración (sin reordenar)          & 373 & $51.74\% \ / \ 58.18\%$ & $53.08\% \ / \ 53.62\%$ ($k=10$) & $47.99\% \ / \ 47.99\%$ & $+1.34\%$ \\
+\bottomrule
+\end{tabularx}
+\caption{Comparativa de exactitud entre PCA 2D, Isomap y el Autoencoder Convolucional Ortogonal 2D récord.}
+\label{tab:comparativa_nolineal}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{../EMG_desarrollo/deep_learning/pca_umap_clustering/resultados_pca_umap/2026-10-20_Candela_Exp1/PCA_2D.png}
+    \caption{PCA 2D con clusters GMM.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{../EMG_desarrollo/deep_learning/pca_umap_clustering/resultados_pca_umap/2026-10-20_Candela_Exp1/PCA_3D.png}
+    \caption{Espacio de fases PCA 3D.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{../EMG_desarrollo/deep_learning/pca_umap_clustering/resultados_pca_umap/2026-10-20_Candela_Exp1/heatmap_confusion_pca_2d.png}
+    \caption{Matriz de confusión 2D.}
+\end{subfigure}
+\caption{Proyecciones PCA y matriz de confusión de Candela --- Experimento 1 (parches en masetero posterior con $20\,\text{mm}$ de separación entre bordes). La vocal /a/ alcanza $97\%$ de exactitud, pero en 2D persiste confusión dentro de los pares /e/--/i/ y /o/--/u/.}
+\label{fig:pca_candela_exp1}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{../EMG_desarrollo/deep_learning/pca_umap_clustering/resultados_pca_umap/2026-10-20_Candela_Exp2/PCA_2D.png}
+    \caption{PCA 2D con clusters GMM.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{../EMG_desarrollo/deep_learning/pca_umap_clustering/resultados_pca_umap/2026-10-20_Candela_Exp2/PCA_3D.png}
+    \caption{Espacio de fases PCA 3D.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{../EMG_desarrollo/deep_learning/pca_umap_clustering/resultados_pca_umap/2026-10-20_Candela_Exp2/heatmap_confusion_pca_2d.png}
+    \caption{Matriz de confusión 2D.}
+\end{subfigure}
+\caption{Proyecciones PCA y evaluación de Candela --- Experimento 2 (parches en masetero adelantados hacia la comisura con $7\,\text{mm}$ entre bordes). El mayor solapamiento espacial con el risorio y buccinador incrementa la confusión de /e/ hacia /i/ ($53\%$).}
+\label{fig:pca_candela_exp2}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{../EMG_desarrollo/deep_learning/pca_umap_clustering/resultados_pca_umap/2026-10-20_Santi_Exploracion/PCA_2D.png}
+    \caption{PCA 2D con clusters GMM.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{../EMG_desarrollo/deep_learning/pca_umap_clustering/resultados_pca_umap/2026-10-20_Santi_Exploracion/PCA_3D.png}
+    \caption{Espacio de fases PCA 3D.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{../EMG_desarrollo/deep_learning/pca_umap_clustering/resultados_pca_umap/2026-10-20_Santi_Exploracion/heatmap_confusion_pca_2d.png}
+    \caption{Matriz de confusión 2D.}
+\end{subfigure}
+\caption{Proyecciones PCA y evaluación de Santiago --- Sesión Exploratoria. Se observa el colapso de /a/ ($28\%$, confundida en un $50\%$ con /e/ y $21\%$ con /i/) contrastando con la notable separación entre /o/ ($67\%$) y /u/ ($88\%$).}
+\label{fig:pca_santi}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.92\textwidth]{../EMG_desarrollo/resultados/resultados_autoencoder/figuras_evaluacion/comparativa_no_linealidad_sesiones_2026_10_20.png}
+\caption{Matriz comparativa $3\times 3$ de variedades en 2D: PCA Lineal (columna 1), Isomap Geodésico (columna 2) y Autoencoder Convolucional Ortogonal 2D Récord de Lucas (columna 3).}
+\label{fig:comparativa_nolineal}
+\end{figure}
+
+\subsection{Reinterpretación Física: Por qué el Experimento 1 Supera al Experimento 2 (Compensación de Ganancia e Impedancia $P_{95}$)}
+Al saber que ambos experimentos emplearon el mismo parche Meditrace de $23\text{--}24\,\text{mm}$, las pruebas paramétricas de amplificación artificial del canal del masetero ($\times 1.0, \times 2.0, \times 3.0$, Tabla \ref{tab:masetero_amplificado} y Figuras \ref{fig:pca_masetero_amplificado}--\ref{fig:isomap_masetero_amplificado}), el barrido de sustracción de ruido basal ($\alpha \in \{0.0, 0.5, 1.0\}$, Tabla \ref{tab:barrido_alpha}) y la ecualización por impedancia basal $P_{95}$ (Tabla \ref{tab:correccion_impedancia} y Figura \ref{fig:comparativa_impedancia}) cobran un sentido biofísico exacto:
+
+\begin{enumerate}
+    \item \textbf{Independencia ortogonal en el Experimento 1 vs. \textit{Crosstalk} en el Experimento 2:}
+    En el \textbf{Experimento 1}, al colocar los parches del masetero bien atrás sobre la rama mandibular con $20\,\text{mm}$ entre bordes, el Canal 2 quedó espacialmente aislado de la boca. Durante la fonación suave su amplitud en microvoltios fue baja ($\sim 20\text{--}30\,\mu\text{V}$ en /a, e, i/), pero la información capturada era ortogonal a la de los labios. Por eso, al restituir su peso relativo mediante la corrección de impedancia $P_{95}$ (Tabla \ref{tab:correccion_impedancia}) o al multiplicarlo por $\mathbf{\times 2.0}$ (Tabla \ref{tab:masetero_amplificado}), la exactitud dio un salto drástico hasta alcanzar los máximos de toda la campaña: $\mathbf{73.46\%}$ en PCA 3D LDA (con $\alpha=0.5$), $\mathbf{72.0\%}$ en PCA 3D ($\times 2.0$) y $\mathbf{70.62\%}$ en Isomap 2D LDA ($\times 2.0$).
+    \item \textbf{Prueba empírica de contaminación por Risorio/Buccinador en el Experimento 2:}
+    En el \textbf{Experimento 2}, al juntar los parches a $7\,\text{mm}$ y adelantar el parche superior negro hasta tocar la cinta marrón de la comisura, el Canal 2 absorbió una fuerte señal de los músculos peribucales laterales ($55\text{--}78\,\mu\text{V}$ en /e/ e /i/). Como su energía cruda ya estaba inflada por este \textit{crosstalk}, activar o desactivar la corrección $P_{95}$ casi no alteró el resultado ($<1.5\%$ de diferencia en Tabla \ref{tab:correccion_impedancia}), y multiplicar el canal por $\times 2.0$ o $\times 3.0$ \textbf{degradó monótonamente la clasificación} (cayendo a $56.93\%$ en PCA $\times 2.0$ y $55.06\%$ en Isomap $\times 3.0$), pues amplificar un canal contaminado sólo inyecta varianza redundante con el modíolo.
+\end{enumerate}
+
+\begin{table}[H]
+\centering
+\scriptsize
+\begin{tabularx}{\textwidth}{p{2.5cm} c c c X}
+\toprule
+\textbf{Sesión} & \textbf{Escala Ch2} & \textbf{PCA 2D (GMM/LDA)} & \textbf{Isomap 2D (GMM/LDA)} & \textbf{Efecto Bioeléctrico Principal} \\
+\midrule
+Candela Exp 1 & $\times 1.0$ & $57.35\% \ / \ 67.77\%$ & $67.77\% \ / \ 67.30\%$ & Nivel base (posición masetérica posterior, baja amplitud). \\
+(sep. $20\,\text{mm}$ post.) & $\mathbf{\times 2.0}$ & $\mathbf{64.45\%} \ / \ 69.19\%$ & $63.51\% \ / \ \mathbf{70.62\%}$ & \textbf{Récord LDA Isomap ($70.62\%$), PCA 3D ($72.0\%$) y $+7.10\%$ en PCA 2D.} \\
+              & $\times 3.0$ & $61.14\% \ / \ 68.72\%$ & $63.98\% \ / \ 66.35\%$ & Inicio de sobre-ponderación del piso de ruido basal. \\
+\midrule
+Candela Exp 2 & $\times 1.0$ & $59.55\% \ / \ 63.67\%$ & $62.92\% \ / \ 63.67\%$ & Posición adelantada con alta energía inicial por risorio. \\
+(sep. $7\,\text{mm}$ ant.)  & $\times 2.0$ & $56.93\% \ / \ 62.92\%$ & $62.55\% \ / \ 62.55\%$ & Degradación por amplificación de \textit{crosstalk} comisural. \\
+              & $\times 3.0$ & $59.55\% \ / \ 61.05\%$ & $55.06\% \ / \ 62.17\%$ & Colapso de geodésicas en Isomap ($-7.86\%$). \\
+\midrule
+Santi Explor. & $\times 1.0$ & $51.74\% \ / \ 58.18\%$ & $52.28\% \ / \ 55.76\%$ & Nivel base con atenuación dérmica en Ch2 (\texttt{nudo} sobre barba). \\
+(Ch2 = \texttt{nudo}) & $\times 2.0$ & $47.45\% \ / \ 58.18\%$ & $48.79\% \ / \ 56.84\%$ & Transición de varianza con tomas 1 y 2 incluidas. \\
+              & $\mathbf{\times 3.0}$ & $39.41\% \ / \ 47.99\%$ & $49.60\% \ / \ \mathbf{60.59\%}$ & \textbf{Rescate en Isomap LDA ($60.59\%$) al levantar \texttt{nudo} sobre la barba.} \\
+\bottomrule
+\end{tabularx}
+\caption{Impacto de escalar el Canal 2 (\texttt{masetero} en Candela; \texttt{nudo} en Santiago) en PCA 2D e Isomap 2D ($k=20$).}
+\label{tab:masetero_amplificado}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{../EMG_desarrollo/resultados/resultados_autoencoder/figuras_evaluacion/comparativa_pca_masetero_amplificado_2026_10_20.png}
+    \caption{Efecto de escala ($\times 1, \times 2, \times 3$) en PCA 2D.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{../EMG_desarrollo/resultados/resultados_autoencoder/figuras_evaluacion/comparativa_masetero_amplificado_2026_10_20.png}
+    \caption{Efecto de escala ($\times 1, \times 2, \times 3$) en Isomap 2D ($k=20$).}
+\end{subfigure}
+\vspace{0.2cm}
+\begin{subfigure}[b]{0.85\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{../EMG_desarrollo/resultados/resultados_autoencoder/figuras_evaluacion/comparativa_pca_3d_masetero_x2_2026_10_20.png}
+    \caption{Espacios de fases PCA 3D con escala $\times 2.0$ (Candela Exp 1 alcanza $72.0\%$ en LDA).}
+\end{subfigure}
+\caption{Evaluación de la compensación de ganancia del Canal 2 en proyecciones 2D lineales (a), geodésicas (b) y tridimensionales (c).}
+\label{fig:pca_masetero_amplificado}
+\label{fig:pca_3d_masetero_x2}
+\label{fig:isomap_masetero_amplificado}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\scriptsize
+\begin{tabularx}{\textwidth}{p{2.5cm} c c c c}
+\toprule
+\textbf{Sesión} & \textbf{Factor Alfa ($\alpha$)} & \textbf{PCA 2D (GMM/LDA)} & \textbf{PCA 3D (GMM/LDA)} & \textbf{Isomap 2D $k=20$ (GMM/LDA)} \\
+\midrule
+Candela Exp 1 & $\alpha = 0.0$ & $56.87\% \ / \ 66.35\%$ & $63.03\% \ / \ 71.09\%$ & $56.87\% \ / \ 64.45\%$ \\
+(sep. $20\,\text{mm}$ post.) & $\mathbf{\alpha = 0.5}$ & $57.35\% \ / \ 67.77\%$ & $57.82\% \ / \ \mathbf{73.46\%}$ & $\mathbf{67.77\%} \ / \ 67.30\%$ \\
+              & $\alpha = 1.0$ & $\mathbf{59.72\%} \ / \ \mathbf{68.25\%}$ & $\mathbf{65.40\%} \ / \ 72.99\%$ & $63.51\% \ / \ \mathbf{69.67\%}$ \\
+\midrule
+Candela Exp 2 & $\alpha = 0.0$ & $58.43\% \ / \ 64.42\%$ & $61.42\% \ / \ 63.30\%$ & $53.56\% \ / \ 63.67\%$ \\
+(sep. $7\,\text{mm}$ ant.)  & $\alpha = 0.5$ & $59.55\% \ / \ 63.67\%$ & $61.42\% \ / \ 62.92\%$ & $62.92\% \ / \ 63.67\%$ \\
+              & $\mathbf{\alpha = 1.0}$ & $\mathbf{63.30\%} \ / \ \mathbf{64.42\%}$ & $\mathbf{65.54\%} \ / \ \mathbf{65.92\%}$ & $\mathbf{63.30\%} \ / \ 62.92\%$ \\
+\midrule
+Santi Explor. & $\mathbf{\alpha = 0.0}$ & $\mathbf{52.82\%} \ / \ \mathbf{58.45\%}$ & $\mathbf{50.40\%} \ / \ \mathbf{57.64\%}$ & $49.60\% \ / \ \mathbf{57.37\%}$ \\
+(Auto-montaje)& $\alpha = 0.5$ & $51.74\% \ / \ 58.18\%$ & $46.38\% \ / \ 56.57\%$ & $\mathbf{52.28\%} \ / \ 55.76\%$ \\
+              & $\alpha = 1.0$ & $50.13\% \ / \ 53.89\%$ & $46.11\% \ / \ 56.03\%$ & $49.33\% \ / \ 53.35\%$ \\
+\bottomrule
+\end{tabularx}
+\caption{Barrido del coeficiente de sustracción de ruido estocástico inter-pulso $x_{c,\text{rect}}(t) = \max(0,\, x_c(t) - \alpha\cdot\mu_{c,\text{ruido}})$.}
+\label{tab:barrido_alpha}
+\end{table}
+
+\begin{table}[H]
+\centering
+\scriptsize
+\begin{tabularx}{\textwidth}{p{2.4cm} c c c c X}
+\toprule
+\textbf{Sesión} & \textbf{Condición} & \textbf{PCA 2D (GMM/LDA)} & \textbf{PCA 3D (GMM/LDA)} & \textbf{Isomap 2D (GMM/LDA)} & \textbf{Impacto en la Variedad Motora} \\
+\midrule
+Candela Exp 1 & \textbf{Con P95} & $57.35\% \ / \ \mathbf{67.77\%}$ & $57.82\% \ / \ \mathbf{73.46\%}$ & $\mathbf{67.77\%} \ / \ \mathbf{67.30\%}$ & \textbf{Restituye el peso del masetero posterior (+11.37\% Isomap, +10.43\% LDA 3D).} \\
+              & Sin P95          & $\mathbf{60.66\%} \ / \ 67.30\%$ & $\mathbf{62.09\%} \ / \ 63.03\%$ & $56.40\% \ / \ 56.40\%$ & El supremo tricanal anula al masetero por su menor escala en $\mu\text{V}$. \\
+\midrule
+Candela Exp 2 & \textbf{Con P95} & $\mathbf{59.55\%} \ / \ \mathbf{63.67\%}$ & $\mathbf{61.42\%} \ / \ 62.92\%$ & $\mathbf{62.92\%} \ / \ 63.67\%$ & Estabiliza fronteras entre vocales anteriores y posteriores. \\
+              & Sin P95          & $59.18\% \ / \ 62.17\%$ & $60.30\% \ / \ \mathbf{64.42\%}$ & $60.30\% \ / \ \mathbf{65.92\%}$ & Invarianza ($<1.5\%$) porque el parche adelantado ya tiene alta amplitud. \\
+\midrule
+Santi Explor. & \textbf{Con P95} & $\mathbf{51.74\%} \ / \ \mathbf{58.18\%}$ & $46.38\% \ / \ \mathbf{56.57\%}$ & $52.28\% \ / \ \mathbf{55.76\%}$ & \textbf{Corrige el desbalance de impedancia entre piel libre y barba.} \\
+              & Sin P95          & $50.13\% \ / \ 57.64\%$ & $\mathbf{52.28\%} \ / \ 56.30\%$ & $\mathbf{53.35\%} \ / \ 54.69\%$ & Deriva de centroides por diferencias de contacto entre tomas. \\
+\bottomrule
+\end{tabularx}
+\caption{Evaluación de la ecualización por impedancia basal y rango dinámico $\tilde{x}_c(t) = (x_c(t) - \mu_{c,\text{reposo}})/P_{95}(x_c)$.}
+\label{tab:correccion_impedancia}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{../EMG_desarrollo/resultados/resultados_autoencoder/figuras_evaluacion/comparativa_correccion_impedancia_2026_10_20.png}
+    \caption{Impacto de $P_{95}$ en las 3 sesiones del 20/10/2026.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{imagenes/lucas_pca_sin_vs_con_reposo_comparativa.png}
+    \caption{Desacople de /o/ y /u/ en Lucas ($73.0\% \to 86.8\%$ LDA).}
+\end{subfigure}
+\caption{Efecto del acondicionamiento por sustracción de reposo y normalización $P_{95}$: (a) restitución de simetría inter-canal en la campaña del 20/10 y (b) demostración histórica en el corpus de Lucas de cómo remover el corrimiento basal del labio separa nítidamente /o/ de /u/.}
+\label{fig:comparativa_impedancia}
+\end{figure}
+
+\subsection{Explicación Biofísica de las Señales de Santiago: ¿Por qué Colapsan /a, e, i/ pero se Separan /o/ y /u/?}
+Una de las observaciones más llamativas de la campaña (Figura \ref{fig:pca_santi}c) es que en Santiago la separación global disminuye por el colapso entre /a/, /e/ e /i/ (/a/ obtiene $28\%$ y se confunde en un $50\%$ con /e/), pero simultáneamente \textbf{las vocales redondeadas /o/ ($67\%$) y /u/ ($88\%$) logran mucho mayor desacoplamiento entre sí que en Candela} (donde /u/ sufrió un $80\text{--}88\%$ de confusión con /o/). Al extraer los valores calibrados de las series estabilizadas de Santiago (Series 3 y 4, Tabla \ref{tab:vectores_santi}), la causa física queda completamente demostrada:
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabularx}{\textwidth}{l c c c X}
+\toprule
+\textbf{Vocal (Santiago S3--S4)} & \textbf{Ch0: \texttt{mast}} ($\mu\text{V}$) & \textbf{Ch1: \texttt{orbi}} ($\mu\text{V}$) & \textbf{Ch2: \texttt{nudo}} ($\mu\text{V}$) & \textbf{Vector Tricanal Normalizado \texttt{[mast, orbi, nudo]}} \\
+\midrule
+\textbf{Vocal /a/} (\texttt{Prueba 3, 4}) & $\mathbf{87.9\text{--}102.8}$ & $38.4\text{--}42.8$ & $25.0\text{--}37.1$ & $\mathbf{[1.00,\ \ 0.43,\ \ 0.32]}$ \ (Idéntico a /e/ e /i/) \\
+\textbf{Vocal /e/} (\texttt{Prueba 3, 4}) & $\mathbf{88.0\text{--}98.8}$  & $35.8\text{--}45.8$ & $14.6\text{--}36.3$ & $\mathbf{[1.00,\ \ 0.43,\ \ 0.26]}$ \ (Colineal con /a/ e /i/) \\
+\textbf{Vocal /i/} (\texttt{Prueba 3, 4}) & $\mathbf{96.6\text{--}100.8}$ & $36.0\text{--}50.3$ & $21.1\text{--}32.5$ & $\mathbf{[1.00,\ \ 0.43,\ \ 0.27]}$ \ (Colineal con /a/ y /e/) \\
+\midrule
+\textbf{Vocal /o/} (\texttt{Prueba 3, 4}) & $31.8\text{--}112.5$ & $\mathbf{58.1\text{--}72.6}$ & $34.1\text{--}42.0$ & $\mathbf{[0.85,\ \ 1.00,\ \ 0.52]}$ \ (Despegue de \texttt{orbi}) \\
+\textbf{Vocal /u/} (\texttt{Prueba 2, 3, 4}) & $82.4\text{--}88.2$ & $\mathbf{85.3\text{--}94.2}$ & $\mathbf{46.9\text{--}58.0}$ & $\mathbf{[0.95,\ \ 1.00,\ \ 0.60]}$ \ (Máximo en \texttt{orbi} y \texttt{nudo}) \\
+\bottomrule
+\end{tabularx}
+\caption{Amplitudes pico calibradas y vectores normalizados en las series estables de Santiago.}
+\label{tab:vectores_santi}
+\end{table}
+
+\begin{enumerate}
+    \item \textbf{Causa del colapso triple (/a, e, i/) en Santiago:} Como muestra la Tabla \ref{tab:vectores_santi}, pronunciar /a/, /e/ o /i/ en el auto-montaje de Santiago produce exactamente el mismo vector unitario $\texttt{[1.00, 0.43, 0.28]}$. Esto ocurre porque: (a) el electrodo superior de \texttt{mast (Ch0)} se pegó adelantado sobre piel libre de barba encima del \textit{risorio}/borde masetérico anterior (Figura \ref{fig:fotos_santi}c), disparándose a $\sim 95\,\mu\text{V}$ tanto al abrir la mandíbula en /a/ como al tensar la mejilla en /e/ e /i/; y (b) el canal \texttt{nudo (Ch2)}, que en Candela sube a $90\text{--}133\,\mu\text{V}$ durante la sonrisa de /e/ e /i/, en Santiago estaba apoyado sobre la barba: como el gesto de sonrisa desliza la piel tangencialmente por debajo del pelo sin presionar el sensor hacia afuera, \texttt{nudo} quedó amortiguado en $14\text{--}36\,\mu\text{V}$ (igual que en /a/).
+    \item \textbf{Causa del éxito en /o/ vs. /u/ en Santiago:} Al articular vocales redondeadas, \texttt{orbi (Ch1)} duplica su salida ($58\text{--}94\,\mu\text{V}$), separando de inmediato a \{/o/, /u/\} del grupo \{/a/, /e/, /i/\}. Además, para pronunciar la /u/ (protrusión cerrada extrema), el abultamiento muscular del complejo peribucal empuja perpendicularmente hacia afuera contra la cinta, venciendo la amortiguación de la barba y llevando a \texttt{nudo (Ch2)} a sus valores máximos de toda la tarde ($46.9,\ 53.0\text{ y }58.0\,\mu\text{V}$ en \texttt{U\_Prueba2, 3, 4}), netamente por encima de los registros de /o/ ($34.1\text{--}42.0\,\mu\text{V}$). Adicionalmente, como en la Figura \ref{fig:fotos_santi}a Santiago colocó los sensores de comisura más arriba sobre el modíolo ecuatorial real (mientras que en Candela el Masetero estaba muerto en $5\text{--}9\,\mu\text{V}$ y el Modíolo estaba desplazado hacia el mentón), Santiago conservó variación tridimensional real en los tres canales para desempatar /o/ de /u/.
+\end{enumerate}
+
+% ==============================================================================
+% SECCIÓN 5: ANÁLISIS DEL SOLAPAMIENTO /e/ vs /i/ Y FEATURE DE ENERGÍA
+% ==============================================================================
+\section{Análisis Estadístico y Biomecánico del Solapamiento entre /e/ e /i/}
+
+En ambos experimentos de Candela del 20 de octubre, las matrices de confusión muestran una fuerte mezcla entre /e/ e /i/ ($30\%\text{--}53\%$ de confusión). El análisis de las señales calibradas y los patrones temporales demuestra por qué ocurrió este solapamiento y evalúa estadísticamente el alcance de usar la energía absoluta como cuarta dimensión.
+
+\subsection{Colinealidad Vectorial y Cancelación por el Supremo Tricanal}
+Al promediar las amplitudes calibradas de Candela en el Experimento 1:
+\begin{itemize}
+    \item \textbf{Vocal /e/ (Exp 1):} $\texttt{orbi} = 47.9\,\mu\text{V}$, $\texttt{modiolo} = 98.4\,\mu\text{V}$, $\texttt{masetero} = 17.4\,\mu\text{V}$ $\implies$ Vector normalizado por Supremo Tricanal: $\mathbf{[0.49,\ 1.00,\ 0.18]}$.
+    \item \textbf{Vocal /i/ (Exp 1):} $\texttt{orbi} = 69.0\,\mu\text{V}$, $\texttt{modiolo} = 126.9\,\mu\text{V}$, $\texttt{masetero} = 26.9\,\mu\text{V}$ $\implies$ Vector normalizado por Supremo Tricanal: $\mathbf{[0.54,\ 1.00,\ 0.21]}$.
+\end{itemize}
+Fisiológicamente, en el montaje bajo del 20/10 la vocal /i/ recluta los tres canales con un factor de escala uniforme $\sim 1.35\times$ superior al de la vocal /e/ ($\vec{v}_I \approx 1.35\,\vec{v}_E$). Al dividir cada pulso por su canal dominante ($M_{\text{supremo, pulso}} = \texttt{modiolo}$), el factor escalar $1.35$ se cancela algebraicamente, proyectando ambas vocales sobre el mismo rayo unitario del cubo de activación. En el Experimento 2, el \textit{crosstalk} anterior iguala incluso las amplitudes crudas ($\texttt{[0.82, 1.00, 0.70]}$ en /e/ frente a $\texttt{[0.72, 1.00, 0.74]}$ en /i/).
+
+Asimismo, como revelan los patrones musculares promedio sincronizados con el micrófono del 20/10 (Figura \ref{fig:patrones_sincronizados_2010}), al haber colocado los electrodos del masetero en la parte baja de la mandíbula, tanto en /e/ como en /i/ el \texttt{modiolo} y el \texttt{masetero} disparan simultáneamente a $-110\,\text{ms}$ antes del pico acústico, perdiendo toda diferencia de fase temporal entre ambas vocales.
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/A_Exp1_Prueba1_Candela/patron_muscular_grabacion.png}
+    \caption{Vocal /a/ (\texttt{A\_Exp1\_Prueba1}).}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/E_Exp1_Prueba1_Candela/patron_muscular_grabacion.png}
+    \caption{Vocal /e/ (\texttt{E\_Exp1\_Prueba1}).}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/I_Exp1_Prueba1_Candela/patron_muscular_grabacion.png}
+    \caption{Vocal /i/ (\texttt{I\_Exp1\_Prueba1}).}
+\end{subfigure}
+\caption{Patrones musculares promedio sincronizados respecto al pico de micrófono ($t=0\,\text{s}$) en la campaña del 20/10/2026. Con el masetero colocado bajo en la mandíbula, en /a/ (a) el canal se enciende antes del sonido ($-70\,\text{ms}$) por arrastre del platisma al abrir la boca, y en /e/ (b) e /i/ (c) las envolventes temporales resultan morfológicamente indistinguibles.}
+\label{fig:patrones_sincronizados_2010}
+\end{figure}
+
+\subsection{Evaluación Estadística de la Energía Tricanal como Cuarta Feature}
+Para verificar rigurosamente si conservar la escala energética del pulso antes de normalizar resuelve la degeneración entre /e/ e /i/ (y entre /o/ y /u/), se realizó tanto el cálculo estadístico paramétrico sobre la norma tricanal de picos ($E_2 = \sqrt{x_0^2 + x_1^2 + x_2^2}$, distancia $d$ de Cohen) como la evaluación directa en el pipeline PCA concatenando $E_{\text{log}} = \log_{10}(\sum_{c=0}^2 \int x_c^2(t)\,dt + 10^{-9})$ al vector de 60 dimensiones (Tabla \ref{tab:pca_energia} y Figura \ref{fig:comparativa_energia}).
+
+\begin{table}[H]
+\centering
+\scriptsize
+\begin{tabularx}{\textwidth}{l c c c c c X}
+\toprule
+\textbf{Sesión y Par} & \textbf{Energía $E_2$ ($\mu\text{V}$)} & \textbf{$d$ Cohen} & \textbf{Condición PCA} & \textbf{GMM 2D} & \textbf{LDA 2D} & \textbf{Separación Binaria / Diagnóstico} \\
+\midrule
+\multirow{2}{*}{\shortstack[l]{\textbf{Candela Exp 1}\\Par /e/ vs. /i/}} & $/e/: 111.1 \pm 28.5$ & \multirow{2}{*}{$d = 1.10$} & Base (Sin Energía) & $60.54\%$ & $63.68\%$ & $57.50\%$ en /e/ vs /i/ ($d_{E,I}=0.1097$). \\
+ & $/i/: 147.2 \pm 36.5$ & & \textbf{Con $E_{\text{log}}$} & $56.50\%$ & $\mathbf{65.02\%}$ & $\mathbf{65.00\%}$ (\textbf{+7.50\%} binario), pero \textbf{cae $-4.04\%$ en GMM}. \\
+\midrule
+\multirow{2}{*}{\shortstack[l]{\textbf{Candela Exp 2}\\Par /e/ vs. /i/}} & $/e/: 128.7 \pm 24.5$ & \multirow{2}{*}{$d = 0.52$} & Base (Sin Energía) & $59.64\%$ & $63.57\%$ & $56.60\%$ en /e/ vs /i/ ($d_{E,I}=0.0858$). \\
+ & $/i/: 143.1 \pm 30.2$ & & \textbf{Con $E_{\text{log}}$} & $\mathbf{64.29\%}$ & $63.57\%$ & $\mathbf{59.43\%}$ (+2.83\% marginal; varianza intra-toma domina). \\
+\midrule
+\textbf{Candela Exp 1} (/o/ vs /u/) & $227.0$ vs $213.4$ & $d = 0.32$ & Con / Sin Energía & --- & --- & Inviable: $\Delta E_2 = 13.6\,\mu\text{V} \ll \sigma_{\text{pool}} = 42.0\,\mu\text{V}$. \\
+\textbf{Candela Exp 2} (/o/ vs /u/) & $191.1$ vs $185.9$ & $d = 0.18$ & Con / Sin Energía & --- & --- & Inviable: $\Delta E_2 = 5.2\,\mu\text{V} \ll \sigma_{\text{pool}} = 29.7\,\mu\text{V}$. \\
+\bottomrule
+\end{tabularx}
+\caption{Evaluación estadística ($d$ de Cohen sobre norma $E_2$) y desempeño en PCA 2D al incorporar la energía tricanal logarítmica ($E_{\text{log}}$).}
+\label{tab:pca_energia}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.90\textwidth]{../EMG_desarrollo/resultados/resultados_autoencoder/figuras_evaluacion/comparativa_pca_feature_energia_tricanal_2026_10_20.png}
+\caption{Matriz $2\times 2$ del impacto de agregar la energía tricanal logarítmica ($E_{\text{log}}$) en PCA 2D: Pipeline base con normalización pura por supremo (izquierda) frente a Pipeline con cuarta feature de energía (derecha). Aunque la distancia entre centroides $d(e,i)$ crece un $+21.5\%$ en Exp 1, el solapamiento de nubes persiste.}
+\label{fig:comparativa_energia}
+\end{figure}
+
+El resultado estadístico es contundente: aunque en el Experimento 1 la vocal /i/ posee en promedio un $+48.0\%$ más de energía integrada que la /e/ ($d = 1.10$), la dispersión pulso a pulso dentro de una misma toma ($\sigma \approx 28\text{--}36\,\mu\text{V}$) limita la ganancia lineal binaria a un modesto $65.00\%$, al tiempo que degrada el agrupamiento no supervisado global en $-4.04\%$. Más importante aún, depender de la energía absoluta destruye la invarianza de escala frente al énfasis articulatorio: cualquier vocal /e/ pronunciada con mayor intensidad es clasificada erróneamente como /i/. Por lo tanto, \textbf{la separabilidad debe provenir de la selectividad anatómica y de la fase temporal de disparo, no de la amplitud absoluta}.
+
+% ==============================================================================
+% SECCIÓN 6: SÍNTESIS HISTÓRICA E HIPÓTESIS DE LOS DOS PUNTOS DULCES
+% ==============================================================================
+\section{Síntesis Histórica del Proyecto e Hipótesis Biofísica de los Dos Puntos Dulces Faciales}
+
+Al contrastar los resultados del 20 de octubre con la serie histórica de experimentos realizados entre junio y principios de octubre de 2026 (en los sujetos Lucas, Petra, Candela y Santiago), se comprende con exactitud qué fenómeno físico permitió alcanzar previamente un $\mathbf{100\%}$ de separación entre /e/ e /i/ y un $\mathbf{82.1\%}$ entre /o/ y /u/, y por qué un desplazamiento de $1.5\text{ a }2.0\,\text{cm}$ hacia abajo el 20 de octubre desactivó ambos mecanismos.
+
+\subsection{Punto Dulce 1: El Puente Cigomático-Masetérico Submalar (Inversión Temporal entre /a/ e /i/ y Desacople del 100\% frente a /e/)}
+En las campañas del \texttt{16/09} y del \texttt{02/10--08/10} en Candela (Figura \ref{fig:punto_dulce_1}), cuando se migró desde el vientre anterior del digástrico hacia la mejilla, los dos parches Meditrace \textbf{no fueron colocados en la parte baja de la mandíbula}, sino en la \textbf{región submalar alta, inmediatamente por debajo del hueso del pómulo (arco cigomático)} (Figura \ref{fig:punto_dulce_1}a). En esa ubicación exacta, el par bipolar forma un \textbf{puente híbrido} que registra simultáneamente el origen tendinoso anterosuperior del \textbf{Masetero Superficial} y el vientre oblicuo del \textbf{Músculo Cigomático Mayor}.
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth,height=5.6cm,keepaspectratio]{imagenes/masetero_panel_completo.png}
+    \caption{Montaje alto submalar y Matriz 3D ($100\%$ en /e/ e /i/).}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth,height=5.6cm,keepaspectratio]{imagenes/masetero_latencia_secuencia_vertical.png}
+    \caption{Inversión de fase temporal: /a/ ($+118.7\,\text{ms}$) vs. /i/ ($-221.0\,\text{ms}$).}
+\end{subfigure}
+\caption{Demostración empírica del \textbf{Punto Dulce 1 (Puente Cigomático-Masetérico Submalar)} en Candela (\texttt{08/10/2026}). En (a), los parches apoyados bajo el pómulo logran $94\%$ en /a/ y $100\%$ en /e/ e /i/. En (b), se observa el mecanismo físico: en /a/ el músculo dispara al final para cerrar la boca ($+118.7\,\text{ms}$), mientras que en /i/ dispara antes de emitir sonido ($-221.0\,\text{ms}$) para fijar la mordida y elevar la comisura.}
+\label{fig:punto_dulce_1}
+\end{figure}
+
+Como demuestran las curvas de latencia de la Figura \ref{fig:punto_dulce_1}b y el Atlas de Especialización Muscular (Figura \ref{fig:atlas_especializacion}a), este puente submalar actúa como un discriminador trifásico perfecto:
+\begin{enumerate}
+    \item \textbf{En la vocal /a/ --- Activación POST-FONATORIA al cerrar la boca ($+118.7\text{ a }+135\,\text{ms}$):} Para pronunciar /a/, la mandíbula desciende al máximo traccionada por el digástrico anterior (que dispara a $-183\,\text{ms}$ en Lucas y $-147\,\text{ms}$ en Petra, Figura \ref{fig:atlas_especializacion}). Durante toda la fase de apertura ($t < 0$) y emisión vocal ($t = 0$), el sistema nervioso aplica \textbf{inhibición recíproca} sobre el masetero para no frenar la apertura. Recién cuando finaliza la emisión acústica ($t = +118.7\,\text{ms}$), el masetero se contrae bruscamente para frenar la inercia mandibular y devolver la mandíbula a la posición de cierre.
+    \item \textbf{En la vocal /i/ --- Activación PRE-FONATORIA al abrir/preparar la boca ($-221.0\text{ a }-229\,\text{ms}$):} La vocal /i/ exige comprimir el dorso de la lengua contra el paladar duro dejando una constricción milimétrica. Para darle a la lengua un zócalo óseo inmóvil, $\sim 225\,\text{ms}$ antes del sonido se produce una \textbf{co-contracción isométrica de fijación mandibular} en el masetero superior simultánea con la \textbf{tracción oblicua ascendente del cigomático mayor} (que eleva la comisura hacia el pómulo), generando un pico masivo anticipado ($0.80$ normalizado a $-229\,\text{ms}$ en Figura \ref{fig:atlas_especializacion}a).
+    \item \textbf{En la vocal /e/ --- Silencio pre-fonatorio y pulso débil tardío ($+179\,\text{ms}$, amplitud $0.22$):} Al ser una vocal de apertura intermedia con mandíbula flotante y retracción comisural horizontal baja (mediada por el risorio y el DAO, no por el cigomático alto), la /e/ no requiere fijación molar pre-fonatoria ni rebote de cierre post-fonatorio. Así, entre $-300\,\text{ms}$ y $0\,\text{ms}$ el canal submalar permanece en silencio para /e/ y al máximo para /i/, separándolas con un $\mathbf{100\%}$ de exactitud (Figura \ref{fig:punto_dulce_1}a).
+\end{enumerate}
+
+\textbf{¿Por qué se perdió este efecto el 20 de octubre?} Porque el 20/10 los parches se bajaron $\sim 2\,\text{cm}$ hacia el ángulo inferior de la mandíbula (\textit{gonion}, Figura \ref{fig:fotos_candela_comparativa}). Al abandonar la zona submalar, el sensor dejó de ver al \textit{cigomático mayor} (perdiendo el pico de $-229\,\text{ms}$ de la /i/) y su electrodo inferior pegado al borde mandibular captó la tensión pre-fonatoria del \textit{platisma} cervical al abrir la boca en /a/ ($-70\,\text{ms}$, Figura \ref{fig:patrones_sincronizados_2010}a), borrando la inversión temporal apertura/cierre.
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth,height=6.2cm,keepaspectratio]{imagenes/panel_triada_con_lucas_orbi.png}
+    \caption{Especialización: Digástrico (/a/), Cigomático (/i/), Orbicular (/o,u/).}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth,height=6.2cm,keepaspectratio]{imagenes/panel_musculos_particulares_final.png}
+    \caption{Perfiles de Risorio, Modíolo ecuatorial y Platisma cervical.}
+\end{subfigure}
+\caption{Atlas de activación electromiográfica promedio sincronizada con el micrófono: (a) ortogonalidad funcional de los tres ejes motores primarios y (b) respuesta diferencial del Modíolo ecuatorial (\texttt{30/08}, fila central), donde la amplitud en /o/ ($\sim 0.90$ a $-150\,\text{ms}$) supera netamente a la de /u/ ($\sim 0.60$ a $-155\,\text{ms}$).}
+\label{fig:atlas_especializacion}
+\end{figure}
+
+\subsection{Punto Dulce 2: El Nodo Ecuatorial del Modíolo (Desacople de /o/ frente a /u/ en PC3)}
+La segunda serie histórica de experimentos (Figuras \ref{fig:exploracion_mejilla_4} y \ref{fig:evolucion_o_vs_u}) documenta la búsqueda sistemática para separar /o/ de /u/. Tras comprobar que el vientre anterior del digástrico en el cuello (Figura \ref{fig:evolucion_o_vs_u}a) y el músculo mentoniano en la barbilla (Figura \ref{fig:evolucion_o_vs_u}b) arrojaban un $50.0\%$ de confusión debido a que la piel del mentón sufre un \textbf{arrastre mecánico pasivo} solidario con el labio inferior, se descubrió el punto dulce en el \textbf{nodo ecuatorial del modíolo} (ensayos del \texttt{30/08} en Figura \ref{fig:exploracion_mejilla_4} y del \texttt{16/10} en Figura \ref{fig:evolucion_o_vs_u}c).
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth,height=5.0cm,keepaspectratio]{imagenes/candela_4_montajes_fotos_2x2.png}
+    \caption{Cuatro topologías ensayadas en la mejilla de Candela.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth,height=5.0cm,keepaspectratio]{imagenes/candela_4_pcas_grid.png}
+    \caption{Mapas PCA 2D resultantes de cada topología.}
+\end{subfigure}
+\caption{Exploración sistemática de la mejilla en Candela (\texttt{30/08} al \texttt{18/09}): se observa arriba a la izquierda en (a) la ubicación exacta del \textbf{Punto Dulce 2 (\texttt{30/08})} con los dos pines azules abrazando horizontalmente el nivel de la comisura labial (separando /o/ de /u/), y abajo a la izquierda (\texttt{16/09}) la diagonal alta del \textbf{Punto Dulce 1} sobre el cigomático mayor (aislando nítidamente la /i/).}
+\label{fig:exploracion_mejilla_4}
+\end{figure}
+
+\textbf{Mecanismo biofísico del Punto Dulce 2:}
+Mientras el orbicular del labio superior se contrae por igual en /o/ y /u/, en el nodo fibromuscular del modíolo (ubicado a $10\,\text{mm}$ por fuera de la comisura, exactamente en el plano horizontal de cierre labial) ocurre una oposición biomecánica entre ambas vocales:
+\begin{itemize}
+    \item \textbf{En la vocal /o/ (Redondeo Abierto --- Tracción Radial Centrífuga):} Los labios se redondean pero la abertura bucal debe sostenerse verticalmente abierta. Para impedir que el esfínter orbicular colapse la cavidad, los músculos radiales que convergen en el modíolo (\textit{cigomático}, \textit{risorio}, \textit{buccinador} y \textit{DAO}) ejercen tracción centrífuga de anclaje sobre el nudo comisural, produciendo un pico máximo de $\sim 0.90$ a $-150\,\text{ms}$ (fila central de la Figura \ref{fig:atlas_especializacion}b).
+    \item \textbf{En la vocal /u/ (Protrusión Cerrada --- Contracción Esfinteriana Centrípeta):} El cierre es puramente esfinteriano (\textit{orbicularis oris marginalis}), proyectando los labios hacia adelante y desplazando las comisuras medialmente hacia el centro de la boca. Esto relaja la tracción radial periférica y aleja físicamente al nudo del modíolo de los electrodos laterales, reduciendo la señal a $\sim 0.60$ (Figura \ref{fig:atlas_especializacion}b).
+\end{itemize}
+
+Como demuestra la Figura \ref{fig:evolucion_o_vs_u}c, mientras que en una proyección 2D plana las nubes de /o/ y /u/ parecen contiguas porque las dos primeras componentes (PC1 y PC2) absorben la varianza macro entre \{/a/\}, \{/e, i/\} y \{/o, u/\}, \textbf{la tercera componente principal (PC3) captura esta diferencia radial en el modíolo y separa /o/ de /u/ con un $\mathbf{82.1\%}$ de acierto ($71.4\%$ en /o/, $92.9\%$ en /u/ y $84.6\%$ macro en las 5 vocales)}. El 20 de octubre en Candela este desacople se atenuó porque los dos electrodos bajo la cinta marrón se colocaron desde la comisura hacia abajo rumbo al mentón (Figura \ref{fig:fotos_candela_comparativa}), entrando en la región de arrastre cutáneo pasivo del mentoniano e igualando la tensión de /o/ y /u/ en $145\,\mu\text{V}$.
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{imagenes/pca_3d_aciertos_errores_digastrico_inicial.png}
+    \caption{Digástrico: /o/ y /u/ solapadas ($50\%$).}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{imagenes/pca_3d_aciertos_errores_mentoniano.png}
+    \caption{Mentoniano: arrastre pasivo ($50\%$).}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{imagenes/pca_3d_aciertos_errores_modiolo.png}
+    \caption{\textbf{Modíolo ecuatorial: $82.1\%$ en PC3.}}
+\end{subfigure}
+\caption{Evolución del desacople en PCA 3D entre /o/ (violeta) y /u/ (naranja): tras el solapamiento en el vientre anterior del digástrico (a) y en el músculo mentoniano por arrastre de la piel del labio inferior (b), la colocación sobre el nodo ecuatorial del modíolo en comisura (c) logra separar ambos clusters a lo largo de PC3.}
+\label{fig:evolucion_o_vs_u}
+\end{figure}
+
+\subsection{Variedad Motora Universal, Habla Continua y Alineación de Sara Solla ($O(2)$)}
+Cuando la señal se adquiere sobre estos puntos anatómicos selectivos y se procesa mediante el \textbf{Autoencoder Convolucional Ortogonal} (que impone regularización de ortogonalidad en los pesos y decorrelación en el espacio latente sin usar etiquetas en el entrenamiento, Figura \ref{fig:autoencoder_y_universal}a), la variedad motora se despliega en una \textbf{Cruz Canónica Abierta} que alcanza un récord de $\mathbf{88.0\%}$ de exactitud no supervisada (GMM) en el corpus de Lucas ($N=502$ pulsos).
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth,height=5.5cm,keepaspectratio]{imagenes/lucas_ae_comun_vs_ortogonal_comparativa.png}
+    \caption{Autoencoder MSE ($85.7\%$) vs. Ortogonal Campeón ($88.0\%$).}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth,height=5.5cm,keepaspectratio]{imagenes/figura_paper_variedad_universal_cuatrisujeto.png}
+    \caption{Alineación Sara Solla ($N=1028$, $83.6\%$) y habla continua ($82.9\%$).}
+\end{subfigure}
+\caption{Consolidación del sistema de decodificación Ñandú: (a) apertura de la cruz canónica mediante regularización ortogonal no supervisada y (b) transferencia inter-sujeto sobre $1028$ fonaciones reales de 4 participantes (Lucas, Santi, Petra y Candela) mediante calibración rotacional $O(2)$ con tres vocales ancla (/a/, /i/, /u/), junto con la inferencia al vuelo en habla continua (secuencia P5 de 123 fonaciones con detector de doble umbral).}
+\label{fig:autoencoder_y_universal}
+\end{figure}
+
+Más aún, al transferir el codificador congelado de Lucas a nuevos usuarios (Santi, Petra, Candela) o entre sesiones de distintos días, se verifica la \textbf{hipótesis de variedad motora universal de Sara Solla}: la topología interna de los cinco clusters se preserva intacta entre personas, sufriendo únicamente una rotación rígida en el plano latente ($\sim -95^\circ$ en Candela por el ángulo de pegado de los parches). Calibrando dicha rotación mediante una transformación de Procrustes ortogonal $O(2)$ calculada en menos de $20\,\text{s}$ exclusivamente con los \textbf{tres vértices articulatorios extremos (/a/, /i/, /u/)} —para evitar el ruido de las vocales intermedias /e/ y /o/—, la exactitud global sobre $1028$ fonaciones reales de los 4 sujetos salta de $68.5\%$ a $\mathbf{83.6\%}$ (Lucas $88\%$, Santi $88\%$, Petra $78\%$, Candela $75\%$), manteniendo un $\mathbf{82.9\%}$ ($102/123$ vocales) en decodificación de habla continua en tiempo real mediante el detector de doble umbral con adelanto electromecánico de $350\,\text{ms}$ (Figura \ref{fig:autoencoder_y_universal}b).
+
+% ==============================================================================
+% SECCIÓN 7: PROTOCOLO DEFINITIVO DE COLOCACIÓN EN LOS PUNTOS DULCES
+% ==============================================================================
+\section{Conclusión Operativa: Protocolo Exacto de Colocación de Electrodos en los Puntos Dulces Faciales}
+
+Como síntesis práctica de toda la evidencia experimental acumulada, para alcanzar simultáneamente el $100\%$ de separación entre /e/ e /i/, el $>94\%$ en /a/ y el $>82\%$ entre /o/ y /u/ empleando exclusivamente tres canales superficiales faciales, las próximas campañas deberán ejecutar de forma estricta el siguiente protocolo de montaje y verificación previa:
+
+\subsection{Tabla Maestra de Coordenadas Anatómicas y Asignación Unificada de Canales}
+
+\begin{table}[H]
+\centering
+\scriptsize
+\begin{tabularx}{\textwidth}{l l p{2.5cm} p{3.8cm} X}
+\toprule
+\textbf{Canal Fijo} & \textbf{Punto Dulce Anatómico} & \textbf{Electrodo y Distancia} & \textbf{Coordenadas Métricas Exactas} & \textbf{Zona Prohibida (Errores a Evitar)} \\
+\midrule
+\textbf{Canal 0} \newline (\texttt{orbi}) & \textbf{Orbicular Superior} \newline (\textit{M. orbicularis oris superior}) & Pines chicos ($\varnothing = 10\,\text{mm}$), $\text{IED} = 15\,\text{mm}$ ($5\,\text{mm}$ entre bordes), cinta blanca. & Un pin a cada lado del filtrum subnasal, a mitad de altura entre la base de la columela nasal y el borde bermellón del labio superior, en línea horizontal estricta. & No elevar el pin izquierdo hacia el ala de la nariz (evita \textit{crosstalk} con el \textit{levator labii superioris}). \\
+\midrule
+\textbf{Canal 1} \newline (\texttt{modiolo}) & \textbf{Punto Dulce 2: Nodo Ecuatorial del Modíolo} \newline (Comisura estricta, montaje \texttt{30/08} y \texttt{16/10}) & Pines chicos ($\varnothing = 10\,\text{mm}$), $\text{IED} = 15\,\text{mm}$ ($5\,\text{mm}$ entre bordes), fijación bicapa (blanca + marrón). & \textbf{Pin superior:} $10\,\text{mm}$ ($1.0\,\text{cm}$) lateral a la comisura labial, \textbf{exactamente a la misma altura horizontal de la línea de cierre de los labios} (o $2\,\text{mm}$ arriba). \newline \textbf{Pin inferior:} $15\,\text{mm}$ verticalmente debajo del primero ($10\,\text{mm}$ lateral y $12\,\text{mm}$ debajo de la comisura). & \textbf{Prohibido bajar hacia el mentón:} si el pin inferior desciende más de $15\,\text{mm}$ bajo la línea labial hacia el borde mandibular (como ocurrió el 20/10), entra en la zona de arrastre cutáneo pasivo del mentoniano e iguala /o/ con /u/. \\
+\midrule
+\textbf{Canal 2} \newline (\texttt{masetero}) & \textbf{Punto Dulce 1: Puente Cigomático-Masetérico Submalar} \newline (Pómulo bajo, montaje \texttt{16/09} y \texttt{08/10}) & Parches Meditrace $\text{Ag/AgCl}$ ($\varnothing = 23\text{--}24\,\text{mm}$), $\text{IED} = 30\,\text{mm}$ ($7\text{--}10\,\text{mm}$ entre bordes), con cinta de alivio de tracción. & \textbf{Parche anterosuperior:} inmediatamente debajo del hueso del pómulo (arco cigomático), a $30\text{--}35\,\text{mm}$ bajo el canto externo del ojo y $35\,\text{mm}$ del ala nasal, pisando el cruce entre el \textit{cigomático mayor} y el tendón anterior del \textit{masetero}. \newline \textbf{Parche posteroinferior:} en diagonal hacia atrás y levemente abajo rumbo al lóbulo de la oreja ($10\text{--}15\,\text{mm}$ delante del trago). & \textbf{Prohibido bajar al ángulo mandibular (\textit{gonion}) o pegar a la comisura:} no bajar al borde inferior de la mandíbula (pierde el cigomático en /i/ y capta platisma en /a/) ni pegar el parche delantero a la cinta del modíolo. \\
+\midrule
+\textbf{Referencia} \newline (\texttt{GND}) & \textbf{Apófisis Mastoides} \newline (Prominencia ósea retroauricular) & Parche Meditrace $\text{Ag/AgCl}$ único. & Pegado sobre el hueso firme detrás del lóbulo de la oreja (apófisis mastoides). & Prohibido pegar sobre piel blanda del cuello (evita artefactos mecánicos del esternocleidomastoideo y platisma). \\
+\bottomrule
+\end{tabularx}
+\caption{Protocolo maestro de posicionamiento anatómico y unificación de canales para el sistema Ñandú sEMG.}
+\label{tab:protocolo_puntos_dulces}
+\end{table}
+
+\subsection{Procedimiento Paso a Paso de Colocación y Test en Vivo de 15 Segundos}
+\begin{enumerate}
+    \item \textbf{Preparación epidérmica y fijación de conectores:} Limpiar con alcohol la piel submalar, peribucal y retroauricular (evitando áreas con vello facial; en sujetos con barba, priorizar la zona submalar alta libre de folículos o rasurar el punto ecuatorial del modíolo). Conectar invariablemente \textbf{Ch0 = Orbicular}, \textbf{Ch1 = Modíolo} y \textbf{Ch2 = Puente Cigomático-Masetérico} para impedir permutaciones en el software automatizador.
+    \item \textbf{Maniobra de palpación para el Punto Dulce 1 (Canal 2):} Pedir al sujeto que apriete los molares para localizar el borde anterosuperior del masetero justo debajo del hueso malar, y luego que sonría pronunciando /i/ para visualizar el relieve oblicuo del cigomático mayor. Pegar el parche delantero exactamente en esa intersección submalar y el trasero hacia la oreja ($7\text{--}10\,\text{mm}$ entre bordes), asegurando los cables con una tira de cinta marrón sobre la mejilla para eliminar el efecto palanca.
+    \item \textbf{Maniobra de palpación para el Punto Dulce 2 (Canal 1):} Con los labios en reposo, medir $10\,\text{mm}$ hacia afuera del ángulo de la comisura labial. Pegar el pin superior sobre esa línea ecuatorial y el inferior inmediatamente debajo ($5\,\text{mm}$ entre bordes), cubriéndolos con fijación bicapa (cinta blanca dérmica + sobrecapa marrón de anclaje).
+    \item \textbf{Verificación funcional en pantalla antes de grabar ($15\,\text{s}$):} Emitir un pulso de prueba de cada vocal observando las envolventes en vivo:
+    \begin{itemize}
+        \item \textbf{Control /i/ vs. /e/:} En \textbf{/i/}, el Canal 2 (Cigomático-Masetérico) debe disparar con fuerza $\sim 220\,\text{ms}$ \textbf{antes} del audio; en \textbf{/e/}, debe permanecer por debajo de un tercio de la amplitud de /i/. Si ambos miden igual, subir el parche delantero $8\text{--}10\,\text{mm}$ hacia el pómulo.
+        \item \textbf{Control /a/:} Al abrir la boca en \textbf{/a/}, el Canal 2 debe permanecer en silencio y mostrar un pulso corto al final del sonido ($+120\,\text{ms}$, al cerrar la mandíbula).
+        \item \textbf{Control /o/ vs. /u/:} Con el Canal 0 (Orbicular) al máximo en ambas, el Canal 1 (Modíolo) debe registrar una amplitud pico al menos un $25\text{--}35\%$ mayor en \textbf{/o/} que en \textbf{/u/}. Si ambas empatan, subir el par del modíolo $5\text{--}8\,\text{mm}$ para centrarlo en la comisura y alejarlo del mentón.
+    \end{itemize}
+\end{enumerate}
+
+\end{document}

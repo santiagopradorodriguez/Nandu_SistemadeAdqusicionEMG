@@ -156,6 +156,16 @@
            - **Empaquetado de Distribución:** Generado `build_windows/NanduLsd_Windows_v5.1.zip` (382.46 MB) y `NanduLsd_Windows.zip`.
            - **Publicación Oficial en GitHub:** Creado Release oficial con tag `v5.1-estable` en `santiagopradorodriguez/Nandu_SistemadeAdqusicionEMG` con el archivo binario subido y disponible para descarga pública directa.
 
+       20. **Hito 20 - Campaña Experimental 2026-10-23 y Tríada Fijada Masetero-Modíolo-Orbicular [COMPLETADO]:**
+           - **Condiciones Registradas:** $21.0\ ^\circ\text{C}$, $70.0\ \%\text{ HR}$, bajo ruido eléctrico con gente en el laboratorio. Alimentación AD620 balanceada (-8.63 V y -8.57 V, $|\Delta V| = 0.06\text{ V}$).
+           - **Tríada Fijada (Exp 3 Pruebatricanal, 6000 Hz):**
+             1) CH 0 (Masetero): Parches semi-grandes recortados a $24\text{ mm}$ (cortados a la mitad), distancia libre entre bordes $0.5\text{ cm}$ ($\text{IED} = 2.9\text{ cm}$). Electrodo superior a $2.5\text{ cm}$ del lóbulo; electrodo inferior a $6.0\text{ cm}$ de comisura labial. /a/ iniciales en apertura vertical pura.
+             2) CH 1 (Modíolo): Electrodos de $1\text{ cm}$ ($10\text{ mm}$), sostenido con presión manual continua para mitigar desprendimiento por pliegue comisural.
+             3) CH 2 (Orbicularis Oris): Borde peribucal.
+             4) CH 3 (Micrófono): Sincronismo acústico. Tierra en clavícula.
+           - **Exploraciones Previas (Exp 1 y Exp 2):** Barrido inicial de posiciones de masetero hasta hallar separación (Exp 1 monocanal 2000 Hz) y prueba comparativa previa de Anterior Belly vs Orbicularis (Exp 2 bicanal 2000 Hz, parches recortados a la mitad de $24\text{ mm}$).
+           - **Reportes Oficiales Compilados:** Generados y compilados `Reporte_EMG_2026-10-23_Exp1_Masetero_Monocanal.pdf` (38 págs), `Reporte_EMG_2026-10-23_Exp2_Belly_Orbi_x25.pdf` (33 págs) y `Reporte_EMG_2026-10-23_Exp3_Triada_Masetero_x25.pdf` (54 págs), documentados en `registro_experimento_2026_10_23.md`.
+
 ---
 
 ## 6. Infraestructura de Memoria y Tokens

@@ -445,7 +445,7 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, gate_ra
                 iqr_ch = p75_ch - p25_ch
                 rel_iqr_ch = (np.max(segmento_ch) - np.median(segmento_ch)) / (iqr_ch + 1e-9)
                 
-                centro_samples = int(0.250 * 2000)
+                centro_samples = int(0.250 * sr_canal)
                 idx_max_ch = np.argmax(segmento_ch)
                 c_i = max(0, idx_max_ch - centro_samples // 2)
                 c_f = min(len(segmento_ch), idx_max_ch + centro_samples // 2)
@@ -462,7 +462,7 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, gate_ra
                     acorr = acorr[len(acorr)//2:]
                     acorr = acorr / (acorr[0] + 1e-9)
                     lags_50 = np.where(acorr < 0.5)[0]
-                    tau_50_ms = (lags_50[0] / 2000.0) * 1000.0 if len(lags_50) > 0 else 0.0
+                    tau_50_ms = (lags_50[0] / float(sr_canal)) * 1000.0 if len(lags_50) > 0 else 0.0
                 else:
                     tau_50_ms = 0.0
                     
@@ -1786,6 +1786,40 @@ def aplicar_pesos_canales(X, canales_list, pesos):
             X_out[:, c_idx*pts_per_ch : (c_idx+1)*pts_per_ch] *= w
     return X_out
 
+def aplicar_pesos_canales(X, canales_list, pesos):
+    if pesos is None:
+        return X
+    if isinstance(pesos, dict):
+        pesos_efectivos = []
+        for ch_name in canales_list:
+            ch_idx_str = str(ch_name).replace("canal_", "").strip()
+            w = pesos.get(ch_name, pesos.get(ch_idx_str, pesos.get(int(ch_idx_str) if ch_idx_str.isdigit() else -1, 1.0)))
+            pesos_efectivos.append(float(w))
+    elif isinstance(pesos, (list, tuple)):
+        if len(pesos) == 0:
+            return X
+        if len(pesos) == 3 and len(canales_list) < 3:
+            pesos_efectivos = []
+            for ch_name in canales_list:
+                ch_idx_str = str(ch_name).replace("canal_", "").strip()
+                idx_ch = int(ch_idx_str) if ch_idx_str.isdigit() and int(ch_idx_str) < 3 else 0
+                pesos_efectivos.append(float(pesos[idx_ch]))
+        else:
+            pesos_efectivos = [float(w) for w in pesos]
+    else:
+        return X
+    if all(float(w) == 1.0 for w in pesos_efectivos):
+        return X
+    X_out = np.array(X, copy=True)
+    n_feat = X_out.shape[1]
+    n_ch = len(canales_list) if len(canales_list) > 0 else 3
+    pts_per_ch = n_feat // n_ch
+    for c_idx in range(min(n_ch, len(pesos_efectivos))):
+        w = float(pesos_efectivos[c_idx])
+        if w != 1.0:
+            X_out[:, c_idx*pts_per_ch : (c_idx+1)*pts_per_ch] *= w
+    return X_out
+
 def ejecutar_procesamiento(
     mediciones, 
     base_dir, 
@@ -1863,21 +1897,6 @@ def ejecutar_procesamiento(
     import seaborn as sns
     
     print(f"\nIniciando Procesamiento. Canales: {', '.join(canales_features)}")
-    
-    def aplicar_pesos_canales(X, canales_list, pesos):
-        if pesos is None or not isinstance(pesos, (list, tuple)) or len(pesos) == 0:
-            return X
-        if all(float(w) == 1.0 for w in pesos):
-            return X
-        X_out = np.array(X, copy=True)
-        n_feat = X_out.shape[1]
-        n_ch = len(canales_list) if len(canales_list) > 0 else 3
-        pts_per_ch = n_feat // n_ch
-        for c_idx in range(min(n_ch, len(pesos))):
-            w = float(pesos[c_idx])
-            if w != 1.0:
-                X_out[:, c_idx*pts_per_ch : (c_idx+1)*pts_per_ch] *= w
-        return X_out
 
     resultados_ejecucion = {}
     if proc_pca_2d:

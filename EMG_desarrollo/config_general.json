@@ -7,7 +7,7 @@
     "adquisicion": {
         "frecuencia_muestreo": 2000.0,
         "ruido_segundos": 5.0,
-        "bpm": 30,
+        "bpm": 40,
         "tiempo_descanso": 10.0,
         "nidaq_channels": [
             "Dev1/ai0",
@@ -64,14 +64,14 @@
             "activo_por_defecto": false
         },
         "Canal 1": {
-            "musculo": "Depresor Anguli Oris",
-            "color_hex": "#15803d",
+            "musculo": "Canal 1",
+            "color_hex": "#00ffcc",
             "factor_calibracion": 495.0,
             "activo_por_defecto": false
         },
         "Canal 2": {
-            "musculo": "Orbicularis Oris",
-            "color_hex": "#ffff00",
+            "musculo": "Canal 2",
+            "color_hex": "#00a896",
             "factor_calibracion": 495.0,
             "activo_por_defecto": false
         },
@@ -160,7 +160,7 @@
         "bandpass": true,
         "lp": 500.0,
         "hp": 20.0,
-        "env": "ninguna",
+        "env": "rms",
         "env_ms": 50,
         "env_offset": false,
         "adaptive_filter": false,

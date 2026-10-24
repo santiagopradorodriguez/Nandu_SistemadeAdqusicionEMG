@@ -907,12 +907,13 @@ class ReportEngine:
 
         return output_path.replace('\\', '/')
 
-    def generate_session_evolution_plots(self, session_paths, info=None, logger=print):
+    def generate_session_evolution_plots(self, session_paths, info=None, logger=print, report_tag=None):
         """Genera automáticamente los gráficos de evolución de sesión (Amplitud Timeline, Cubo 3D, etc.)."""
         import analysis.analisis_por_track_integrado as track_mod
         
         fecha_sesion = info['fecha'] if info and 'fecha' in info else datetime.now().strftime("%Y-%m-%d")
-        evolucion_dir = os.path.join(self.output_dir, f"evolucion_sesion_{fecha_sesion}")
+        tag_suffix = f"_{re.sub(r'[^a-zA-Z0-9_-]', '_', str(report_tag))}" if report_tag else ""
+        evolucion_dir = os.path.join(self.output_dir, f"evolucion_sesion_{fecha_sesion}{tag_suffix}")
         os.makedirs(evolucion_dir, exist_ok=True)
         nombre_salida_base = os.path.join(evolucion_dir, "Sesion")
         
@@ -1091,16 +1092,20 @@ class ReportEngine:
                     
         return final_amp_table
 
-    def find_comparative_images(self, fecha, custom_comp_dir=None):
+    def find_comparative_images(self, fecha, custom_comp_dir=None, report_tag=None):
         """Busca imágenes de análisis comparativos globales (SNR y Amplitud)."""
         images = {}
         search_dirs = []
         
-        evolucion_dir = os.path.join(self.output_dir, f"evolucion_sesion_{fecha}")
+        tag_suffix = f"_{re.sub(r'[^a-zA-Z0-9_-]', '_', str(report_tag))}" if report_tag else ""
+        evolucion_dir = os.path.join(self.output_dir, f"evolucion_sesion_{fecha}{tag_suffix}")
+        evolucion_dir_base = os.path.join(self.output_dir, f"evolucion_sesion_{fecha}")
         evolucion_dir_old = os.path.join(self.output_dir, "evolucion_sesion")
         
         if os.path.isdir(evolucion_dir):
             search_dirs.append(evolucion_dir)
+        elif os.path.isdir(evolucion_dir_base):
+            search_dirs.append(evolucion_dir_base)
         elif os.path.isdir(evolucion_dir_old):
             search_dirs.append(evolucion_dir_old)
             
@@ -1190,19 +1195,38 @@ class ReportEngine:
         
         return output_path.replace('\\', '/')
 
-    def run_pca_pipeline(self, session_paths, canales_map=None, ejecutar_grid=True, logger=print):
+    def run_pca_pipeline(self, session_paths, canales_map=None, ejecutar_grid=True, logger=print, options=None):
         """Ejecuta el Grid Search PCA sobre el conjunto de sesiones y genera proyecciones con Fronteras de Decisión."""
         import deep_learning.pca_analysis as pca_ana
         
         if canales_map is None:
             canales_map = {}
+        if options is None:
+            options = {}
         m0 = canales_map.get(0, "Canal 0")
         m1 = canales_map.get(1, "Canal 1")
         m2 = canales_map.get(2, "Canal 2")
         
+        lowpass_val = float(options.get("lowpass_cutoff_hz", 500.0))
+        highpass_val = float(options.get("highpass_cutoff_hz", 20.0))
+        corr_intersesion = bool(options.get("aplicar_correccion_intersesion", False))
+        pesos_canales = options.get("pesos_canales", [1.0, 1.0, 1.0])
+        report_tag = options.get("report_tag", None)
+        tag_suffix = f"_{re.sub(r'[^a-zA-Z0-9_-]', '_', str(report_tag))}" if report_tag else ""
+        
+        canales_pca = options.get("canales_pca", None)
+        if not canales_pca:
+            canales_pca = []
+            for ch_i in [0, 1, 2]:
+                m_lbl = str(canales_map.get(ch_i, f"Canal {ch_i}")).strip().lower()
+                if m_lbl not in ["nada", "vacio", "vacío", "none", "desconectado", "-"]:
+                    canales_pca.append(f"canal_{ch_i}")
+            if not canales_pca:
+                canales_pca = ["canal_0", "canal_1", "canal_2"]
+        
         repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
         base_dir = os.path.join(repo_root, "EMG_desarrollo", "base_de_datos_electrodos")
-        pca_out_root = os.path.join(self.output_dir, "analisis_pca_generado")
+        pca_out_root = os.path.join(self.output_dir, f"analisis_pca_generado{tag_suffix}")
         os.makedirs(pca_out_root, exist_ok=True)
         
         mediciones_rel = []
@@ -1217,6 +1241,9 @@ class ReportEngine:
             "target_length": 10,
             "alpha_ruido": 1.0,
             "notch_q": 2.0,
+            "lowpass_cutoff_hz": lowpass_val,
+            "highpass_cutoff_hz": highpass_val,
+            "pesos_canales": pesos_canales,
             "accuracy_clasificacion": 73.49,
             "silhouette_score": 0.2626,
             "porcentaje_por_vocal": {}
@@ -1226,6 +1253,9 @@ class ReportEngine:
             "target_length": 60,
             "alpha_ruido": 0.7,
             "notch_q": 2.0,
+            "lowpass_cutoff_hz": lowpass_val,
+            "highpass_cutoff_hz": highpass_val,
+            "pesos_canales": pesos_canales,
             "accuracy_clasificacion": 78.71,
             "silhouette_score": 0.2405,
             "porcentaje_por_vocal": {}
@@ -1234,8 +1264,8 @@ class ReportEngine:
         df_hist = None
         dist_plot_path = None
         
-        opt_2d_json = os.path.join(repo_root, "EMG_desarrollo", "deep_learning", "parametros_optimos_pca_2d.json")
-        opt_3d_json = os.path.join(repo_root, "EMG_desarrollo", "deep_learning", "parametros_optimos_pca_3d.json")
+        opt_2d_json = os.path.join(pca_out_root, "parametros_optimos_pca_2d.json")
+        opt_3d_json = os.path.join(pca_out_root, "parametros_optimos_pca_3d.json")
         opt_general_json = os.path.join(repo_root, "EMG_desarrollo", "deep_learning", "parametros_optimos_pca.json")
         
         if os.path.exists(opt_2d_json):
@@ -1263,13 +1293,16 @@ class ReportEngine:
             dist_plot_path = existing_dist
             
         if ejecutar_grid:
-            logger("\n[REPORTE] Ejecutando Grid Search PCA 2D (Notch Q = 2.0 constante, Gate = 0.0, Outliers = 10%)...")
+            logger(f"\n[REPORTE] Ejecutando Grid Search PCA 2D (Canales={canales_pca}, LP={lowpass_val}Hz, Intersesion={corr_intersesion}, Pesos={pesos_canales})...")
             try:
                 params_base_grid = {
                     "alpha_ruido": 0.5,
                     "smooth_ms": 90,
                     "target_length": 20,
                     "notch_q": 2.0,
+                    "highpass_cutoff_hz": highpass_val,
+                    "lowpass_cutoff_hz": lowpass_val,
+                    "pesos_canales": pesos_canales,
                     "snr_threshold": 0.5,
                     "gate_ratio_ruido": 0.0,
                     "outlier_contamination": 0.10,
@@ -1283,12 +1316,16 @@ class ReportEngine:
                     modo_alineacion="Pico Volumen Micrófono",
                     pre_pct=0.4,
                     post_pct=0.6,
-                    canales_features=["canal_0", "canal_1", "canal_2"],
+                    canales_features=canales_pca,
                     ignorar_ventana_cero=False,
                     algoritmo_clustering="GMM",
                     notch_q_grid=[2.0],
                     logger=logger,
-                    n_components=2
+                    n_components=2,
+                    aplicar_correccion_intersesion=corr_intersesion,
+                    tag_nombre=report_tag,
+                    output_dir=os.path.join(pca_out_root, "grid_2d"),
+                    ejecutar_ganador_con_graficos=False
                 )
                 
                 if isinstance(res_2d, tuple) and len(res_2d) >= 3 and res_2d[0] is not None:
@@ -1297,6 +1334,9 @@ class ReportEngine:
                     best_params_2d["target_length"] = int(best_c_2d[1])
                     best_params_2d["alpha_ruido"] = float(best_c_2d[2])
                     best_params_2d["notch_q"] = 2.0
+                    best_params_2d["lowpass_cutoff_hz"] = lowpass_val
+                    best_params_2d["highpass_cutoff_hz"] = highpass_val
+                    best_params_2d["pesos_canales"] = pesos_canales
                     best_params_2d["accuracy_clasificacion"] = float(res_2d[1])
                     best_params_2d["silhouette_score"] = float(res_2d[2])
                     if len(res_2d) >= 4 and isinstance(res_2d[3], dict):
@@ -1312,6 +1352,7 @@ class ReportEngine:
                         df_hist = pd.DataFrame(res_2d[4])
                     else:
                         for possible_csv in [
+                            os.path.join(pca_out_root, "grid_2d", "resultados_grid_search.csv"),
                             os.path.join(os.path.dirname(os.path.abspath(pca_ana.__file__)), "resultados_grid_search_pca.csv"),
                             os.path.join(repo_root, "EMG_desarrollo", "deep_learning", "resultados_grid_search_pca.csv")
                         ]:
@@ -1327,7 +1368,7 @@ class ReportEngine:
             except Exception as e:
                 logger(f"Error durante el Grid Search PCA 2D: {e}")
 
-            logger("\n[REPORTE] Ejecutando Grid Search PCA 3D (Notch Q = 2.0 constante, Gate = 0.0, Outliers = 10%)...")
+            logger(f"\n[REPORTE] Ejecutando Grid Search PCA 3D (Canales={canales_pca}, LP={lowpass_val}Hz, Intersesion={corr_intersesion}, Pesos={pesos_canales})...")
             try:
                 res_3d = pca_ana.buscar_mejor_configuracion_pca(
                     mediciones=mediciones_rel,
@@ -1337,12 +1378,16 @@ class ReportEngine:
                     modo_alineacion="Pico Volumen Micrófono",
                     pre_pct=0.4,
                     post_pct=0.6,
-                    canales_features=["canal_0", "canal_1", "canal_2"],
+                    canales_features=canales_pca,
                     ignorar_ventana_cero=False,
                     algoritmo_clustering="GMM",
                     notch_q_grid=[2.0],
                     logger=logger,
-                    n_components=3
+                    n_components=3,
+                    aplicar_correccion_intersesion=corr_intersesion,
+                    tag_nombre=report_tag,
+                    output_dir=os.path.join(pca_out_root, "grid_3d"),
+                    ejecutar_ganador_con_graficos=False
                 )
                 if isinstance(res_3d, tuple) and len(res_3d) >= 3 and res_3d[0] is not None:
                     best_c_3d = res_3d[0]
@@ -1350,6 +1395,9 @@ class ReportEngine:
                     best_params_3d["target_length"] = int(best_c_3d[1])
                     best_params_3d["alpha_ruido"] = float(best_c_3d[2])
                     best_params_3d["notch_q"] = 2.0
+                    best_params_3d["lowpass_cutoff_hz"] = lowpass_val
+                    best_params_3d["highpass_cutoff_hz"] = highpass_val
+                    best_params_3d["pesos_canales"] = pesos_canales
                     best_params_3d["accuracy_clasificacion"] = float(res_3d[1])
                     best_params_3d["silhouette_score"] = float(res_3d[2])
                     if len(res_3d) >= 4 and isinstance(res_3d[3], dict):
@@ -1363,12 +1411,31 @@ class ReportEngine:
             except Exception as e:
                 logger(f"Error durante el Grid Search PCA 3D: {e}")
 
-        combinaciones = [
-            ("triada", ["canal_0", "canal_1", "canal_2"], f"Tríada Muscular Completa: {m0} (C0), {m1} (C1) y {m2} (C2)"),
-            ("par_0_1", ["canal_0", "canal_1"], f"Par Muscular: {m0} (Canal 0) y {m1} (Canal 1)"),
-            ("par_1_2", ["canal_1", "canal_2"], f"Par Muscular: {m1} (Canal 1) y {m2} (Canal 2)"),
-            ("par_0_2", ["canal_0", "canal_2"], f"Par Muscular: {m0} (Canal 0) y {m2} (Canal 2)")
-        ]
+        if len(canales_pca) == 1:
+            ch_only = canales_pca[0]
+            ch_idx_only = int(ch_only.replace("canal_", "")) if ch_only.replace("canal_", "").isdigit() else 0
+            m_only = canales_map.get(ch_idx_only, f"Canal {ch_idx_only}")
+            combinaciones = [
+                (f"monocanal_{ch_idx_only}", [ch_only], f"Configuración Monocanal Dedicada: {m_only} - Canal {ch_idx_only}")
+            ]
+        elif len(canales_pca) == 2:
+            c_a, c_b = canales_pca[0], canales_pca[1]
+            i_a = int(c_a.replace("canal_", "")) if c_a.replace("canal_", "").isdigit() else 0
+            i_b = int(c_b.replace("canal_", "")) if c_b.replace("canal_", "").isdigit() else 2
+            m_a = canales_map.get(i_a, f"Canal {i_a}")
+            m_b = canales_map.get(i_b, f"Canal {i_b}")
+            combinaciones = [
+                (f"par_{i_a}_{i_b}", [c_a, c_b], f"Par Muscular Activo: {m_a} - Canal {i_a} y {m_b} - Canal {i_b}"),
+                (f"monocanal_{i_a}", [c_a], f"Canal Individual: {m_a} - Canal {i_a}"),
+                (f"monocanal_{i_b}", [c_b], f"Canal Individual: {m_b} - Canal {i_b}")
+            ]
+        else:
+            combinaciones = [
+                ("triada", ["canal_0", "canal_1", "canal_2"], f"Tríada Muscular Completa: {m0} - C0, {m1} - C1 y {m2} - C2"),
+                ("par_0_1", ["canal_0", "canal_1"], f"Par Muscular: {m0} - Canal 0 y {m1} - Canal 1"),
+                ("par_1_2", ["canal_1", "canal_2"], f"Par Muscular: {m1} - Canal 1 y {m2} - Canal 2"),
+                ("par_0_2", ["canal_0", "canal_2"], f"Par Muscular: {m0} - Canal 0 y {m2} - Canal 2")
+            ]
         
         pca_results = {
             'best_params': best_params_2d,
@@ -1386,6 +1453,9 @@ class ReportEngine:
             "smooth_ms": int(best_params_2d.get("smooth_ms", 180)),
             "target_length": int(best_params_2d.get("target_length", 10)),
             "notch_q": 2.0,
+            "highpass_cutoff_hz": highpass_val,
+            "lowpass_cutoff_hz": lowpass_val,
+            "pesos_canales": pesos_canales,
             "normalizar_canales_por_separado": False
         }
 
@@ -1397,6 +1467,9 @@ class ReportEngine:
             "smooth_ms": int(best_params_3d.get("smooth_ms", 80)),
             "target_length": int(best_params_3d.get("target_length", 60)),
             "notch_q": 2.0,
+            "highpass_cutoff_hz": highpass_val,
+            "lowpass_cutoff_hz": lowpass_val,
+            "pesos_canales": pesos_canales,
             "normalizar_canales_por_separado": False
         }
 
@@ -1423,7 +1496,11 @@ class ReportEngine:
                         modo_alineacion="Pico Volumen Micrófono",
                         algoritmo_clustering_pca="GMM",
                         estilo_visual="Fronteras",
-                        out_dir=out_comb_dir
+                        out_dir=out_comb_dir,
+                        aplicar_correccion_intersesion=corr_intersesion,
+                        highpass_cutoff_hz=highpass_val,
+                        lowpass_cutoff_hz=lowpass_val,
+                        abrir_visor=False
                     )
                 except Exception as e:
                     logger(f"Error al procesar PCA para {tag}: {e}")
@@ -1486,11 +1563,12 @@ class ReportEngine:
         fotos = notes_dict.get('fotos', [])
         incluir_pca = notes_dict.get('incluir_pca', False)
         ejecutar_grid = notes_dict.get('ejecutar_grid', True)
+        report_tag = notes_dict.get('report_tag', None)
         
         # Generar automáticamente gráficos de evolución temporal de la sesión
         logger("[REPORTE] Generando gráficos de evolución de la sesión (Líneas de tiempo, Amplitudes y Cubo 3D)...")
-        amp_stats = self.generate_session_evolution_plots(session_paths, info=info, logger=logger)
-        comp_images = self.find_comparative_images(fecha, notes_dict.get('comparativo_dir'))
+        amp_stats = self.generate_session_evolution_plots(session_paths, info=info, logger=logger, report_tag=report_tag)
+        comp_images = self.find_comparative_images(fecha, notes_dict.get('comparativo_dir'), report_tag=report_tag)
         
         # Mapeo final de canales: priorizar notes_dict si el usuario editó en el diálogo, sino los extraídos
         canales_final = {}
@@ -1498,11 +1576,13 @@ class ReportEngine:
             canales_dict_user = notes_dict.get('canales', {})
             if ch_idx in canales_dict_user and canales_dict_user[ch_idx]:
                 canales_final[ch_idx] = canales_dict_user[ch_idx]
+            elif str(ch_idx) in canales_dict_user and canales_dict_user[str(ch_idx)]:
+                canales_final[ch_idx] = canales_dict_user[str(ch_idx)]
             else:
                 canales_final[ch_idx] = info['canales'].get(ch_idx, f"Canal {ch_idx}")
 
         if incluir_pca:
-            pca_data = self.run_pca_pipeline(session_paths, canales_map=canales_final, ejecutar_grid=ejecutar_grid, logger=logger)
+            pca_data = self.run_pca_pipeline(session_paths, canales_map=canales_final, ejecutar_grid=ejecutar_grid, logger=logger, options=notes_dict)
         else:
             pca_data = None
         
@@ -2041,7 +2121,8 @@ class ReportEngine:
         doc.append(r"\end{document}")
         
         clean_date = re.sub(r'[^a-zA-Z0-9_-]', '_', fecha)
-        base_name = f"Reporte_EMG_{clean_date}"
+        tag_suffix = f"_{re.sub(r'[^a-zA-Z0-9_-]', '_', str(report_tag))}" if report_tag else ""
+        base_name = f"Reporte_EMG_{clean_date}{tag_suffix}"
         tex_path = os.path.join(self.output_dir, f"{base_name}.tex")
         pdf_path = os.path.join(self.output_dir, f"{base_name}.pdf")
         

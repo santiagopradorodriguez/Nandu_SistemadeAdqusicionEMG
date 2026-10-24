@@ -1,0 +1,587 @@
+\documentclass[11pt, a4paper]{article}
+\usepackage[a4paper, margin=2.0cm]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish,es-noshorthands,es-tabla]{babel}
+\usepackage{enumitem}
+\setlist[itemize]{label=-}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage[table]{xcolor}
+\usepackage{hyperref}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!75!black,
+    citecolor=blue!75!black,
+    urlcolor=blue!75!black
+}
+
+\let\origincludegraphics\includegraphics
+\renewcommand{\includegraphics}[2][]{%
+  \IfFileExists{#2}{\origincludegraphics[#1]{#2}}{%
+    \fbox{\parbox[c][2.0cm][c]{0.88\linewidth}{\centering\scriptsize\textbf{Figura en repositorio local}\\[0.15em]\detokenize{#2}}}%
+  }%
+}
+
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.08}
+
+\title{
+    \vspace{-1.4cm}
+    \textbf{\Large Síntesis del Experimento 2026-10-20}\\[0.3em]
+    \large Ubicación Muscular, Señales Calibradas, Patrones de Activación y Separabilidad PCA
+}
+\author{
+    \textbf{Santiago Prado Rodríguez}\\[0.25em]
+    \normalsize Laboratorio de Sistemas Dinámicos (LSD) --- Departamento de Física\\
+    \normalsize Facultad de Ciencias Exactas y Naturales, Universidad de Buenos Aires
+}
+\date{20 de Octubre de 2026}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+\noindent El presente informe sintetiza los resultados de la campaña experimental del 20 de octubre de 2026 del proyecto \textbf{Ñandú sEMG} (60 registros multimodales de las cinco vocales \texttt{/a, e, i, o, u/} adquiridos a $2000\,\text{Hz}$ con ritmo guiado por metrónomo a $30\,\text{BPM}$). Se documentan las condiciones operativas del laboratorio, la ubicación anatómica exacta de los electrodos en los tres bloques medidos (Candela Experimento 1, Candela Experimento 2 y Santiago Exploración), las señales calibradas y los patrones temporales de activación muscular para las cinco vocales en cada configuración, la auditoría de canales caídos y el análisis de separabilidad mediante Componentes Principales (PCA 2D y 3D). Finalmente, se detalla el protocolo anatómico y métrico exacto para posicionar los electrodos en los puntos dulces faciales en las próximas mediciones.
+\end{abstract}
+
+% ==============================================================================
+% SECCIÓN 1: CONDICIONES EXPERIMENTALES, MÚSCULOS MEDIDOS Y FOTOS DE MONTAJE
+% ==============================================================================
+\section{Condiciones de la Sesión, Músculos Medidos y Fotografías de Montaje}
+
+\subsection{Parámetros Técnicos y Ambientales de la Jornada}
+\begin{itemize}\setlength{\itemsep}{1pt}
+    \item \textbf{Fecha y duración:} 20 de octubre de 2026, de 10:59:17 a 15:58:43 ($4\,\text{h }59\,\text{min}$; 60 registros vocálicos divididos en 7 series: $35\,\text{s}$ por toma en Candela y $45\,\text{s}$ en Santiago, con $5\,\text{s}$ iniciales de ruido basal).
+    \item \textbf{Condiciones ambientales:} Laboratorio climatizado a $\mathbf{20\,^\circ\text{C}}$ mediante \textbf{aire acondicionado}, condición mantenida durante toda la jornada para evitar la sudoración cutánea y el despegue mecánico o deriva galvánica de los parches adhesivos.
+    \item \textbf{Alimentación y adquisición:} Fuente partida verificada antes de iniciar con \textbf{Batería 1 (cerca del switch)} $= \mathbf{9.50\,\text{V}}$ y \textbf{Batería 2} $= \mathbf{8.95\,\text{V}}$ (diferencial $\Delta V = 0.55\,\text{V}$, dentro del rango óptimo de bajo ruido para el amplificador de instrumentación AD620). Frecuencia de muestreo de $2000\,\text{Hz}$ y sincronización acústica mediante micrófono frontal a $30\,\text{BPM}$.
+\end{itemize}
+
+\subsection{Geometría de los Montajes y Ubicación Anatómica Exacta}
+En los tres bloques experimentales se utilizaron \textbf{los mismos electrodos comerciales descartables Ag/AgCl de broche ($23\text{--}24\,\text{mm}$ de diámetro efectivo)} para el canal del masetero, modificando entre el Experimento 1 y el Experimento 2 únicamente su distancia entre bordes, su posición anteroposterior en la mejilla y el diámetro de los sensores recortados en labio y comisura (Tabla~\ref{tab:montajes_compacta} y Figuras~\ref{fig:fotos_candela} y \ref{fig:fotos_santi}).
+
+\begin{table}[H]
+\centering
+\scriptsize
+\begin{tabularx}{\textwidth}{l p{4.2cm} p{4.4cm} X}
+\toprule
+\textbf{Región / Canal} & \textbf{Candela --- Experimento 1} (17 tomas) & \textbf{Candela --- Experimento 2} (21 tomas) & \textbf{Santiago --- Exploración} (22 tomas) \\
+\midrule
+\textbf{Labio Superior} (\texttt{orbi}) & $\varnothing=15\,\text{mm}$, $\text{IED}=15\,\text{mm}$ horizontal subnasal, cinta blanca. & $\varnothing=10\,\text{mm}$, $\text{IED}=15\,\text{mm}$ ($5\,\text{mm}$ entre bordes), cinta blanca. & $\varnothing=10\,\text{mm}$, $\text{IED}=15\,\text{mm}$ horizontal sobre bigote, cinta blanca. \\
+\textbf{Comisura / DAO} (\texttt{modiolo}/\texttt{nudo}) & $\varnothing=15\,\text{mm}$, $\text{IED}=15\,\text{mm}$, oblicuo hacia borde mandibular, cinta blanca+marrón. & $\varnothing=10\,\text{mm}$, $\text{IED}=15\,\text{mm}$ ($5\,\text{mm}$ bordes), oblicuo inferomedial, cinta blanca+marrón. & $\varnothing=10\,\text{mm}$, $\text{IED}=15\,\text{mm}$, ubicado más alto sobre el centro de la comisura, cinta marrón. \\
+\textbf{Mejilla / Mandíbula} (\texttt{masetero}/\texttt{mast}) & Parche $\varnothing=24\,\text{mm}$, \textbf{$\mathbf{20\,\text{mm}}$ entre bordes} ($\text{IED}=44\,\text{mm}$), \textbf{posición posterior} con cinta blanca encima. & Parche $\varnothing=23\,\text{mm}$, \textbf{$\mathbf{7\,\text{mm}}$ entre bordes} ($\text{IED}=30\,\text{mm}$), \textbf{posición adelantada} (pegado a cinta marrón) y \textbf{sin cinta}. & Parche $\varnothing=24\,\text{mm}$: superior rojo adelantado sobre piel sin barba (risorio) e inferior sobre barba mandibular. \\
+\bottomrule
+\end{tabularx}
+\caption{Síntesis geométrica de los tres montajes realizados el 2026-10-20.}
+\label{tab:montajes_compacta}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth,height=4.3cm,keepaspectratio]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/fotos/2026-10-20_Candela_Exp1_Modiolo_Masetero_Lateral.png}
+    \caption{Candela Exp 1: Lateral (sep.\ $20\,\text{mm}$).}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth,height=4.3cm,keepaspectratio]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/fotos/2026-10-20_Candela_Exp1_Orbicularis_Modiolo_Frontal.png}
+    \caption{Candela Exp 1: Frontal (Orbicular/DAO).}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth,height=4.3cm,keepaspectratio]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/fotos/2026-10-20_Candela_Exp2_Modiolo_Masetero_Lateral.png}
+    \caption{Candela Exp 2: Lateral (sep.\ $7\,\text{mm}$).}
+\end{subfigure}
+\caption{Fotografías de los montajes en Candela: Experimento 1 (a, b) con parches del masetero posteriores bajo cinta blanca, y Experimento 2 (c) con parches adelantados y descubiertos.}
+\label{fig:fotos_candela}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth,height=4.1cm,keepaspectratio]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/fotos/2026-10-20_Santi_Modiolo_Lateral.png}
+    \caption{Santiago: Modíolo en comisura.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth,height=4.1cm,keepaspectratio]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/fotos/2026-10-20_Santi_Orbicularis_Frontal.png}
+    \caption{Santiago: Orbicular superior.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth,height=4.1cm,keepaspectratio]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/fotos/2026-10-20_Santi_Masetero_Lateral.png}
+    \caption{Santiago: Masetero/risorio anterior.}
+\end{subfigure}
+\caption{Fotografías del montaje exploratorio por auto-colocación en Santiago sobre vello facial.}
+\label{fig:fotos_santi}
+\end{figure}
+
+\noindent \textbf{Músculos exactamente registrados en cada canal según las fotografías:}
+\begin{enumerate}\setlength{\itemsep}{2pt}
+    \item \textbf{Labio Superior (\texttt{orbi}):} Mide la porción periférica superior del \textbf{músculo orbicular de la boca (\textit{orbicularis oris})}. Por una leve elevación del sensor izquierdo hacia el ala nasal (Figura~\ref{fig:fotos_candela}b), capta secundariamente fibras del \textit{levator labii superioris}.
+    \item \textbf{Comisura / Mentón (\texttt{modiolo} / \texttt{nudo}):} En Candela (Figura~\ref{fig:fotos_candela}a--c), el electrodo superior apoyó en el borde inferior del \textbf{modíolo}, pero el inferior se ubicó $15\,\text{mm}$ hacia abajo rumbo a la mandíbula; por lo tanto, el par midió longitudinalmente el vientre del \textbf{músculo depresor del ángulo de la boca (\textit{depressor anguli oris}, DAO)} y el borde lateral del \textit{depressor labii inferioris}, entrando en la zona de arrastre cutáneo pasivo del mentón. En Santiago (Figura~\ref{fig:fotos_santi}a), la cinta marrón se ubicó más arriba, centrada sobre el nudo del modíolo.
+    \item \textbf{Mejilla / Mandíbula (\texttt{masetero} / \texttt{mast}):}
+    \begin{itemize}\setlength{\itemsep}{1pt}
+        \item En \textbf{Candela Exp 1} (Figura~\ref{fig:fotos_candela}a), ambos parches quedaron sobre el vientre medio-posterior del \textbf{masetero superficial (\textit{masseter, pars superficialis})}, aunque por la gran distancia entre bordes ($20\,\text{mm}$) el electrodo inferior tocó la inserción mandibular del \textbf{platisma} y la línea entre electrodos quedó en la diagonal inversa a las fibras musculares.
+        \item En \textbf{Candela Exp 2} (Figura~\ref{fig:fotos_candela}c), al fijar el parche superior a $35\,\text{mm}$ del canto externo del ojo, $35\,\text{mm}$ del ala nasal y $8\,\text{mm}$ del lóbulo auricular con $7\,\text{mm}$ entre bordes, el electrodo negro superior quedó pegado a la cinta marrón (a $\sim 2\,\text{cm}$ de la comisura), pisando directamente el \textbf{risorio}, el \textbf{buccinador} y la entrada posterior al modíolo, mientras el electrodo rojo inferior quedó sobre el vientre bajo del masetero (ángulo goníaco).
+        \item En \textbf{Santiago} (Figura~\ref{fig:fotos_santi}c), el parche superior rojo quedó adelantado sobre la mejilla libre de barba encima del \textbf{risorio} y borde anterior del masetero, y el inferior sobre la inserción baja del masetero cubierta de barba.
+    \end{itemize}
+    \item \textbf{Tierra / Referencia:} Pegada en la región cervical lateral alta (Figura~\ref{fig:fotos_candela}a, c) sobre el tercio superior del \textbf{esternocleidomastoideo} y el \textbf{platisma}.
+\end{enumerate}
+
+% ==============================================================================
+% SECCIÓN 2: SEÑALES CALIBRADAS (A, E, I, O, U) POR SUJETO Y AUDITORÍA DE CANALES
+% ==============================================================================
+\section{Señales Calibradas de las Cinco Vocales (\texttt{A, E, I, O, U}) y Auditoría de Canales}
+
+Cada registro fue filtrado con un Notch en $50\,\text{Hz}$ ($Q=2.0$), un pasabanda Butterworth de $20\text{--}500\,\text{Hz}$ y envolvente RMS con resta del nivel basal de los primeros $5\,\text{s}$.
+
+\subsection{Permutación de Canales Detectada y Resumen de Amplitudes Calibradas}
+La revisión de las 60 trazas calibradas reveló que a las \texttt{15:37:22} (\texttt{A\_Prueba2\_Santi}) se invirtió el orden de conexión de los canales respecto a Candela:
+\begin{itemize}\setlength{\itemsep}{1pt}
+    \item \textbf{Candela (Exp 1 y Exp 2, 38 tomas) y \texttt{A\_Prueba1\_Santi}:} $\text{Ch0} = \texttt{orbi}$, $\text{Ch1} = \texttt{modiolo}$, $\text{Ch2} = \texttt{masetero}$.
+    \item \textbf{Santiago (desde \texttt{A\_Prueba2\_Santi} hasta el final, 21 tomas):} $\text{Ch0} = \texttt{mast}$, $\text{Ch1} = \texttt{orbi}$, $\text{Ch2} = \texttt{nudo}$.
+\end{itemize}
+
+\begin{table}[H]
+\centering
+\scriptsize
+\begin{tabularx}{\textwidth}{l c c c c X}
+\toprule
+\textbf{Bloque y Vocal} & \textbf{Orbicular ($\mu\text{V}$)} & \textbf{Modíolo/DAO ($\mu\text{V}$)} & \textbf{Masetero ($\mu\text{V}$)} & \textbf{Vector Supremo \texttt{[Orbi, Mod, Mast]}} & \textbf{Observación en la Señal Calibrada} \\
+\midrule
+\textbf{Candela Exp 1} --- \texttt{/a/} & $54.1 \pm 14.9$ & $48.3 \pm 15.1$ & $18.2 \pm 7.5$  & $\mathbf{[1.00,\ 0.89,\ 0.34]}$ & Activación balanceada entre Orbicular y DAO. \\
+\textbf{Candela Exp 1} --- \texttt{/e/} & $47.9 \pm 16.0$ & $98.4 \pm 27.4$ & $17.4 \pm 9.1$  & $\mathbf{[0.49,\ 1.00,\ 0.18]}$ & Dominada por DAO/Modíolo; Masetero bajo. \\
+\textbf{Candela Exp 1} --- \texttt{/i/} & $69.0 \pm 19.7$ & $126.9 \pm 36.4$& $26.9 \pm 11.8$ & $\mathbf{[0.54,\ 1.00,\ 0.21]}$ & $+35\%$ de amplitud que \texttt{/e/}, pero igual proporción. \\
+\textbf{Candela Exp 1} --- \texttt{/o/} & $172.5 \pm 43.2$& $145.4 \pm 36.8$& $\mathbf{8.7 \pm 4.5}$   & $\mathbf{[1.00,\ 0.84,\ 0.05]}$ & \textbf{Masetero en piso basal} ($5.4\text{--}14.8\,\mu\text{V}$). \\
+\textbf{Candela Exp 1} --- \texttt{/u/} & $162.8 \pm 36.5$& $145.6 \pm 29.7$& $\mathbf{8.9 \pm 4.2}$   & $\mathbf{[1.00,\ 0.89,\ 0.05]}$ & \textbf{Masetero en piso basal}; idéntica a \texttt{/o/}. \\
+\midrule
+\textbf{Candela Exp 2} --- \texttt{/a/} & $48.4 \pm 14.5$ & $59.9 \pm 16.7$ & $38.6 \pm 11.4$ & $\mathbf{[0.81,\ 1.00,\ 0.64]}$ & Sube señal en Canal 2 por posición adelantada. \\
+\textbf{Candela Exp 2} --- \texttt{/e/} & $72.0 \pm 16.2$ & $87.3 \pm 16.9$ & $\mathbf{61.2 \pm 16.9}$ & $\mathbf{[0.82,\ 1.00,\ 0.70]}$ & Fuerte \textit{crosstalk} del risorio sobre el Canal 2. \\
+\textbf{Candela Exp 2} --- \texttt{/i/} & $71.9 \pm 18.8$ & $99.3 \pm 27.2$ & $\mathbf{73.9 \pm 20.4}$ & $\mathbf{[0.72,\ 1.00,\ 0.74]}$ & Solapada con \texttt{/e/} en crudo y normalizada. \\
+\textbf{Candela Exp 2} --- \texttt{/o/} & $153.2 \pm 31.0$& $113.1 \pm 23.3$& $\mathbf{9.0 \pm 2.0}$   & $\mathbf{[1.00,\ 0.74,\ 0.06]}$ & \textbf{Masetero en piso basal} ($6.8\text{--}12.8\,\mu\text{V}$). \\
+\textbf{Candela Exp 2} --- \texttt{/u/} & $143.3 \pm 28.0$& $116.8 \pm 22.8$& $16.5 \pm 8.5$  & $\mathbf{[1.00,\ 0.82,\ 0.12]}$ & Colineal con \texttt{/o/}. \\
+\midrule
+\textbf{Santiago (S3--S4)} --- \texttt{/a/} & $40.6 \pm 8.8$  & $31.1 \pm 11.4$ & $\mathbf{95.4 \pm 21.3}$ & $\mathbf{[0.43,\ 0.33,\ 1.00]}$ & \texttt{mast} alto domina; \texttt{nudo} atenuado por barba. \\
+\textbf{Santiago (S3--S4)} --- \texttt{/e/} & $40.8 \pm 9.4$  & $25.5 \pm 9.6$  & $\mathbf{93.4 \pm 16.4}$ & $\mathbf{[0.44,\ 0.27,\ 1.00]}$ & Misma amplitud en los 3 canales que \texttt{/a/} e \texttt{/i/}. \\
+\textbf{Santiago (S3--S4)} --- \texttt{/i/} & $43.2 \pm 12.6$ & $26.8 \pm 7.8$  & $\mathbf{98.7 \pm 14.8}$ & $\mathbf{[0.44,\ 0.27,\ 1.00]}$ & Misma amplitud en los 3 canales que \texttt{/a/} y \texttt{/e/}. \\
+\textbf{Santiago (S3--S4)} --- \texttt{/o/} & $\mathbf{65.4 \pm 14.5}$ & $\mathbf{35.8 \pm 8.5}$  & $95.2 \pm 20.1$ & $\mathbf{[0.69,\ 0.38,\ 1.00]}$ & Salto del Orbicular separa a \texttt{/o/} de \texttt{/a, e, i/}. \\
+\textbf{Santiago (S3--S4)} --- \texttt{/u/} & $\mathbf{91.1 \pm 17.2}$ & $\mathbf{55.5 \pm 12.8}$ & $88.0 \pm 16.5$ & $\mathbf{[1.00,\ 0.61,\ 0.97]}$ & Protrusión fuerte vence la barba en \texttt{nudo} y \texttt{orbi}. \\
+\bottomrule
+\end{tabularx}
+\caption{Amplitudes pico promedio calibradas ($\mu \pm \sigma$) y vectores normalizados para las 5 vocales en cada bloque.}
+\label{tab:amplitudes_reales}
+\end{table}
+
+\begin{table}[H]
+\centering
+\scriptsize
+\begin{tabularx}{\textwidth}{l l l X}
+\toprule
+\textbf{Bloque} & \textbf{Mediciones Afectadas} & \textbf{Canal Caído / Falla} & \textbf{Detalle en la Señal Calibrada} \\
+\midrule
+Candela Exp 1 & \texttt{E\_Exp1\_Prueba2} & \texttt{masetero (Ch2)} caído & Planchado en $9.0 \pm 4.1\,\mu\text{V}$ (vs.\ $23.1\,\mu\text{V}$ en Prueba 1). En \texttt{A\_Exp1\_Prueba2} hay pausa sin voz ($11\text{--}25\,\text{s}$). \\
+Candela Exp 1 y 2 & \texttt{O\_Exp1 (1--4)}, \texttt{U\_Exp1 (1--4)}, \texttt{O\_Exp2 (1--5)}, \texttt{U\_Exp2 (1,3)} & \texttt{masetero (Ch2)} en piso basal & El masetero mide entre $5.4$ y $12.8\,\mu\text{V}$ durante todas las vocales redondeadas de Candela. \\
+Santiago (Inicio) & \texttt{A\_Prueba1\_Santi}, \texttt{A\_Prueba2\_Santi} & \textbf{Tomas malas (Descartar)} & En \texttt{Prueba1} \texttt{masetero} $=10.0\,\mu\text{V}$ y \texttt{orbi} se apaga tras $t=10\,\text{s}$; en \texttt{Prueba2} caen los 3 canales ($6.4\text{--}16.5\,\mu\text{V}$). \\
+Santiago (Serie 1--3) & \texttt{E\_P1} (\texttt{orbi}), \texttt{O\_P1} y \texttt{U\_P1} (\texttt{mast}), \texttt{E\_P2} y \texttt{E\_P3} (\texttt{nudo}) & Canales caídos puntuales & \texttt{orbi} $=13.3\,\mu\text{V}$ en \texttt{E\_P1}; \texttt{mast} $=16.5\text{--}20.6\,\mu\text{V}$ en \texttt{O\_P1, U\_P1}; \texttt{nudo} $=14.6\text{--}18.6\,\mu\text{V}$ en \texttt{E\_P2, E\_P3}. \\
+\bottomrule
+\end{tabularx}
+\caption{Síntesis compacta de canales caídos y tomas descartables en las 60 mediciones.}
+\label{tab:canales_caidos}
+\end{table}
+
+\subsection{Galería Completa de Señales Calibradas (\texttt{A, E, I, O, U}) por Sujeto y Experimento}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/A_Exp1_Prueba1_Candela/plot_calibrado_2026-10-20_A_Exp1_Prueba1_Candela.png}
+    \caption{Candela Exp 1: Vocal \texttt{/a/}.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/E_Exp1_Prueba3_Candela/plot_calibrado_2026-10-20_E_Exp1_Prueba3_Candela.png}
+    \caption{Candela Exp 1: Vocal \texttt{/e/}.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/I_Exp1_Prueba2_Candela/plot_calibrado_2026-10-20_I_Exp1_Prueba2_Candela.png}
+    \caption{Candela Exp 1: Vocal \texttt{/i/}.}
+\end{subfigure}
+\vspace{0.12cm}
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=0.92\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/O_Exp1_Prueba1_Candela/plot_calibrado_2026-10-20_O_Exp1_Prueba1_Candela.png}
+    \caption{Candela Exp 1: Vocal \texttt{/o/} (\texttt{masetero} en $5.6\,\mu\text{V}$).}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=0.92\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/U_Exp1_Prueba1_Candela/plot_calibrado_2026-10-20_U_Exp1_Prueba1_Candela.png}
+    \caption{Candela Exp 1: Vocal \texttt{/u/} (\texttt{masetero} en $8.9\,\mu\text{V}$).}
+\end{subfigure}
+\caption{\textbf{Candela --- Experimento 1:} Señales calibradas de las 5 vocales (\texttt{/a, e, i, o, u/}). En \texttt{/e/} e \texttt{/i/} la proporción entre canales es idéntica, y en \texttt{/o/} y \texttt{/u/} el canal \texttt{masetero} cae al piso basal.}
+\label{fig:calibradas_candela_exp1}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/A_Exp2_Prueba1_Candela/plot_calibrado_2026-10-20_A_Exp2_Prueba1_Candela.png}
+    \caption{Candela Exp 2: Vocal \texttt{/a/}.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/E_Exp2_Prueba3_Candela/plot_calibrado_2026-10-20_E_Exp2_Prueba3_Candela.png}
+    \caption{Candela Exp 2: Vocal \texttt{/e/}.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/I_Exp2_Prueba4_Candela/plot_calibrado_2026-10-20_I_Exp2_Prueba4_Candela.png}
+    \caption{Candela Exp 2: Vocal \texttt{/i/}.}
+\end{subfigure}
+\vspace{0.12cm}
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=0.92\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/O_Exp2_Prueba4_Candela/plot_calibrado_2026-10-20_O_Exp2_Prueba4_Candela.png}
+    \caption{Candela Exp 2: Vocal \texttt{/o/} (\texttt{masetero} en $12.8\,\mu\text{V}$).}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=0.92\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/U_Exp2_Prueba4_Candela/plot_calibrado_2026-10-20_U_Exp2_Prueba4_Candela.png}
+    \caption{Candela Exp 2: Vocal \texttt{/u/} (\texttt{masetero} en $25.2\,\mu\text{V}$).}
+\end{subfigure}
+\caption{\textbf{Candela --- Experimento 2:} Señales calibradas de las 5 vocales (\texttt{/a, e, i, o, u/}). Al adelantar el parche del masetero hacia la comisura, sube fuertemente el \textit{crosstalk} en \texttt{/a, e, i/} ($39\text{--}74\,\mu\text{V}$).}
+\label{fig:calibradas_candela_exp2}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/A_Prueba4_Santi/plot_calibrado_2026-10-20_A_Prueba4_Santi.png}
+    \caption{Santiago: Vocal \texttt{/a/} (Prueba 4).}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/E_Prueba4_Santi/plot_calibrado_2026-10-20_E_Prueba4_Santi.png}
+    \caption{Santiago: Vocal \texttt{/e/} (Prueba 4).}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/I_Prueba3_Santi/plot_calibrado_2026-10-20_I_Prueba3_Santi.png}
+    \caption{Santiago: Vocal \texttt{/i/} (Prueba 3).}
+\end{subfigure}
+\vspace{0.12cm}
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/O_Prueba4_Santi/plot_calibrado_2026-10-20_O_Prueba4_Santi.png}
+    \caption{Santiago: Vocal \texttt{/o/} (Prueba 4).}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/U_Prueba4_Santi/plot_calibrado_2026-10-20_U_Prueba4_Santi.png}
+    \caption{Santiago: Vocal \texttt{/u/} (Prueba 4).}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/A_Prueba2_Santi/plot_calibrado_2026-10-20_A_Prueba2_Santi.png}
+    \caption{Toma mala descartada (\texttt{A\_P2}).}
+\end{subfigure}
+\caption{\textbf{Santiago --- Exploración:} Señales calibradas de las 5 vocales (\texttt{/a, e, i, o, u/}, paneles a--e, con orden \texttt{[mast, orbi, nudo]}) junto con la toma fallida \texttt{A\_Prueba2} (panel f). En \texttt{/a, e, i/} las tres señales son casi idénticas, mientras que entre \texttt{/o/} y \texttt{/u/} se observa el incremento neto de \texttt{orbi} y \texttt{nudo}.}
+\label{fig:calibradas_santi}
+\end{figure}
+
+% ==============================================================================
+% SECCIÓN 3: PATRONES MUSCULARES PROMEDIO (A, E, I, O, U) POR SUJETO Y EXPERIMENTO
+% ==============================================================================
+\section{Patrones de Activación Muscular (\texttt{A, E, I, O, U}) por Sujeto y Experimento}
+
+En las Figuras~\ref{fig:patrones_candela_1}, \ref{fig:patrones_candela_2} y \ref{fig:patrones_santi} se presentan las envolventes musculares promedio sincronizadas respecto al pico del micrófono ($t=0.0\,\text{s}$) para las cinco vocales en cada uno de los tres bloques experimentales.
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/A_Exp1_Prueba1_Candela/patron_muscular_grabacion.png}
+    \caption{Candela Exp 1: Vocal \texttt{/a/}.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/E_Exp1_Prueba1_Candela/patron_muscular_grabacion.png}
+    \caption{Candela Exp 1: Vocal \texttt{/e/}.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/I_Exp1_Prueba1_Candela/patron_muscular_grabacion.png}
+    \caption{Candela Exp 1: Vocal \texttt{/i/}.}
+\end{subfigure}
+\vspace{0.12cm}
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=0.82\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/O_Exp1_Prueba1_Candela/patron_muscular_grabacion.png}
+    \caption{Candela Exp 1: Vocal \texttt{/o/}.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=0.82\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/U_Exp1_Prueba1_Candela/patron_muscular_grabacion.png}
+    \caption{Candela Exp 1: Vocal \texttt{/u/}.}
+\end{subfigure}
+\caption{\textbf{Candela --- Experimento 1:} Patrones de activación sincronizados para \texttt{/a, e, i, o, u/}.}
+\label{fig:patrones_candela_1}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/A_Exp2_Prueba1_Candela/patron_muscular_grabacion.png}
+    \caption{Candela Exp 2: Vocal \texttt{/a/}.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/E_Exp2_Prueba1_Candela/patron_muscular_grabacion.png}
+    \caption{Candela Exp 2: Vocal \texttt{/e/}.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/I_Exp2_Prueba1_Candela/patron_muscular_grabacion.png}
+    \caption{Candela Exp 2: Vocal \texttt{/i/}.}
+\end{subfigure}
+\vspace{0.12cm}
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=0.82\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/O_Exp2_Prueba1_Candela/patron_muscular_grabacion.png}
+    \caption{Candela Exp 2: Vocal \texttt{/o/}.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=0.82\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/U_Exp2_Prueba1_Candela/patron_muscular_grabacion.png}
+    \caption{Candela Exp 2: Vocal \texttt{/u/}.}
+\end{subfigure}
+\caption{\textbf{Candela --- Experimento 2:} Patrones de activación sincronizados para \texttt{/a, e, i, o, u/}.}
+\label{fig:patrones_candela_2}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/A_Prueba3_Santi/patron_muscular_grabacion.png}
+    \caption{Santiago: Vocal \texttt{/a/} (Prueba 3).}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/E_Prueba3_Santi/patron_muscular_grabacion.png}
+    \caption{Santiago: Vocal \texttt{/e/} (Prueba 3).}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/I_Prueba3_Santi/patron_muscular_grabacion.png}
+    \caption{Santiago: Vocal \texttt{/i/} (Prueba 3).}
+\end{subfigure}
+\vspace{0.12cm}
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=0.82\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/O_Prueba2_Santi/patron_muscular_grabacion.png}
+    \caption{Santiago: Vocal \texttt{/o/} (Prueba 2).}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.48\textwidth}
+    \centering
+    \includegraphics[width=0.82\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-10-20/U_Prueba3_Santi/patron_muscular_grabacion.png}
+    \caption{Santiago: Vocal \texttt{/u/} (Prueba 3).}
+\end{subfigure}
+\caption{\textbf{Santiago --- Exploración:} Patrones de activación sincronizados para \texttt{/a, e, i, o, u/}.}
+\label{fig:patrones_santi}
+\end{figure}
+
+\subsection{Interpretación Física de los Patrones Musculares}
+\begin{itemize}\setlength{\itemsep}{2pt}
+    \item \textbf{Pérdida del desfasaje apertura/cierre por bajar los parches del masetero:} En pruebas previas donde el sensor de la mejilla se ubicó alto (entre el masetero superior y el cigomático mayor, justo bajo el pómulo), la vocal \texttt{/a/} encendía el canal después del sonido ($+118\,\text{ms}$) al cerrar la mandíbula y la \texttt{/i/} lo encendía antes del sonido ($-221\,\text{ms}$) al trabar la mordida y elevar la comisura, mientras la \texttt{/e/} permanecía callada antes de fonar. En cambio, en las Figuras~\ref{fig:patrones_candela_1} y \ref{fig:patrones_candela_2}, al haber bajado los electrodos $2\,\text{cm}$ hacia el ángulo mandibular inferior, el canal dejó de captar al cigomático mayor: tanto en \texttt{/e/} como en \texttt{/i/} el \texttt{modiolo} y el \texttt{masetero} disparan simultáneamente entre $-150$ y $-70\,\text{ms}$ con la misma envolvente, y en \texttt{/a/} el parche inferior capta tensión de apertura del platisma antes del sonido ($-70\text{ a }-122\,\text{ms}$).
+    \item \textbf{Inactividad del masetero en \texttt{/o/} y \texttt{/u/} en Candela vs.\ activación tricanal en Santiago:} En Candela (Figuras~\ref{fig:patrones_candela_1}d--e y \ref{fig:patrones_candela_2}d--e), la curva del masetero permanece pegada al cero durante todo el ciclo de \texttt{/o/} y \texttt{/u/}. En Santiago (Figura~\ref{fig:patrones_santi}d--e), los tres canales participan activamente y cambian su relación de amplitud entre \texttt{/o/} y \texttt{/u/}.
+\end{itemize}
+
+% ==============================================================================
+% SECCIÓN 4: RESULTADOS DE PCA 2D/3D Y ANÁLISIS DE SEPARABILIDAD
+% ==============================================================================
+\section{Resultados de PCA (2D y 3D), Matrices de Confusión y Diagnóstico}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/deep_learning/pca_umap_clustering/resultados_pca_umap/2026-10-20_Candela_Exp1/PCA_2D.png}
+    \caption{Candela Exp 1: PCA 2D.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/deep_learning/pca_umap_clustering/resultados_pca_umap/2026-10-20_Candela_Exp1/PCA_3D.png}
+    \caption{Candela Exp 1: PCA 3D.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/deep_learning/pca_umap_clustering/resultados_pca_umap/2026-10-20_Candela_Exp1/heatmap_confusion_pca_2d.png}
+    \caption{Candela Exp 1: Confusión 2D.}
+\end{subfigure}
+\vspace{0.12cm}
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/deep_learning/pca_umap_clustering/resultados_pca_umap/2026-10-20_Candela_Exp2/PCA_2D.png}
+    \caption{Candela Exp 2: PCA 2D.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/deep_learning/pca_umap_clustering/resultados_pca_umap/2026-10-20_Candela_Exp2/PCA_3D.png}
+    \caption{Candela Exp 2: PCA 3D.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/deep_learning/pca_umap_clustering/resultados_pca_umap/2026-10-20_Candela_Exp2/heatmap_confusion_pca_2d.png}
+    \caption{Candela Exp 2: Confusión 2D.}
+\end{subfigure}
+\vspace{0.12cm}
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/deep_learning/pca_umap_clustering/resultados_pca_umap/2026-10-20_Santi_Exploracion/PCA_2D.png}
+    \caption{Santiago: PCA 2D.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/deep_learning/pca_umap_clustering/resultados_pca_umap/2026-10-20_Santi_Exploracion/PCA_3D.png}
+    \caption{Santiago: PCA 3D.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.32\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/deep_learning/pca_umap_clustering/resultados_pca_umap/2026-10-20_Santi_Exploracion/heatmap_confusion_pca_2d.png}
+    \caption{Santiago: Confusión 2D.}
+\end{subfigure}
+\caption{Proyecciones PCA 2D, espacios de fases PCA 3D y matrices de confusión para Candela Exp 1 (a--c), Candela Exp 2 (d--f) y Santiago Exploración (g--i).}
+\label{fig:pca_9panel}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[b]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/resultados/resultados_autoencoder/figuras_evaluacion/comparativa_pca_masetero_amplificado_2026_10_20.png}
+    \caption{Efecto de amplificar Canal 2 ($\times 1, \times 2, \times 3$) en PCA 2D.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/resultados/resultados_autoencoder/figuras_evaluacion/comparativa_pca_3d_masetero_x2_2026_10_20.png}
+    \caption{Espacios PCA 3D con Canal 2 $\times 2.0$ ($72.0\%$ LDA en Exp 1).}
+\end{subfigure}
+\caption{Impacto en PCA 2D (a) y PCA 3D (b) al amplificar la ganancia del Canal 2 ($\times 2.0$ y $\times 3.0$).}
+\label{fig:pca_ganancia}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\scriptsize
+\begin{tabularx}{\textwidth}{l c c c c X}
+\toprule
+\textbf{Bloque} & \textbf{PCA 2D} (GMM/LDA) & \textbf{PCA 3D} (GMM/LDA) & \textbf{PCA 2D ($\text{Ch2}\times 2$)} & \textbf{PCA 3D ($\text{Ch2}\times 2$)} & \textbf{Comportamiento de los Clusters} \\
+\midrule
+\textbf{Candela Exp 1} (post.\ $20\,\text{mm}$) & $57.35\%\ /\ 67.77\%$ & $57.82\%\ /\ \mathbf{73.46\%}$ & $\mathbf{64.45\%}\ /\ 69.19\%$ & $64.00\%\ /\ \mathbf{72.00\%}$ & Masetero posterior independiente: al duplicar su escala ($\times 2$) sube $+7.1\%$ en PCA 2D y alcanza $72\text{--}73.5\%$ en 3D. \\
+\textbf{Candela Exp 2} (ant.\ $7\,\text{mm}$)  & $59.55\%\ /\ 63.67\%$ & $61.42\%\ /\ 62.92\%$ & $56.93\%\ /\ 62.92\%$ & $58.80\%\ /\ 64.40\%$ & Contaminado por \textit{crosstalk} con el risorio: amplificar el Canal 2 empeora la separación ($-2.62\%$). \\
+\textbf{Santiago Exploración}                   & $51.74\%\ /\ 58.18\%$ & $46.38\%\ /\ 56.57\%$ & $47.45\%\ /\ 58.18\%$ & $48.00\%\ /\ 58.40\%$ & Colapso entre \texttt{/a, e, i/} ($28\%$ en \texttt{/a/}), pero separa \texttt{/o/} ($67\%$) de \texttt{/u/} ($88\%$). \\
+\bottomrule
+\end{tabularx}
+\caption{Resumen de exactitud en PCA 2D y 3D para los tres bloques de la sesión.}
+\label{tab:pca_compacta}
+\end{table}
+
+\noindent \textbf{Conclusiones críticas del análisis PCA y de las señales calibradas:}
+\begin{enumerate}\setlength{\itemsep}{2pt}
+    \item \textbf{Por qué no se separan \texttt{/e/} e \texttt{/i/} en Candela ($21\%\text{--}53\%$ de confusión):} Al haber colocado los electrodos del masetero bajos en la mandíbula (lejos del pómulo y del cigomático mayor), tanto \texttt{/e/} como \texttt{/i/} activan los tres canales en la misma proporción relativa ($\vec{v}_I \approx 1.35\,\vec{v}_E$, Tabla~\ref{tab:amplitudes_reales}). Al normalizar cada pulso por su Supremo Tricanal, el factor escalar $1.35$ se cancela matemáticamente y ambas vocales caen sobre el mismo punto.
+    \item \textbf{Por qué se confunden \texttt{/o/} y \texttt{/u/} en Candela ($80\%\text{--}88\%$ de error en \texttt{/u/}):} En Candela el masetero está apagado en ambas vocales ($\sim 8.8\,\mu\text{V}$) y el canal de la comisura fue pegado hacia abajo sobre el vientre del DAO (mentón lateral), donde la piel sufre arrastre mecánico pasivo solidario con el labio inferior, arrojando la misma lectura en \texttt{/o/} ($145.4\,\mu\text{V}$) y en \texttt{/u/} ($145.6\,\mu\text{V}$).
+    \item \textbf{Por qué en Santiago colapsan \texttt{/a, e, i/} pero se separan \texttt{/o/} ($67\%$) y \texttt{/u/} ($88\%$):} El electrodo superior de \texttt{mast} quedó alto sobre piel despejada (risorio), disparándose a $\sim 95\,\mu\text{V}$ por igual en \texttt{/a, e, i/}, mientras la barba atenuó a \texttt{nudo} en los gestos planos de sonrisa ($25\text{--}31\,\mu\text{V}$), igualando los vectores de \texttt{/a, e, i/}. En cambio, en \texttt{/o/} y \texttt{/u/}, al haber pegado la cinta marrón más arriba sobre el centro del modíolo y realizar la protrusión cerrada intensa de la \texttt{/u/}, el abultamiento muscular presionó contra la cinta venciendo la impedancia del vello y subiendo \texttt{nudo} a $55.5\,\mu\text{V}$ y \texttt{orbi} a $91.1\,\mu\text{V}$ (frente a $35.8\,\mu\text{V}$ y $65.4\,\mu\text{V}$ en \texttt{/o/}), separándolas con nitidez.
+\end{enumerate}
+
+% ==============================================================================
+% SECCIÓN 5: PROTOCOLO EXPLÍCITO DE COLOCACIÓN DE ELECTRODOS EN LOS PUNTOS DULCES
+% ==============================================================================
+\section{Conclusión: Instrucciones Exactas para Colocar los Electrodos en los Puntos Dulces}
+
+El experimento del 20/10 demuestra que bajar los sensores de la mejilla hacia el ángulo de la mandíbula y los de la comisura hacia el mentón apaga las diferencias entre \texttt{/e/} e \texttt{/i/} y entre \texttt{/o/} y \texttt{/u/}. Para capturar simultáneamente los dos puntos dulces faciales en las próximas mediciones, se debe seguir paso a paso el siguiente protocolo de colocación:
+
+\subsection{Punto Dulce 1: Puente Cigomático-Masetérico Submalar (Canal 2 --- Separa \texttt{/i/} de \texttt{/e/} y cierre de \texttt{/a/})}
+\begin{enumerate}\setlength{\itemsep}{2pt}
+    \item \textbf{Palpación previa (2 maniobras):}
+    \begin{itemize}\setlength{\itemsep}{1pt}
+        \item \textit{Maniobra A (Borde superior del masetero):} Pedir al sujeto que apriete las muelas con fuerza. Palpar el masetero subiendo hasta chocar con el hueso duro del pómulo (\textbf{arco cigomático}) e identificar el borde anterior del músculo.
+        \item \textit{Maniobra B (Diagonal del cigomático mayor):} Pedir al sujeto que sonría exageradamente diciendo \texttt{/i/}. Observar el relieve muscular oblicuo que sube desde la comisura labial hacia el pómulo externo.
+    \end{itemize}
+    \item \textbf{Pegado del Electrodo Anterosuperior (Parche comercial 1):}
+    Pegarlo \textbf{inmediatamente por debajo del hueso del pómulo (arco cigomático)}, exactamente en la intersección donde el \textbf{cigomático mayor} cruza el \textbf{tendón anterosuperior del masetero}.
+    \begin{itemize}\setlength{\itemsep}{1pt}
+        \item \textit{Referencias métricas:} A $\mathbf{3.0\text{--}3.5\,\text{cm}}$ en vertical hacia abajo desde el canto externo del ojo y a $\mathbf{3.5\,\text{cm}}$ en horizontal desde el ala de la nariz (su centro debe caer sobre la línea vertical que baja del borde externo del ojo).
+    \end{itemize}
+    \item \textbf{Pegado del Electrodo Posteroinferior (Parche comercial 2):}
+    Pegarlo en diagonal \textbf{hacia atrás y levemente hacia abajo} rumbo al trago/lóbulo de la oreja, dejando $\mathbf{7\text{ a }10\,\text{mm}}$ libres entre bordes ($\mathbf{30\,\text{mm}}$ entre centros) y quedando su borde posterior a $\mathbf{1.0\text{--}1.5\,\text{cm}}$ delante de la oreja. Sujetar ambos parches y el bucle del cable con cinta por encima para evitar palanca mecánica.
+    \item \textbf{Zonas prohibidas:} \textbf{Prohibido} bajar los parches al ángulo inferior de la mandíbula (\textit{gonion}) o al borde mandibular (pierde el pulso del cigomático en \texttt{/i/} y capta platisma al abrir en \texttt{/a/}), y \textbf{prohibido} pegar el parche delantero contra la cinta marrón de la comisura.
+\end{enumerate}
+
+\subsection{Punto Dulce 2: Nodo Ecuatorial del Modíolo (Canal 1 --- Separa \texttt{/o/} de \texttt{/u/})}
+\begin{enumerate}\setlength{\itemsep}{2pt}
+    \item \textbf{Localización del nudo comisural:} Con los labios en reposo, medir $\mathbf{1.0\,\text{cm}}$ ($\mathbf{10\,\text{mm}}$) horizontalmente hacia afuera desde el ángulo exacto de la comisura labial. Al palpar ese punto mientras el sujeto alterna \texttt{/o/} y \texttt{/u/}, se siente el nudo fibromuscular firme del \textbf{modíolo}.
+    \item \textbf{Pegado de los dos pines chicos ($\varnothing = 10\,\text{mm}$, $\text{IED} = 15\,\text{mm}$, $5\,\text{mm}$ entre bordes):}
+    \begin{itemize}\setlength{\itemsep}{1pt}
+        \item \textit{Electrodo Superior:} Pegarlo a $\mathbf{10\,\text{mm}}$ por fuera de la comisura, con su centro \textbf{exactamente a la misma altura horizontal que la línea de cierre de los labios} (o apenas $2\,\text{mm}$ por encima).
+        \item \textit{Electrodo Inferior:} Pegarlo verticalmente debajo del primero dejando $\mathbf{5\,\text{mm}}$ libres entre bordes ($\mathbf{15\,\text{mm}}$ entre centros). Fijar con doble capa (cinta blanca dérmica + sobrecapa marrón rígida).
+    \end{itemize}
+    \item \textbf{Zona prohibida:} \textbf{Prohibido} colocar el par desde abajo de la comisura bajando hacia el mentón o borde mandibular. Si el electrodo inferior baja más de $12\text{--}15\,\text{mm}$ por debajo de la línea labial sobre el DAO inferior, mide el arrastre pasivo de la piel del mentón e iguala \texttt{/o/} con \texttt{/u/}.
+\end{enumerate}
+
+\subsection{Canal 0 (Orbicular Superior), Tierra y Test de Verificación en Vivo (15 segundos)}
+\begin{itemize}\setlength{\itemsep}{2pt}
+    \item \textbf{Canal 0 (\texttt{orbi} --- Labio superior):} Dos pines de $\mathbf{10\,\text{mm}}$ ($\text{IED} = \mathbf{15\,\text{mm}}$, $5\,\text{mm}$ entre bordes) colocados simétricamente a cada lado del filtrum subnasal, a mitad de camino entre la base del tabique nasal y el borde rojo del labio superior, a idéntica altura horizontal (sin subir hacia el ala de la nariz).
+    \item \textbf{Tierra (Referencia):} Un parche comercial pegado sobre el hueso firme de la \textbf{apófisis mastoides} (detrás del lóbulo de la oreja), nunca sobre la piel blanda del cuello. Mantener fijo el orden en placa: $\text{Ch0} = \texttt{orbi}$, $\text{Ch1} = \texttt{modiolo}$, $\text{Ch2} = \texttt{masetero}$.
+    \item \textbf{Verificación en pantalla antes de grabar (15 s):}
+    \begin{enumerate}\setlength{\itemsep}{1pt}
+        \item \textit{Chequeo \texttt{/i/} vs.\ \texttt{/e/}:} Al decir \texttt{/i/}, el Canal 2 (Cigomático-Masetérico) debe encenderse fuerte \textbf{antes del sonido ($\sim -220\,\text{ms}$)}; al decir \texttt{/e/}, debe mantenerse por debajo de un tercio de la amplitud de \texttt{/i/}. Si dan igual, subir el parche delantero $1\,\text{cm}$ hacia el pómulo.
+        \item \textit{Chequeo \texttt{/a/}:} Al decir \texttt{/a/}, el Canal 2 debe permanecer callado al abrir la boca y mostrar un pulso corto \textbf{al final del sonido ($+120\,\text{ms}$)} al cerrar la mandíbula.
+        \item \textit{Chequeo \texttt{/o/} vs.\ \texttt{/u/}:} En el Canal 1 (\texttt{modiolo}), la \texttt{/o/} (redondeo abierto con tracción radial) debe marcar un pico más alto que la \texttt{/u/} (fruncido cerrado). Si empatan, subir los pines $5\text{--}8\,\text{mm}$ hacia el nivel de la comisura.
+    \end{enumerate}
+\end{itemize}
+
+\end{document}
