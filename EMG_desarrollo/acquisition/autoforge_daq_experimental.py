@@ -3359,7 +3359,7 @@ class RealTimePlotter(QtWidgets.QWidget):
       total_muestras_leidas = all_new_data.shape[1]
 
       # 3. Grabar si es necesario (GUARDAR DATOS CRUDOS EN VOLTIOS)
-      if self.is_recording:
+      if self.is_recording or getattr(self, 'is_recording_final_noise', False):
         self.current_recording.append(all_new_data.copy())
 
       # 4. Calibrar para la visualización y análisis en tiempo real
@@ -4807,6 +4807,12 @@ class RealTimePlotter(QtWidgets.QWidget):
             json.dump(ch_metadata, f, indent=4)
         except: pass
 
+      try:
+        base_meta_path = os.path.join(base_dir, "metadata.json")
+        with open(base_meta_path, 'w', encoding='utf-8') as f:
+          json.dump(metadata, f, indent=4)
+      except: pass
+
       try: guardar_grabacion_csv(local_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion")
       except: pass
       
@@ -5258,6 +5264,12 @@ class RealTimePlotter(QtWidgets.QWidget):
           with open(metadata_path, 'w', encoding='utf-8') as f:
             json.dump(ch_metadata, f, indent=4)
         except: pass
+
+      try:
+        base_meta_path = os.path.join(base_dir, "metadata.json")
+        with open(base_meta_path, 'w', encoding='utf-8') as f:
+          json.dump(metadata, f, indent=4)
+      except: pass
 
       # 3. Guardar Datos Raw CSV y WAV (las funciones internas ya manejan la división por canales)
       try: guardar_grabacion_csv(local_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion")

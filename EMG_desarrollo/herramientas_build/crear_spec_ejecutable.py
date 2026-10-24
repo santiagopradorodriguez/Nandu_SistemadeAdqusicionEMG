@@ -6,7 +6,6 @@
 # ==============================================================================
 
 import os
-from PyInstaller.utils.hooks import collect_all, copy_metadata
 
 def generar_spec():
     # Al moverse a 'herramientas_build', el directorio raíz del proyecto es el padre
@@ -33,6 +32,9 @@ def generar_spec():
         ('logo_nandu_lsd.png', 'gui_app/assets'),
         ('logo_nandu_lsd.png', 'gui_app'),
         ('usb-621x-manual.pdf', '.'),
+        ('modelos', 'modelos'),
+        ('resultados', 'resultados'),
+        ('EMG_desarrollo/resultados', 'EMG_desarrollo/resultados'),
     ]
     
     datas_tuples = []
@@ -77,6 +79,7 @@ pynndescent_datas, pynndescent_binaries, pynndescent_hiddenimports = _safe_colle
 tqdm_datas, tqdm_binaries, tqdm_hiddenimports = _safe_collect('tqdm')
 mp_datas, mp_binaries, mp_hiddenimports = _safe_collect('mediapipe')
 cv2_datas, cv2_binaries, cv2_hiddenimports = _safe_collect('cv2')
+torch_datas, torch_binaries, torch_hiddenimports = _safe_collect('torch')
 nitypes_metadata = _safe_metadata('nitypes')
 
 block_cipher = None
@@ -86,6 +89,7 @@ additional_modules = [
     'acquisition.manual_daq',
     'acquisition.autoforge_daq',
     'acquisition.autoforge_daq_experimental',
+    'acquisition.autoforge_daq_decodificador',
     'acquisition.calibracion_espacial_electrodos',
     'acquisition.metronomo_visual',
     'acquisition.modulo_de_entrenamiento',
@@ -121,7 +125,6 @@ additional_modules = [
     'utils.curar_dataset_exportacion',
     'utils.metadata_auditor',
     'instrucciones_uso',
-    'views.config_dialog',
     'gui_app.core.threads',
     'gui_app.views.calibrated_viewer_widget',
     'gui_app.views.comparative_explorer_widget',
@@ -136,6 +139,7 @@ additional_modules = [
     'gui_app.temp_comparativo',
     'gui_app.temp_procesar',
     'gui_app.temp_sesion',
+    'deep_learning.realtime_decoder_engine',
     'deep_learning.pipeline_autoencoder_gui',
     'deep_learning.grid_search_autoencoder',
     'deep_learning.pca_umap_clustering.generador_pca_umap',
@@ -151,13 +155,11 @@ additional_modules = [
     'deep_learning.train_autoencoder',
     'deep_learning.plot_latent_space',
     'deep_learning.decodificador_continuo',
-    'deep_learning.generador_umap_supervisado',
     'deep_learning.pca_analysis',
     'deep_learning.umap_analysis',
     'deep_learning.motor_autoencoder_unificado',
     'deep_learning.soft_dtw',
     'deep_learning.autoencoder_no_supervisado_gui',
-    'deep_learning.corregir_canales_2026_09_16',
 ]
 
 # Librerías y módulos que PyInstaller requiere explícitamente
@@ -170,14 +172,14 @@ hidden_imports = [
     'deep_learning', 'tkinter', 'numba', 'tqdm', 'decouple', 'requests',
     'tzlocal', 'hightime', 'sklearn', 'sklearn.utils._typedefs',
     'sklearn.neighbors._quad_tree',
-    'sklearn.tree._utils', 'pynndescent', 'cv2', 'mediapipe',
-] + additional_modules + nidaqmx_hiddenimports + sd_hiddenimports + sf_hiddenimports + umap_hiddenimports + sns_hiddenimports + tly_hiddenimports + numba_hiddenimports + pynndescent_hiddenimports + tqdm_hiddenimports + mp_hiddenimports + cv2_hiddenimports
+    'sklearn.tree._utils', 'pynndescent', 'cv2', 'mediapipe', 'torch',
+] + additional_modules + nidaqmx_hiddenimports + sd_hiddenimports + sf_hiddenimports + umap_hiddenimports + sns_hiddenimports + tly_hiddenimports + numba_hiddenimports + pynndescent_hiddenimports + tqdm_hiddenimports + mp_hiddenimports + cv2_hiddenimports + torch_hiddenimports
 
 datas = [
         {datas_str}
-] + nidaqmx_datas + sd_datas + sf_datas + umap_datas + sns_datas + tly_datas + numba_datas + pynndescent_datas + tqdm_datas + mp_datas + cv2_datas + nitypes_metadata
+] + nidaqmx_datas + sd_datas + sf_datas + umap_datas + sns_datas + tly_datas + numba_datas + pynndescent_datas + tqdm_datas + mp_datas + cv2_datas + torch_datas + nitypes_metadata
 
-binaries = nidaqmx_binaries + sd_binaries + sf_binaries + umap_binaries + sns_binaries + tly_binaries + numba_binaries + pynndescent_binaries + tqdm_binaries + mp_binaries + cv2_binaries
+binaries = nidaqmx_binaries + sd_binaries + sf_binaries + umap_binaries + sns_binaries + tly_binaries + numba_binaries + pynndescent_binaries + tqdm_binaries + mp_binaries + cv2_binaries + torch_binaries
 
 a = Analysis(
     ['gui_app/main_app.py'],
@@ -200,7 +202,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={{}},
     runtime_hooks=[],
-    excludes=['torch', 'torchvision', 'torchaudio'],
+    excludes=['torchvision', 'torchaudio'],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,

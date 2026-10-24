@@ -13,8 +13,21 @@ import time
 import numpy as np
 from scipy import signal
 from sklearn.mixture import GaussianMixture
-import torch
-import torch.nn as nn
+
+try:
+    import torch
+    import torch.nn as nn
+    TORCH_DISPONIBLE = True
+except ImportError:
+    torch = None
+    TORCH_DISPONIBLE = False
+    class _DummyModule:
+        def __init__(self, *args, **kwargs): pass
+        def to(self, *args, **kwargs): return self
+        def eval(self, *args, **kwargs): return self
+    class _DummyNN:
+        Module = _DummyModule
+    nn = _DummyNN()
 
 VOCALES = ['A', 'E', 'I', 'O', 'U']
 VOCAL_A_COLOR_HEX = {
@@ -397,11 +410,22 @@ class RealtimeDecoderEngine:
 
     def load_model(self, pt_path):
         """Carga el modelo PyTorch entrenado y reconstruye el clasificador GMM."""
-        if not os.path.exists(pt_path):
-            raise FileNotFoundError(f"No existe el archivo de modelo: {pt_path}")
+        if not TORCH_DISPONIBLE or torch is None:
+            print("[WARN RealtimeDecoderEngine] PyTorch no está disponible en este entorno.")
+            return False
 
-        ckpt = torch.load(pt_path, map_location=self.device, weights_only=False)
-        self.cfg = ckpt.get('cfg', {})
+        if not pt_path or not os.path.exists(pt_path):
+            print(f"[WARN RealtimeDecoderEngine] No existe el archivo de modelo: {pt_path}")
+            return False
+
+        try:
+            ckpt = torch.load(pt_path, map_location=self.device, weights_only=False)
+            self.cfg = ckpt.get('cfg', {})
+        except Exception as e:
+            print(f"[ERROR RealtimeDecoderEngine al abrir checkpoint {pt_path}] {e}")
+            self.model = None
+            self.gmm = None
+            return False
 
         # Factores de estandarización por canal si vienen en el checkpoint
         if 'channel_base_mean' in ckpt:
@@ -829,20 +853,22 @@ class RealtimeDecoderEngine:
 
         # 8. Preparar tensor de entrada PyTorch (1, 60)
         x_flat = win_final.reshape(1, -1)
-        x_tensor = torch.tensor(x_flat, dtype=torch.float32, device=self.device)
-
-        # 9. Inferencia PyTorch (Encoder)
         t_infer_st = time.perf_counter()
-        with torch.no_grad():
-            if self.model is not None:
-                z_tensor = self.model.encode(x_tensor)
-                z_np = z_tensor.cpu().numpy()[0]
-            else:
+        if TORCH_DISPONIBLE and torch is not None and self.model is not None:
+            try:
+                x_tensor = torch.tensor(x_flat, dtype=torch.float32, device=self.device)
+                with torch.no_grad():
+                    z_tensor = self.model.encode(x_tensor)
+                    z_np = z_tensor.cpu().numpy()[0]
+            except Exception as e:
+                print(f"[ERROR Inferencia Encoder] {e}")
                 z_np = np.zeros(self.latent_dim, dtype=np.float32)
+        else:
+            z_np = np.zeros(self.latent_dim, dtype=np.float32)
         t_infer_end = time.perf_counter()
 
         # 10. Clasificación GMM y probabilidades
-        vocal_ganadora = 'A'
+        vocal_ganadora = '---'
         confianza_pct = 0.0
         probs_dict = {v: 0.0 for v in VOCALES}
 

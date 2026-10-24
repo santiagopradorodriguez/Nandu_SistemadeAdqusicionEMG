@@ -101,13 +101,17 @@ cache_datos/
 !DataConfig/modelos_vision/*
 !EMG_desarrollo/DataConfig/modelos_vision/*
 
-# --- MODELOS ENTRENADOS Y CHECKPOINTS DE DEEP LEARNING ---
 *.pth
 *.pt
 *.onnx
 *.pkl
 *.joblib
 *.h5
+
+# Excepciones para modelos integrados con el sistema / ejecutable
+!modelos/*
+!**/modelos/*
+!EMG_desarrollo/modelos/*
 
 # --- CODIGOS Y SCRIPTS DE PRUEBA Y EXPERIMENTOS TEMPORALES ---
 codigos_de_prueba/

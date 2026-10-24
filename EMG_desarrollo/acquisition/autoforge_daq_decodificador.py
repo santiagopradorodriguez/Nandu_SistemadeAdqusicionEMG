@@ -20,8 +20,18 @@ from datetime import datetime
 from scipy import signal
 import scipy.io.wavfile as wavfile
 
-# Asegurar path del proyecto
-project_root = "/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG"
+# Asegurar path del proyecto dinámicamente
+if getattr(sys, 'frozen', False):
+    project_root = os.path.dirname(sys.executable)
+    if os.path.basename(project_root) == "_internal":
+        project_root = os.path.dirname(project_root)
+else:
+    _this_file_dir = os.path.dirname(os.path.abspath(__file__))
+    _emg_dir = os.path.dirname(_this_file_dir)
+    project_root = os.path.dirname(_emg_dir)
+    if _emg_dir not in sys.path:
+        sys.path.insert(0, _emg_dir)
+
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
@@ -56,10 +66,20 @@ try:
 except Exception:
     NIDAQMX_DISPONIBLE = False
 
-# Importar motor de decodificación en tiempo real
-from EMG_desarrollo.deep_learning.realtime_decoder_engine import (
-    RealtimeDecoderEngine, VOCALES, VOCAL_A_COLOR_HEX, VOCAL_A_RGBA
-)
+# Importar motor de decodificación en tiempo real con fallbacks
+try:
+    from EMG_desarrollo.deep_learning.realtime_decoder_engine import (
+        RealtimeDecoderEngine, VOCALES, VOCAL_A_COLOR_HEX, VOCAL_A_RGBA
+    )
+except ImportError:
+    try:
+        from deep_learning.realtime_decoder_engine import (
+            RealtimeDecoderEngine, VOCALES, VOCAL_A_COLOR_HEX, VOCAL_A_RGBA
+        )
+    except ImportError:
+        from realtime_decoder_engine import (
+            RealtimeDecoderEngine, VOCALES, VOCAL_A_COLOR_HEX, VOCAL_A_RGBA
+        )
 
 try:
     from numba import jit
@@ -134,39 +154,54 @@ def decimate_min_max(data_x, data_y, max_points=2000):
 
     return out_x, out_y
 
+def resolver_ruta_modelo(rel_path):
+    if not rel_path:
+        return ""
+    if os.path.isabs(rel_path) and os.path.exists(rel_path):
+        return rel_path
+    
+    candidatos = [
+        os.path.join(project_root, rel_path),
+        os.path.join(project_root, "EMG_desarrollo", rel_path),
+        os.path.join(project_root, "modelos", os.path.basename(rel_path)),
+        os.path.join(project_root, "EMG_desarrollo", "resultados", os.path.basename(rel_path)),
+    ]
+    if getattr(sys, 'frozen', False):
+        try:
+            candidatos.append(os.path.join(sys._MEIPASS, rel_path))
+            candidatos.append(os.path.join(sys._MEIPASS, "modelos", os.path.basename(rel_path)))
+        except Exception:
+            pass
+        exe_dir = os.path.dirname(sys.executable)
+        candidatos.append(os.path.join(exe_dir, "modelos", os.path.basename(rel_path)))
+        candidatos.append(os.path.join(exe_dir, rel_path))
+
+    for c in candidatos:
+        if os.path.exists(c):
+            return os.path.abspath(c)
+    return os.path.join(project_root, rel_path)
+
 # Modelos disponibles en el repositorio
 MODELOS_PRESETS = [
     {
         'nombre': "Campeón MLP 3D sin SO2 - 87.21% Media Armónica",
         'subtitulo': "Récord: 87.4% Lucas | 87.0% P5 (107/123) | Ventana 40/60",
-        'path': os.path.join(
-            project_root,
-            "EMG_desarrollo/resultados/grid_search_lucas_ventana4060/mlp_3d_sin_so2/campeon_mlp_3d_sin_so2_zona_dulce_completo.pt"
-        )
+        'path': resolver_ruta_modelo("EMG_desarrollo/resultados/grid_search_lucas_ventana4060/mlp_3d_sin_so2/campeon_mlp_3d_sin_so2_zona_dulce_completo.pt")
     },
     {
         'nombre': "Campeón Convolucional Ortogonal 2D - 85.32% Armónica",
         'subtitulo': "87.8% Lucas | 82.9% P5 | Ventana 50/50",
-        'path': os.path.join(
-            project_root,
-            "EMG_desarrollo/resultados/grid_search_conv_ortogonal/modelo_campeon_conv_ortogonal.pt"
-        )
+        'path': resolver_ruta_modelo("EMG_desarrollo/resultados/grid_search_conv_ortogonal/modelo_campeon_conv_ortogonal.pt")
     },
     {
         'nombre': "Autoencoder Ortogonal 2D Nativo - modelo_optimo.pt",
         'subtitulo': "87.85% Lucas | 81.30% P5 con EMD | Densa Lineal",
-        'path': os.path.join(
-            project_root,
-            "EMG_desarrollo/resultados/resultados_pca_umap/2026-09-12/General_por_sujeto/lucas/lucas_viejo_para_probar/autoencoder_ortogonal_reposo_optimo/modelo_optimo.pt"
-        )
+        'path': resolver_ruta_modelo("EMG_desarrollo/resultados/resultados_pca_umap/2026-09-12/General_por_sujeto/lucas/lucas_viejo_para_probar/autoencoder_ortogonal_reposo_optimo/modelo_optimo.pt")
     },
     {
         'nombre': "Modelo Semisupervisado 2D - Apunte LaTeX",
         'subtitulo': "Entropía Cruzada lambda=0.5 | Hito 115",
-        'path': os.path.join(
-            project_root,
-            "EMG_desarrollo/resultados/grid_search_conv_ortogonal/modelo_campeon_semisupervisado_87.pt"
-        )
+        'path': resolver_ruta_modelo("EMG_desarrollo/resultados/grid_search_conv_ortogonal/modelo_campeon_semisupervisado_87.pt")
     }
 ]
 
@@ -352,10 +387,12 @@ class RealTimeDecoderPlotter(QtWidgets.QWidget):
         self.test_correct_count = 0
         self.test_vocal_stats = {v: {'correct': 0, 'total': 0} for v in VOCALES}
 
-        # Motor de decodificación inicializado con el modelo campeón (87.21% armónica)
-        pt_model_default = MODELOS_PRESETS[0]['path']
-        if not os.path.exists(pt_model_default):
-            pt_model_default = MODELOS_PRESETS[1]['path']
+        # Motor de decodificación: buscar primer modelo disponible entre los presets
+        pt_model_default = None
+        for p in MODELOS_PRESETS:
+            if os.path.exists(p['path']):
+                pt_model_default = p['path']
+                break
 
         self.engine = RealtimeDecoderEngine(
             model_path=pt_model_default,
@@ -614,8 +651,24 @@ class RealTimeDecoderPlotter(QtWidgets.QWidget):
         self.cmb_modelo.currentIndexChanged.connect(self._on_model_changed)
         lay_modelo.addWidget(self.cmb_modelo)
 
-        self.lbl_modelo_info = QLabel(MODELOS_PRESETS[0]['subtitulo'])
-        self.lbl_modelo_info.setStyleSheet("color: #66FCF1; font-size: 11px; font-weight: bold;")
+        self.btn_cargar_modelo_custom = QPushButton("📂 Cargar Modelo Propio (.pt)...")
+        self.btn_cargar_modelo_custom.setCursor(QtCore.Qt.PointingHandCursor)
+        self.btn_cargar_modelo_custom.setStyleSheet("""
+            QPushButton {
+                background-color: #1F2833; color: #66FCF1; border: 1px solid #45A29E;
+                border-radius: 4px; padding: 4px 8px; font-weight: bold; font-size: 11px;
+            }
+            QPushButton:hover { background-color: #45A29E; color: #0B0C10; }
+        """)
+        self.btn_cargar_modelo_custom.clicked.connect(self._cargar_modelo_personalizado_dialogo)
+        lay_modelo.addWidget(self.btn_cargar_modelo_custom)
+
+        if self.engine.model is not None:
+            self.lbl_modelo_info = QLabel(MODELOS_PRESETS[0]['subtitulo'])
+            self.lbl_modelo_info.setStyleSheet("color: #66FCF1; font-size: 11px; font-weight: bold;")
+        else:
+            self.lbl_modelo_info = QLabel("⚠ Sin modelo cargado. Utilice 'Cargar Modelo Propio (.pt)' para decodificar.")
+            self.lbl_modelo_info.setStyleSheet("color: #FFB703; font-size: 11px; font-weight: bold;")
         lay_modelo.addWidget(self.lbl_modelo_info)
 
         self.layout_decodificador.addWidget(grp_modelo)
@@ -1069,6 +1122,30 @@ class RealTimeDecoderPlotter(QtWidgets.QWidget):
                 'pen': pg.mkPen(color_hex, width=3)
             }])
 
+    def _cargar_modelo_personalizado_dialogo(self):
+        """Abre un diálogo de selección de archivo para cargar un checkpoint PyTorch propio."""
+        f, _ = QFileDialog.getOpenFileName(self, "Seleccionar Modelo PyTorch (.pt / .pth)", project_root, "Modelos PyTorch (*.pt *.pth);;Todos (*.*)")
+        if f and os.path.exists(f):
+            nombre = os.path.basename(f)
+            if self.engine.load_model(f):
+                self.lbl_modelo_info.setText(f"Modelo cargado: {nombre}")
+                self.lbl_modelo_info.setStyleSheet("color: #39FF14; font-size: 11px; font-weight: bold;")
+                self._cargar_mapa_fronteras_decision()
+                self.historial_puntos.clear()
+                self.scatter_trail.clear()
+                self.scatter_actual.clear()
+                if self.engine.latent_dim == 3:
+                    self.cmb_proyeccion_2d.setEnabled(True)
+                    self.lbl_proy_2d.setText("Plano 2D:")
+                    self._conmutar_vista_latente('3D')
+                else:
+                    self.cmb_proyeccion_2d.setEnabled(False)
+                    self.lbl_proy_2d.setText("Plano (2D Nativo):")
+                    self._conmutar_vista_latente('2D')
+            else:
+                self.lbl_modelo_info.setText(f"⚠ Error al procesar checkpoint: {nombre}")
+                self.lbl_modelo_info.setStyleSheet("color: #FF3300; font-size: 11px; font-weight: bold;")
+
     def _on_model_changed(self, idx):
         """Carga el modelo seleccionado en el desplegable y regenera las fronteras de decisión."""
         if idx < 0 or idx >= len(MODELOS_PRESETS):
@@ -1077,31 +1154,42 @@ class RealTimeDecoderPlotter(QtWidgets.QWidget):
         p_pt = preset['path']
         if os.path.exists(p_pt):
             print(f"[Modelo] Conmutando a: {preset['nombre']}")
-            self.engine.load_model(p_pt)
-            self.lbl_modelo_info.setText(preset['subtitulo'])
-            self._cargar_mapa_fronteras_decision()
-            self.historial_puntos.clear()
-            self.scatter_trail.clear()
-            self.scatter_actual.clear()
-            if self.engine.latent_dim == 3:
-                self.cmb_proyeccion_2d.setEnabled(True)
-                self.lbl_proy_2d.setText("Plano 2D:")
-                self._conmutar_vista_latente('3D')
+            if self.engine.load_model(p_pt):
+                self.lbl_modelo_info.setText(preset['subtitulo'])
+                self.lbl_modelo_info.setStyleSheet("color: #66FCF1; font-size: 11px; font-weight: bold;")
+                self._cargar_mapa_fronteras_decision()
+                self.historial_puntos.clear()
+                self.scatter_trail.clear()
+                self.scatter_actual.clear()
+                if self.engine.latent_dim == 3:
+                    self.cmb_proyeccion_2d.setEnabled(True)
+                    self.lbl_proy_2d.setText("Plano 2D:")
+                    self._conmutar_vista_latente('3D')
+                else:
+                    self.cmb_proyeccion_2d.setEnabled(False)
+                    self.cmb_proyeccion_2d.blockSignals(True)
+                    self.cmb_proyeccion_2d.setCurrentIndex(0)
+                    self.cmb_proyeccion_2d.blockSignals(False)
+                    self.ejes_proyeccion_2d = (0, 1)
+                    self.lbl_proy_2d.setText("Plano (2D Nativo):")
+                    self.plot_latente.setLabel('bottom', "Coordenada Z1")
+                    self.plot_latente.setLabel('left', "Coordenada Z2")
+                    self._conmutar_vista_latente('2D')
             else:
-                self.cmb_proyeccion_2d.setEnabled(False)
-                self.cmb_proyeccion_2d.blockSignals(True)
-                self.cmb_proyeccion_2d.setCurrentIndex(0)
-                self.cmb_proyeccion_2d.blockSignals(False)
-                self.ejes_proyeccion_2d = (0, 1)
-                self.lbl_proy_2d.setText("Plano (2D Nativo):")
-                self.plot_latente.setLabel('bottom', "Coordenada Z1")
-                self.plot_latente.setLabel('left', "Coordenada Z2")
-                self._conmutar_vista_latente('2D')
+                self.lbl_modelo_info.setText(f"⚠ Error al leer checkpoint de {preset['nombre']}")
+                self.lbl_modelo_info.setStyleSheet("color: #FFB703; font-size: 11px; font-weight: bold;")
         else:
-            print(f"[Modelo ERROR] Archivo no encontrado: {p_pt}")
+            print(f"[Modelo AVISO] Archivo preset no encontrado: {p_pt}")
+            self.lbl_modelo_info.setText(f"⚠ Preset no encontrado: {os.path.basename(p_pt)} (cargue uno manualmente)")
+            self.lbl_modelo_info.setStyleSheet("color: #FFB703; font-size: 11px; font-weight: bold;")
 
     def _cargar_mapa_fronteras_decision(self):
         """Calcula y dibuja las regiones de decisión del GMM con zoom óptimo sobre los fonemas activos."""
+        if self.engine.model is None or self.engine.gmm is None:
+            self.img_fronteras.clear()
+            self.scatter_centroides_2d.setData([])
+            return
+
         ax_x, ax_y = getattr(self, 'ejes_proyeccion_2d', (0, 1))
 
         if self.engine.latent_dim == 2:
@@ -1432,6 +1520,21 @@ class RealTimeDecoderPlotter(QtWidgets.QWidget):
         center_s = ev.get('center_sample', 0)
 
         # Cartel gigante
+        if vocal == '---':
+            self.lbl_vocal_gigante.setText("---")
+            self.lbl_vocal_gigante.setStyleSheet("""
+                font-size: 78px;
+                font-weight: 900;
+                color: #66FCF1;
+                background-color: #0B0C10;
+                border: 3px solid #66FCF1;
+                border-radius: 10px;
+                padding: 8px;
+            """)
+            self.lbl_confianza.setText("Esperando contracción fonatoria o modelo no cargado...")
+            self.bar_confianza.setValue(0)
+            return
+
         self.lbl_vocal_gigante.setText(f"/{vocal}/")
         self.lbl_vocal_gigante.setStyleSheet(f"""
             font-size: 82px;

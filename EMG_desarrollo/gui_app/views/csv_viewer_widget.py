@@ -93,16 +93,37 @@ class DataLoaderThread(QThread):
             df = pd.read_csv(self.filepath)
             df.columns = df.columns.str.strip()
             time_col = None
-            for c in ['Time', 'Tiempo', 'Time(s)']:
+            for c in ['Time', 'Tiempo', 'Time(s)', 'Tiempo (s)', 'Time (s)']:
                 if c in df.columns:
-                    time_col = c; break
-            if not time_col and len(df.columns) > 0: time_col = df.columns[0]
+                    time_col = c
+                    break
+            if not time_col and len(df.columns) > 0:
+                time_col = df.columns[0]
             
             canales = [c for c in df.columns if c != time_col]
             
+            # Filtrar y asegurar que los canales sean numéricos (evita errores con archivos de metadatos/calibración)
+            canales_validos = []
+            for c in canales:
+                try:
+                    df[c] = pd.to_numeric(df[c])
+                    canales_validos.append(c)
+                except Exception:
+                    pass
+            canales = canales_validos
+
+            if not canales:
+                raise ValueError("El archivo seleccionado no contiene señales numéricas válidas para el visor (verifique si seleccionó un archivo de calibración o reporte).")
+
             # Calibración a microvoltios
             measurement_dir = os.path.dirname(self.filepath)
             meta_path = os.path.join(measurement_dir, 'metadata.json')
+            if not os.path.exists(meta_path):
+                # Fallback para sesiones de AutoForge guardadas por canal
+                meta_canal0 = os.path.join(measurement_dir, 'canal_0', 'metadata.json')
+                if os.path.exists(meta_canal0):
+                    meta_path = meta_canal0
+
             resistencia_ohm = 100.0
             if os.path.exists(meta_path):
                 try:
@@ -115,8 +136,7 @@ class DataLoaderThread(QThread):
             r_fija = 49400.0
             ganancia = 1.0 + (r_fija / resistencia_ohm)
             
-            # Convertir todos los canales (asumiendo que están en voltios si no están calibrados, o usar ganancia)
-            # En la versión de tkinter se divide por ganancia y * 1e6
+            # Convertir canales a microvoltios
             for c in canales:
                 df[c] = (df[c] / ganancia) * 1e6
 
