@@ -150,18 +150,36 @@ DISTINCT_PALETTE = [
     "#651fff"   # Azul índigo
 ]
 
+def _is_generic_or_mic_channel(name, idx=None):
+    """
+    Determina si un canal corresponde a un micrófono o si es el Canal 3 sin un músculo real asignado.
+    Si el usuario asignó un músculo real (ej. 'Risorio', 'Orbicularis Oris') al Canal 3, devuelve False.
+    """
+    name_str = str(name or "").strip().lower()
+    if "mic" in name_str or "audio" in name_str:
+        return True
+    generic_ch3_names = ("", "canal 3", "canal_3", "ch3", "ai3", "3", "dev1/ai3", "dev2/ai3", "dev3/ai3")
+    if idx is not None:
+        idx_str = str(idx).strip().lower()
+        is_idx_3 = (idx == 3) or (idx_str in ("3", "canal 3", "canal_3", "ch3", "ai3", "dev1/ai3", "dev2/ai3"))
+        if is_idx_3 and name_str in generic_ch3_names:
+            return True
+        return False
+    return name_str in ("canal 3", "canal_3", "ch3", "dev1/ai3", "dev2/ai3")
+
+
 def get_muscle_color(name, default=None):
     """
     Devuelve el color hex estandarizado o personalizado para un músculo dado.
-    El canal 3 / micrófono siempre se asigna a rojo (#ff0000).
+    El micrófono (o Canal 3 genérico sin músculo asignado) se asigna a rojo (#ff0000).
     """
     if not name:
         return default or "#ff0000"
         
     name_str = str(name).strip().lower()
     
-    # 1. Comprobar si es micrófono o canal 3
-    if "mic" in name_str or name_str in ("canal 3", "canal_3", "ch3", "dev1/ai3", "dev2/ai3"):
+    # 1. Comprobar si es micrófono o canal 3 genérico
+    if _is_generic_or_mic_channel(name_str):
         return "#ff0000"
         
     # 2. Comprobar si el usuario definió un color personalizado en config_general.json
@@ -202,15 +220,18 @@ def get_unique_channel_colors(channels_info):
         if isinstance(item, dict):
             musc = item.get("musculo", "")
             preferred = item.get("color_hex", None)
-            is_mic = item.get("is_mic", False) or ("mic" in str(musc).lower()) or (item.get("idx") == 3)
+            idx_val = item.get("idx", None)
+            explicit_mic = bool(item.get("is_mic", False))
+            # Solo forzar micrófono si el nombre realmente es de micrófono o genérico de Canal 3
+            is_mic = _is_generic_or_mic_channel(musc, idx=idx_val) or (explicit_mic and _is_generic_or_mic_channel(musc, idx=3))
         elif isinstance(item, (tuple, list)):
             musc = item[1] if len(item) > 1 else str(item[0])
             preferred = item[2] if len(item) > 2 else None
-            is_mic = ("mic" in str(musc).lower()) or (str(item[0]).lower() in ("canal 3", "canal_3", "3"))
+            is_mic = _is_generic_or_mic_channel(musc, idx=item[0])
         else:
             musc = str(item)
             preferred = None
-            is_mic = ("mic" in musc.lower()) or (musc.lower() in ("canal 3", "canal_3", "3"))
+            is_mic = _is_generic_or_mic_channel(musc)
 
         # El micrófono siempre recibe su color de micrófono (#ff0000)
         if is_mic:
@@ -219,11 +240,15 @@ def get_unique_channel_colors(channels_info):
             used_colors.add(mic_col.lower())
             continue
 
-        # Si el usuario especificó un color_hex personalizado en el canal, usarlo prioritariamente
-        if preferred and str(preferred).startswith("#") and str(preferred).lower() not in [c.lower() for c in used_colors]:
+        # Si el músculo tiene un color canónico y preferred era #ff0000 heredado de un Micrófono previo,
+        # priorizar el color canónico del músculo nuevo
+        canonical_col = get_muscle_color(musc, default=None)
+        if canonical_col and preferred and str(preferred).lower() == "#ff0000" and canonical_col.lower() != "#ff0000":
+            color = canonical_col
+        elif preferred and str(preferred).startswith("#") and str(preferred).lower() not in [c.lower() for c in used_colors]:
             color = preferred
         else:
-            color = get_muscle_color(musc, default=None) or preferred
+            color = canonical_col or preferred
         
         # Si el color ya fue usado o no está definido, buscar de la paleta
         if color is None or color.lower() in [c.lower() for c in used_colors]:
@@ -367,18 +392,58 @@ class ConfigManager:
 
     def get_channel_config(self, index):
         """Devuelve dict con la config del canal Ej: index=0 -> 'Canal 0'"""
-        ch_key = f"Canal {index}"
+        idx_str = str(index).strip()
+        if idx_str.lower().startswith("canal"):
+            num_part = idx_str[5:].strip()
+            ch_key = f"Canal {num_part}"
+            idx_num = int(num_part) if num_part.isdigit() else -1
+        elif idx_str.isdigit():
+            ch_key = f"Canal {idx_str}"
+            idx_num = int(idx_str)
+        else:
+            ch_key = idx_str
+            idx_num = -1
+
         canales = self.get("canales") or {}
         if ch_key in canales:
             ch_data = canales[ch_key].copy()
             musculo_nom = ch_data.get("musculo", ch_key)
-            if index == 3 or "mic" in musculo_nom.lower():
+            if _is_generic_or_mic_channel(musculo_nom, idx=idx_num):
                 ch_data["color_hex"] = "#ff0000"
             else:
                 ch_data["color_hex"] = get_muscle_color(musculo_nom, ch_data.get("color_hex", "#00ffcc"))
             return ch_data
             
         # Fallback genérico si no existe
-        if index == 3:
-            return {"musculo": "Micrófono", "color_hex": "#ff0000", "factor_calibracion": 1.0}
-        return {"musculo": ch_key, "color_hex": get_muscle_color(ch_key, "#00ffcc"), "factor_calibracion": 1.0}
+        if idx_num == 3:
+            return {"musculo": "Micrófono", "color_hex": "#ff0000", "factor_calibracion": 495.0}
+        return {"musculo": ch_key, "color_hex": get_muscle_color(ch_key, "#00ffcc"), "factor_calibracion": 495.0}
+
+    def update_channel_muscle(self, index, muscle_name, save=True):
+        """Actualiza el músculo y color canónico de un canal físico (ej. index=3 -> 'Canal 3')."""
+        idx_str = str(index).strip()
+        if idx_str.lower().startswith("canal"):
+            num_part = idx_str[5:].strip()
+            ch_key = f"Canal {num_part}"
+            idx_num = int(num_part) if num_part.isdigit() else -1
+        elif idx_str.isdigit():
+            ch_key = f"Canal {idx_str}"
+            idx_num = int(idx_str)
+        else:
+            ch_key = idx_str
+            idx_num = -1
+
+        if "canales" not in self.config or not isinstance(self.config["canales"], dict):
+            self.config["canales"] = {}
+        if ch_key not in self.config["canales"]:
+            self.config["canales"][ch_key] = {"factor_calibracion": 495.0}
+        musc_clean = str(muscle_name or "").strip() or ch_key
+        self.config["canales"][ch_key]["musculo"] = musc_clean
+        if _is_generic_or_mic_channel(musc_clean, idx=idx_num):
+            self.config["canales"][ch_key]["color_hex"] = "#ff0000"
+        else:
+            self.config["canales"][ch_key]["color_hex"] = get_muscle_color(musc_clean, "#00ffcc")
+        if save:
+            self.save_config()
+        return self.config["canales"][ch_key]
+

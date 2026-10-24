@@ -85,7 +85,38 @@ METRONOME_CONFIG_PATH = os.path.join(get_project_root(), 'metronome_config.json'
 PALABRAS_TXT_PATH = os.path.join(get_project_root(), 'palabras.txt')
 
 import json
+import re
 import subprocess
+from typing import Optional, Dict, List, Any, Union
+try:
+  import matplotlib
+  matplotlib.use('Agg')
+except Exception:
+  pass
+
+try:
+  from EMG_desarrollo.acquisition.fotometria_webcam import WebcamPhotometryManager
+except ImportError:
+  try:
+    from acquisition.fotometria_webcam import WebcamPhotometryManager
+  except ImportError:
+    try:
+      from fotometria_webcam import WebcamPhotometryManager
+    except ImportError:
+      WebcamPhotometryManager = None
+
+STANDARD_MUSCLES_LIST = [
+  "Anterior Belly of Digastric",
+  "Zygomaticus Major",
+  "Orbicularis Oris",
+  "Risorio",
+  "Modíolo",
+  "Depresor Anguli Oris",
+  "Mentoniano",
+  "Milohioideo",
+  "Masetero",
+  "Micrófono"
+]
 
 try:
   from utils.sound_utils import play_beep
@@ -246,7 +277,13 @@ class DAQThread(QThread):
         finally:
             self._is_running = False
 
-from numba import jit
+try:
+    from numba import jit
+except Exception:
+    def jit(*args, **kwargs):
+        def decorator(fn):
+            return fn
+        return decorator
 
 @jit(nopython=True, nogil=True)
 def calculate_rms_envelope(buffer: np.ndarray, window_size: int) -> np.ndarray:
@@ -592,7 +629,7 @@ def microphone_thread(chunk_samples, sample_rate, num_canales, data_queue, stop_
   finally:
     print("Cerrando hilo de micrófono.")
 
-def simulador_thread(chunk_samples, sample_rate, num_canales, data_queue, stop_event, test_freq=50, tipo_prueba="Senoidal"):
+def simulador_thread(chunk_samples, sample_rate, num_canales, data_queue, stop_event, test_freq=50, tipo_prueba="Senoidal", active_channel_indices=None):
   """
   Ejecuta la funcionalidad de simulador_thread.
 
@@ -604,11 +641,12 @@ def simulador_thread(chunk_samples, sample_rate, num_canales, data_queue, stop_e
     stop_event (Any): Argumento posicional stop_event.
     test_freq (Any): Argumento posicional test_freq.
     tipo_prueba (Any): Argumento posicional tipo_prueba.
+    active_channel_indices (list, optional): Índices físicos activos (ej. [1, 3]).
 
   Returns:
     Any: Resultado de la ejecución de la función.
   """
-  print(f"Iniciando hilo de simulación con SR={sample_rate} Hz, Tipo={tipo_prueba}...")
+  print(f"Iniciando hilo de simulación con SR={sample_rate} Hz, Tipo={tipo_prueba}, Canales físicos={active_channel_indices}...")
   
   datos_archivo = None
   total_samples_archivo = 0
@@ -627,12 +665,29 @@ def simulador_thread(chunk_samples, sample_rate, num_canales, data_queue, stop_e
         df = pd.read_csv(csv_path)
         canales_cols = [c for c in df.columns if "Canal" in c]
         if canales_cols:
-          datos_archivo = df[canales_cols].values.T
-          if datos_archivo.shape[0] < num_canales:
-            pad = np.zeros((num_canales - datos_archivo.shape[0], datos_archivo.shape[1]))
-            datos_archivo = np.vstack((datos_archivo, pad))
+          raw_all = df[canales_cols].values.T
+          if active_channel_indices and len(active_channel_indices) == num_canales:
+            selected_rows = []
+            for hw_idx in active_channel_indices:
+              col_found = None
+              for c in df.columns:
+                m_c = re.search(r'(?:Canal|ai)[_\s]*(\d+)', c, re.IGNORECASE)
+                if m_c and int(m_c.group(1)) == hw_idx:
+                  col_found = c
+                  break
+              if col_found:
+                selected_rows.append(df[col_found].values)
+              elif 0 <= hw_idx < raw_all.shape[0]:
+                selected_rows.append(raw_all[hw_idx, :])
+              else:
+                selected_rows.append(np.zeros(raw_all.shape[1]))
+            datos_archivo = np.vstack(selected_rows)
           else:
-            datos_archivo = datos_archivo[:num_canales, :]
+            if raw_all.shape[0] < num_canales:
+              pad = np.zeros((num_canales - raw_all.shape[0], raw_all.shape[1]))
+              datos_archivo = np.vstack((raw_all, pad))
+            else:
+              datos_archivo = raw_all[:num_canales, :]
           total_samples_archivo = datos_archivo.shape[1]
           print(f"Archivo de prueba cargado correctamente ({total_samples_archivo} muestras).")
         else:
@@ -771,7 +826,7 @@ def guardar_grabacion_wav(datos_completos, sample_rate, output_dir, num_canales,
 # =============================================================================
 # BLOQUE 3.2: GUARDADO DE DATOS EN .CSV (Sin cambios)
 # =============================================================================
-def guardar_grabacion_csv(datos_completos, sample_rate, output_dir, num_canales, base_name="grabacion"):
+def guardar_grabacion_csv(datos_completos, sample_rate, output_dir, num_canales, base_name="grabacion", canales_daq=None):
   """
   Ejecuta la funcionalidad de guardar_grabacion_csv.
 
@@ -781,6 +836,7 @@ def guardar_grabacion_csv(datos_completos, sample_rate, output_dir, num_canales,
     output_dir (Any): Argumento posicional output_dir.
     num_canales (Any): Argumento posicional num_canales.
     base_name (Any): Argumento posicional base_name.
+    canales_daq (list, optional): Nombres de canales DAQ (ej: ['Dev1/ai1', 'Dev1/ai3']).
 
   Returns:
     Any: Resultado de la ejecución de la función.
@@ -790,7 +846,7 @@ def guardar_grabacion_csv(datos_completos, sample_rate, output_dir, num_canales,
 
   print("Concatenando datos para CSV...")
   try:
-    grabacion = np.concatenate(datos_completos, axis=1) # (3, N)
+    grabacion = np.concatenate(datos_completos, axis=1) # (num_canales, N)
   except ValueError:
     return False
   
@@ -798,10 +854,10 @@ def guardar_grabacion_csv(datos_completos, sample_rate, output_dir, num_canales,
   num_muestras = grabacion.shape[1]
   tiempo = np.arange(num_muestras) / float(sample_rate) # (N,)
   
-  # Transponer datos de (3, N) a (N, 3)
+  # Transponer datos de (num_canales, N) a (N, num_canales)
   datos_t = grabacion.T
   
-  # Apilar tiempo y datos: (N, 1) + (N, 3) -> (N, 4)
+  # Apilar tiempo y datos: (N, 1) + (N, num_canales) -> (N, num_canales + 1)
   datos_para_csv = np.hstack((tiempo.reshape(-1, 1), datos_t))
   
   # Definir nombre de archivo
@@ -810,7 +866,15 @@ def guardar_grabacion_csv(datos_completos, sample_rate, output_dir, num_canales,
   # Guardar
   try:
     print(f"Guardando CSV en: {nombre_archivo_csv}...")
-    headers = "Tiempo (s)," + ",".join([f"Canal {i}" for i in range(num_canales)])
+    col_names = []
+    for i in range(num_canales):
+      if canales_daq and i < len(canales_daq):
+        m_ai = re.search(r"ai(\d+)", str(canales_daq[i]), re.IGNORECASE)
+        hw_idx = int(m_ai.group(1)) if m_ai else i
+        col_names.append(f"Canal {hw_idx}")
+      else:
+        col_names.append(f"Canal {i}")
+    headers = "Tiempo (s)," + ",".join(col_names)
     np.savetxt(
       nombre_archivo_csv, 
       datos_para_csv, 
@@ -893,8 +957,11 @@ def generar_grafico_grabacion(datos_completos, sample_rate, output_dir, num_cana
 
   ch_info_list = []
   for i in range(num_canales):
-    nom_limpio = f"Canal {i}"
-    ch_conf = canales_config.get(nom_limpio, {})
+    daq_name = canales_daq[i] if (canales_daq and i < len(canales_daq)) else f"Canal {i}"
+    m_ai = re.search(r"ai(\d+)", str(daq_name), re.IGNORECASE)
+    hw_idx = int(m_ai.group(1)) if m_ai else i
+    nom_limpio = f"Canal {hw_idx}"
+    ch_conf = canales_config.get(nom_limpio, canales_config.get(f"Canal {i}", {}))
     musculo = ch_conf.get("musculo", nom_limpio)
     ganancia = ch_conf.get("factor_calibracion", 495.0)
     color_hex = ch_conf.get("color_hex")
@@ -917,11 +984,12 @@ def generar_grafico_grabacion(datos_completos, sample_rate, output_dir, num_cana
       except Exception:
         pass
 
-    daq_name = canales_daq[i] if i < len(canales_daq) else nom_limpio
-    is_mic = (i == 3 or "mic" in musculo.lower() or "audio" in musculo.lower() or "mic" in daq_name.lower())
+    m_low = str(musculo or "").strip().lower()
+    is_generic_ch3 = (hw_idx == 3 and m_low in ("", "canal 3", "canal_3", "ch3", "ai3", "dev1/ai3", "dev2/ai3"))
+    is_mic = ("mic" in m_low or "audio" in m_low or "mic" in str(daq_name).lower() or is_generic_ch3)
     
     ch_info_list.append({
-      "idx": i,
+      "idx": hw_idx,
       "col_name": nom_limpio,
       "daq_name": daq_name,
       "musculo": musculo,
@@ -968,6 +1036,7 @@ def generar_grafico_grabacion(datos_completos, sample_rate, output_dir, num_cana
 
     processed_channels.append({
       "idx": i,
+      "hw_idx": ch_meta["idx"],
       "musculo": ch_meta["musculo"],
       "daq_name": ch_meta["daq_name"],
       "color_hex": color_hex,
@@ -1106,7 +1175,8 @@ def generar_grafico_grabacion(datos_completos, sample_rate, output_dir, num_cana
                 fontweight='bold', alpha=0.95, zorder=6)
 
     # Títulos y ejes
-    tit = f"{musculo} (Cruda)" if not is_mic else musculo
+    hw_ch = ch.get("hw_idx", i)
+    tit = f"ai{hw_ch} - {musculo} (Cruda)" if not is_mic else f"ai{hw_ch} - {musculo}"
     ax.set_title(tit, fontsize=21, color='white', pad=6)
     ax.set_ylabel("Amplitud (µV)" if not is_mic else "Micrófono", fontsize=21, color='white')
     ax.grid(False)
@@ -1137,18 +1207,21 @@ def generar_grafico_grabacion(datos_completos, sample_rate, output_dir, num_cana
 # =============================================================================
 def generar_grafico_estadisticas(stats_time, stats_snr, stats_noise_mean, stats_noise_std, output_dir, num_canales, canales_daq, base_name="estadisticas_evolucion"):
   """
-  Genera el gráfico de evolución temporal de estadísticas (SNR y Ruido inter-pulso).
+  Genera el gráfico de evolución temporal de estadísticas (SNR y Ruido inter-pulso) de manera thread-safe.
   """
   hay_datos = any(len(t) > 0 for t in stats_time) if stats_time else False
   if not hay_datos:
     return False
 
   try:
-    import matplotlib.pyplot as plt
+    from matplotlib.figure import Figure
+    from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
   except ImportError:
     return False
 
-  fig, axs = plt.subplots(num_canales, 2, figsize=(15, 4 * num_canales), squeeze=False)
+  fig = Figure(figsize=(15, max(4, 4 * num_canales)))
+  canvas = FigureCanvas(fig)
+  axs = fig.subplots(num_canales, 2, squeeze=False)
   fig.suptitle("Evolución Temporal: SNR y Ruido Inter-pulso", fontsize=16)
 
   for i in range(num_canales):
@@ -1169,10 +1242,12 @@ def generar_grafico_estadisticas(stats_time, stats_snr, stats_noise_mean, stats_
     noise_std_plot = np.array(stats_noise_std[i])[mask]
 
     daq_ch_name = canales_daq[i] if (canales_daq and i < len(canales_daq)) else f"CH{i}"
+    m_ai = re.search(r"ai(\d+)", str(daq_ch_name), re.IGNORECASE)
+    hw_idx = int(m_ai.group(1)) if m_ai else i
 
     # Subplot Izquierdo: SNR
     axs[i, 0].plot(t_plot, snr_plot, marker='o', linestyle='-', color='b', linewidth=2)
-    axs[i, 0].set_title(f"Canal {i} ({daq_ch_name}) - Evolución SNR Promedio")
+    axs[i, 0].set_title(f"ai{hw_idx} ({daq_ch_name}) - Evolución SNR Promedio")
     axs[i, 0].set_xlabel("Tiempo de Señal (s)")
     axs[i, 0].set_ylabel("SNR Promedio Acumulado")
     axs[i, 0].grid(True, alpha=0.5)
@@ -1180,18 +1255,23 @@ def generar_grafico_estadisticas(stats_time, stats_snr, stats_noise_mean, stats_
     # Subplot Derecho: Ruido
     axs[i, 1].plot(t_plot, noise_mean_plot, marker='o', linestyle='-', color='r', label='Promedio (x̄)', linewidth=2)
     axs[i, 1].plot(t_plot, noise_std_plot, marker='x', linestyle='--', color='orange', label='Desviación (σ)', linewidth=2)
-    axs[i, 1].set_title(f"Canal {i} ({daq_ch_name}) - Evolución Ruido Inter-pulso")
+    axs[i, 1].set_title(f"ai{hw_idx} ({daq_ch_name}) - Evolución Ruido Inter-pulso")
     axs[i, 1].set_xlabel("Tiempo de Señal (s)")
     axs[i, 1].set_ylabel("Amplitud (µV)")
     axs[i, 1].legend()
     axs[i, 1].grid(True, alpha=0.5)
 
   nombre_archivo = os.path.join(output_dir, f"{base_name}.png")
-  plt.tight_layout(rect=[0, 0.03, 1, 0.96])
-  plt.savefig(nombre_archivo, dpi=200)
-  plt.close(fig)
-  print(f"  Gráfico de estadísticas guardado como: {nombre_archivo}")
-  return True
+  try:
+    fig.tight_layout(rect=[0, 0.03, 1, 0.96])
+    fig.savefig(nombre_archivo, dpi=200)
+    print(f"  Gráfico de estadísticas guardado como: {nombre_archivo}")
+    return True
+  except Exception as e:
+    print(f"  Error al guardar gráfico de estadísticas: {e}")
+    return False
+  finally:
+    fig.clf()
 
 
 # =============================================================================
@@ -1297,28 +1377,18 @@ class SaveMeasurementDialog(QtWidgets.QDialog):
   Un diálogo personalizado para guardar mediciones con dos formatos:
   1. Medición de Prueba (nombre aleatorio).
   2. Medición Formal (formato estructurado: Letra_Prueba_Sujeto).
+  Permite agregar Notas/Comentarios tanto en mediciones de prueba como formales.
   """
   def __init__(self, parent=None):
-    """
-    Ejecuta la funcionalidad de __init__.
-
-    Args:
-      parent (Any): Argumento posicional parent.
-
-    Returns:
-      Any: Resultado de la ejecución de la función.
-    """
     super().__init__(parent)
     self.setWindowTitle("Ñandú LSD - Guardar Medición")
-    self.setMinimumWidth(350)
+    self.setMinimumWidth(420)
     self.layout = QtWidgets.QVBoxLayout(self)
     self.measurement_name = ""
-    # --- NUEVO: Guardar los componentes del nombre por separado ---
     self.sujeto = ""
     self.letra = ""
     self.prueba = ""
     self.es_formal = False
-    # --- NUEVO: Campo para el comentario ---
     self.comentario = ""
 
     # Grupo de Radio Buttons para seleccionar el tipo
@@ -1341,11 +1411,19 @@ class SaveMeasurementDialog(QtWidgets.QDialog):
     self.formal_layout.addRow("Letra:", self.edit_letra)
     self.formal_layout.addRow("Prueba:", self.edit_prueba)
     self.formal_layout.addRow("Sujeto:", self.edit_sujeto)
-    # --- NUEVO: Añadir campo de comentario al layout formal ---
-    self.edit_comentario = QtWidgets.QLineEdit()
-    self.formal_layout.addRow("Comentario:", self.edit_comentario)
     self.formal_group.setLayout(self.formal_layout)
     self.layout.addWidget(self.formal_group)
+
+    # Grupo de Notas / Comentario (siempre habilitado para Prueba y Formal)
+    self.notes_group = QtWidgets.QGroupBox("Notas / Comentario del Experimento")
+    self.notes_layout = QtWidgets.QVBoxLayout(self.notes_group)
+    self.edit_comentario = QtWidgets.QPlainTextEdit()
+    self.edit_comentario.setPlaceholderText("Posición de electrodos, preparación de piel, observaciones sobre /O/ vs /U/, etc.")
+    self.edit_comentario.setFixedHeight(80)
+    if parent is not None and hasattr(parent, 'txt_notas_live'):
+      self.edit_comentario.setPlainText(parent.txt_notas_live.toPlainText().strip())
+    self.notes_layout.addWidget(self.edit_comentario)
+    self.layout.addWidget(self.notes_group)
 
     # Botones de OK y Cancelar
     self.button_box = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
@@ -1365,12 +1443,18 @@ class SaveMeasurementDialog(QtWidgets.QDialog):
 
   def on_accept(self):
     """Construye el nombre del archivo al presionar OK."""
+    self.comentario = self.edit_comentario.toPlainText().strip()
+    if self.parent() is not None:
+      p = self.parent()
+      if hasattr(p, 'txt_notas_live') and self.comentario:
+        p.txt_notas_live.setPlainText(self.comentario)
+      p.notas_experimento = self.comentario
+
     if self.radio_formal.isChecked():
       self.es_formal = True
-      self.letra = self.edit_letra.text()
-      self.prueba = self.edit_prueba.text()
-      self.sujeto = self.edit_sujeto.text()
-      self.comentario = self.edit_comentario.text() # Guardar el comentario
+      self.letra = self.edit_letra.text().strip()
+      self.prueba = self.edit_prueba.text().strip()
+      self.sujeto = self.edit_sujeto.text().strip()
       self.measurement_name = f"{self.letra}_{self.prueba}_{self.sujeto}"
     else:
       self.es_formal = False
@@ -1378,7 +1462,6 @@ class SaveMeasurementDialog(QtWidgets.QDialog):
       self.sujeto = "prueba"
       self.letra = ""
       self.prueba = ""
-      self.comentario = "" # Sin comentario para mediciones de prueba
     self.accept()
 
 
@@ -1389,30 +1472,21 @@ class AutoForgeDialog(QtWidgets.QDialog):
   Representa y gestiona las operaciones relacionadas con AutoForgeDialog.
   """
   def __init__(self, parent=None):
-    """
-    Ejecuta la funcionalidad de __init__.
-
-    Args:
-      parent (Any): Argumento posicional parent.
-
-    Returns:
-      Any: Resultado de la ejecución de la función.
-    """
     super().__init__(parent)
     self.setWindowTitle("Ñandú LSD - Configuración de Autograbado")
-    self.setMinimumWidth(380)
+    self.setMinimumWidth(440)
     self.setStyleSheet("""
       QDialog { background-color: #0d0d0d; color: #00ffff; font-family: 'Courier New', monospace; }
       QLabel { color: #00ffcc; font-weight: bold; }
-      QLineEdit, QSpinBox, QComboBox { background-color: #1a1a1a; color: #00ffcc; border: 1px solid #00ffcc; padding: 4px; border-radius: 3px; }
+      QLineEdit, QSpinBox, QComboBox, QPlainTextEdit { background-color: #1a1a1a; color: #00ffcc; border: 1px solid #00ffcc; padding: 4px; border-radius: 3px; }
       QGroupBox { border: 1px solid #ff00ff; border-radius: 4px; margin-top: 10px; padding-top: 10px; font-weight: bold; color: #ff00ff; }
       QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 0 5px; }
     """)
     
     self.layout = QtWidgets.QFormLayout(self)
     
-    self.edit_prueba = QtWidgets.QLineEdit("Prueba1")
-    self.edit_sujeto = QtWidgets.QLineEdit("Sujeto1")
+    self.edit_prueba = QtWidgets.QLineEdit(getattr(parent, 'autoforge_prueba', "Prueba1") or "Prueba1")
+    self.edit_sujeto = QtWidgets.QLineEdit(getattr(parent, 'autoforge_sujeto', "Sujeto1") or "Sujeto1")
     self.spin_reps = QtWidgets.QSpinBox()
     self.spin_reps.setRange(1, 1000)
     self.spin_reps.setValue(5)
@@ -1425,10 +1499,22 @@ class AutoForgeDialog(QtWidgets.QDialog):
     self.layout.addRow("Repeticiones:", self.spin_reps)
     self.layout.addRow("BPM Metrónomo:", self.spin_bpm)
     
-    self.chk_calibrar_cvm = QtWidgets.QCheckBox("Calibrar Contracción Máxima (A, I, O)")
+    self.chk_calibrar_cvm = QtWidgets.QCheckBox("Calibrar Contracción Máxima (A, I, U)")
     self.chk_calibrar_cvm.setChecked(True)
     self.chk_calibrar_cvm.setStyleSheet("color: #00ffcc; font-weight: bold;")
     self.layout.addRow("Calibración CVM:", self.chk_calibrar_cvm)
+
+    # --- Fotometría Webcam 3D ---
+    photo_mgr = getattr(parent, 'photometry_mgr', None)
+    self.chk_fotometria = QtWidgets.QCheckBox("Habilitar Fotometría Automática y Asistente Facial 3D (Webcam)")
+    self.chk_fotometria.setChecked(bool(photo_mgr and getattr(photo_mgr, 'is_enabled', False)))
+    self.chk_fotometria.setStyleSheet("color: #00e5ff; font-weight: bold;")
+    self.layout.addRow("Fotometría 3D:", self.chk_fotometria)
+
+    self.chk_fotometria_video = QtWidgets.QCheckBox("Grabar también clip de video (.mp4) por toma")
+    self.chk_fotometria_video.setChecked(bool(photo_mgr and (getattr(photo_mgr, 'record_video_clips', False) or getattr(photo_mgr, 'record_video_clip', False))))
+    self.chk_fotometria_video.setStyleSheet("color: #aaddff;")
+    self.layout.addRow("Video por Toma:", self.chk_fotometria_video)
     
     self.btn_edit_words = QtWidgets.QPushButton(" Editar Palabras")
     self.btn_edit_words.setStyleSheet("background-color: #333333; color: white; font-weight: bold; font-family: 'Courier New'; font-size: 14px; padding: 5px; border: 2px solid #555555; border-radius: 4px;")
@@ -1436,21 +1522,29 @@ class AutoForgeDialog(QtWidgets.QDialog):
     self.layout.addRow("", self.btn_edit_words)
 
     # --- Asignación de Músculos ---
-    self.group_muscles = QtWidgets.QGroupBox("Asignación de Músculos")
+    self.group_muscles = QtWidgets.QGroupBox("Asignación de Músculos (Canales Físicos Activos)")
     self.layout_muscles = QtWidgets.QFormLayout(self.group_muscles)
     self.muscle_inputs = []
     
-    num_chans = getattr(parent, 'NUM_CANALES', 4)
+    active_indices = getattr(parent, 'active_channel_indices', None)
+    if not active_indices:
+      num_chans = getattr(parent, 'NUM_CANALES', 4) or 4
+      active_indices = list(range(num_chans))
+    else:
+      num_chans = len(active_indices)
     parent_muscles = getattr(parent, 'nombres_musculos', [])
+    parent_muscles_hw = getattr(parent, 'nombres_musculos_hw', [])
     
-    musculos_sugeridos = [
-      "Masetero", "Risorio", "Depresor", "Micrófono", 
-      "Vientre Anterior del Digástrico", "Orbicular de los Labios", 
-      "Cigomático Mayor", "Temporal"
-    ]
+    musculos_sugeridos = list(STANDARD_MUSCLES_LIST)
     
     for i in range(num_chans):
-      default_val = parent_muscles[i] if i < len(parent_muscles) else f"Canal {i}"
+      hw_idx = active_indices[i] if i < len(active_indices) else i
+      if i < len(parent_muscles) and parent_muscles[i]:
+        default_val = parent_muscles[i]
+      elif hw_idx < len(parent_muscles_hw) and parent_muscles_hw[hw_idx]:
+        default_val = parent_muscles_hw[hw_idx]
+      else:
+        default_val = f"Canal {hw_idx}"
       cmb = QtWidgets.QComboBox()
       cmb.setEditable(True)
       for m in musculos_sugeridos:
@@ -1459,11 +1553,19 @@ class AutoForgeDialog(QtWidgets.QDialog):
         cmb.insertItem(0, default_val)
       cmb.setCurrentText(default_val)
       
-      lbl = QtWidgets.QLabel(f"Canal {i}:")
+      lbl = QtWidgets.QLabel(f"ai{hw_idx} (Canal {hw_idx}):")
       self.layout_muscles.addRow(lbl, cmb)
       self.muscle_inputs.append(cmb)
       
     self.layout.addRow(self.group_muscles)
+
+    # --- Notas del Experimento ---
+    self.edit_notas = QtWidgets.QPlainTextEdit()
+    self.edit_notas.setPlaceholderText("Observaciones sobre posición de electrodos, piel/gel, separabilidad /O/-/U/, ruido 50Hz...")
+    self.edit_notas.setFixedHeight(68)
+    if parent is not None and hasattr(parent, 'txt_notas_live'):
+      self.edit_notas.setPlainText(parent.txt_notas_live.toPlainText().strip())
+    self.layout.addRow("Notas Experimento:", self.edit_notas)
     
     self.buttonBox = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
     self.buttonBox.accepted.connect(self.accept)
@@ -1474,18 +1576,11 @@ class AutoForgeDialog(QtWidgets.QDialog):
     return [inp.currentText().strip() for inp in self.muscle_inputs]
 
   def abrir_editor_palabras(self):
-    """
-    Ejecuta la funcionalidad de abrir_editor_palabras.
-
-    Returns:
-      Any: Resultado de la ejecución de la función.
-    """
     ruta_palabras = PALABRAS_TXT_PATH
     if not os.path.exists(ruta_palabras):
       with open(ruta_palabras, 'w', encoding='utf-8') as f:
         f.write("A\nE\nI\nO\nU\n")
     
-    # Crear un QDialog nativo en lugar de abrir Notepad
     dialog = QtWidgets.QDialog(self)
     dialog.setWindowTitle("Editor de Palabras (AutoForge)")
     dialog.resize(300, 400)
@@ -1506,10 +1601,767 @@ class AutoForgeDialog(QtWidgets.QDialog):
     
     if dialog.exec() == QtWidgets.QDialog.Accepted:
       with open(ruta_palabras, 'w', encoding='utf-8') as f:
-        # Asegurar que termina en nueva línea
         texto_guardar = text_edit.toPlainText().strip() + "\n"
         f.write(texto_guardar)
       QtWidgets.QMessageBox.information(self, "Guardado", "Lista de palabras guardada con éxito.")
+
+
+class TestSeparabilidadVocalesDialog(QtWidgets.QDialog):
+  """
+  Tester interactivo multiclase de separabilidad biomecánica/eléctrica para las 5 vocales
+  (A, E, I, O, U) con múltiples repeticiones guiadas por metrónomo, proyección 2D PCA,
+  matrices 5x5 (ángulo direccional, distancia de Fisher, matriz de confusión validada Leave-One-Out)
+  y detector de Crosstalk por correlación cruzada a lag cero.
+  """
+  def __init__(self, parent=None):
+    super().__init__(parent)
+    self.parent_plotter = parent
+    self.setWindowTitle("Test de Separabilidad Multiclase 5 Vocales (A, E, I, O, U) y Crosstalk")
+    self.resize(1040, 780)
+    self.setStyleSheet("""
+      QDialog { background-color: #08080c; color: #e0f7fa; font-family: 'Consolas', 'Courier New', monospace; }
+      QLabel { color: #00ffcc; font-size: 12px; }
+      QGroupBox { border: 1.5px solid #00e5ff; border-radius: 5px; margin-top: 10px; padding-top: 10px; font-weight: bold; color: #00e5ff; }
+      QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 0 5px; }
+      QPushButton { background-color: #141424; color: #00ffcc; border: 1.5px solid #00ffcc; padding: 6px 12px; border-radius: 4px; font-weight: bold; font-size: 12px; }
+      QPushButton:hover { background-color: #00ffcc; color: #000000; }
+      QPushButton:disabled { background-color: #101015; color: #555555; border-color: #333344; }
+      QTextEdit { background-color: #050508; color: #ffffff; border: 1px solid #333344; font-family: 'Consolas', monospace; font-size: 11px; }
+      QCheckBox { color: #00ffcc; font-weight: bold; spacing: 5px; font-size: 12px; }
+      QSpinBox, QComboBox { background-color: #101018; color: #00ffcc; border: 1px solid #00e5ff; padding: 4px; border-radius: 3px; font-weight: bold; }
+    """)
+
+    self.VOCAL_COLORS = {
+      'A': '#00ffff',
+      'E': '#ff00ff',
+      'I': '#ffff00',
+      'O': '#ff8800',
+      'U': '#00ff66',
+    }
+    self.vocales_list = ['A', 'E', 'I', 'O', 'U']
+    self.samples = []  # Lista de dicts: {'vocal': str, 'x': np.ndarray, 'raw': np.ndarray, 'rep': int}
+    self.is_protocol_running = False
+    self.protocol_steps = []
+    self.step_idx = 0
+    self.protocol_timer = QtCore.QTimer(self)
+    self.protocol_timer.timeout.connect(self._avanzar_paso_protocolo)
+    self.last_metrics = None
+    self.last_report_text = ""
+
+    main_layout = QtWidgets.QVBoxLayout(self)
+
+    # Introducción
+    lbl_intro = QtWidgets.QLabel(
+      "<b>Evaluación Multiclase de Ortogonalidad y Crosstalk para 5 Vocales (A, E, I, O, U):</b><br>"
+      "Evalúa separabilidad global y por pares (vigilando O-U, A-E, E-I, A-I) con múltiples repeticiones "
+      "para diagnosticar el posicionamiento de los electrodos y evitar confusiones cruzadas."
+    )
+    lbl_intro.setWordWrap(True)
+    lbl_intro.setStyleSheet("color: #ffffff; font-size: 12px; padding: 4px;")
+    main_layout.addWidget(lbl_intro)
+
+    # Splitter central: Izquierda (Controles + Diagnóstico + Reporte) | Derecha (Proyección 2D PCA)
+    splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
+    left_widget = QtWidgets.QWidget()
+    left_layout = QtWidgets.QVBoxLayout(left_widget)
+    left_layout.setContentsMargins(0, 0, 4, 0)
+
+    # --- Grupo Configuración ---
+    grp_cfg = QtWidgets.QGroupBox("1. Vocales y Configuración de Repeticiones")
+    cfg_layout = QtWidgets.QVBoxLayout(grp_cfg)
+
+    # Checkboxes de vocales (las 5 activas por defecto)
+    chk_row = QtWidgets.QHBoxLayout()
+    chk_row.addWidget(QtWidgets.QLabel("Vocales activas:"))
+    self.vocal_checkboxes = {}
+    for v in self.vocales_list:
+      cb = QtWidgets.QCheckBox(f"/{v}/")
+      cb.setChecked(True)
+      col = self.VOCAL_COLORS.get(v, "#00ffcc")
+      cb.setStyleSheet(f"color: {col}; font-weight: bold;")
+      self.vocal_checkboxes[v] = cb
+      chk_row.addWidget(cb)
+    chk_row.addStretch(1)
+    cfg_layout.addLayout(chk_row)
+
+    # Parámetros: repeticiones y modo
+    params_row = QtWidgets.QHBoxLayout()
+    params_row.addWidget(QtWidgets.QLabel("Reps / Vocal:"))
+    self.spin_reps = QtWidgets.QSpinBox()
+    self.spin_reps.setRange(2, 50)
+    self.spin_reps.setValue(12)  # Por defecto 12 a 15 repeticiones
+    self.spin_reps.setFixedWidth(65)
+    params_row.addWidget(self.spin_reps)
+
+    params_row.addSpacing(10)
+    params_row.addWidget(QtWidgets.QLabel("Modo:"))
+    self.cmb_mode = QtWidgets.QComboBox()
+    self.cmb_mode.addItems(["Alternada (Anti-fatiga)", "Por Bloques"])
+    params_row.addWidget(self.cmb_mode)
+    params_row.addStretch(1)
+    cfg_layout.addLayout(params_row)
+
+    # Botones de inicio de protocolo guiado y control de datos
+    btn_ctrl_row = QtWidgets.QHBoxLayout()
+    self.btn_iniciar = QtWidgets.QPushButton("Iniciar Protocolo Guiado")
+    self.btn_iniciar.clicked.connect(self._toggle_protocolo_guiado)
+    self.btn_sumar_tanda = QtWidgets.QPushButton("+ Sumar Tanda (+5 Reps)")
+    self.btn_sumar_tanda.clicked.connect(self._sumar_tanda)
+    self.btn_limpiar = QtWidgets.QPushButton("Limpiar Datos")
+    self.btn_limpiar.clicked.connect(self._limpiar_datos)
+    btn_ctrl_row.addWidget(self.btn_iniciar)
+    btn_ctrl_row.addWidget(self.btn_sumar_tanda)
+    btn_ctrl_row.addWidget(self.btn_limpiar)
+    cfg_layout.addLayout(btn_ctrl_row)
+
+    # Botones de captura manual rápida individual
+    man_row = QtWidgets.QHBoxLayout()
+    man_row.addWidget(QtWidgets.QLabel("Captura Rápida Individual:"))
+    for v in self.vocales_list:
+      b = QtWidgets.QPushButton(f"+ /{v}/")
+      col = self.VOCAL_COLORS.get(v, "#00ffcc")
+      b.setStyleSheet(f"QPushButton {{ background-color: #111122; color: {col}; border: 1px solid {col}; padding: 3px 8px; font-weight: bold; font-size: 11px; }} QPushButton:hover {{ background-color: {col}; color: #000000; }}")
+      b.clicked.connect(lambda _, voc=v: self._capturar_muestra_manual(voc))
+      man_row.addWidget(b)
+    man_row.addStretch(1)
+    cfg_layout.addLayout(man_row)
+
+    left_layout.addWidget(grp_cfg)
+
+    # --- Estado y Barra de Progreso ---
+    self.lbl_status = QtWidgets.QLabel("Estado: Esperando inicio de protocolo...")
+    self.lbl_status.setAlignment(QtCore.Qt.AlignCenter)
+    self.lbl_status.setStyleSheet("background-color: #111118; color: #ffaa00; font-size: 13px; font-weight: bold; padding: 6px; border: 1px solid #ffaa00; border-radius: 4px;")
+    left_layout.addWidget(self.lbl_status)
+
+    self.prog_bar = QtWidgets.QProgressBar()
+    self.prog_bar.setRange(0, 100)
+    self.prog_bar.setValue(0)
+    self.prog_bar.setFixedHeight(16)
+    self.prog_bar.setStyleSheet("""
+      QProgressBar { border: 1px solid #333344; border-radius: 3px; text-align: center; color: white; background-color: #05050a; font-size: 10px; font-weight: bold; }
+      QProgressBar::chunk { background-color: #00e5ff; }
+    """)
+    left_layout.addWidget(self.prog_bar)
+
+    # --- Semáforo de Diagnóstico ---
+    self.lbl_semaforo = QtWidgets.QLabel("SEMAFORO DE DIAGNOSTICO: Pendiente de datos suficientes")
+    self.lbl_semaforo.setAlignment(QtCore.Qt.AlignCenter)
+    self.lbl_semaforo.setWordWrap(True)
+    self.lbl_semaforo.setStyleSheet("background-color: #151515; color: #aaaaaa; font-size: 14px; font-weight: bold; padding: 8px; border: 2px solid #444444; border-radius: 5px;")
+    left_layout.addWidget(self.lbl_semaforo)
+
+    # --- Reporte Textual Consolidado ---
+    self.txt_resultados = QtWidgets.QTextEdit()
+    self.txt_resultados.setReadOnly(True)
+    left_layout.addWidget(self.txt_resultados, stretch=1)
+
+    splitter.addWidget(left_widget)
+
+    # --- Lado Derecho: Proyección 2D PCA de las 5 Nubes Vocálicas ---
+    right_widget = QtWidgets.QWidget()
+    right_layout = QtWidgets.QVBoxLayout(right_widget)
+    right_layout.setContentsMargins(4, 0, 0, 0)
+
+    grp_plot = QtWidgets.QGroupBox("2. Proyeccion 2D PCA - Separacion de Nubes Vocalicas")
+    plot_box_layout = QtWidgets.QVBoxLayout(grp_plot)
+
+    self.plot_widget = pg.PlotWidget()
+    self.plot_widget.setBackground('#05050a')
+    self.plot_widget.showGrid(x=True, y=True, alpha=0.3)
+    self.plot_widget.setLabel('bottom', 'Componente Principal 1 (PC1)')
+    self.plot_widget.setLabel('left', 'Componente Principal 2 (PC2)')
+    plot_box_layout.addWidget(self.plot_widget, stretch=1)
+
+    self.lbl_pca_info = QtWidgets.QLabel("Varianza explicada: PC1 = --%, PC2 = --% | Total Muestras = 0")
+    self.lbl_pca_info.setStyleSheet("color: #aaddff; font-size: 11px;")
+    plot_box_layout.addWidget(self.lbl_pca_info)
+
+    right_layout.addWidget(grp_plot)
+    splitter.addWidget(right_widget)
+    splitter.setSizes([560, 460])
+    main_layout.addWidget(splitter, stretch=1)
+
+    # --- Fila Inferior de Acciones ---
+    bottom_row = QtWidgets.QHBoxLayout()
+    self.btn_anexar = QtWidgets.QPushButton("Anexar Diagnostico a Notas y Metadata")
+    self.btn_anexar.setEnabled(False)
+    self.btn_anexar.setStyleSheet("background-color: #002b22; color: #00ffcc; border: 2px solid #00ffcc; padding: 8px 16px; font-weight: bold; font-size: 13px;")
+    self.btn_anexar.clicked.connect(self._anexar_a_notas)
+
+    btn_cerrar = QtWidgets.QPushButton("Cerrar")
+    btn_cerrar.clicked.connect(self.close)
+
+    bottom_row.addWidget(self.btn_anexar)
+    bottom_row.addStretch()
+    bottom_row.addWidget(btn_cerrar)
+    main_layout.addLayout(bottom_row)
+
+  def _limpiar_datos(self):
+    """Reinicia todas las muestras capturadas y el visor gráfico."""
+    if self.is_protocol_running:
+      self._toggle_protocolo_guiado()
+    self.samples.clear()
+    self.plot_widget.clear()
+    self.lbl_pca_info.setText("Varianza explicada: PC1 = --%, PC2 = --% | Total Muestras = 0")
+    self.prog_bar.setValue(0)
+    self.lbl_status.setText("Estado: Datos reiniciados. Listo para iniciar nueva toma.")
+    self.lbl_status.setStyleSheet("background-color: #111118; color: #ffaa00; font-size: 13px; font-weight: bold; padding: 6px; border: 1px solid #ffaa00; border-radius: 4px;")
+    self.lbl_semaforo.setText("SEMAFORO DE DIAGNOSTICO: Pendiente de datos suficientes")
+    self.lbl_semaforo.setStyleSheet("background-color: #151515; color: #aaaaaa; font-size: 14px; font-weight: bold; padding: 8px; border: 2px solid #444444; border-radius: 5px;")
+    self.txt_resultados.clear()
+    self.btn_anexar.setEnabled(False)
+
+  def _sumar_tanda(self):
+    """Suma 5 repeticiones adicionales a las vocales activas."""
+    if self.is_protocol_running:
+      return
+    vocales_activas = [v for v in self.vocales_list if self.vocal_checkboxes[v].isChecked()]
+    if len(vocales_activas) < 2:
+      QtWidgets.QMessageBox.warning(self, "Selección Insuficiente", "Seleccione al menos 2 vocales.")
+      return
+    self._iniciar_secuencia_protocolo(vocales_activas, n_reps=5, append_mode=True)
+
+  def _toggle_protocolo_guiado(self):
+    """Inicia o detiene el protocolo guiado por metrónomo."""
+    if self.is_protocol_running:
+      self.protocol_timer.stop()
+      self.is_protocol_running = False
+      self.btn_iniciar.setText("Iniciar Protocolo Guiado")
+      self.btn_iniciar.setStyleSheet("background-color: #141424; color: #00ffcc; border: 1.5px solid #00ffcc; padding: 6px 12px; font-weight: bold;")
+      self.lbl_status.setText("Estado: Protocolo detenido por el usuario.")
+      self.lbl_status.setStyleSheet("background-color: #221100; color: #ffaa00; font-size: 13px; font-weight: bold; padding: 6px; border: 1px solid #ffaa00; border-radius: 4px;")
+      if len(self.samples) >= 2:
+        self._calcular_metricas_multiclase()
+      return
+
+    p = self.parent_plotter
+    if p is None or not getattr(p, 'is_acquiring', False) or p.plot_buffer_datos is None:
+      QtWidgets.QMessageBox.warning(
+        self, "Adquisición Inactiva",
+        "Inicie primero la adquisición ('Iniciar Adquisición') en la ventana principal para capturar sEMG."
+      )
+      return
+
+    vocales_activas = [v for v in self.vocales_list if self.vocal_checkboxes[v].isChecked()]
+    if len(vocales_activas) < 2:
+      QtWidgets.QMessageBox.warning(
+        self, "Selección Insuficiente",
+        "Seleccione al menos 2 vocales (por defecto las 5 vocales A, E, I, O, U) para evaluar separabilidad."
+      )
+      return
+
+    n_reps = self.spin_reps.value()
+    self._iniciar_secuencia_protocolo(vocales_activas, n_reps=n_reps, append_mode=False)
+
+  def _iniciar_secuencia_protocolo(self, vocales_activas, n_reps=12, append_mode=False):
+    if not append_mode:
+      self.samples.clear()
+
+    sequence = []
+    if self.cmb_mode.currentText().startswith("Alternada"):
+      for r in range(1, n_reps + 1):
+        for v in vocales_activas:
+          sequence.append((v, r, n_reps))
+    else:
+      for v in vocales_activas:
+        for r in range(1, n_reps + 1):
+          sequence.append((v, r, n_reps))
+
+    self.protocol_steps = []
+    # Cuenta regresiva inicial de 3 segundos
+    self.protocol_steps.append({'phase': 'countdown', 'count': 3, 'dur_ms': 1000})
+    self.protocol_steps.append({'phase': 'countdown', 'count': 2, 'dur_ms': 1000})
+    self.protocol_steps.append({'phase': 'countdown', 'count': 1, 'dur_ms': 1000})
+
+    for v, r, tot in sequence:
+      self.protocol_steps.append({'phase': 'prep', 'vocal': v, 'rep': r, 'total': tot, 'dur_ms': 1000})
+      self.protocol_steps.append({'phase': 'action', 'vocal': v, 'rep': r, 'total': tot, 'dur_ms': 1500})
+
+    self.step_idx = 0
+    self.is_protocol_running = True
+    self.btn_iniciar.setText("Detener Protocolo")
+    self.btn_iniciar.setStyleSheet("background-color: #3b0011; color: #ff4466; border: 1.5px solid #ff4466; padding: 6px 12px; font-weight: bold;")
+    self._avanzar_paso_protocolo()
+
+  def _avanzar_paso_protocolo(self):
+    if not self.is_protocol_running:
+      return
+
+    if self.step_idx >= len(self.protocol_steps):
+      self.is_protocol_running = False
+      self.btn_iniciar.setText("Iniciar Protocolo Guiado")
+      self.btn_iniciar.setStyleSheet("background-color: #141424; color: #00ffcc; border: 1.5px solid #00ffcc; padding: 6px 12px; font-weight: bold;")
+      self.prog_bar.setValue(100)
+      self.lbl_status.setText("Estado: Protocolo completado. Calculando métricas multiclase...")
+      self.lbl_status.setStyleSheet("background-color: #002211; color: #00ffcc; font-size: 13px; font-weight: bold; padding: 6px; border: 1px solid #00ffcc; border-radius: 4px;")
+      self._calcular_metricas_multiclase()
+      return
+
+    step = self.protocol_steps[self.step_idx]
+    phase = step['phase']
+    dur_ms = step['dur_ms']
+
+    p = self.parent_plotter
+    action_steps_total = sum(1 for s in self.protocol_steps if s['phase'] == 'action')
+    action_steps_done = sum(1 for s in self.protocol_steps[:self.step_idx] if s['phase'] == 'action')
+    pct = int((action_steps_done / max(1, action_steps_total)) * 100)
+    self.prog_bar.setValue(pct)
+
+    if phase == 'countdown':
+      cnt = step['count']
+      self.lbl_status.setText(f"[PREPARACION] Iniciando protocolo en {cnt} segundos...")
+      self.lbl_status.setStyleSheet("background-color: #1a1a2e; color: #00ffff; font-size: 14px; font-weight: bold; padding: 6px; border: 1.5px solid #00ffff; border-radius: 4px;")
+      if p and hasattr(p, 'beep_queue'):
+        p.beep_queue.put((800, 100))
+    elif phase == 'prep':
+      v = step['vocal']
+      r = step['rep']
+      tot = step['total']
+      self.lbl_status.setText(f"[REPOSO] Prepárese para pronunciar: /{v}/  (Repetición {r}/{tot})")
+      self.lbl_status.setStyleSheet("background-color: #2b2200; color: #ffdd44; font-size: 14px; font-weight: bold; padding: 6px; border: 1.5px solid #ffdd44; border-radius: 4px;")
+      if p and hasattr(p, 'beep_queue'):
+        p.beep_queue.put((900, 100))
+    elif phase == 'action':
+      v = step['vocal']
+      r = step['rep']
+      tot = step['total']
+      col = self.VOCAL_COLORS.get(v, '#00ffcc')
+      self.lbl_status.setText(f"[PRONUNCIE AHORA] /{v}/  (Repetición {r}/{tot})")
+      self.lbl_status.setStyleSheet(f"background-color: #002222; color: {col}; font-size: 15px; font-weight: bold; padding: 6px; border: 2px solid {col}; border-radius: 4px;")
+      if p and hasattr(p, 'beep_queue'):
+        p.beep_queue.put((1400, 150))
+
+      # Al finalizar el intervalo de acción (1.5s), capturar el segmento de la ventana
+      QtCore.QTimer.singleShot(dur_ms - 50, lambda voc=v, rep_i=r: self._guardar_muestra_actual(voc, rep_i))
+
+    self.step_idx += 1
+    self.protocol_timer.singleShot(dur_ms, self._avanzar_paso_protocolo)
+
+  def _guardar_muestra_actual(self, vocal: str, rep_idx: int):
+    p = self.parent_plotter
+    if p is None or p.plot_buffer_datos is None or p.env_buffer_datos is None:
+      return
+
+    emg_indices = [ch for ch in range(p.NUM_CANALES) if not p._is_mic_channel(ch)]
+    if not emg_indices:
+      emg_indices = list(range(p.NUM_CANALES))
+
+    n_samples = min(int(1.5 * max(1, p.SAMPLE_RATE)), p.plot_buffer_datos.shape[1])
+    raw_seg = np.nan_to_num(p.plot_buffer_datos[emg_indices, -n_samples:].copy())
+    env_seg = np.nan_to_num(p.env_buffer_datos[emg_indices, -n_samples:].copy())
+    feat = np.sqrt(np.mean(env_seg ** 2, axis=1))
+
+    self.samples.append({
+      'vocal': vocal,
+      'x': feat,
+      'raw': raw_seg,
+      'rep': rep_idx
+    })
+    self._actualizar_proyeccion_pca()
+
+  def _capturar_muestra_manual(self, vocal: str):
+    """Captura inmediata de 1.5s de señal para una vocal específica."""
+    p = self.parent_plotter
+    if p is None or not getattr(p, 'is_acquiring', False) or p.plot_buffer_datos is None:
+      QtWidgets.QMessageBox.warning(self, "Adquisición Inactiva", "Inicie primero la adquisición.")
+      return
+
+    emg_indices = [ch for ch in range(p.NUM_CANALES) if not p._is_mic_channel(ch)]
+    if not emg_indices:
+      emg_indices = list(range(p.NUM_CANALES))
+
+    n_samples = min(int(1.5 * max(1, p.SAMPLE_RATE)), p.plot_buffer_datos.shape[1])
+    raw_seg = np.nan_to_num(p.plot_buffer_datos[emg_indices, -n_samples:].copy())
+    env_seg = np.nan_to_num(p.env_buffer_datos[emg_indices, -n_samples:].copy())
+    feat = np.sqrt(np.mean(env_seg ** 2, axis=1))
+
+    count_v = sum(1 for s in self.samples if s['vocal'] == vocal) + 1
+    self.samples.append({
+      'vocal': vocal,
+      'x': feat,
+      'raw': raw_seg,
+      'rep': count_v
+    })
+    self.lbl_status.setText(f"Estado: Muestra individual /{vocal}/ capturada (Total muestras = {len(self.samples)}).")
+    self.lbl_status.setStyleSheet("background-color: #002211; color: #00ffcc; font-size: 13px; font-weight: bold; padding: 6px; border: 1px solid #00ffcc; border-radius: 4px;")
+    self._actualizar_proyeccion_pca()
+    if len(self.samples) >= 2:
+      self._calcular_metricas_multiclase()
+
+  def _actualizar_proyeccion_pca(self):
+    """Proyecta las muestras en un espacio 2D mediante PCA y las dibuja interactivamente."""
+    if len(self.samples) < 2:
+      return
+
+    X = np.array([s['x'] for s in self.samples])
+    X_mean = np.mean(X, axis=0)
+    X_c = X - X_mean
+
+    if X.shape[1] >= 2 and X.shape[0] >= 2:
+      try:
+        _, S, Vt = np.linalg.svd(X_c, full_matrices=False)
+        Z = np.dot(X_c, Vt[:2].T)
+        s2 = S ** 2
+        tot_s2 = np.sum(s2) + 1e-12
+        var_pc1 = float(s2[0] / tot_s2 * 100.0)
+        var_pc2 = float(s2[1] / tot_s2 * 100.0) if len(s2) > 1 else 0.0
+      except Exception:
+        Z = np.zeros((len(self.samples), 2))
+        Z[:, 0] = X_c[:, 0]
+        var_pc1, var_pc2 = 100.0, 0.0
+    else:
+      Z = np.zeros((len(self.samples), 2))
+      Z[:, 0] = X_c[:, 0] if X_c.shape[1] > 0 else np.zeros(len(self.samples))
+      var_pc1, var_pc2 = 100.0, 0.0
+
+    self.plot_widget.clear()
+    for v in self.vocales_list:
+      v_indices = [idx for idx, s in enumerate(self.samples) if s['vocal'] == v]
+      if not v_indices:
+        continue
+      pts_x = Z[v_indices, 0]
+      pts_y = Z[v_indices, 1]
+      col = self.VOCAL_COLORS.get(v, '#00ffcc')
+
+      scatter = pg.ScatterPlotItem(
+        x=pts_x, y=pts_y, pen=pg.mkPen(None),
+        brush=pg.mkBrush(col), size=12, name=f"/{v}/"
+      )
+      self.plot_widget.addItem(scatter)
+
+      cx = float(np.mean(pts_x))
+      cy = float(np.mean(pts_y))
+      star = pg.ScatterPlotItem(
+        x=[cx], y=[cy], symbol='star', size=20,
+        pen=pg.mkPen('w', width=1.5), brush=pg.mkBrush(col)
+      )
+      self.plot_widget.addItem(star)
+
+    self.lbl_pca_info.setText(
+      f"Varianza explicada: PC1 = {var_pc1:.1f}%, PC2 = {var_pc2:.1f}% | Total Muestras = {len(self.samples)}"
+    )
+
+  def _calcular_metricas_multiclase(self):
+    """Calcula matrices 5x5 de ángulo, Fisher, confusión validada LOO-LDA y Crosstalk."""
+    vocales_activas = [v for v in self.vocales_list if any(s['vocal'] == v for s in self.samples)]
+    if len(vocales_activas) < 2:
+      self.lbl_status.setText("Estado: Se requieren muestras de al menos 2 vocales distintas para calcular separabilidad.")
+      return
+
+    p = self.parent_plotter
+    num_ch = p.NUM_CANALES if p else 4
+    emg_indices = [ch for ch in range(num_ch) if not p._is_mic_channel(ch)] if p else list(range(num_ch))
+    if not emg_indices:
+      emg_indices = list(range(num_ch))
+    sample_feat_len = len(self.samples[0]['x']) if self.samples else len(emg_indices)
+    m_len = sample_feat_len
+
+    ch_labels = []
+    for idx_pos in range(m_len):
+      if idx_pos < len(emg_indices):
+        ch = emg_indices[idx_pos]
+        hw_idx = p.active_channel_indices[ch] if p and hasattr(p, 'active_channel_indices') and ch < len(p.active_channel_indices) else ch
+        musc = p.nombres_musculos[ch] if p and hasattr(p, 'nombres_musculos') and ch < len(p.nombres_musculos) else f"Canal {hw_idx}"
+        ch_labels.append(f"ai{hw_idx} ({musc})")
+      else:
+        ch_labels.append(f"Canal {idx_pos}")
+
+    # 1. Agrupar muestras por vocal y calcular vectores medios y dominancia
+    mu_dict = {}
+    dom_dict = {}
+    var_dict = {}
+    unit_mu_dict = {}
+    counts = {}
+
+    for v in vocales_activas:
+      v_samples = [s['x'] for s in self.samples if s['vocal'] == v]
+      arr_v = np.array(v_samples)
+      counts[v] = len(v_samples)
+      mu_v = np.mean(arr_v, axis=0)
+      var_v = np.var(arr_v, axis=0) if len(v_samples) > 1 else np.zeros(m_len)
+      norm_v = float(np.linalg.norm(mu_v))
+      unit_v = (mu_v / (norm_v + 1e-12))
+      sum_mu = float(np.sum(mu_v)) + 1e-12
+      dom_v = (mu_v / sum_mu) * 100.0
+
+      mu_dict[v] = mu_v
+      dom_dict[v] = dom_v
+      var_dict[v] = var_v
+      unit_mu_dict[v] = unit_v
+
+    # 2. Matrices multiclase K x K: Ángulos y Distancia de Fisher
+    K = len(vocales_activas)
+    angles = np.zeros((K, K))
+    fisher_mat = np.zeros((K, K))
+
+    for i in range(K):
+      for j in range(K):
+        v1 = vocales_activas[i]
+        v2 = vocales_activas[j]
+        if i == j:
+          angles[i, j] = 0.0
+          fisher_mat[i, j] = 0.0
+        else:
+          cos_t = float(np.clip(np.dot(unit_mu_dict[v1], unit_mu_dict[v2]), -1.0, 1.0))
+          angles[i, j] = float(np.degrees(np.arccos(cos_t)))
+          d_mu = mu_dict[v1] - mu_dict[v2]
+          denom_f = float(np.sum(var_dict[v1] + var_dict[v2])) + 1e-6
+          fisher_mat[i, j] = float(np.sum(d_mu ** 2) / denom_f)
+
+    # 3. Matriz de Confusión Leave-One-Out (LDA Regularizado)
+    X_all = np.array([s['x'] for s in self.samples])
+    y_all = np.array([vocales_activas.index(s['vocal']) for s in self.samples if s['vocal'] in vocales_activas])
+    N_total = len(y_all)
+    conf_mat = np.zeros((K, K), dtype=int)
+
+    if N_total >= K + 2:
+      for i in range(N_total):
+        train_mask = np.ones(N_total, dtype=bool)
+        train_mask[i] = False
+        X_tr = X_all[train_mask]
+        y_tr = y_all[train_mask]
+
+        means_tr = []
+        cov_sum = np.zeros((m_len, m_len))
+        for c in range(K):
+          c_mask = (y_tr == c)
+          if np.sum(c_mask) > 0:
+            mu_c = np.mean(X_tr[c_mask], axis=0)
+            diff = X_tr[c_mask] - mu_c
+            cov_sum += diff.T @ diff
+          else:
+            mu_c = np.zeros(m_len)
+          means_tr.append(mu_c)
+
+        pooled_cov = cov_sum / max(1, (N_total - 1 - K))
+        reg = (np.trace(pooled_cov) * 1e-3 + 1e-6) * np.eye(m_len)
+        inv_cov = np.linalg.pinv(pooled_cov + reg)
+
+        scores = []
+        for c in range(K):
+          mu_c = means_tr[c]
+          score = float(X_all[i] @ inv_cov @ mu_c - 0.5 * mu_c @ inv_cov @ mu_c)
+          scores.append(score)
+        pred_c = int(np.argmax(scores))
+        conf_mat[y_all[i], pred_c] += 1
+      acc_global = float(np.trace(conf_mat) / max(1, N_total) * 100.0)
+    else:
+      # Aproximación Nearest Centroid para pocas muestras
+      for i in range(N_total):
+        x_i = X_all[i]
+        dists = [np.linalg.norm(x_i - mu_dict[vocales_activas[c]]) for c in range(K)]
+        pred_c = int(np.argmin(dists))
+        conf_mat[y_all[i], pred_c] += 1
+      acc_global = float(np.trace(conf_mat) / max(1, N_total) * 100.0)
+
+    # 4. Matriz de Correlación Cruzada a Lag Cero (Crosstalk)
+    all_raw = [s['raw'] for s in self.samples if 'raw' in s and s['raw'] is not None]
+    if all_raw and m_len >= 2:
+      concat_raw = np.hstack(all_raw)
+      raw_ch = concat_raw.shape[0]
+      if raw_ch >= 2:
+        full_corr = np.abs(np.nan_to_num(np.corrcoef(concat_raw)))
+        corr_mat = np.ones((m_len, m_len), dtype=float)
+        use_k = min(m_len, raw_ch)
+        corr_mat[:use_k, :use_k] = full_corr[:use_k, :use_k]
+        off_diag = [corr_mat[r, c] for r in range(m_len) for c in range(r + 1, m_len)]
+        max_crosstalk = float(max(off_diag)) if off_diag else 0.0
+      else:
+        corr_mat = np.ones((m_len, m_len), dtype=float)
+        max_crosstalk = 0.0
+    else:
+      corr_mat = np.ones((m_len, m_len), dtype=float)
+      max_crosstalk = 0.0
+
+    # 5. Diagnóstico Anatómico y Semáforo
+    alertas = []
+    if max_crosstalk >= 0.60:
+      pares_xtalk = []
+      for r in range(m_len):
+        for c in range(r + 1, m_len):
+          if corr_mat[r, c] >= 0.60:
+            pares_xtalk.append(f"{ch_labels[r]} <-> {ch_labels[c]} (|r|={corr_mat[r, c]:.2f})")
+      alertas.append(
+        f"[CROSSTALK ALTO] |r_max| = {max_crosstalk:.2f} >= 0.60 en: {', '.join(pares_xtalk)}. "
+        "Alta conduccion de volumen o puente de gel salino. Separe fisicamente los electrodos o reduzca exceso de gel."
+      )
+
+    confusiones_criticas = []
+    for i in range(K):
+      for j in range(i + 1, K):
+        v1 = vocales_activas[i]
+        v2 = vocales_activas[j]
+        theta = angles[i, j]
+        fisher = fisher_mat[i, j]
+        conf_count = conf_mat[i, j] + conf_mat[j, i]
+        tot_pair = counts[v1] + counts[v2]
+        overlap_pct = (conf_count / max(1, tot_pair)) * 100.0
+        if theta < 12.0 or overlap_pct >= 25.0 or fisher < 0.8:
+          confusiones_criticas.append((v1, v2, theta, fisher, overlap_pct))
+
+    back_overlap = [c for c in confusiones_criticas if c[0] in ('O', 'U') and c[1] in ('O', 'U')]
+    front_overlap = [c for c in confusiones_criticas if c[0] in ('A', 'E', 'I') and c[1] in ('A', 'E', 'I')]
+    other_overlap = [c for c in confusiones_criticas if c not in back_overlap and c not in front_overlap]
+
+    if back_overlap:
+      for c in back_overlap:
+        alertas.append(
+          f"[SOLAPAMIENTO POSTERIOR /{c[0]}/-/{c[1]}/]: theta={c[2]:.1f} deg, solapamiento={c[4]:.0f}%, Fisher J={c[3]:.2f}. "
+          "Falta de discriminacion entre protrusion labial y redondeamiento. "
+          "Sugerencia anatomica: reubicar electrodo hacia Orbicularis Oris / Mentoniano vs Digastrico (apertura mandibular)."
+        )
+
+    if front_overlap:
+      for c in front_overlap:
+        alertas.append(
+          f"[SOLAPAMIENTO ANTERIOR /{c[0]}/-/{c[1]}/]: theta={c[2]:.1f} deg, solapamiento={c[4]:.0f}%, Fisher J={c[3]:.2f}. "
+          "Falta de diferenciacion entre retraccion comisural y apertura mandibular. "
+          "Sugerencia anatomica: revisar electrodos en Zygomaticus Major / Risorio vs Vientre Anterior del Digastrico."
+        )
+
+    if other_overlap:
+      for c in other_overlap:
+        alertas.append(
+          f"[SOLAPAMIENTO VOCALICO /{c[0]}/-/{c[1]}/]: theta={c[2]:.1f} deg, solapamiento={c[4]:.0f}%, Fisher J={c[3]:.2f}. "
+          "Verificar contacto de electrodos y pedir mayor diferenciacion articular."
+        )
+
+    # Estado del semáforo
+    if max_crosstalk >= 0.60:
+      estado = "CROSSTALK ALTO"
+      self.lbl_semaforo.setText(f"[CROSSTALK ALTO] |r_max| = {max_crosstalk:.2f} >= 0.60 entre canales.\nRevisar posible puente de gel o conduccion de volumen.")
+      self.lbl_semaforo.setStyleSheet("background-color: #3b0000; color: #ff4444; font-size: 14px; font-weight: bold; padding: 10px; border: 2px solid #ff4444; border-radius: 5px;")
+    elif confusiones_criticas:
+      estado = "ALERTA DE SOLAPAMIENTO VOCALICO"
+      resumen_conf = "; ".join([f"/{c[0]}/-/{c[1]}/ ({c[4]:.0f}% solap)" for c in confusiones_criticas])
+      self.lbl_semaforo.setText(f"[ALERTA DE SOLAPAMIENTO VOCALICO] Pares afectados: {resumen_conf}.\nExactitud LOO = {acc_global:.1f}%. Ver reporte para sugerencias anatomicas.")
+      self.lbl_semaforo.setStyleSheet("background-color: #332b00; color: #ffdd00; font-size: 14px; font-weight: bold; padding: 10px; border: 2px solid #ffdd00; border-radius: 5px;")
+    else:
+      estado = "OPTIMO"
+      self.lbl_semaforo.setText(f"[OPTIMO] Separabilidad multiclase excelente (Exactitud LOO = {acc_global:.1f}%, |r_max| = {max_crosstalk:.2f}).\nNo se observan pares colapsados.")
+      self.lbl_semaforo.setStyleSheet("background-color: #002b15; color: #00ff88; font-size: 14px; font-weight: bold; padding: 10px; border: 2px solid #00ff88; border-radius: 5px;")
+
+    # 6. Formatear reporte consolidado textual
+    lines = [
+      "=" * 70,
+      "TEST DE SEPARABILIDAD MULTICLASE 5 VOCALES Y DETECTOR DE CROSSTALK",
+      "=" * 70,
+      f"Estado Diagnostico             : [{estado}]",
+      f"Exactitud Global (LOO-LDA)     : {acc_global:.1f}% ({N_total} repeticiones totales)",
+      f"Max. Correlacion Lag-0 |r_ij|  : {max_crosstalk:.3f} (Alerta Crosstalk >= 0.60)",
+      f"Vocales Evaluadas              : {', '.join(['/' + v + '/' for v in vocales_activas])}",
+      "",
+      "--- ACTIVACION MEDIA RMS Y DOMINANCIA POR CANAL ---"
+    ]
+    for idx_pos, lbl_ch in enumerate(ch_labels):
+      partes_v = []
+      for v in vocales_activas:
+        partes_v.append(f"/{v}/: {mu_dict[v][idx_pos]:5.1f}uV ({dom_dict[v][idx_pos]:4.1f}%Dom)")
+      lines.append(f"  • {lbl_ch:<26} | " + " | ".join(partes_v))
+
+    lines.append("")
+    lines.append("--- MATRIZ DE ANGULOS DE SEPARACION DIRECCIONAL theta_v1,v2 (grados) ---")
+    header_v = "Vocal".ljust(10) + "".join(f"/{v}/".rjust(10) for v in vocales_activas)
+    lines.append(header_v)
+    for i, v1 in enumerate(vocales_activas):
+      row_str = f"/{v1}/".ljust(10) + "".join(f"{angles[i, j]:9.1f} deg" for j in range(K))
+      lines.append(row_str)
+
+    lines.append("")
+    lines.append("--- MATRIZ DE DISTANCIA DISCRIMINANTE DE FISHER J_v1,v2 ---")
+    lines.append(header_v)
+    for i, v1 in enumerate(vocales_activas):
+      row_str = f"/{v1}/".ljust(10) + "".join(f"{fisher_mat[i, j]:10.2f}" for j in range(K))
+      lines.append(row_str)
+
+    lines.append("")
+    lines.append("--- MATRIZ DE CONFUSION (LEAVE-ONE-OUT LDA) ---")
+    lines.append(header_v + "   | Total")
+    for i, v1 in enumerate(vocales_activas):
+      row_str = f"/{v1}/ (real)".ljust(10) + "".join(f"{conf_mat[i, j]:10d}" for j in range(K)) + f"   | {counts[v1]:4d}"
+      lines.append(row_str)
+
+    lines.append("")
+    lines.append("--- MATRIZ DE CORRELACION CRUZADA A LAG CERO |r_ij| (Crosstalk) ---")
+    header_ch = "Canal".ljust(24) + "".join(f"Ch{c}".rjust(8) for c in range(m_len))
+    lines.append(header_ch)
+    for r_idx in range(m_len):
+      row_str = ch_labels[r_idx][:22].ljust(24) + "".join(f"{corr_mat[r_idx, c_idx]:8.2f}" for c_idx in range(m_len))
+      lines.append(row_str)
+
+    if alertas:
+      lines.append("")
+      lines.append("--- ALERTAS Y DIAGNOSTICO ANATOMICO ---")
+      for alt in alertas:
+        lines.append(f"  • {alt}")
+
+    lines.append("=" * 70)
+
+    self.last_report_text = "\n".join(lines)
+    self.txt_resultados.setPlainText(self.last_report_text)
+
+    # Guardar métricas estructuradas para persistencia en metadata
+    min_theta = float(min([angles[i, j] for i in range(K) for j in range(i + 1, K)])) if K >= 2 else 0.0
+    min_fisher = float(min([fisher_mat[i, j] for i in range(K) for j in range(i + 1, K)])) if K >= 2 else 0.0
+
+    self.last_metrics = {
+      "timestamp": datetime.now().isoformat(),
+      "estado_diagnostico": estado,
+      "exactitud_global_loo_pct": round(acc_global, 2),
+      "total_repeticiones": N_total,
+      "vocales_evaluadas": vocales_activas,
+      "repeticiones_por_vocal": {v: counts[v] for v in vocales_activas},
+      "canales_evaluados": ch_labels,
+      "angulo_minimo_grados": round(min_theta, 2),
+      "fisher_j_minimo": round(min_fisher, 3),
+      "max_crosstalk_lag0": round(max_crosstalk, 3),
+      "matriz_angulos_grados": [[round(float(angles[r, c]), 2) for c in range(K)] for r in range(K)],
+      "matriz_fisher_j": [[round(float(fisher_mat[r, c]), 3) for c in range(K)] for r in range(K)],
+      "matriz_confusion_loo": [[int(conf_mat[r, c]) for c in range(K)] for r in range(K)],
+      "matriz_crosstalk_lag0": [[round(float(corr_mat[r, c]), 3) for c in range(m_len)] for r in range(m_len)],
+      "activacion_rms_media_uV": {v: [round(float(x), 2) for x in mu_dict[v]] for v in vocales_activas},
+      "dominancia_muscular_media_pct": {v: [round(float(x), 1) for x in dom_dict[v]] for v in vocales_activas},
+      "alertas_diagnostico": alertas
+    }
+    self.btn_anexar.setEnabled(True)
+
+  def _anexar_a_notas(self):
+    """Anexa el diagnóstico textual y métricas a las Notas del Experimento y a metadata."""
+    p = self.parent_plotter
+    if p is None or not self.last_metrics:
+      return
+    p.last_separability_metrics = self.last_metrics
+    if hasattr(p, 'txt_notas_live'):
+      cur = p.txt_notas_live.toPlainText().strip()
+      bloque = (
+        f"[Test 5 Vocales ({datetime.now().strftime('%H:%M:%S')})]: "
+        f"Estado=[{self.last_metrics['estado_diagnostico']}], "
+        f"Exactitud_LOO={self.last_metrics['exactitud_global_loo_pct']:.1f}%, "
+        f"theta_min={self.last_metrics['angulo_minimo_grados']:.1f} deg, "
+        f"Fisher_J_min={self.last_metrics['fisher_j_minimo']:.2f}, "
+        f"|r_max|={self.last_metrics['max_crosstalk_lag0']:.2f}"
+      )
+      nuevo_txt = f"{cur}\n{bloque}".strip() if cur else bloque
+      p.txt_notas_live.setPlainText(nuevo_txt)
+      if hasattr(p, 'notas_panel'):
+        p.notas_panel.setVisible(True)
+
+    if getattr(p, 'last_measurement_dir', None) and os.path.exists(p.last_measurement_dir):
+      try:
+        p.persistir_notas_experimento(p.last_measurement_dir)
+      except Exception as exc:
+        print(f"[TestVocales] Error persistiendo notas: {exc}")
+
+    QtWidgets.QMessageBox.information(
+      self, "Diagnóstico Anexado",
+      "El diagnóstico del Test de Separabilidad de las 5 Vocales y Crosstalk se anexó a las Notas del Experimento y a metadata.json."
+    )
+
+
+# Alias de retrocompatibilidad
+TestSeparabilidadOUDialog = TestSeparabilidadVocalesDialog
+
 
 class RealTimePlotter(QtWidgets.QWidget):
   """
@@ -1552,10 +2404,10 @@ class RealTimePlotter(QtWidgets.QWidget):
     # --- Propiedades que se definen al iniciar adquisición ---
     self.NUM_CANALES = 0
     self.CANALES_DAQ = []
-    self.SAMPLE_RATE = 0
-    self.PLOT_DURATION_S = 0
-    self.PLOT_SAMPLES = 0
-    self.CHUNK_DURATION_S = 0
+    self.SAMPLE_RATE = 2000
+    self.PLOT_DURATION_S = 3.0
+    self.PLOT_SAMPLES = int(self.PLOT_DURATION_S * self.SAMPLE_RATE)
+    self.CHUNK_DURATION_S = 0.05
     
     # --- Buffers de ploteo ---
     # Se inicializarán al empezar la adquisición
@@ -1593,11 +2445,43 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.autoforge_target_reps = 25
     self.autoforge_current_reps = 0
 
+    # --- NUEVO: Gestión de canales de hardware y calibración ---
+    self.nombres_musculos_hw = [None] * 16
+    self.factores_calibracion_hw = [495.0] * 16
+    self.active_channel_indices = []
+    self._autoforge_token = 0
+    self.autoforge_session_dirs = []
+    self.autoforge_do_cvm = True
+    self.cvm_completed = False
+    self.final_noise_completed = False
+    self.is_cvm_active = False
+    self.is_recording_final_noise = False
+    self.rt_peaks = []
+    self.rt_last_noise_eval = []
+    self.raw_noise_accumulated = []
+
+    for hw in range(16):
+      cfg = self.config_mgr.get_channel_config(hw)
+      self.nombres_musculos_hw[hw] = cfg.get("musculo", f"Canal {hw}")
+      self.factores_calibracion_hw[hw] = float(cfg.get("factor_calibracion", 495.0))
+
     # --- NUEVO: Estado del Filtro Notch ---
     self.notch_sos = None
     self.notch_zi = None
 
     self.FILTER_ORDER = 4 # Orden del filtro Butterworth
+
+    # --- Notas del Experimento, Métricas y Fotometría Webcam ---
+    self.last_measurement_dir = None
+    self.last_separability_metrics = None
+    self.notas_experimento = ""
+    self.photometry_mgr = None
+    if WebcamPhotometryManager is not None:
+      try:
+        self.photometry_mgr = WebcamPhotometryManager(parent=self, camera_index=0)
+      except Exception as exc:
+        print(f"[FotometriaWebcam] Aviso al inicializar manager: {exc}")
+        self.photometry_mgr = None
 
     # --- Configurar la ventana principal ---
     self.setWindowTitle(f"Ñandú LSD - Visor y Grabador de Señales Emg v{__version__}")
@@ -1686,6 +2570,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.filter_groupbox.setLayout(self.filter_layout)
 
     self.button_layout = QtWidgets.QHBoxLayout()
+    self._setup_notas_panel()
     self.trigger_layout = QtWidgets.QHBoxLayout()
     self.measure_layout = QtWidgets.QHBoxLayout()
     self.measure_widget = QtWidgets.QWidget()
@@ -1694,6 +2579,100 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.spectrogram_layout = QtWidgets.QHBoxLayout()
     self.spectrogram_groupbox = QtWidgets.QGroupBox("Espectrograma")
     self.spectrogram_groupbox.setLayout(self.spectrogram_layout)
+
+  def _setup_notas_panel(self):
+    """Configura el panel desplegable de Notas del Experimento con plantillas rápidas."""
+    self.notas_panel = QtWidgets.QGroupBox("Notas del Experimento")
+    self.notas_panel.setStyleSheet("""
+      QGroupBox {
+        border: 1.5px solid #00e5ff;
+        border-radius: 5px;
+        margin-top: 6px;
+        padding-top: 8px;
+        font-weight: bold;
+        color: #00e5ff;
+        background-color: #070913;
+      }
+      QGroupBox::title {
+        subcontrol-origin: margin;
+        subcontrol-position: top left;
+        padding: 0 5px;
+      }
+    """)
+    notas_vbox = QtWidgets.QVBoxLayout(self.notas_panel)
+    notas_vbox.setContentsMargins(8, 6, 8, 8)
+    notas_vbox.setSpacing(6)
+
+    self.txt_notas_live = QtWidgets.QPlainTextEdit()
+    self.txt_notas_live.setPlaceholderText(
+      "Observaciones pre, durante y post-medición (posición de electrodos, preparación piel/gel, confusión vocálica, 50Hz, etc.)..."
+    )
+    self.txt_notas_live.setFixedHeight(75)
+    self.txt_notas_live.setStyleSheet("""
+      QPlainTextEdit {
+        background-color: #0b0f1a;
+        color: #e0f7fa;
+        border: 1px solid #1e3a5f;
+        border-radius: 4px;
+        font-family: 'Consolas', 'Courier New', monospace;
+        font-size: 12px;
+      }
+    """)
+    notas_vbox.addWidget(self.txt_notas_live)
+
+    btn_row = QtWidgets.QHBoxLayout()
+    btn_tmpl_electrodos = QtWidgets.QPushButton("+ Electrodos")
+    btn_tmpl_piel = QtWidgets.QPushButton("+ Piel/Gel")
+    btn_tmpl_confusion = QtWidgets.QPushButton("+ Confusión Vocales")
+    btn_tmpl_ruido = QtWidgets.QPushButton("+ Ruido 50Hz")
+    self.btn_actualizar_notas = QtWidgets.QPushButton("Actualizar Notas en Última Medición")
+
+    tmpl_style = """
+      QPushButton {
+        background-color: #101a28;
+        color: #80d8ff;
+        border: 1px solid #26c6da;
+        border-radius: 3px;
+        padding: 4px 8px;
+        font-size: 11px;
+        font-weight: bold;
+      }
+      QPushButton:hover {
+        background-color: #26c6da;
+        color: #000000;
+      }
+    """
+    for b in (btn_tmpl_electrodos, btn_tmpl_piel, btn_tmpl_confusion, btn_tmpl_ruido):
+      b.setStyleSheet(tmpl_style)
+      btn_row.addWidget(b)
+
+    btn_tmpl_electrodos.clicked.connect(lambda: self._insertar_plantilla_nota("[Electrodos]: Posicion = ; Adherencia = Buena; Distancia inter-electrodo = 20 mm; Reubicado canal = "))
+    btn_tmpl_piel.clicked.connect(lambda: self._insertar_plantilla_nota("[Piel/Gel]: Limpieza alcohol = Si; Gel conductor = Aplicado; Impedancia contacto = Buena"))
+    btn_tmpl_confusion.clicked.connect(lambda: self._insertar_plantilla_nota("[Confusion Vocales]: Pares afectados = /O/-/U/, /A/-/E/; Co-activacion = ; Separabilidad = "))
+    btn_tmpl_ruido.clicked.connect(lambda: self._insertar_plantilla_nota("[Ruido 50Hz]: Nivel observado = ; Conexion tierra/DIFF = Verificado; Filtro Notch = Activo"))
+
+    self.btn_actualizar_notas.setStyleSheet("""
+      QPushButton {
+        background-color: #003322;
+        color: #00ffaa;
+        border: 1.5px solid #00ffaa;
+        border-radius: 3px;
+        padding: 4px 12px;
+        font-size: 11px;
+        font-weight: bold;
+      }
+      QPushButton:hover {
+        background-color: #00ffaa;
+        color: #000000;
+      }
+    """)
+    self.btn_actualizar_notas.clicked.connect(self.on_actualizar_notas_ultima_medicion)
+
+    btn_row.addStretch(1)
+    btn_row.addWidget(self.btn_actualizar_notas)
+    notas_vbox.addLayout(btn_row)
+
+    self.notas_panel.setVisible(False)
 
   def _setup_ui_config_panel(self):
     """Configura el panel superior de adquisición."""
@@ -1744,12 +2723,35 @@ class RealTimePlotter(QtWidgets.QWidget):
       if is_active:
         chk.setChecked(True)
         any_checked = True
+      chk.toggled.connect(self._on_channel_checkbox_toggled)
       self.channel_checkboxes.append(chk)
       self.channel_layout.addWidget(chk)
     
     # Si no hay ninguno activo, marcamos el 0 por defecto por seguridad
     if not any_checked and self.channel_checkboxes:
       self.channel_checkboxes[0].setChecked(True)
+
+    self.btn_config_musculos = QtWidgets.QPushButton("Configurar Músculos")
+    self.btn_config_musculos.setStyleSheet("""
+      QPushButton {
+        background-color: #141424;
+        color: #00ffff;
+        font-weight: bold;
+        font-family: 'Consolas', 'Courier New', monospace;
+        font-size: 12px;
+        padding: 4px 10px;
+        border: 1.5px solid #00ffff;
+        border-radius: 4px;
+      }
+      QPushButton:hover {
+        background-color: #00ffff;
+        color: #000000;
+      }
+    """)
+    self.btn_config_musculos.setToolTip("Configurar nombres de músculos asignados a los canales (detiene la adquisición si está corriendo)")
+    self.btn_config_musculos.clicked.connect(self.abrir_dialogo_musculos)
+    self.channel_layout.addSpacing(8)
+    self.channel_layout.addWidget(self.btn_config_musculos)
 
     self.btn_start_acq = QtWidgets.QPushButton("Iniciar Adquisición")
     self.btn_start_acq.setStyleSheet(self.BTN_START_STYLE)
@@ -1911,6 +2913,67 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     self.btn_record = QtWidgets.QPushButton("Empezar a Grabar")
     self.btn_record.setStyleSheet(self.BTN_REC_START_STYLE)
+
+    # --- Botones Superiores: Notas, Fotometría 3D y Test 5 Vocales ---
+    self.btn_notas = QtWidgets.QPushButton("NOTAS")
+    self.btn_notas.setStyleSheet("""
+      QPushButton {
+        background-color: #0b1a24;
+        color: #00ffcc;
+        font-weight: 900;
+        font-family: 'Consolas', 'Courier New', monospace;
+        font-size: 13px;
+        padding: 7px 12px;
+        border-radius: 4px;
+        border: 2px solid #00ffcc;
+      }
+      QPushButton:hover {
+        background-color: #00ffcc;
+        color: #000000;
+      }
+    """)
+    self.btn_notas.setToolTip("Desplegar panel de Notas del Experimento (pre, durante y post medición)")
+    self.btn_notas.clicked.connect(self.toggle_notas_panel)
+
+    self.btn_fotometria = QtWidgets.QPushButton("FOTOMETRIA 3D")
+    self.btn_fotometria.setStyleSheet("""
+      QPushButton {
+        background-color: #0d1f2d;
+        color: #00e5ff;
+        font-weight: 900;
+        font-family: 'Consolas', 'Courier New', monospace;
+        font-size: 13px;
+        padding: 7px 12px;
+        border-radius: 4px;
+        border: 2px solid #00e5ff;
+      }
+      QPushButton:hover {
+        background-color: #00e5ff;
+        color: #000000;
+      }
+    """)
+    self.btn_fotometria.setToolTip("Abrir asistente de posicionamiento facial y fotometría 3D de electrodos")
+    self.btn_fotometria.clicked.connect(self.abrir_asistente_fotometria)
+
+    self.btn_test_vocales = QtWidgets.QPushButton("TEST 5 VOCALES")
+    self.btn_test_vocales.setStyleSheet("""
+      QPushButton {
+        background-color: #240b20;
+        color: #ff00aa;
+        font-weight: 900;
+        font-family: 'Consolas', 'Courier New', monospace;
+        font-size: 13px;
+        padding: 7px 12px;
+        border-radius: 4px;
+        border: 2px solid #ff00aa;
+      }
+      QPushButton:hover {
+        background-color: #ff00aa;
+        color: #ffffff;
+      }
+    """)
+    self.btn_test_vocales.setToolTip("Test de Separabilidad Multiclase de las 5 Vocales (A, E, I, O, U) y Crosstalk")
+    self.btn_test_vocales.clicked.connect(self.abrir_test_separabilidad_5_vocales)
     
     self.label_rec_time = QtWidgets.QLabel("Grabando: --:--.-")
     self.label_rec_time.setStyleSheet("font-weight: bold; color: #E91E63;")
@@ -1926,6 +2989,9 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.button_layout.addWidget(self.btn_record)
     self.button_layout.addWidget(self.btn_autoforge)
     self.button_layout.addWidget(self.btn_autoforge_continuo)
+    self.button_layout.addWidget(self.btn_notas)
+    self.button_layout.addWidget(self.btn_fotometria)
+    self.button_layout.addWidget(self.btn_test_vocales)
     self.button_layout.addWidget(self.label_rec_time)
     
     self.button_layout.addStretch(1) # Mover todo el espacio vacío aquí
@@ -2137,6 +3203,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.main_layout.addWidget(self.config_stack) # Reemplaza a config_groupbox
     self.main_layout.addWidget(self.filter_groupbox)
     self.main_layout.addLayout(self.button_layout)
+    self.main_layout.addWidget(self.notas_panel) # Panel desplegable de Notas del Experimento
     self.main_layout.addLayout(self.trigger_layout)
     self.main_layout.addWidget(self.measure_widget)
     self.main_layout.addWidget(self.spectrogram_groupbox) # Añadir controles del espectrograma
@@ -2182,29 +3249,123 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     # --- Curvas del Plot ---
     self.curvas = []
-    self.nombres_musculos = []
-    canales_conf = self.config_mgr.get("canales") or {}
-    
-    canales_info = []
-    for i in range(16):
-      key = f"Canal {i}"
-      musc = canales_conf.get(key, {}).get("musculo", f"Canal {i}")
-      self.nombres_musculos.append(musc)
-      canales_info.append({
-          "idx": i,
-          "musculo": musc,
-          "color_hex": canales_conf.get(key, {}).get("color_hex"),
-          "is_mic": (i == 3 or "mic" in musc.lower())
-      })
-      
-    try:
-      from utils.config_manager import get_unique_channel_colors
-      self.colores_curvas = get_unique_channel_colors(canales_info)
-    except Exception:
-      self.colores_curvas = ["#ffaa00", "#39ff14", "#ffff00", "#ff0000"] + ["#00ffcc"] * 12
+    self._actualizar_canales_activos(update_gui=False)
 
     # Conectar señal de vista previa de gráfico
     self.mostrar_preview_signal.connect(self.mostrar_preview_plot)
+
+  def _safe_autoforge_single_shot(self, delay_ms, callback):
+    """
+    Ejecuta callback tras delay_ms sólo si la sesión actual de AutoForge sigue activa
+    y coincide con el token de sesión _autoforge_token. Si AutoForge fue cancelado o reiniciado,
+    invalida limpiamente la ejecución del timer pendiente.
+    """
+    current_token = getattr(self, '_autoforge_token', 0)
+    def wrapper():
+      if getattr(self, '_autoforge_token', 0) == current_token and getattr(self, 'is_autoforge_running', False):
+        callback()
+    QtCore.QTimer.singleShot(delay_ms, wrapper)
+
+  def _is_mic_channel(self, ch_idx):
+    """
+    Determina si el canal activo ch_idx (0..NUM_CANALES-1) corresponde a un micrófono
+    o si es un canal muscular EMG.
+    """
+    if ch_idx is None:
+      return False
+    from utils.config_manager import _is_generic_or_mic_channel
+    if isinstance(ch_idx, int):
+      hw_idx = self.active_channel_indices[ch_idx] if (hasattr(self, 'active_channel_indices') and self.active_channel_indices and ch_idx < len(self.active_channel_indices)) else ch_idx
+      musc = ""
+      if hasattr(self, 'nombres_musculos') and ch_idx < len(self.nombres_musculos):
+        musc = self.nombres_musculos[ch_idx]
+      elif hasattr(self, 'nombres_musculos_hw') and hw_idx < len(self.nombres_musculos_hw):
+        musc = self.nombres_musculos_hw[hw_idx]
+      daq_name = self.CANALES_DAQ[ch_idx] if (hasattr(self, 'CANALES_DAQ') and ch_idx < len(self.CANALES_DAQ)) else ""
+      if "mic" in str(daq_name).lower() or "audio" in str(daq_name).lower():
+        return True
+      return _is_generic_or_mic_channel(musc, idx=hw_idx)
+    else:
+      return _is_generic_or_mic_channel(str(ch_idx))
+
+  def _actualizar_canales_activos(self, update_gui=True):
+    """
+    Actualiza active_channel_indices, NUM_CANALES, CANALES_DAQ, nombres_musculos y colores_curvas
+    basándose en los checkboxes seleccionados y la configuración de canales físicos en config_general.json.
+    """
+    device = self.cmb_device.currentText() if hasattr(self, 'cmb_device') else "Dev1"
+    selected_channels = [chk.text() for chk in getattr(self, 'channel_checkboxes', []) if chk.isChecked()]
+
+    self.CANALES_DAQ = [f"{device}/{ch}" for ch in selected_channels]
+    self.active_channel_indices = []
+    for ch in selected_channels:
+      m = re.search(r'\d+', ch)
+      self.active_channel_indices.append(int(m.group()) if m else 0)
+    self.NUM_CANALES = len(self.active_channel_indices)
+
+    # Recargar hardware channels
+    if not hasattr(self, 'nombres_musculos_hw') or not self.nombres_musculos_hw:
+      self.nombres_musculos_hw = [None] * 16
+      self.factores_calibracion_hw = [495.0] * 16
+    for hw in range(16):
+      cfg = self.config_mgr.get_channel_config(hw)
+      self.nombres_musculos_hw[hw] = cfg.get("musculo", f"Canal {hw}")
+      self.factores_calibracion_hw[hw] = float(cfg.get("factor_calibracion", 495.0))
+
+    # Mapear canales activos
+    from utils.config_manager import get_unique_channel_colors
+    active_info = []
+    self.nombres_musculos = []
+    for i, hw_idx in enumerate(self.active_channel_indices):
+      musc = self.nombres_musculos_hw[hw_idx] if hw_idx < len(self.nombres_musculos_hw) else f"Canal {hw_idx}"
+      self.nombres_musculos.append(musc)
+      ch_cfg = self.config_mgr.get_channel_config(hw_idx)
+      active_info.append({
+        "idx": hw_idx,
+        "musculo": musc,
+        "color_hex": ch_cfg.get("color_hex"),
+        "is_mic": self._is_mic_channel(i)
+      })
+
+    self.colores_curvas = get_unique_channel_colors(active_info)
+
+    if update_gui and hasattr(self, 'plot'):
+      self.setup_gui_for_channels()
+
+  def _on_channel_checkbox_toggled(self, checked):
+    if not getattr(self, 'is_acquiring', False):
+      self._actualizar_canales_activos(update_gui=True)
+
+  def abrir_dialogo_musculos(self):
+    if getattr(self, 'is_acquiring', False):
+      resp = QtWidgets.QMessageBox.question(
+        self,
+        "Detener Adquisición",
+        "La configuración de músculos requiere detener la adquisición en curso.\n¿Desea detener la adquisición y continuar?",
+        QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+        QtWidgets.QMessageBox.Yes
+      )
+      if resp != QtWidgets.QMessageBox.Yes:
+        return
+      self.on_start_acq_click() # Detiene la adquisición
+
+    dialog = MuscleSelectionDialog(self)
+    if dialog.exec() == QtWidgets.QDialog.Accepted:
+      self.refrescar_interfaz_canales()
+
+  def refrescar_interfaz_canales(self):
+    """
+    Recarga configuraciones de canales y músculos, actualiza active_channel_indices,
+    nombres_musculos_hw, factores_calibracion_hw, colores_curvas y refresca
+    la interfaz gráfica (etiquetas, leyendas, curvas) sin reiniciar la app.
+    """
+    for hw in range(16):
+      cfg = self.config_mgr.get_channel_config(hw)
+      if hw < len(self.nombres_musculos_hw):
+        self.nombres_musculos_hw[hw] = cfg.get("musculo", f"Canal {hw}")
+        self.factores_calibracion_hw[hw] = float(cfg.get("factor_calibracion", 495.0))
+
+    self._actualizar_canales_activos(update_gui=True)
 
   @QtCore.Slot(str)
   def mostrar_preview_plot(self, ruta_img):
@@ -2304,6 +3465,191 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.spin_low_cut.setEnabled(is_filter_enabled)
     self.spin_high_cut.setEnabled(is_filter_enabled)
 
+    # Botones superiores siempre habilitados (Notas, Fotometría 3D y Test 5 Vocales)
+    if hasattr(self, 'btn_notas'):
+      self.btn_notas.setEnabled(True)
+    if hasattr(self, 'btn_fotometria'):
+      self.btn_fotometria.setEnabled(True)
+    if hasattr(self, 'btn_test_vocales'):
+      self.btn_test_vocales.setEnabled(True)
+
+  def toggle_notas_panel(self):
+    """Muestra u oculta el panel de Notas del Experimento."""
+    if hasattr(self, 'notas_panel'):
+      visible = not self.notas_panel.isVisible()
+      self.notas_panel.setVisible(visible)
+      if visible and hasattr(self, 'txt_notas_live'):
+        self.txt_notas_live.setFocus()
+
+  def _insertar_plantilla_nota(self, texto: str):
+    """Inserta una plantilla formateada en el editor de notas en vivo."""
+    if not hasattr(self, 'txt_notas_live'):
+      return
+    cur = self.txt_notas_live.toPlainText().strip()
+    nuevo = f"{cur}\n{texto}".strip() if cur else texto
+    self.txt_notas_live.setPlainText(nuevo)
+    self.notas_experimento = nuevo
+
+  def on_actualizar_notas_ultima_medicion(self):
+    """Actualiza las notas en metadata.json y notas_experimento.txt de la última medición."""
+    target_dir = getattr(self, 'last_measurement_dir', None)
+    if not target_dir or not os.path.exists(target_dir):
+      QtWidgets.QMessageBox.warning(
+        self, "Sin Medición",
+        "Aún no se ha completado ni guardado ninguna medición en esta sesión."
+      )
+      return
+
+    notas = self.txt_notas_live.toPlainText().strip() if hasattr(self, 'txt_notas_live') else ""
+    exito = self.persistir_notas_experimento(target_dir, texto_notas=notas)
+    if exito:
+      QtWidgets.QMessageBox.information(
+        self, "Notas Actualizadas",
+        f"Las notas se han actualizado correctamente en la carpeta de la medición:\n{target_dir}"
+      )
+    else:
+      QtWidgets.QMessageBox.critical(
+        self, "Error al Actualizar",
+        f"No se pudieron actualizar las notas en:\n{target_dir}"
+      )
+
+  def persistir_notas_experimento(self, target_dir: str, metadata_base: Optional[dict] = None, texto_notas: Optional[str] = None) -> bool:
+    """
+    Persiste las notas en:
+      - metadata.json raíz y canal_*/metadata.json (claves 'notas_experimento' y 'comentario')
+      - notas_experimento.txt legible con cabecera de fecha, sujeto, canales/músculos, SNR y ruido 50 Hz.
+    """
+    try:
+      if not target_dir or not os.path.exists(target_dir):
+        return False
+
+      self.last_measurement_dir = str(target_dir)
+      if texto_notas is None:
+        texto_notas = self.txt_notas_live.toPlainText().strip() if hasattr(self, 'txt_notas_live') else ""
+      self.notas_experimento = texto_notas
+
+      # 1. metadata.json raíz
+      root_meta_path = os.path.join(target_dir, "metadata.json")
+      meta_dict = {}
+      if os.path.exists(root_meta_path):
+        try:
+          with open(root_meta_path, 'r', encoding='utf-8') as f:
+            meta_dict = json.load(f)
+        except Exception:
+          meta_dict = {}
+      elif metadata_base:
+        meta_dict = dict(metadata_base)
+
+      meta_dict["notas_experimento"] = texto_notas
+      meta_dict["comentario"] = texto_notas
+      if getattr(self, 'last_separability_metrics', None):
+        meta_dict["diagnostico_separabilidad_vocales"] = self.last_separability_metrics
+
+      try:
+        with open(root_meta_path, 'w', encoding='utf-8') as f:
+          json.dump(meta_dict, f, indent=4, ensure_ascii=False)
+      except Exception as exc:
+        print(f"[Notas] Aviso al escribir metadata.json raíz: {exc}")
+
+      # 2. canal_*/metadata.json
+      for i in range(getattr(self, 'NUM_CANALES', 4)):
+        ch_dir = os.path.join(target_dir, f"canal_{i}")
+        if os.path.isdir(ch_dir):
+          ch_meta_path = os.path.join(ch_dir, "metadata.json")
+          ch_dict = {}
+          if os.path.exists(ch_meta_path):
+            try:
+              with open(ch_meta_path, 'r', encoding='utf-8') as f:
+                ch_dict = json.load(f)
+            except Exception:
+              ch_dict = {}
+          else:
+            ch_dict = dict(meta_dict)
+            ch_dict["canal"] = f"canal_{i}"
+            ch_dict["musculo"] = self.nombres_musculos[i % len(self.nombres_musculos)] if hasattr(self, 'nombres_musculos') else f"Canal {i}"
+
+          ch_dict["notas_experimento"] = texto_notas
+          ch_dict["comentario"] = texto_notas
+          if getattr(self, 'last_separability_metrics', None):
+            ch_dict["diagnostico_separabilidad_vocales"] = self.last_separability_metrics
+
+          try:
+            with open(ch_meta_path, 'w', encoding='utf-8') as f:
+              json.dump(ch_dict, f, indent=4, ensure_ascii=False)
+          except Exception as exc:
+            print(f"[Notas] Aviso al escribir canal_{i}/metadata.json: {exc}")
+
+      # 3. notas_experimento.txt legible
+      txt_path = os.path.join(target_dir, "notas_experimento.txt")
+      sujeto = meta_dict.get("sujeto", getattr(self, 'autoforge_sujeto', "Sujeto1"))
+      prueba = meta_dict.get("prueba", getattr(self, 'autoforge_prueba', "Prueba1"))
+      fecha = meta_dict.get("measurement_date", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
+      canales_lines = []
+      for i in range(getattr(self, 'NUM_CANALES', 4)):
+        hw_idx = self.active_channel_indices[i] if hasattr(self, 'active_channel_indices') and i < len(self.active_channel_indices) else i
+        musc = self.nombres_musculos[i % len(self.nombres_musculos)] if hasattr(self, 'nombres_musculos') else f"Canal {hw_idx}"
+        canales_lines.append(f"  • Canal {i} (ai{hw_idx}): {musc}")
+
+      noise_50hz = meta_dict.get("ruido_basal", {}).get("inicial", {}).get("line_noise_50hz_uV", getattr(self, 'line_noise_50hz_uV', []))
+      ruido_mean = meta_dict.get("ruido_basal", {}).get("inicial", {}).get("mean_uV", getattr(self, 'initial_noise_mean', []))
+
+      snr_info = []
+      if hasattr(self, 'stats_snr') and self.stats_snr:
+        for i, snrs in enumerate(self.stats_snr):
+          val = snrs[-1] if snrs else 0.0
+          snr_info.append(f"Ch{i}: {val:.1f} dB")
+      snr_str = ", ".join(snr_info) if snr_info else "No calculado"
+
+      lines_txt = [
+        "=" * 70,
+        "NOTAS DEL EXPERIMENTO - NANDU DAQ",
+        "=" * 70,
+        f"Fecha / Hora       : {fecha}",
+        f"Sujeto             : {sujeto}",
+        f"Prueba / Protocolo : {prueba}",
+        "",
+        "--- ASIGNACION DE CANALES Y MUSCULOS ---",
+        *canales_lines,
+        "",
+        "--- CALIDAD DE SENAL Y RUIDO ---",
+        f"Ruido 50 Hz (uV)   : {noise_50hz}",
+        f"Ruido Basal Media  : {ruido_mean}",
+        f"SNR Estimado       : {snr_str}",
+        "-" * 70,
+        "OBSERVACIONES Y NOTAS REGISTRADAS:",
+        texto_notas if texto_notas else "(Sin observaciones adicionales registradas)",
+        "=" * 70,
+      ]
+      with open(txt_path, 'w', encoding='utf-8') as f:
+        f.write("\n".join(lines_txt) + "\n")
+
+      return True
+    except Exception as exc:
+      print(f"[Notas] Error persistiendo notas del experimento: {exc}")
+      return False
+
+  def abrir_asistente_fotometria(self):
+    """Abre el asistente interactivo de posicionamiento facial y alineación 3D de electrodos."""
+    if getattr(self, 'photometry_mgr', None) is not None:
+      self.photometry_mgr.open_alignment_dialog(
+        parent_widget=self,
+        nombres_musculos=getattr(self, 'nombres_musculos', []),
+        active_channel_indices=getattr(self, 'active_channel_indices', None),
+        sujeto=getattr(self, 'autoforge_sujeto', "Sujeto1"),
+        prueba=getattr(self, 'autoforge_prueba', "Prueba1"),
+      )
+    else:
+      QtWidgets.QMessageBox.warning(
+        self, "Fotometria No Disponible",
+        "El módulo WebcamPhotometryManager no está disponible en este sistema."
+      )
+
+  def abrir_test_separabilidad_5_vocales(self):
+    """Abre el tester de separabilidad multiclase de 5 vocales y detector de Crosstalk."""
+    dialog = TestSeparabilidadVocalesDialog(self)
+    dialog.exec()
+
   def on_start_acq_click(self):
     """
     Ejecuta la funcionalidad de on_start_acq_click.
@@ -2317,6 +3663,7 @@ class RealTimePlotter(QtWidgets.QWidget):
       self.stop_event.set()
       
       # --- NUEVO: Abortar AutoForge o grabación activa ---
+      self._autoforge_token = getattr(self, '_autoforge_token', 0) + 1
       self.is_autoforge_running = False
       self.is_autoforge_continuo = False
       self.reset_autoforge_buttons() # Restaurar aspecto de botones
@@ -2385,8 +3732,14 @@ class RealTimePlotter(QtWidgets.QWidget):
         print("Error: Debes seleccionar al menos un canal.")
         return
 
+      self.active_channel_indices = []
+      for ch in selected_channels:
+        m = re.search(r'\d+', ch)
+        self.active_channel_indices.append(int(m.group()) if m else 0)
+
       self.CANALES_DAQ = [f"{device}/{ch}" for ch in selected_channels]
       self.NUM_CANALES = len(self.CANALES_DAQ)
+      self._actualizar_canales_activos(update_gui=False)
       
       # --- NUEVO: Obtener modo terminal ---
       terminal_config_str = self.cmb_terminal_config.currentText()
@@ -2403,8 +3756,6 @@ class RealTimePlotter(QtWidgets.QWidget):
       print(f"Iniciando con SR={self.SAMPLE_RATE}, Plot={self.PLOT_DURATION_S}s, Canales={self.CANALES_DAQ}, Terminal={terminal_config_str}")
 
       # --- NUEVO: Vaciar la cola de datos antes de empezar ---
-      # Esto previene que datos de una adquisición anterior (con diferente N de canales)
-      # se procesen en la nueva adquisición, causando un ValueError.
       while not self.data_queue.empty(): self.data_queue.get_nowait()
 
       # Limpiar y re-crear elementos de la GUI
@@ -2425,7 +3776,7 @@ class RealTimePlotter(QtWidgets.QWidget):
 
         test_freq = self.spin_test_freq.value()
         tipo_prueba = self.cmb_fuente_prueba.currentText()
-        self.acquisition_thread = threading.Thread(target=simulador_thread, args=(chunk_samples_dinamico, self.SAMPLE_RATE, self.NUM_CANALES, self.data_queue, self.stop_event, test_freq, tipo_prueba), daemon=True)
+        self.acquisition_thread = threading.Thread(target=simulador_thread, args=(chunk_samples_dinamico, self.SAMPLE_RATE, self.NUM_CANALES, self.data_queue, self.stop_event, test_freq, tipo_prueba, self.active_channel_indices), daemon=True)
       else:
         if not NIDAQMX_DISPONIBLE:
           print("Error: nidaqmx no encontrado. No se puede correr en modo real.")
@@ -2542,12 +3893,14 @@ class RealTimePlotter(QtWidgets.QWidget):
     title_label.setStyleSheet("color: white;")
     self.measure_layout.addWidget(title_label)
     for i in range(self.NUM_CANALES):
+      hw_idx = self.active_channel_indices[i] if (hasattr(self, 'active_channel_indices') and self.active_channel_indices and i < len(self.active_channel_indices)) else i
       color = self.colores_curvas[i % len(self.colores_curvas)]
-      musculo = self.nombres_musculos[i % len(self.nombres_musculos)]
-      self.curvas.append(self.plot.plot(pen=color, name=musculo))
+      musculo = self.nombres_musculos[i] if (hasattr(self, 'nombres_musculos') and i < len(self.nombres_musculos)) else f"Canal {hw_idx}"
+      curva_nombre = f"ai{hw_idx} ({musculo})"
+      self.curvas.append(self.plot.plot(pen=color, name=curva_nombre))
       
       # --- NUEVO: Checkbox de visualización ---
-      chk_viz = QtWidgets.QCheckBox(musculo)
+      chk_viz = QtWidgets.QCheckBox(curva_nombre)
       chk_viz.setChecked(True)
       chk_viz.setStyleSheet(f"color: {pg.mkColor(color).name()}; font-weight: bold; border: none;")
       
@@ -2599,14 +3952,14 @@ class RealTimePlotter(QtWidgets.QWidget):
       frame_layout = QtWidgets.QVBoxLayout(measurement_frame)
       frame_layout.setContentsMargins(5, 5, 5, 5) # Padding interno
       
-      label = QtWidgets.QLabel(f"<b>{musculo}:</b> -- µVp-p, -- µVrms")
+      label = QtWidgets.QLabel(f"<b>ai{hw_idx} ({musculo}):</b> -- µVp-p, -- µVrms (--% Dom)")
       label.setStyleSheet(f"color: {pg.mkColor(color).name()}; font-size: 14px; font-weight: bold; background-color: transparent; border: none;")
       label.setWordWrap(True)
       label.setMinimumWidth(0)
       frame_layout.addWidget(label)
       
       # --- NUEVO: Etiqueta para el tester de ruido ---
-      label_ruido = QtWidgets.QLabel("Ruido inter-pulso: Esperando grabación...")
+      label_ruido = QtWidgets.QLabel(f"ai{hw_idx} Ruido: Esperando...")
       label_ruido.setStyleSheet("color: gray; font-size: 11px; background-color: transparent;")
       label_ruido.setWordWrap(True)
       label_ruido.setMinimumWidth(0)
@@ -2619,7 +3972,7 @@ class RealTimePlotter(QtWidgets.QWidget):
       frame_50hz.setStyleSheet("background-color: #111111; border: 1.5px solid #555555; border-radius: 3px; padding: 2px;")
       layout_50hz = QtWidgets.QVBoxLayout(frame_50hz)
       layout_50hz.setContentsMargins(3, 2, 3, 2)
-      label_50hz = QtWidgets.QLabel(f"50Hz ({musculo}): -- µV")
+      label_50hz = QtWidgets.QLabel(f"50Hz ai{hw_idx} ({musculo}): -- µV")
       label_50hz.setStyleSheet("color: #AAAAAA; font-size: 11px; font-weight: bold;")
       label_50hz.setWordWrap(True)
       layout_50hz.addWidget(label_50hz)
@@ -2635,9 +3988,29 @@ class RealTimePlotter(QtWidgets.QWidget):
       self.measure_layout.addWidget(measurement_frame)
       self.measure_labels.append(label) # Guardar solo el label para actualizar su texto
     self.measure_layout.addStretch(1) # Asegurar que los recuadros se alineen a la izquierda
-    self.cmb_trig_chan.addItems([f"{i}" for i in range(self.NUM_CANALES)])
-    self.cmb_spectrogram_chan.addItems([f"{i}" for i in range(self.NUM_CANALES)])
+
+    for i in range(self.NUM_CANALES):
+      hw_idx = self.active_channel_indices[i] if (hasattr(self, 'active_channel_indices') and self.active_channel_indices and i < len(self.active_channel_indices)) else i
+      musc = self.nombres_musculos[i] if (hasattr(self, 'nombres_musculos') and i < len(self.nombres_musculos)) else f"Canal {hw_idx}"
+      self.cmb_trig_chan.addItem(f"ai{hw_idx} ({musc})")
+      self.cmb_spectrogram_chan.addItem(f"ai{hw_idx} ({musc})")
     
+    # Asegurar parámetros de sample rate y buffer válidos
+    if getattr(self, 'SAMPLE_RATE', 0) <= 0:
+      if hasattr(self, 'cmb_sample_rate') and self.cmb_sample_rate.currentText():
+        try: self.SAMPLE_RATE = int(self.cmb_sample_rate.currentText())
+        except Exception: self.SAMPLE_RATE = 2000
+      else:
+        self.SAMPLE_RATE = 2000
+
+    if getattr(self, 'PLOT_DURATION_S', 0) <= 0:
+      if hasattr(self, 'spin_plot_duration') and self.spin_plot_duration.value() > 0:
+        self.PLOT_DURATION_S = self.spin_plot_duration.value()
+      else:
+        self.PLOT_DURATION_S = 3.0
+
+    self.PLOT_SAMPLES = max(1, int(self.PLOT_DURATION_S * self.SAMPLE_RATE))
+
     # Inicializar buffers con el tamaño correcto
     self.plot_buffer_datos = np.zeros((self.NUM_CANALES, self.PLOT_SAMPLES))
     self.env_buffer_datos = np.zeros((self.NUM_CANALES, self.PLOT_SAMPLES))
@@ -2645,16 +4018,14 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.trigger_last_values = np.zeros(self.NUM_CANALES)
 
     # Inicializar buffer del espectrograma
-    chunk_samples_dinamico = int(self.SAMPLE_RATE * 0.05)
+    chunk_samples_dinamico = max(2, int(self.SAMPLE_RATE * 0.05))
     self.CURRENT_FFT_LEN = min(self.SPECTROGRAM_FFT_LEN, chunk_samples_dinamico)
+    if self.CURRENT_FFT_LEN < 2: self.CURRENT_FFT_LEN = 2
     if self.CURRENT_FFT_LEN % 2 != 0: self.CURRENT_FFT_LEN -= 1
     self.spectrogram_buffer = np.zeros((self.SPECTROGRAM_HISTORY_LEN, self.CURRENT_FFT_LEN // 2 + 1))
     self.on_spectrogram_enable_toggle() # Para mostrar/ocultar la vista
 
     # --- CORRECCIÓN v3: Configurar la transformación del espectrograma una sola vez ---
-    # En lugar de pasar 'scale' en cada llamada a setImage, lo que puede ser propenso a errores,
-    # configuramos la transformación directamente en el ViewBox del ImageView.
-    # Esto es más eficiente y robusto.
     view = self.spectrogram_view.getView()
     
     # Eje Y (Frecuencia): Va de 0 a Frecuencia de Nyquist.
@@ -2663,7 +4034,7 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     # Eje X (Tiempo): El ancho total del historial del espectrograma en segundos.
     # Cada columna representa un segmento de tiempo (nperseg - noverlap) / fs.
-    time_per_column = (self.CURRENT_FFT_LEN - (self.CURRENT_FFT_LEN // 2)) / self.SAMPLE_RATE
+    time_per_column = (self.CURRENT_FFT_LEN - (self.CURRENT_FFT_LEN // 2)) / max(1.0, float(self.SAMPLE_RATE))
     time_scale = time_per_column
 
     view.setAspectLocked(False) # Desbloquear la relación de aspecto para escalar ejes independientemente
@@ -2885,7 +4256,7 @@ class RealTimePlotter(QtWidgets.QWidget):
                         instrucciones = {
                             'A': "Abre la boca y pronuncia /A/ con fuerza",
                             'I': "Sonríe y pronuncia /I/ con fuerza",
-                            'O': "Redondea los labios con /O/ con fuerza"
+                            'U': "Redondea y protruye los labios con /U/ con fuerza"
                         }
                         desc = instrucciones.get(vocal, "")
                         
@@ -2914,6 +4285,9 @@ class RealTimePlotter(QtWidgets.QWidget):
                         
                         self.cvm_current_take_chunks = []
                         self.is_cvm_recording_take = True
+                        if getattr(self, 'photometry_mgr', None) is not None and getattr(self.photometry_mgr, 'is_enabled', False):
+                            t_daq = time.perf_counter() - getattr(self, 'recording_start_time', time.perf_counter())
+                            self.photometry_mgr.request_snapshot(fase="cvm", palabra=vocal, pulso=toma, t_daq_s=t_daq, sample_rate=self.SAMPLE_RATE)
 
             # --- NUEVO: Intercalar Letras dinámicamente en Secuencia Continua ---
             if getattr(self, 'is_autoforge_continuo', False) and getattr(self, 'is_recording', False):
@@ -2926,6 +4300,19 @@ class RealTimePlotter(QtWidgets.QWidget):
                     idx = (self.metro_beat_count - 1) % len(self.autoforge_words)
                     palabra_actual = self.autoforge_words[idx].upper()
                     self.lbl_recording_space.setText(f"<div align='center' style='font-size: 100px; font-weight: bold;'>{palabra_actual}</div>")
+                    if getattr(self, 'photometry_mgr', None) is not None and getattr(self.photometry_mgr, 'is_enabled', False):
+                        t_daq = time.perf_counter() - getattr(self, 'recording_start_time', time.perf_counter())
+                        self.photometry_mgr.request_snapshot(fase="vocal_metronomo", palabra=palabra_actual, pulso=self.metro_beat_count, t_daq_s=t_daq, sample_rate=self.SAMPLE_RATE)
+
+            # --- NUEVO: Snapshot de fotometria para grabacion discreta o manual ---
+            if getattr(self, 'photometry_mgr', None) is not None and getattr(self.photometry_mgr, 'is_enabled', False):
+                if not getattr(self, 'is_cvm_active', False) and not getattr(self, 'is_autoforge_continuo', False) and getattr(self, 'is_recording', False):
+                    t_daq = time.perf_counter() - getattr(self, 'recording_start_time', time.perf_counter())
+                    if getattr(self, 'is_autoforge_running', False) and hasattr(self, 'autoforge_words') and self.autoforge_words:
+                        pal = self.autoforge_words[self.autoforge_word_idx] if self.autoforge_word_idx < len(self.autoforge_words) else "vocal"
+                        self.photometry_mgr.request_snapshot(fase="vocal_metronomo", palabra=pal, pulso=self.metro_beat_count, t_daq_s=t_daq, sample_rate=self.SAMPLE_RATE)
+                    else:
+                        self.photometry_mgr.request_snapshot(fase="vocal_metronomo", palabra="manual", pulso=self.metro_beat_count, t_daq_s=t_daq, sample_rate=self.SAMPLE_RATE)
         
         QtCore.QTimer.singleShot(50, self.reset_metro_color)
     elif self.metro_count_in_remaining == 0:
@@ -3140,6 +4527,11 @@ class RealTimePlotter(QtWidgets.QWidget):
     if not self.is_recording:
       # --- EMPEZAR A GRABAR ---
       self.is_recording = True
+      self.recording_start_time = time.perf_counter()
+      self.btn_record.setText("Detener Grabación")
+      self.btn_record.setStyleSheet(self.BTN_REC_STOP_STYLE)
+      self.label_rec_time.setVisible(True)
+      self.label_rec_time.setText("GRABANDO...")
       
       # --- Resetear el zoom en Y a rango base calibrado (500 µV) ---
       if hasattr(self, 'chk_rms_env') and self.chk_rms_env.isChecked():
@@ -3152,12 +4544,15 @@ class RealTimePlotter(QtWidgets.QWidget):
       self.current_recording.clear()
       self.cmb_terminal_config.setEnabled(False) # <-- NUEVO: Bloquear cambio en plena grabación
       
-      # --- NUEVO: Reiniciar variables de ruido ---
+      # --- NUEVO: Reiniciar variables de ruido y buffers ---
       self.noise_data_accumulated = [[] for _ in range(self.NUM_CANALES)]
+      self.raw_noise_accumulated = [[] for _ in range(self.NUM_CANALES)]
       self.noise_levels = [0.0] * self.NUM_CANALES
       self.noise_calculated = False
       self.noise_initialized = False # <-- NUEVO: Resetear estado
       self.countdown_active = False # Permitir lanzar el countdown de nuevo
+      self.rt_peaks = [[] for _ in range(self.NUM_CANALES)]
+      self.rt_last_noise_eval = 0.0
       for line in getattr(self, 'noise_lines', []): line.hide()
       for line in getattr(self, 'noise_lines_neg', []): line.hide()
       for reg in getattr(self, 'noise_regions', []): reg.hide()
@@ -3178,7 +4573,6 @@ class RealTimePlotter(QtWidgets.QWidget):
       self.global_snr_acumulado = [0.0] * self.NUM_CANALES
       self.global_snr_count = [0] * self.NUM_CANALES
       
-      
       if hasattr(self, 'noise_status_labels'):
         for label in self.noise_status_labels:
           label.setText("Ruido inter-pulso: Evaluando base...")
@@ -3186,21 +4580,28 @@ class RealTimePlotter(QtWidgets.QWidget):
       
       self.config_stack.setCurrentIndex(1) # Ocultar configuración
       
-      # --- NUEVO: Re-lanzar el metrónomo con count-in (mismo beep que autograbado) al inicio de grabar ruido ---
+      # --- NUEVO: Re-lanzar el metrónomo con count-in 4 compases ---
       if self.chk_use_metronome.isChecked():
         self.stop_native_metronome()
-        
-        self.start_native_metronome(count_in=0, force_start=True)
+        self.start_native_metronome(count_in=4, force_start=True)
+
+      # --- HOOK FOTOMETRIA: Inicio de sesion y captura onset ---
+      if getattr(self, 'photometry_mgr', None) is not None and getattr(self.photometry_mgr, 'is_enabled', False):
+        self.photometry_mgr.start_take_session("manual", t0_perf=self.recording_start_time)
+        self.photometry_mgr.request_snapshot(fase="onset", palabra="manual", pulso=1, t_daq_s=0.0, sample_rate=self.SAMPLE_RATE)
 
     else:
       # --- DETENER GRABAR ---
       self.is_recording = False
+      self.btn_record.setText("Empezar a Grabar")
+      self.btn_record.setStyleSheet(self.BTN_REC_START_STYLE)
+      self.label_rec_time.setVisible(False)
       self.cmb_terminal_config.setEnabled(True)
       self.stop_native_metronome()
       self.config_stack.setCurrentIndex(0)
 
       if self.current_recording:
-        self.on_export_click() # <-- LLAMADA AUTOMÁTICA A EXPORTAR (AHORA DESPUÉS DE CERRAR EL METRÓNOMO)
+        self.on_export_click()
 
   # --- MODIFICADO v3.12: Manejo de errores de exportación individual ---
   def on_export_click(self):
@@ -3269,7 +4670,29 @@ class RealTimePlotter(QtWidgets.QWidget):
     muscles_list = [self.nombres_musculos[i % len(self.nombres_musculos)] for i in range(self.NUM_CANALES)]
     muscles_map = {f"canal_{i}": self.nombres_musculos[i % len(self.nombres_musculos)] for i in range(self.NUM_CANALES)}
 
-    # --- NUEVO: Guardar metadata.json con la fecha, hora, timestamp y músculos ---
+    calib_cvm_dict = {
+        "calibrado": getattr(self, 'cvm_completed', False),
+        "metodo": "envolvente_rms_multiparametrico",
+        "tomas_por_vocal": 3,
+        "canales": {
+            f"canal_{i}": {
+                "pico_envolvente_uV": self.cvm_env_max_per_channel[i] if hasattr(self, 'cvm_env_max_per_channel') and i < len(self.cvm_env_max_per_channel) else 0.0,
+                "percentil_95_uV": self.cvm_env_p95_per_channel[i] if hasattr(self, 'cvm_env_p95_per_channel') and i < len(self.cvm_env_p95_per_channel) else 0.0,
+                "percentil_90_uV": self.cvm_env_p90_per_channel[i] if hasattr(self, 'cvm_env_p90_per_channel') and i < len(self.cvm_env_p90_per_channel) else 0.0,
+                "rms_envolvente_uV": self.cvm_env_rms_per_channel[i] if hasattr(self, 'cvm_env_rms_per_channel') and i < len(self.cvm_env_rms_per_channel) else 0.0,
+                "energia_uV2_s": self.cvm_energia_per_channel[i] if hasattr(self, 'cvm_energia_per_channel') and i < len(self.cvm_energia_per_channel) else 0.0,
+                "auc_uV_s": self.cvm_auc_per_channel[i] if hasattr(self, 'cvm_auc_per_channel') and i < len(self.cvm_auc_per_channel) else 0.0
+            } for i in range(self.NUM_CANALES)
+        },
+        "supremo_global_uV": getattr(self, 'supremo_global_uV', 0.0),
+        "supremo_global_p95_uV": getattr(self, 'supremo_global_p95_uV', 0.0),
+        "supremo_global_p90_uV": getattr(self, 'supremo_global_p90_uV', 0.0),
+        "supremo_global_rms_uV": getattr(self, 'supremo_global_rms_uV', 0.0),
+        "supremo_global_energia_uV2_s": getattr(self, 'supremo_global_energia', 0.0),
+        "supremo_global_auc_uV_s": getattr(self, 'supremo_global_auc', 0.0)
+    }
+
+    # --- NUEVO: Guardar metadata.json con la fecha, hora, timestamp, músculos, ruido y CVM ---
     metadata = {
       "measurement_date": now.isoformat(),
       "timestamp": int(now.timestamp()),
@@ -3285,9 +4708,41 @@ class RealTimePlotter(QtWidgets.QWidget):
       "sujeto": details["sujeto"],
       "letra": details["letra"],
       "prueba": details["prueba"],
-      "comentario": comentario # <-- NUEVO: Añadir el comentario al metadata
+      "comentario": comentario,
+      "ruido_basal": {
+          "inicial": {
+              "mean_uV": getattr(self, 'initial_noise_mean', [0.0]*self.NUM_CANALES),
+              "std_uV": getattr(self, 'initial_noise_std', [0.0]*self.NUM_CANALES),
+              "line_noise_50hz_uV": getattr(self, 'line_noise_50hz_uV', [0.0]*self.NUM_CANALES)
+          },
+          "final": {
+              "mean_uV": getattr(self, 'final_noise_mean', [0.0]*self.NUM_CANALES),
+              "std_uV": getattr(self, 'final_noise_std', [0.0]*self.NUM_CANALES),
+              "line_noise_50hz_uV": getattr(self, 'final_noise_50hz', [0.0]*self.NUM_CANALES)
+          }
+      },
+      "calibracion_cvm": calib_cvm_dict
     }
-    # --- CORRECCIÓN: Guardar metadata ÚNICAMENTE en la carpeta de cada canal con su respectivo músculo ---
+
+    # Exportar Fotometria 3D si esta habilitada
+    if getattr(self, 'photometry_mgr', None) is not None and getattr(self.photometry_mgr, 'is_enabled', False):
+      try:
+        foto_resumen = self.photometry_mgr.export_take_photometry(output_dir)
+        if foto_resumen:
+          metadata["fotometria_espacial"] = foto_resumen
+      except Exception as exc:
+        print(f"--- ERROR AL EXPORTAR FOTOMETRIA 3D ---\n{exc}")
+
+    # Guardar metadata.json en la raíz de output_dir
+    try:
+      root_meta_path = os.path.join(output_dir, "metadata.json")
+      with open(root_meta_path, 'w', encoding='utf-8') as f:
+        json.dump(metadata, f, indent=4)
+      print(f"  Metadata raíz guardado en: {root_meta_path}")
+    except Exception as e:
+      print(f"--- ERROR AL GUARDAR METADATA.JSON raíz en '{output_dir}' ---\n{e}")
+
+    # Guardar metadata en la carpeta de cada canal con su respectivo músculo
     for i in range(self.NUM_CANALES):
       current_dir = os.path.join(output_dir, f"canal_{i}")
       metadata_path = os.path.join(current_dir, "metadata.json")
@@ -3310,7 +4765,7 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     # 2. Guarda el .csv
     try:
-      guardar_grabacion_csv(self.current_recording, self.SAMPLE_RATE, output_dir, self.NUM_CANALES)
+      guardar_grabacion_csv(self.current_recording, self.SAMPLE_RATE, output_dir, self.NUM_CANALES, canales_daq=self.CANALES_DAQ)
     except Exception as e:
       print(f"--- ERROR FATAL AL GUARDAR .CSV ---\n{e}")
 
@@ -3329,6 +4784,10 @@ class RealTimePlotter(QtWidgets.QWidget):
       generar_grafico_estadisticas(self.stats_time, self.stats_snr, self.stats_noise_mean, self.stats_noise_std, output_dir, self.NUM_CANALES, self.CANALES_DAQ)
     except Exception as e:
       print(f"--- ERROR FATAL AL GUARDAR GRÁFICO ESTADÍSTICO ---\n{e}")
+
+    # 5. Persistir Notas del Experimento en metadata y notas_experimento.txt
+    self.last_measurement_dir = output_dir
+    self.persistir_notas_experimento(output_dir, metadata_base=metadata, texto_notas=comentario)
 
     print("--- EXPORTACIÓN FINALIZADA ---")
 
@@ -3369,8 +4828,17 @@ class RealTimePlotter(QtWidgets.QWidget):
         print(f"\n[DEBUG DAQ] Voltaje RAW puro entregado por la placa (Canal 0): {all_new_data[0, 0]:.6f} V")
         self._raw_print_done = True
 
-      # Calibración a microvoltios (Ganancia = 495 con R_electrodo = 100 ohm)
-      raw_uV_data = (all_new_data / 495.0) * 1000000.0
+      # Calibración a microvoltios por canal físico
+      if hasattr(self, 'factores_calibracion_hw') and hasattr(self, 'active_channel_indices'):
+        calib_factors = np.array([
+          self.factores_calibracion_hw[self.active_channel_indices[i]]
+          if (i < len(self.active_channel_indices) and self.active_channel_indices[i] < len(self.factores_calibracion_hw) and self.factores_calibracion_hw[self.active_channel_indices[i]] > 0)
+          else 495.0
+          for i in range(self.NUM_CANALES)
+        ]).reshape(-1, 1)
+      else:
+        calib_factors = 495.0
+      raw_uV_data = (all_new_data / calib_factors) * 1000000.0
       processed_data = raw_uV_data.copy()
 
       # --- CVM RECORDING HOOK ---
@@ -3413,8 +4881,8 @@ class RealTimePlotter(QtWidgets.QWidget):
       if self.chk_filter_enable.isChecked() and self.filter_sos is not None and self.filter_zi is not None:
         bandpass_filtered_data = np.zeros_like(processed_data)
         for i in range(self.NUM_CANALES):
-          if i == 3 and self.NUM_CANALES > 3:
-            # Canal 3 es micrófono/audio: preservar audio sin filtro pasa-banda muscular 20-500 Hz
+          if self._is_mic_channel(i):
+            # Canal de micrófono/audio: preservar audio sin filtro pasa-banda muscular 20-500 Hz
             bandpass_filtered_data[i, :] = processed_data[i, :]
             continue
           # --- CORRECCIÓN: Indexar correctamente el array de estado del filtro 'zi' ---
@@ -3846,6 +5314,12 @@ class RealTimePlotter(QtWidgets.QWidget):
       vp_p = max_vals - min_vals
       
       rms = np.sqrt(np.mean(np.square(chunk_data), axis=1))
+
+      # --- NUEVO: Dominancia Muscular (% Dom) en vivo ---
+      emg_indices = [ch for ch in range(self.NUM_CANALES) if not self._is_mic_channel(ch)]
+      if not emg_indices:
+        emg_indices = list(range(self.NUM_CANALES))
+      sum_rms_emg = float(np.sum(rms[emg_indices])) + 1e-9
       
       # --- MEJORA: Ventanas Deterministas atadas al metrónomo ---
       # Aislar exactamente el segmento de tiempo correspondiente al pulso actual
@@ -3867,8 +5341,14 @@ class RealTimePlotter(QtWidgets.QWidget):
 
       # Actualiza los labels y el marcador gráfico
       for i in range(self.NUM_CANALES):
-        musculo = self.nombres_musculos[i % len(self.nombres_musculos)]
-        texto = f"<b>{musculo}:</b> {vp_p[i]:.1f} µVp-p, {rms[i]:.1f} µVrms"
+        hw_idx = self.active_channel_indices[i] if (hasattr(self, 'active_channel_indices') and self.active_channel_indices and i < len(self.active_channel_indices)) else i
+        musculo = self.nombres_musculos[i] if (hasattr(self, 'nombres_musculos') and i < len(self.nombres_musculos)) else f"Canal {hw_idx}"
+        if i in emg_indices:
+          dom_pct = (rms[i] / sum_rms_emg) * 100.0
+          dom_str = f" ({dom_pct:.1f}% Dom)"
+        else:
+          dom_str = ""
+        texto = f"<b>ai{hw_idx} ({musculo}):</b> {vp_p[i]:.1f} µVp-p, {rms[i]:.1f} µVrms{dom_str}"
         
         # Aislar la ventana de búsqueda para este canal
         window_data = plot_buffer_datos[i, search_start_idx:]
@@ -3965,6 +5445,11 @@ class RealTimePlotter(QtWidgets.QWidget):
 
   def reset_autoforge_buttons(self):
     """Restaura los botones de autoforge a su estado normal (Cyberpunk)."""
+    self._autoforge_token = getattr(self, '_autoforge_token', 0) + 1
+    self.is_autoforge_running = False
+    self.is_autoforge_continuo = False
+    self.is_cvm_active = False
+    self.is_recording_final_noise = False
     self.btn_autoforge.setText(" AUTOGRABADO")
     self.btn_autoforge.setStyleSheet("""
       QPushButton {
@@ -4011,8 +5496,11 @@ class RealTimePlotter(QtWidgets.QWidget):
     """
     try:
       if getattr(self, 'is_autoforge_running', False):
+        self._autoforge_token = getattr(self, '_autoforge_token', 0) + 1
         self.is_autoforge_running = False
         self.is_autoforge_continuo = False
+        self.is_cvm_active = False
+        self.is_recording_final_noise = False
         self.is_recording = False
         self.reset_autoforge_buttons()
         self.autoforge_overlay.hide()
@@ -4030,8 +5518,8 @@ class RealTimePlotter(QtWidgets.QWidget):
         return
         
       # --- NUEVO: Apagar metrónomo general si estaba corriendo para que no choquen ---
-        self.stop_native_metronome()
-        self.chk_use_metronome.setChecked(False) # Reflejar en UI
+      self.stop_native_metronome()
+      self.chk_use_metronome.setChecked(False) # Reflejar en UI
 
       if not self.is_acquiring:
         QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
@@ -4073,18 +5561,30 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.autoforge_target_reps = dialog.spin_reps.value()
         bpm = dialog.spin_bpm.value()
         
+        self.autoforge_do_cvm = dialog.chk_calibrar_cvm.isChecked()
+        self.cvm_completed = False
+        self.final_noise_completed = False
+        self.is_cvm_active = False
+        self.is_recording_final_noise = False
+        self.autoforge_session_dirs = []
+        self._autoforge_token = getattr(self, '_autoforge_token', 0) + 1
+
         # Actualizar nombres de músculos elegidos
         muscles = dialog.get_muscle_names()
         if muscles:
           self.nombres_musculos = muscles
           canales_conf = self.config_mgr.get("canales") or {}
           for i, m in enumerate(muscles):
-            key = f"Canal {i}"
+            hw_idx = self.active_channel_indices[i] if (hasattr(self, 'active_channel_indices') and i < len(self.active_channel_indices)) else i
+            if hasattr(self, 'nombres_musculos_hw') and hw_idx < len(self.nombres_musculos_hw):
+              self.nombres_musculos_hw[hw_idx] = m
+            key = f"Canal {hw_idx}"
             if key not in canales_conf:
               canales_conf[key] = {}
             canales_conf[key]["musculo"] = m
           self.config_mgr.set("canales", canales_conf)
           self.config_mgr.save()
+          self.refrescar_interfaz_canales()
 
         # Actualizar el spinbox principal de BPM si existe
         try:
@@ -4092,6 +5592,25 @@ class RealTimePlotter(QtWidgets.QWidget):
           self._save_metronome_config() # Guardar archivo JSON con el BPM
         except:
           pass
+
+        # Sincronizar Notas del Experimento
+        texto_notas = dialog.edit_notas.toPlainText().strip()
+        if hasattr(self, 'txt_notas_live') and texto_notas:
+          self.txt_notas_live.setPlainText(texto_notas)
+        self.notas_experimento = texto_notas
+
+        # Sincronizar Fotometría y calibrar si está habilitada sin calibración previa
+        if getattr(self, 'photometry_mgr', None):
+          self.photometry_mgr.is_enabled = dialog.chk_fotometria.isChecked()
+          self.photometry_mgr.record_video_clips = dialog.chk_fotometria_video.isChecked()
+          if self.photometry_mgr.is_enabled and not self.photometry_mgr.calibracion_inicial_data:
+            self.photometry_mgr.open_alignment_dialog(
+              parent_widget=self,
+              nombres_musculos=self.nombres_musculos,
+              active_channel_indices=self.active_channel_indices,
+              sujeto=self.autoforge_sujeto,
+              prueba=self.autoforge_prueba,
+            )
         
         self.autoforge_word_idx = 0
         # --- NUEVO: Mostrar Instrucciones del Experimento ---
@@ -4102,7 +5621,7 @@ class RealTimePlotter(QtWidgets.QWidget):
             "<b>Bienvenido a la Sesión de Grabación (Discreta)</b><br><br>"
             "1. Relaja el rostro y evita moverte o tragar saliva.<br>"
             "2. Se medirán primero los niveles basales de ruido inter-pulso.<br>"
-            "3. Se calibrará la Contracción Muscular Máxima (CVM) con vocales extremas (A, I, O) usando el metrónomo.<br>"
+            "3. Se calibrará la Contracción Muscular Máxima (CVM) con vocales extremas (A, I, U) usando el metrónomo.<br>"
             "4. A continuación, el sistema te guiará palabra por palabra.<br>"
             "5. Al finalizar se registrará nuevamente el ruido basal."
         )
@@ -4133,8 +5652,11 @@ class RealTimePlotter(QtWidgets.QWidget):
   def iniciar_autoforge_continuo(self):
     try:
       if getattr(self, 'is_autoforge_running', False):
+        self._autoforge_token = getattr(self, '_autoforge_token', 0) + 1
         self.is_autoforge_running = False
         self.is_autoforge_continuo = False
+        self.is_cvm_active = False
+        self.is_recording_final_noise = False
         self.is_recording = False
         self.reset_autoforge_buttons()
         self.autoforge_overlay.hide()
@@ -4192,24 +5714,55 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.autoforge_target_reps = dialog.spin_reps.value() # Total cycles
         bpm = dialog.spin_bpm.value()
         
+        self.autoforge_do_cvm = dialog.chk_calibrar_cvm.isChecked()
+        self.cvm_completed = False
+        self.final_noise_completed = False
+        self.is_cvm_active = False
+        self.is_recording_final_noise = False
+        self.autoforge_session_dirs = []
+        self._autoforge_token = getattr(self, '_autoforge_token', 0) + 1
+
         # Actualizar nombres de músculos elegidos
         muscles = dialog.get_muscle_names()
         if muscles:
           self.nombres_musculos = muscles
           canales_conf = self.config_mgr.get("canales") or {}
           for i, m in enumerate(muscles):
-            key = f"Canal {i}"
+            hw_idx = self.active_channel_indices[i] if (hasattr(self, 'active_channel_indices') and i < len(self.active_channel_indices)) else i
+            if hasattr(self, 'nombres_musculos_hw') and hw_idx < len(self.nombres_musculos_hw):
+              self.nombres_musculos_hw[hw_idx] = m
+            key = f"Canal {hw_idx}"
             if key not in canales_conf:
               canales_conf[key] = {}
             canales_conf[key]["musculo"] = m
           self.config_mgr.set("canales", canales_conf)
           self.config_mgr.save()
+          self.refrescar_interfaz_canales()
 
         try:
           self.spin_bpm.setValue(bpm)
           self._save_metronome_config()
         except:
           pass
+
+        # Sincronizar Notas del Experimento
+        texto_notas = dialog.edit_notas.toPlainText().strip()
+        if hasattr(self, 'txt_notas_live') and texto_notas:
+          self.txt_notas_live.setPlainText(texto_notas)
+        self.notas_experimento = texto_notas
+
+        # Sincronizar Fotometría y calibrar si está habilitada sin calibración previa
+        if getattr(self, 'photometry_mgr', None):
+          self.photometry_mgr.is_enabled = dialog.chk_fotometria.isChecked()
+          self.photometry_mgr.record_video_clips = dialog.chk_fotometria_video.isChecked()
+          if self.photometry_mgr.is_enabled and not self.photometry_mgr.calibracion_inicial_data:
+            self.photometry_mgr.open_alignment_dialog(
+              parent_widget=self,
+              nombres_musculos=self.nombres_musculos,
+              active_channel_indices=self.active_channel_indices,
+              sujeto=self.autoforge_sujeto,
+              prueba=self.autoforge_prueba,
+            )
         
         self.autoforge_word_idx = 0
         # --- NUEVO: Mostrar Instrucciones del Experimento ---
@@ -4220,7 +5773,7 @@ class RealTimePlotter(QtWidgets.QWidget):
             "<b>Bienvenido a la Sesión de Grabación (Secuencia Continua)</b><br><br>"
             "1. Relaja el rostro y evita moverte o tragar saliva.<br>"
             "2. Se medirán primero los niveles basales de ruido inter-pulso.<br>"
-            "3. Se calibrará la Contracción Muscular Máxima (CVM) con vocales extremas (A, I, O) usando el metrónomo.<br>"
+            "3. Se calibrará la Contracción Muscular Máxima (CVM) con vocales extremas (A, I, U) usando el metrónomo.<br>"
             "4. A continuación, pronuncia las vocales mostradas en pantalla al ritmo del metrónomo. Mantén la fuerza constante.<br>"
             "5. Al finalizar se registrará nuevamente el ruido basal."
         )
@@ -4291,7 +5844,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.lbl_recording_space.setText(texto_ventana)
     self.word_window_process = None # Mantener variable para no romper nada
     
-    QtCore.QTimer.singleShot(3000, self.estado_grabar_ruido_continuo)
+    self._safe_autoforge_single_shot(3000, self.estado_grabar_ruido_continuo)
 
   def _procesar_ruido_inicial_50hz(self):
     self.line_noise_50hz_uV = [0.0] * self.NUM_CANALES
@@ -4321,20 +5874,20 @@ class RealTimePlotter(QtWidgets.QWidget):
           self.line_noise_status_frames[i].setStyleSheet(f"background-color: {color_bg}; border: 1.5px solid {color_txt}; border-radius: 3px; padding: 2px;")
 
   # ==============================================================================
-  # --- RUTINA DE CALIBRACIÓN CVM (3 TOMAS /A/, /I/, /O/ MULTIPARAMÉTRICA) ---
+  # --- RUTINA DE CALIBRACIÓN CVM (3 TOMAS /A/, /I/, /U/ MULTIPARAMÉTRICA) ---
   # ==============================================================================
   def estado_iniciar_calibracion_cvm(self, target_post_cvm):
     if not getattr(self, 'is_autoforge_running', False): return
     self._post_cvm_target_method = target_post_cvm
     self.is_recording = False
     self.autoforge_estado_actual_str = "CONTRACCIÓN MUSCULAR MÁXIMA"
-    self.label_rec_time.setText("CONTRACCIÓN MUSCULAR MÁXIMA (3 TOMAS POR VOCAL EXTREMA)...")
+    self.label_rec_time.setText("CONTRACCIÓN MUSCULAR MÁXIMA (3 TOMAS POR VOCAL EXTREMA: A, I, U)...")
     self.label_rec_time.setStyleSheet("font-weight: bold; color: #FFCC00;")
     
     self.cvm_sequence = [
         ('A', 1), ('A', 2), ('A', 3),
         ('I', 1), ('I', 2), ('I', 3),
-        ('O', 1), ('O', 2), ('O', 3)
+        ('U', 1), ('U', 2), ('U', 3)
     ]
     self.cvm_step_idx = 0
     self.cvm_recording_chunks = []
@@ -4353,7 +5906,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         "<div align='center'>"
         "<span style='color:#FFCC00; font-size:36px; font-weight:bold;'>CONTRACCIÓN MUSCULAR MÁXIMA</span><br><br>"
         "<span style='color:#FFFFFF; font-size:24px;'>Iniciando protocolo de calibración al ritmo del metrónomo.</span><br>"
-        "<span style='color:#00FFCC; font-size:20px;'>Sigue las instrucciones en pantalla.</span>"
+        "<span style='color:#00FFCC; font-size:20px;'>Sigue las instrucciones en pantalla (Vocales: A, I, U).</span>"
         "</div>"
     )
     self.autoforge_overlay.show()
@@ -4368,8 +5921,17 @@ class RealTimePlotter(QtWidgets.QWidget):
       take_data = np.concatenate(self.cvm_current_take_chunks, axis=1)
       self.cvm_recording_chunks.append(take_data)
       
-      # Convertir a uV
-      take_uV = (take_data / 495.0) * 1000000.0
+      # Convertir a uV usando factor de calibración por canal físico
+      if hasattr(self, 'factores_calibracion_hw') and hasattr(self, 'active_channel_indices'):
+        calib_factors = np.array([
+          self.factores_calibracion_hw[self.active_channel_indices[ch]]
+          if (ch < len(self.active_channel_indices) and self.active_channel_indices[ch] < len(self.factores_calibracion_hw) and self.factores_calibracion_hw[self.active_channel_indices[ch]] > 0)
+          else 495.0
+          for ch in range(self.NUM_CANALES)
+        ]).reshape(-1, 1)
+      else:
+        calib_factors = 495.0
+      take_uV = (take_data / calib_factors) * 1000000.0
       window_size_ms = self.spin_rms_window.value()
       window_size = int((window_size_ms / 1000.0) * self.SAMPLE_RATE)
       if window_size < 1: window_size = 1
@@ -4415,19 +5977,25 @@ class RealTimePlotter(QtWidgets.QWidget):
     if not getattr(self, 'is_autoforge_running', False): return
     self.cvm_completed = True
     
-    n_ch_tri = min(3, self.NUM_CANALES)
-    self.supremo_global_uV = float(max(self.cvm_env_max_per_channel[:n_ch_tri])) if n_ch_tri > 0 else 0.0
-    self.supremo_global_p95_uV = float(max(self.cvm_env_p95_per_channel[:n_ch_tri])) if n_ch_tri > 0 else 0.0
-    self.supremo_global_p90_uV = float(max(self.cvm_env_p90_per_channel[:n_ch_tri])) if n_ch_tri > 0 else 0.0
-    self.supremo_global_rms_uV = float(max(self.cvm_env_rms_per_channel[:n_ch_tri])) if n_ch_tri > 0 else 0.0
-    self.supremo_global_energia = float(max(self.cvm_energia_per_channel[:n_ch_tri])) if n_ch_tri > 0 else 0.0
-    self.supremo_global_auc = float(max(self.cvm_auc_per_channel[:n_ch_tri])) if n_ch_tri > 0 else 0.0
+    # Excluir el canal de micrófono del cálculo del supremo global EMG
+    emg_channels = [ch for ch in range(self.NUM_CANALES) if not self._is_mic_channel(ch)]
+    if emg_channels:
+      self.supremo_global_uV = float(max(self.cvm_env_max_per_channel[ch] for ch in emg_channels))
+      self.supremo_global_p95_uV = float(max(self.cvm_env_p95_per_channel[ch] for ch in emg_channels))
+      self.supremo_global_p90_uV = float(max(self.cvm_env_p90_per_channel[ch] for ch in emg_channels))
+      self.supremo_global_rms_uV = float(max(self.cvm_env_rms_per_channel[ch] for ch in emg_channels))
+      self.supremo_global_energia = float(max(self.cvm_energia_per_channel[ch] for ch in emg_channels))
+      self.supremo_global_auc = float(max(self.cvm_auc_per_channel[ch] for ch in emg_channels))
+    else:
+      self.supremo_global_uV = 0.0
+      self.supremo_global_p95_uV = 0.0
+      self.supremo_global_p90_uV = 0.0
+      self.supremo_global_rms_uV = 0.0
+      self.supremo_global_energia = 0.0
+      self.supremo_global_auc = 0.0
       
-    c0 = self.cvm_env_max_per_channel[0] if self.NUM_CANALES > 0 else 0.0
-    c1 = self.cvm_env_max_per_channel[1] if self.NUM_CANALES > 1 else 0.0
-    c2 = self.cvm_env_max_per_channel[2] if self.NUM_CANALES > 2 else 0.0
-    
-    print(f"[Calibración CVM] Picos Envolvente: C0={c0:.1f}µV, C1={c1:.1f}µV, C2={c2:.1f}µV | Supremo Pico={self.supremo_global_uV:.1f}µV | Supremo P95={self.supremo_global_p95_uV:.1f}µV")
+    c_str = ", ".join([f"C{ch}={self.cvm_env_max_per_channel[ch]:.1f}µV" for ch in range(self.NUM_CANALES)])
+    print(f"[Calibración CVM (A, I, U)] Picos Envolvente: {c_str} | Canales EMG={emg_channels} | Supremo Pico={self.supremo_global_uV:.1f}µV | Supremo P95={self.supremo_global_p95_uV:.1f}µV")
     
     self.autoforge_overlay.setText(
         f"<div align='center'>"
@@ -4439,7 +6007,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.autoforge_overlay.show()
     
     self._guardar_calibracion_csv()
-    QtCore.QTimer.singleShot(2500, self._continuar_post_cvm)
+    self._safe_autoforge_single_shot(2500, self._continuar_post_cvm)
 
   def _guardar_calibracion_csv(self):
     import threading
@@ -4535,10 +6103,14 @@ class RealTimePlotter(QtWidgets.QWidget):
     
     self.final_raw_noise_accumulated = [[] for _ in range(self.NUM_CANALES)]
     self.is_recording_final_noise = True
+
+    # --- HOOK FOTOMETRIA: Captura no bloqueante en ruido basal final ---
+    if getattr(self, 'photometry_mgr', None) is not None and getattr(self.photometry_mgr, 'is_enabled', False):
+      self.photometry_mgr.request_snapshot(fase="ruido_basal_final", palabra="ruido", pulso=0, sample_rate=self.SAMPLE_RATE)
     
     noise_dur = getattr(self, 'spin_noise_duration', None)
     dur_sec = noise_dur.value() if noise_dur is not None else 5.0
-    QtCore.QTimer.singleShot(int(dur_sec * 1000), self.estado_finalizar_ruido_final)
+    self._safe_autoforge_single_shot(int(dur_sec * 1000), self.estado_finalizar_ruido_final)
 
   def estado_finalizar_ruido_final(self):
     if not getattr(self, 'is_autoforge_running', False): return
@@ -4564,6 +6136,37 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     print(f"[Ruido Final] Evaluación completada. 50Hz: {self.final_noise_50hz}")
     
+    # Actualizar metadata.json con ruido final en todas las carpetas guardadas en la sesión
+    final_noise_dict = {
+        "mean_uV": getattr(self, 'final_noise_mean', [0.0]*self.NUM_CANALES),
+        "std_uV": getattr(self, 'final_noise_std', [0.0]*self.NUM_CANALES),
+        "line_noise_50hz_uV": getattr(self, 'final_noise_50hz', [0.0]*self.NUM_CANALES)
+    }
+    for session_dir in getattr(self, 'autoforge_session_dirs', []):
+      try:
+        root_m_path = os.path.join(str(session_dir), "metadata.json")
+        if os.path.exists(root_m_path):
+          with open(root_m_path, 'r', encoding='utf-8') as f:
+            m_data = json.load(f)
+          if "ruido_basal" not in m_data:
+            m_data["ruido_basal"] = {}
+          m_data["ruido_basal"]["final"] = final_noise_dict
+          with open(root_m_path, 'w', encoding='utf-8') as f:
+            json.dump(m_data, f, indent=4)
+
+        for ch in range(self.NUM_CANALES):
+          ch_m_path = os.path.join(str(session_dir), f"canal_{ch}", "metadata.json")
+          if os.path.exists(ch_m_path):
+            with open(ch_m_path, 'r', encoding='utf-8') as f:
+              m_ch = json.load(f)
+            if "ruido_basal" not in m_ch:
+              m_ch["ruido_basal"] = {}
+            m_ch["ruido_basal"]["final"] = final_noise_dict
+            with open(ch_m_path, 'w', encoding='utf-8') as f:
+              json.dump(m_ch, f, indent=4)
+      except Exception as e:
+        print(f"[Ruido Final] Error actualizando metadata en {session_dir}: {e}")
+
     target = getattr(self, '_post_final_noise_target_method', None)
     if callable(target):
       target()
@@ -4599,9 +6202,13 @@ class RealTimePlotter(QtWidgets.QWidget):
     else:
       self.plot.setYRange(-500.0, 500.0, padding=0)
     self._held_plot_ymax = 500.0
+
+    # --- HOOK FOTOMETRIA: Instantanea de ruido basal ---
+    if getattr(self, 'photometry_mgr', None) is not None and getattr(self.photometry_mgr, 'is_enabled', False):
+      self.photometry_mgr.request_snapshot(fase="ruido_basal", palabra="ruido", pulso=0, sample_rate=self.SAMPLE_RATE)
     
     noise_dur = self.spin_noise_duration.value()
-    QtCore.QTimer.singleShot(int(noise_dur * 1000), self.estado_mostrar_preparate_continuo)
+    self._safe_autoforge_single_shot(int(noise_dur * 1000), self.estado_mostrar_preparate_continuo)
 
   def estado_mostrar_preparate_continuo(self):
     self.is_recording = False
@@ -4669,10 +6276,10 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.countdown_text.show()
     
     self.countdown_text.setText("PREPÁRATE...\n3")
-    QtCore.QTimer.singleShot(int(beat_interval_s * 1000), lambda: self.countdown_text.setText("PREPÁRATE...\n2"))
-    QtCore.QTimer.singleShot(int(2 * beat_interval_s * 1000), lambda: self.countdown_text.setText("PREPÁRATE...\n1"))
+    self._safe_autoforge_single_shot(int(beat_interval_s * 1000), lambda: self.countdown_text.setText("PREPÁRATE...\n2"))
+    self._safe_autoforge_single_shot(int(2 * beat_interval_s * 1000), lambda: self.countdown_text.setText("PREPÁRATE...\n1"))
     
-    QtCore.QTimer.singleShot(int(3 * beat_interval_s * 1000), self.estado_iniciar_grabacion_continua)
+    self._safe_autoforge_single_shot(int(3 * beat_interval_s * 1000), self.estado_iniciar_grabacion_continua)
 
   def estado_iniciar_grabacion_continua(self):
     self.autoforge_overlay.hide()
@@ -4693,6 +6300,11 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.label_rec_time.setText("GRABANDO SECUENCIA CONTINUA...")
     if len(self.autoforge_words) > 0:
         self.lbl_recording_space.setText(f"<div align='center' style='font-size: 100px; font-weight: bold;'>{self.autoforge_words[0].upper()}</div>")
+
+    # --- HOOK FOTOMETRIA: Inicio de sesion continua y captura onset ---
+    if getattr(self, 'photometry_mgr', None) is not None and getattr(self.photometry_mgr, 'is_enabled', False):
+      self.photometry_mgr.start_take_session(f"SecuenciaContinua_{self.autoforge_prueba}_{self.autoforge_sujeto}", t0_perf=self.recording_start_time)
+      self.photometry_mgr.request_snapshot(fase="onset", palabra="inicio_secuencia", pulso=1, t_daq_s=0.0, sample_rate=self.SAMPLE_RATE)
 
   def estado_guardar_secuencia_continua(self):
     if not getattr(self, 'final_noise_completed', False):
@@ -4730,6 +6342,8 @@ class RealTimePlotter(QtWidgets.QWidget):
         root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
       base_dir = Path(root_dir) / "base_de_datos_electrodos" / fecha_str / folder_name
       os.makedirs(base_dir, exist_ok=True)
+      if hasattr(self, 'autoforge_session_dirs'):
+        self.autoforge_session_dirs.append(str(base_dir))
       
       total_pulsos = len(self.autoforge_words) * self.autoforge_target_reps
       
@@ -4794,6 +6408,15 @@ class RealTimePlotter(QtWidgets.QWidget):
         "calibracion_cvm": calib_cvm_dict
       }
       
+      # Exportar Fotometria 3D si esta habilitada
+      if getattr(self, 'photometry_mgr', None) is not None and getattr(self.photometry_mgr, 'is_enabled', False):
+        try:
+          foto_resumen = self.photometry_mgr.export_take_photometry(str(base_dir))
+          if foto_resumen:
+            metadata["fotometria_espacial"] = foto_resumen
+        except Exception as exc:
+          print(f"--- ERROR AL EXPORTAR FOTOMETRIA 3D ---\n{exc}")
+      
       for i in range(self.NUM_CANALES):
         channel_output_dir = os.path.join(base_dir, f"canal_{i}")
         os.makedirs(channel_output_dir, exist_ok=True)
@@ -4813,7 +6436,12 @@ class RealTimePlotter(QtWidgets.QWidget):
           json.dump(metadata, f, indent=4)
       except: pass
 
-      try: guardar_grabacion_csv(local_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion")
+      # Persistir Notas del Experimento (metadata.json, canal_*/metadata.json y notas_experimento.txt)
+      self.last_measurement_dir = str(base_dir)
+      texto_notas = getattr(self, 'notas_experimento', '')
+      self.persistir_notas_experimento(str(base_dir), metadata_base=metadata, texto_notas=texto_notas)
+
+      try: guardar_grabacion_csv(local_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion", canales_daq=self.CANALES_DAQ)
       except: pass
       
       try: guardar_grabacion_wav(local_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion")
@@ -4833,7 +6461,7 @@ class RealTimePlotter(QtWidgets.QWidget):
       
     threading.Thread(target=guardar_async, daemon=True).start()
     
-    QtCore.QTimer.singleShot(5000, self.estado_finalizar_secuencia_continua)
+    self._safe_autoforge_single_shot(5000, self.estado_finalizar_secuencia_continua)
 
   def estado_finalizar_secuencia_continua(self):
     self.autoforge_overlay.setText("<div align='center'>¡SECUENCIA COMPLETADA!</div>")
@@ -4944,8 +6572,13 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.lbl_recording_space.setText(texto_ventana)
     self.word_window_process = None
     
+    # Reset buffers de picos y ruido en tiempo real
+    self.rt_peaks = [[] for _ in range(self.NUM_CANALES)]
+    self.rt_last_noise_eval = 0.0
+    self.raw_noise_accumulated = [[] for _ in range(self.NUM_CANALES)]
+    
     # 3 Segundos de silencio ANTES de siquiera empezar a capturar el ruido
-    QtCore.QTimer.singleShot(3000, self.estado_grabar_ruido)
+    self._safe_autoforge_single_shot(3000, self.estado_grabar_ruido)
 
   def estado_grabar_ruido(self):
     if not getattr(self, 'is_autoforge_running', False): return
@@ -4988,10 +6621,14 @@ class RealTimePlotter(QtWidgets.QWidget):
     else:
       self.plot.setYRange(-500.0, 500.0, padding=0)
     self._held_plot_ymax = 500.0
+
+    # --- HOOK FOTOMETRIA: Instantanea de ruido basal ---
+    if getattr(self, 'photometry_mgr', None) is not None and getattr(self.photometry_mgr, 'is_enabled', False):
+      self.photometry_mgr.request_snapshot(fase="ruido_basal", palabra="ruido", pulso=0, sample_rate=self.SAMPLE_RATE)
     
     # Programar la aparición de la ventana "Preparate" y el metrónomo CUANDO TERMINE EL RUIDO
     noise_dur = self.spin_noise_duration.value()
-    QtCore.QTimer.singleShot(int(noise_dur * 1000), self.estado_mostrar_preparate)
+    self._safe_autoforge_single_shot(int(noise_dur * 1000), self.estado_mostrar_preparate)
 
   def estado_mostrar_preparate(self):
     if not getattr(self, 'is_autoforge_running', False): return
@@ -5075,11 +6712,11 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.countdown_text.show()
     
     self.countdown_text.setText("PREPÁRATE...\n3")
-    QtCore.QTimer.singleShot(int(beat_interval_s * 1000), lambda: self.countdown_text.setText("PREPÁRATE...\n2"))
-    QtCore.QTimer.singleShot(int(2 * beat_interval_s * 1000), lambda: self.countdown_text.setText("PREPÁRATE...\n1"))
+    self._safe_autoforge_single_shot(int(beat_interval_s * 1000), lambda: self.countdown_text.setText("PREPÁRATE...\n2"))
+    self._safe_autoforge_single_shot(int(2 * beat_interval_s * 1000), lambda: self.countdown_text.setText("PREPÁRATE...\n1"))
     
     # A los 3 compases justos (cuando suene el pitido Agudo), pasamos a la palabra.
-    QtCore.QTimer.singleShot(int(3 * beat_interval_s * 1000), self.estado_cambiar_ventana_palabra)
+    self._safe_autoforge_single_shot(int(3 * beat_interval_s * 1000), self.estado_cambiar_ventana_palabra)
 
   def estado_cambiar_ventana_palabra(self):
     if not getattr(self, 'is_autoforge_running', False): return
@@ -5106,6 +6743,9 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.stats_snr = [[] for _ in range(self.NUM_CANALES)]
     self.stats_noise_mean = [[] for _ in range(self.NUM_CANALES)]
     self.stats_noise_std = [[] for _ in range(self.NUM_CANALES)]
+    self.rt_peaks = [[] for _ in range(self.NUM_CANALES)]
+    self.rt_last_noise_eval = 0.0
+    self.raw_noise_accumulated = [[] for _ in range(self.NUM_CANALES)]
     
     self.label_rec_time.setText("GRABANDO PALABRA...")
     
@@ -5115,12 +6755,17 @@ class RealTimePlotter(QtWidgets.QWidget):
     # El metrónomo YA ESTÁ corriendo, aquí justo emitirá el pitido Agudo (GO).
     self.lbl_recording_space.setText(palabra.upper())
     self.word_window_process = None
+
+    # --- HOOK FOTOMETRIA: Sesion de toma discreta y captura onset ---
+    if getattr(self, 'photometry_mgr', None) is not None and getattr(self.photometry_mgr, 'is_enabled', False):
+      self.photometry_mgr.start_take_session(f"{palabra}_{self.autoforge_sujeto}", t0_perf=self.recording_start_time)
+      self.photometry_mgr.request_snapshot(fase="onset", palabra=palabra, pulso=1, t_daq_s=0.0, sample_rate=self.SAMPLE_RATE)
     
     # Iniciar la cuenta del guardado de los datos de la palabra
     bpm = self.spin_bpm.value()
     if bpm <= 0: bpm = 60
     ms_totales = int((60000 / bpm) * self.autoforge_target_reps)
-    QtCore.QTimer.singleShot(ms_totales, self.estado_guardar_palabra)
+    self._safe_autoforge_single_shot(ms_totales, self.estado_guardar_palabra)
 
   def estado_guardar_palabra(self):
     if not getattr(self, 'is_autoforge_running', False): return
@@ -5194,6 +6839,8 @@ class RealTimePlotter(QtWidgets.QWidget):
         base_dir = Path(root_dir) / "base_de_datos_electrodos" / fecha_str / f"{palabra}_{prueba_actual}_{self.autoforge_sujeto}"
 
       os.makedirs(base_dir, exist_ok=True)
+      if hasattr(self, 'autoforge_session_dirs'):
+        self.autoforge_session_dirs.append(str(base_dir))
       
       # 1. Preparar metadata para UI Analysis
       now = datetime.now()
@@ -5251,6 +6898,15 @@ class RealTimePlotter(QtWidgets.QWidget):
         "calibracion_cvm": calib_cvm_dict
       }
       
+      # Exportar Fotometria 3D si esta habilitada
+      if getattr(self, 'photometry_mgr', None) is not None and getattr(self.photometry_mgr, 'is_enabled', False):
+        try:
+          foto_resumen = self.photometry_mgr.export_take_photometry(str(base_dir))
+          if foto_resumen:
+            metadata["fotometria_espacial"] = foto_resumen
+        except Exception as exc:
+          print(f"--- ERROR AL EXPORTAR FOTOMETRIA 3D ---\n{exc}")
+
       # 2. Crear carpetas de canales y guardar metadata.json en cada una
       for i in range(self.NUM_CANALES):
         channel_output_dir = os.path.join(base_dir, f"canal_{i}")
@@ -5271,8 +6927,13 @@ class RealTimePlotter(QtWidgets.QWidget):
           json.dump(metadata, f, indent=4)
       except: pass
 
+      # Persistir Notas del Experimento (metadata.json, canal_*/metadata.json y notas_experimento.txt)
+      self.last_measurement_dir = str(base_dir)
+      texto_notas = getattr(self, 'notas_experimento', '')
+      self.persistir_notas_experimento(str(base_dir), metadata_base=metadata, texto_notas=texto_notas)
+
       # 3. Guardar Datos Raw CSV y WAV (las funciones internas ya manejan la división por canales)
-      try: guardar_grabacion_csv(local_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion")
+      try: guardar_grabacion_csv(local_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion", canales_daq=self.CANALES_DAQ)
       except: pass
       
       try: guardar_grabacion_wav(local_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion")
@@ -5289,7 +6950,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     threading.Thread(target=guardar_async, daemon=True).start()
     
     # Tras 5 segundos, pasar a verificación muscular para que el usuario pueda ver su señal fluida
-    QtCore.QTimer.singleShot(5000, self.estado_verificacion_muscular)
+    self._safe_autoforge_single_shot(5000, self.estado_verificacion_muscular)
 
   @QtCore.Slot()
   def estado_verificacion_muscular(self):
@@ -5304,7 +6965,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     )
     
     # Ir a la siguiente palabra tras los 5 segundos de verificación (10s totales)
-    QtCore.QTimer.singleShot(5000, self.estado_siguiente)
+    self._safe_autoforge_single_shot(5000, self.estado_siguiente)
 
   @QtCore.Slot()
   def estado_siguiente(self):
@@ -5349,6 +7010,12 @@ class RealTimePlotter(QtWidgets.QWidget):
       
     self.stop_event.set() # Envía la señal a TODOS los hilos
     self.timer.stop() # Detiene el timer de la GUI
+
+    if getattr(self, 'photometry_mgr', None):
+      try:
+        self.photometry_mgr.stop_worker()
+      except Exception:
+        pass
     
     # --- NUEVO: Guardar estado de la GUI al cerrar el programa ---
     try:
@@ -5371,29 +7038,44 @@ class RealTimePlotter(QtWidgets.QWidget):
 class MuscleSelectionDialog(QtWidgets.QDialog):
   def __init__(self, parent=None):
     super().__init__(parent)
+    self.parent_plotter = parent
     self.setWindowTitle("Configurar Músculos de la Sesión")
-    self.setMinimumWidth(350)
+    self.setMinimumWidth(380)
     
     self.config_mgr = ConfigManager()
     self.canales_conf = self.config_mgr.get("canales") or {}
-    adq = self.config_mgr.get("adquisicion") or {}
-    self.nidaq_chans = adq.get("nidaq_channels", ["Dev1/ai0", "Dev1/ai1", "Dev1/ai2", "Dev1/ai3"])
+    
+    if parent is not None and getattr(parent, 'active_channel_indices', None):
+      self.active_hw_channels = list(parent.active_channel_indices)
+    else:
+      self.active_hw_channels = [0, 1, 2, 3]
     
     self.layout = QtWidgets.QVBoxLayout(self)
     
-    self.lbl = QtWidgets.QLabel("A continuación, asigne el músculo a cada canal activo:")
+    self.lbl = QtWidgets.QLabel("Asigne el músculo a cada canal físico activo:")
     self.lbl.setStyleSheet("color: white; font-weight: bold; margin-bottom: 10px;")
     self.layout.addWidget(self.lbl)
     
     self.form_layout = QtWidgets.QFormLayout()
-    self.line_edits = {}
+    self.combos = {}
     
-    for i in range(len(self.nidaq_chans)):
-        key = f"Canal {i}"
-        musculo_actual = self.canales_conf.get(key, {}).get("musculo", f"Canal {i}")
-        le = QtWidgets.QLineEdit(musculo_actual)
-        self.form_layout.addRow(f"[{self.nidaq_chans[i]}] {key}:", le)
-        self.line_edits[key] = le
+    musculos_sugeridos = list(STANDARD_MUSCLES_LIST)
+    
+    for hw_idx in self.active_hw_channels:
+      key = f"Canal {hw_idx}"
+      cfg = self.config_mgr.get_channel_config(hw_idx)
+      musculo_actual = cfg.get("musculo", key)
+      
+      cmb = QtWidgets.QComboBox()
+      cmb.setEditable(True)
+      for m in musculos_sugeridos:
+        cmb.addItem(m)
+      if musculo_actual not in musculos_sugeridos:
+        cmb.insertItem(0, musculo_actual)
+      cmb.setCurrentText(musculo_actual)
+      
+      self.form_layout.addRow(f"ai{hw_idx} ({key}):", cmb)
+      self.combos[hw_idx] = cmb
         
     self.layout.addLayout(self.form_layout)
     
@@ -5407,24 +7089,34 @@ class MuscleSelectionDialog(QtWidgets.QDialog):
       from utils.config_manager import get_unique_channel_colors
     except ImportError:
       def get_unique_channel_colors(items):
-        return ["#ffaa00", "#39ff14", "#ffff00", "#ff0000"]
+        return ["#ff754b", "#00a896", "#00cc44", "#ff0000"]
 
-    keys = list(self.line_edits.keys())
     ch_list = []
-    for key in keys:
-      m_text = self.line_edits[key].text().strip()
-      ch_list.append({"musculo": m_text, "is_mic": (key == "Canal 3" or "mic" in m_text.lower())})
+    for hw_idx in self.active_hw_channels:
+      m_text = self.combos[hw_idx].currentText().strip()
+      ch_list.append({
+        "idx": hw_idx,
+        "musculo": m_text,
+        "is_mic": ("mic" in m_text.lower() or "audio" in m_text.lower() or (hw_idx == 3 and not m_text))
+      })
       
     unique_cols = get_unique_channel_colors(ch_list)
-    for idx, key in enumerate(keys):
-      if key not in self.canales_conf:
-        self.canales_conf[key] = {}
-      m_text = self.line_edits[key].text().strip()
-      self.canales_conf[key]["musculo"] = m_text
-      self.canales_conf[key]["color_hex"] = unique_cols[idx]
+    canales_conf = self.config_mgr.get("canales") or {}
+    for idx, hw_idx in enumerate(self.active_hw_channels):
+      key = f"Canal {hw_idx}"
+      if key not in canales_conf:
+        canales_conf[key] = {}
+      m_text = self.combos[hw_idx].currentText().strip()
+      canales_conf[key]["musculo"] = m_text
+      canales_conf[key]["color_hex"] = unique_cols[idx]
+      if self.parent_plotter and hasattr(self.parent_plotter, 'nombres_musculos_hw'):
+        if hw_idx < len(self.parent_plotter.nombres_musculos_hw):
+          self.parent_plotter.nombres_musculos_hw[hw_idx] = m_text
     
-    self.config_mgr.config["canales"] = self.canales_conf
+    self.config_mgr.config["canales"] = canales_conf
     self.config_mgr.save()
+    if self.parent_plotter and hasattr(self.parent_plotter, 'refrescar_interfaz_canales'):
+      self.parent_plotter.refrescar_interfaz_canales()
     self.accept()
 
 # =============================================================================
@@ -5464,22 +7156,6 @@ def main():
       padding: 2px;
     }
   """)
-  
-  # --- Preguntar por los músculos al iniciar ---
-  if global_splash:
-      global_splash.hide()
-      
-  respuesta = QtWidgets.QMessageBox.question(
-      None, 
-      "Ñandú LSD - Configuración", 
-      "¿Desea cambiar el conjunto de músculos asignados a los canales?",
-      QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
-      QtWidgets.QMessageBox.No
-  )
-  
-  if respuesta == QtWidgets.QMessageBox.Yes:
-      dialog = MuscleSelectionDialog()
-      dialog.exec()
 
   gui = RealTimePlotter()
   if global_splash:

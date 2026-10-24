@@ -189,6 +189,7 @@ def lanzar_script(script_name, args=[]):
         "acquisition/autoforge_daq_experimental.py",
         "acquisition/autoforge_daq_decodificador.py",
         "acquisition/calibracion_espacial_electrodos.py",
+        "acquisition/fotometria_webcam.py",
         "acquisition/modulo_de_entrenamiento.py",
         "analysis/plotter_calibrado.py", 
         "analysis/electrode_viewer_4.py", 
