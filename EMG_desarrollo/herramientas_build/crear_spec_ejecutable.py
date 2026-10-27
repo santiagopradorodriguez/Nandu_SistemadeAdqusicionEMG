@@ -218,14 +218,12 @@ datas = [
 
 binaries = nidaqmx_binaries + sd_binaries + sf_binaries + umap_binaries + sns_binaries + tly_binaries + numba_binaries + pynndescent_binaries + tqdm_binaries + mp_binaries + cv2_binaries + torch_binaries + mne_binaries + llvmlite_binaries + sklearn_binaries
 
-a_scripts = [
-    s for s in [
-        'gui_app/main_app.py',
-        'acquisition/calibracion_espacial_electrodos.py',
-        'acquisition/fotometria_webcam.py',
-    ]
-    if os.path.exists(s) or s == 'gui_app/main_app.py'
-]
+# Un UNICO script de entrada: el bootloader de PyInstaller NO soporta --run-script
+# (los scripts de la lista se ejecutarian EN CADENA al cerrarse cada uno).
+# Los scripts externos (autoforge_daq_experimental, manual_daq, decodificador,
+# metronomo, visores, etc.) se empaquetan como DATA y el dispatcher inyectado en
+# main_app los lanza con runpy cuando recibe '--run-script <script>'.
+a_scripts = ['gui_app/main_app.py']
 
 a = Analysis(
     a_scripts,

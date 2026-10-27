@@ -8,6 +8,57 @@
 import os
 import re
 
+DISPATCHER_CODE = '''
+# --- DISPATCHER FROZEN (--run-script): lanza scripts empaquetados como data ---
+# Permite que _launch_external (que en frozen emite [exe, --run-script, script])
+# ejecute el script pedido en su propio proceso, sin re-abrir la GUI principal.
+if getattr(sys, 'frozen', False) and len(sys.argv) >= 2 and sys.argv[1] == "--run-script":
+    _nandu_rel = sys.argv[2]
+    _nandu_ruta = resource_path(_nandu_rel)
+    sys.argv = [_nandu_ruta] + list(sys.argv[3:])
+    if not os.path.exists(_nandu_ruta):
+        sys.stderr.write("[NanduLsd] Script empaquetado no encontrado: %s\\n" % _nandu_rel)
+        sys.stderr.flush()
+        os._exit(2)
+    import runpy
+    _nandu_codigo = 0
+    try:
+        runpy.run_path(_nandu_ruta, run_name="__main__")
+    except SystemExit as _nandu_exit:
+        _nandu_codigo = _nandu_exit.code if isinstance(_nandu_exit.code, int) else (0 if _nandu_exit.code is None else 1)
+    try:
+        sys.stdout.flush()
+        sys.stderr.flush()
+    except Exception:
+        pass
+    os._exit(_nandu_codigo)
+# -------------------------------------------------
+'''
+
+
+def inyectar_dispatcher_main_app(ruta_main_app):
+    """Inyecta el dispatcher --run-script en la copia de main_app dentro del build."""
+    if not os.path.exists(ruta_main_app):
+        print("[AVISO] No se encontro %s; dispatcher no inyectado." % ruta_main_app)
+        return
+    with open(ruta_main_app, 'r', encoding='utf-8') as f:
+        contenido = f.read()
+    if "DISPATCHER FROZEN" in contenido:
+        return  # ya inyectado (idempotente)
+    marca = "# " + "-" * 45
+    if marca in contenido:
+        contenido = contenido.replace(marca, dispatcher_bloque(), 1)
+    else:
+        contenido = dispatcher_bloque() + "\n" + contenido
+    with open(ruta_main_app, 'w', encoding='utf-8') as f:
+        f.write(contenido)
+    print("[OK] Dispatcher --run-script inyectado en main_app.")
+
+
+def dispatcher_bloque():
+    return DISPATCHER_CODE.strip("\n") + "\n"
+
+
 def aplicar_parches():
     # Al moverse a 'herramientas_build', el directorio raíz del proyecto es el padre
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -98,9 +149,17 @@ def lanzar_script(script_name, args=[]):
     for root, dirs, files in os.walk(build_dir):
         if 'venv' in root: continue
         for file in files:
-            if file.endswith('.py') and file not in ["crear_entorno_ejecutable.py", "aplicar_parches_ejecutable.py", "refactor_experimental.py", "refactor_experimental2.py", "autoforge_patcher.py"]:
+            if file.endswith('.py') and file not in ["crear_entorno_ejecutable.py", "aplicar_parches_ejecutable.py", "refactor_experimental.py", "refactor_experimental2.py", "autoforge_patcher.py", "autoforge_daq_experimental_pc2_referencia.py"]:
                 ruta = os.path.join(root, file)
                 parchear_archivo(ruta, [])
+
+    # --- 1b. DISPATCHER FROZEN EN main_app: soporte de --run-script ---
+    # El bootloader de PyInstaller NO soporta '--run-script' (verificado en 6.21.0):
+    # sin este parche, _launch_external en el ejecutable re-abriria la GUI principal
+    # en lugar del script pedido (autoforge_daq_experimental, decodificador, etc.).
+    # Los scripts externos se empaquetan como DATA y este dispatcher los ejecuta
+    # con runpy dentro del propio ejecutable, respetando sys.argv.
+    inyectar_dispatcher_main_app(os.path.join(build_dir, "gui_app", "main_app.py"))
 
     # --- 2. REEMPLAZOS ESPECIFICOS PARA ADQUISICION ---
     reemplazos_daq = [

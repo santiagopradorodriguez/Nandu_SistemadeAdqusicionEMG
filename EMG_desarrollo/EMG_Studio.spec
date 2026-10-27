@@ -160,28 +160,27 @@ datas = [
         ('analysis', 'analysis'),
         ('deep_learning', 'deep_learning'),
         ('acquisition/calibracion_espacial_electrodos.py', 'acquisition'),
-        ('/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/acquisition/fotometria_webcam.py', 'acquisition'),
+        ('acquisition/fotometria_webcam.py', 'acquisition'),
         ('/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/acquisition/calibracion_espacial_electrodos.py', 'acquisition'),
+        ('/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/acquisition/fotometria_webcam.py', 'acquisition'),
         ('fotos', 'fotos'),
         ('logo_nandu_lsd.png', '.'),
         ('logo_nandu_lsd.png', 'gui_app/assets'),
         ('logo_nandu_lsd.png', 'gui_app'),
         ('usb-621x-manual.pdf', '.'),
-        ('/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/modelos', 'modelos'),
+        ('modelos', 'modelos'),
         ('resultados', 'resultados'),
         ('/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/resultados', 'EMG_desarrollo/resultados')
 ] + nidaqmx_datas + sd_datas + sf_datas + umap_datas + sns_datas + tly_datas + numba_datas + pynndescent_datas + tqdm_datas + mp_datas + mp_extra_datas + cv2_datas + torch_datas + mne_datas + llvmlite_datas + sklearn_datas + nitypes_metadata
 
 binaries = nidaqmx_binaries + sd_binaries + sf_binaries + umap_binaries + sns_binaries + tly_binaries + numba_binaries + pynndescent_binaries + tqdm_binaries + mp_binaries + cv2_binaries + torch_binaries + mne_binaries + llvmlite_binaries + sklearn_binaries
 
-a_scripts = [
-    s for s in [
-        'gui_app/main_app.py',
-        'acquisition/calibracion_espacial_electrodos.py',
-        'acquisition/fotometria_webcam.py',
-    ]
-    if os.path.exists(s) or s == 'gui_app/main_app.py'
-]
+# Un UNICO script de entrada: el bootloader de PyInstaller NO soporta --run-script
+# (los scripts de la lista se ejecutarian EN CADENA al cerrarse cada uno).
+# Los scripts externos (autoforge_daq_experimental, manual_daq, decodificador,
+# metronomo, visores, etc.) se empaquetan como DATA y el dispatcher inyectado en
+# main_app los lanza con runpy cuando recibe '--run-script <script>'.
+a_scripts = ['gui_app/main_app.py']
 
 a = Analysis(
     a_scripts,

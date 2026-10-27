@@ -39,7 +39,12 @@ echo Para activar este entorno en el futuro, ejecuta:
 echo     venv_win_legacy\Scripts\activate
 echo.
 echo Para generar el ejecutable compatible, ejecuta (con el entorno activado):
+echo     build.bat
+echo.
+echo O paso a paso:
+echo     python herramientas_build\crear_entorno_ejecutable.py
+echo     python herramientas_build\aplicar_parches_ejecutable.py
 echo     python herramientas_build\crear_spec_ejecutable.py
-echo     pyinstaller EMG_Studio.spec
+echo     cd EMG_Ejecutable_Build ^&^& pyinstaller EMG_Studio.spec --noconfirm --clean
 echo.
 pause

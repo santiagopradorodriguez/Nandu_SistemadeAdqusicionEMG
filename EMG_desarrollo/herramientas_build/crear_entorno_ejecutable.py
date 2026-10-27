@@ -30,7 +30,7 @@ def crear_entorno_seguro():
     def ignorar_rutas(directorio, archivos):
         ignorar = set()
         for a in archivos:
-            if a in ('__pycache__', 'resultados_pca_umap', 'resultados_umap_supervisado', 'resultados_autoencoder', '.pytest_cache', '.git', 'codigos_de_prueba'):
+            if a in ('__pycache__', 'resultados_pca_umap', 'resultados_umap_supervisado', 'resultados_autoencoder', '.pytest_cache', '.git', 'codigos_de_prueba', 'autoforge_daq_experimental_pc2_referencia.py'):
                 ignorar.add(a)
             elif a.endswith(('.pyc', '.tar', '.zip', '.tmp')):
                 ignorar.add(a)
