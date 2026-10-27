@@ -155,14 +155,14 @@ datas = [
         ('DataConfig', 'DataConfig'),
         ('DataConfig/modelos_vision', 'DataConfig/modelos_vision'),
         ('DataConfig/modelos_vision/face_landmarker.task', 'DataConfig/modelos_vision'),
-        ('/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/DataConfig/modelos_vision/face_landmarker.task', 'DataConfig/modelos_vision'),
+        ('C:/Users/MSI/OneDrive/Documentos/DOCUMENTOS SANTIAGO/santiago-prado-repositorio/EMG_desarrollo/DataConfig/modelos_vision/face_landmarker.task', 'DataConfig/modelos_vision'),
         ('acquisition', 'acquisition'),
         ('analysis', 'analysis'),
         ('deep_learning', 'deep_learning'),
         ('acquisition/calibracion_espacial_electrodos.py', 'acquisition'),
         ('acquisition/fotometria_webcam.py', 'acquisition'),
-        ('/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/acquisition/calibracion_espacial_electrodos.py', 'acquisition'),
-        ('/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/acquisition/fotometria_webcam.py', 'acquisition'),
+        ('C:/Users/MSI/OneDrive/Documentos/DOCUMENTOS SANTIAGO/santiago-prado-repositorio/EMG_desarrollo/acquisition/calibracion_espacial_electrodos.py', 'acquisition'),
+        ('C:/Users/MSI/OneDrive/Documentos/DOCUMENTOS SANTIAGO/santiago-prado-repositorio/EMG_desarrollo/acquisition/fotometria_webcam.py', 'acquisition'),
         ('fotos', 'fotos'),
         ('logo_nandu_lsd.png', '.'),
         ('logo_nandu_lsd.png', 'gui_app/assets'),
@@ -170,7 +170,7 @@ datas = [
         ('usb-621x-manual.pdf', '.'),
         ('modelos', 'modelos'),
         ('resultados', 'resultados'),
-        ('/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/resultados', 'EMG_desarrollo/resultados')
+        ('C:/Users/MSI/OneDrive/Documentos/DOCUMENTOS SANTIAGO/santiago-prado-repositorio/EMG_desarrollo/resultados', 'EMG_desarrollo/resultados')
 ] + nidaqmx_datas + sd_datas + sf_datas + umap_datas + sns_datas + tly_datas + numba_datas + pynndescent_datas + tqdm_datas + mp_datas + mp_extra_datas + cv2_datas + torch_datas + mne_datas + llvmlite_datas + sklearn_datas + nitypes_metadata
 
 binaries = nidaqmx_binaries + sd_binaries + sf_binaries + umap_binaries + sns_binaries + tly_binaries + numba_binaries + pynndescent_binaries + tqdm_binaries + mp_binaries + cv2_binaries + torch_binaries + mne_binaries + llvmlite_binaries + sklearn_binaries

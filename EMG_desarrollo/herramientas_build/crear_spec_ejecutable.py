@@ -61,7 +61,9 @@ def generar_spec():
         elif os.path.exists(root_path):
             resolved_src = root_path
         if resolved_src is not None and (resolved_src, dst) not in seen_pairs:
-            datas_tuples.append(f"('{resolved_src}', '{dst}')")
+            clean_src = resolved_src.replace('\\', '/')
+            clean_dst = dst.replace('\\', '/')
+            datas_tuples.append(f"('{clean_src}', '{clean_dst}')")
             seen_pairs.add((resolved_src, dst))
             
     datas_str = ",\n        ".join(datas_tuples)
