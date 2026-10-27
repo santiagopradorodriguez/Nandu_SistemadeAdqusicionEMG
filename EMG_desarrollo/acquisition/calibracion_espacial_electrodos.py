@@ -280,7 +280,7 @@ class AntigravityAgent:
             except Exception as e:
                 sys.stderr.write(f"Aviso: No se pudo inicializar MediaPipe Tasks: {e}. Intentando solutions...\n")
 
-        if not self.modo_moderno and hasattr(mp, "solutions") and hasattr(mp.solutions, "face_mesh"):
+        if mp is not None and not self.modo_moderno and hasattr(mp, "solutions") and hasattr(mp.solutions, "face_mesh"):
             self.mp_face_mesh = mp.solutions.face_mesh
             self.mp_drawing = mp.solutions.drawing_utils
             self.mp_drawing_styles = mp.solutions.drawing_styles

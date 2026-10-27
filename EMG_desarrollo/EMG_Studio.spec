@@ -173,7 +173,18 @@ datas = [
         ('C:/Users/MSI/OneDrive/Documentos/DOCUMENTOS SANTIAGO/santiago-prado-repositorio/EMG_desarrollo/resultados', 'EMG_desarrollo/resultados')
 ] + nidaqmx_datas + sd_datas + sf_datas + umap_datas + sns_datas + tly_datas + numba_datas + pynndescent_datas + tqdm_datas + mp_datas + mp_extra_datas + cv2_datas + torch_datas + mne_datas + llvmlite_datas + sklearn_datas + nitypes_metadata
 
-binaries = nidaqmx_binaries + sd_binaries + sf_binaries + umap_binaries + sns_binaries + tly_binaries + numba_binaries + pynndescent_binaries + tqdm_binaries + mp_binaries + cv2_binaries + torch_binaries + mne_binaries + llvmlite_binaries + sklearn_binaries
+qt_flat_binaries = []
+try:
+    import PySide6
+    import shiboken6
+    for _pkg_dir in (os.path.dirname(PySide6.__file__), os.path.dirname(shiboken6.__file__)):
+        for _name in os.listdir(_pkg_dir):
+            if _name.lower().endswith(('.dll', '.pyd')):
+                qt_flat_binaries.append((os.path.join(_pkg_dir, _name), '.'))
+except Exception:
+    pass
+
+binaries = nidaqmx_binaries + sd_binaries + sf_binaries + umap_binaries + sns_binaries + tly_binaries + numba_binaries + pynndescent_binaries + tqdm_binaries + mp_binaries + cv2_binaries + torch_binaries + mne_binaries + llvmlite_binaries + sklearn_binaries + qt_flat_binaries
 
 # Un UNICO script de entrada: el bootloader de PyInstaller NO soporta --run-script
 # (los scripts de la lista se ejecutarian EN CADENA al cerrarse cada uno).
@@ -202,7 +213,7 @@ a = Analysis(
     hiddenimports=hidden_imports,
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=['C:\\Users\\MSI\\OneDrive\\Documentos\\DOCUMENTOS SANTIAGO\\santiago-prado-repositorio\\EMG_desarrollo\\herramientas_build\\runtime_hook_qt_paths.py'],
     excludes=['torchvision', 'torchaudio'],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
