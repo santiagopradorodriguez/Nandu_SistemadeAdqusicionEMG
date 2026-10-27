@@ -7,10 +7,14 @@
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-    QTreeWidget, QTreeWidgetItem, QPushButton, QSizePolicy, QComboBox
+    QTreeWidget, QTreeWidgetItem, QPushButton, QSizePolicy, QComboBox,
+    QMenu
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QUrl
+from PySide6.QtGui import QDesktopServices
 import os
+import sys
+import subprocess
 import re
 import json
 
@@ -60,6 +64,8 @@ class SessionExplorer(QWidget):
         
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
+        self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.tree.customContextMenuRequested.connect(self._mostrar_menu_contextual)
         self.tree.setStyleSheet("""
             QTreeWidget {
                 background-color: #111; color: white; border: 1px solid #444; font-size: 13px;
@@ -70,11 +76,35 @@ class SessionExplorer(QWidget):
         self.tree.itemClicked.connect(self._on_item_clicked)
         self.layout.addWidget(self.tree)
         
-        # Botón Refrescar
+        # Fila de controles de directorio
+        layout_dirs = QHBoxLayout()
+        layout_dirs.setContentsMargins(0, 0, 0, 0)
+        layout_dirs.setSpacing(6)
+
         btn_refresh = QPushButton("Refrescar Directorio")
-        btn_refresh.setStyleSheet("background-color: #333; color: white; padding: 5px;")
+        btn_refresh.setStyleSheet("background-color: #333; color: white; padding: 5px; border-radius: 3px;")
         btn_refresh.clicked.connect(self.cargar_arbol)
-        self.layout.addWidget(btn_refresh)
+        layout_dirs.addWidget(btn_refresh)
+
+        self.btn_open_dir = QPushButton("Abrir Directorio")
+        self.btn_open_dir.setStyleSheet("""
+            QPushButton {
+                background-color: #14261f;
+                color: #00ffcc;
+                border: 1px solid #00ffcc;
+                padding: 5px;
+                border-radius: 3px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #1b4332;
+                color: #ffffff;
+            }
+        """)
+        self.btn_open_dir.clicked.connect(self.abrir_directorio_seleccionado)
+        layout_dirs.addWidget(self.btn_open_dir)
+
+        self.layout.addLayout(layout_dirs)
         
         # Acceso directo al Autoencoder No Supervisado vinculado al Gestor
         self.btn_autoencoder_no_sup = QPushButton("Autoencoder No Supervisado")
@@ -251,3 +281,63 @@ class SessionExplorer(QWidget):
         for i in range(self.tree.topLevelItemCount()):
             _recolectar(self.tree.topLevelItem(i))
         return list(dict.fromkeys(rutas))
+
+    def _mostrar_menu_contextual(self, pos):
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #1a1a1a;
+                color: #ffffff;
+                border: 1px solid #444;
+                padding: 4px;
+            }
+            QMenu::item:selected {
+                background-color: #004d3a;
+                color: #00ffcc;
+            }
+        """)
+        action_open = menu.addAction("Abrir Directorio en Explorador del Sistema")
+        action_open.triggered.connect(self.abrir_directorio_seleccionado)
+        menu.exec(self.tree.viewport().mapToGlobal(pos))
+
+    def abrir_directorio_seleccionado(self):
+        target = None
+        selected_items = self.tree.selectedItems()
+        if selected_items:
+            item = selected_items[0]
+            ruta = item.data(0, Qt.UserRole)
+            if ruta and os.path.exists(ruta):
+                target = ruta
+            else:
+                for i in range(item.childCount()):
+                    c_ruta = item.child(i).data(0, Qt.UserRole)
+                    if c_ruta and os.path.exists(c_ruta):
+                        target = os.path.dirname(c_ruta)
+                        break
+
+        if not target or not os.path.exists(target):
+            target = self.root_path
+
+        abs_target = os.path.abspath(target)
+        if not os.path.exists(abs_target):
+            try:
+                os.makedirs(abs_target, exist_ok=True)
+            except Exception:
+                pass
+
+        try:
+            opened = QDesktopServices.openUrl(QUrl.fromLocalFile(abs_target))
+            if opened:
+                return
+        except Exception:
+            pass
+
+        try:
+            if sys.platform.startswith("win"):
+                os.startfile(abs_target)
+            elif sys.platform.startswith("darwin"):
+                subprocess.Popen(["open", abs_target])
+            else:
+                subprocess.Popen(["xdg-open", abs_target])
+        except Exception as e:
+            print(f"[Aviso] No se pudo abrir directorio '{abs_target}': {e}")

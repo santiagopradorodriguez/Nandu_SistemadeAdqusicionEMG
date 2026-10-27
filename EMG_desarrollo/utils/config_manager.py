@@ -150,6 +150,20 @@ DISTINCT_PALETTE = [
     "#651fff"   # Azul índigo
 ]
 
+# Lista anatómica estándar de músculos faciales para selección rápida en diálogos
+STANDARD_MUSCLES_LIST = [
+    "Anterior Belly of Digastric",
+    "Zygomaticus Major",
+    "Orbicularis Oris",
+    "Risorio",
+    "Modíolo",
+    "Depresor Anguli Oris",
+    "Mentoniano",
+    "Milohioideo",
+    "Masetero",
+    "Micrófono"
+]
+
 def _is_generic_or_mic_channel(name, idx=None):
     """
     Determina si un canal corresponde a un micrófono o si es el Canal 3 sin un músculo real asignado.
@@ -446,4 +460,22 @@ class ConfigManager:
         if save:
             self.save_config()
         return self.config["canales"][ch_key]
+
+    def set_active_channels_default(self, active_hw_indices, save=True):
+        """Persiste 'activo_por_defecto' en cada 'Canal {hw}' en config_general.json."""
+        active_set = set(active_hw_indices or [])
+        if "canales" not in self.config or not isinstance(self.config["canales"], dict):
+            self.config["canales"] = {}
+        for hw_idx in range(16):
+            ch_key = f"Canal {hw_idx}"
+            if ch_key in self.config["canales"] or hw_idx in active_set:
+                if ch_key not in self.config["canales"]:
+                    self.config["canales"][ch_key] = {
+                        "musculo": "Micrófono" if hw_idx == 3 else ch_key,
+                        "color_hex": "#ff0000" if hw_idx == 3 else get_muscle_color(ch_key, "#00ffcc"),
+                        "factor_calibracion": 495.0
+                    }
+                self.config["canales"][ch_key]["activo_por_defecto"] = (hw_idx in active_set)
+        if save:
+            self.save_config()
 

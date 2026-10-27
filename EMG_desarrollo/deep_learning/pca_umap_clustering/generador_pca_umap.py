@@ -190,7 +190,7 @@ def acondicionar_reposo_impedancia(X_array, sesiones, n_canales=3, n_pts_reposo=
         return X_norm.reshape(N, -1)
     return X_norm
 
-def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, gate_ratio_ruido=8.0, smooth_ms=250, notch_q=2.0, target_len=100, return_raw_cache=False, aplicar_trevisan=False, modo_alineacion="Pico Volumen Micrófono", pre_pct=0.4, post_pct=0.6, canales_features=["canal_0", "canal_1", "canal_2"], ignorar_ventana_cero=False, cache_canales_data=None, aplicar_correccion_intersesion=False, tipo_envolvente="rms", lowpass_cutoff_hz=300.0, tipo_filtro_ruido="notch", highpass_cutoff_hz=20.0):
+def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, gate_ratio_ruido=8.0, smooth_ms=250, notch_q=2.0, target_len=100, return_raw_cache=False, aplicar_trevisan=False, modo_alineacion="Pico Volumen Micrófono", pre_pct=0.4, post_pct=0.6, canales_features=["canal_0", "canal_1", "canal_2"], ignorar_ventana_cero=False, cache_canales_data=None, aplicar_correccion_intersesion=False, tipo_envolvente="rms", lowpass_cutoff_hz=500.0, tipo_filtro_ruido="notch", highpass_cutoff_hz=20.0):
     """
     Extrae y alinea las ventanas de los canales solicitados.
     Devuelve X (matriz de features), Y (labels/vocales) y Tomas (nombres de las mediciones).
@@ -1849,7 +1849,7 @@ def ejecutar_procesamiento(
     tipo_filtro_ruido="notch",
     notch_q=2.0,
     highpass_cutoff_hz=20.0,
-    lowpass_cutoff_hz=300.0,
+    lowpass_cutoff_hz=500.0,
     **kwargs
 ):
     corr_imp = kwargs.get('correccion_impedancia', correccion_impedancia)
@@ -2686,7 +2686,7 @@ class GeneradorPCAGUI:
         self.var_ignorar_win0 = tk.BooleanVar(value=False)
         tk.Checkbutton(trev_frame, text="Ignorar Ventana 0 (Artefactos)", variable=self.var_ignorar_win0, bg="#1F2833", fg="white", selectcolor="#0B0C10").grid(row=0, column=2, columnspan=2, sticky="w")
         
-        self.var_correccion_intersesion = tk.BooleanVar(value=True)
+        self.var_correccion_intersesion = tk.BooleanVar(value=False)
         tk.Checkbutton(trev_frame, text="Corrección Intersesión por Lote (Calibración de Ganancia)", variable=self.var_correccion_intersesion, bg="#1F2833", fg="#66FCF1", selectcolor="#0B0C10").grid(row=1, column=0, columnspan=4, sticky="w")
         
         tk.Label(trev_frame, text="Pre-Ventana (%):", width=15, anchor="w", bg="#1F2833", fg="white").grid(row=2, column=0, padx=2, pady=2)
@@ -2732,7 +2732,7 @@ class GeneradorPCAGUI:
         tk.Label(trev_frame, text="Pasabajos LP:", width=15, anchor="w", bg="#1F2833", fg="white").grid(row=5, column=2, padx=2, pady=2)
         self.combo_lowpass = ttk.Combobox(trev_frame, values=["300 Hz (Rangayyan)", "500 Hz (Previo)", "Desactivado"], width=18, state="readonly")
         self.combo_lowpass.grid(row=5, column=3, padx=2, pady=2)
-        self.combo_lowpass.set("300 Hz (Rangayyan)")
+        self.combo_lowpass.set("500 Hz (Previo)")
 
         self.ent_gate_2d = self.ent_gate
         self.ent_gate_3d = self.ent_gate
@@ -3070,6 +3070,123 @@ class GeneradorPCAGUI:
         )
 
 def main():
+    import sys
+    import os
+    import argparse
+    parser = argparse.ArgumentParser(description="Generador PCA/UMAP adaptado para ejecución interactiva y por Agentes.")
+    parser.add_argument("--cli", action="store_true", help="Ejecutar en modo no interactivo / sin GUI")
+    parser.add_argument("--fecha", type=str, default=None, help="Filtrar mediciones por fecha (ej. 2026-09-01)")
+    parser.add_argument("--mediciones", nargs="+", default=None, help="Lista de mediciones relativas o carpetas")
+    parser.add_argument("--base-dir", type=str, default=None, help="Directorio base de mediciones")
+    parser.add_argument("--out-dir", type=str, default=None, help="Directorio de salida para resultados y figuras")
+    parser.add_argument("--pca-2d", action="store_true", default=True, help="Generar PCA 2D")
+    parser.add_argument("--pca-3d", action="store_true", default=False, help="Generar PCA 3D")
+    parser.add_argument("--umap-2d", action="store_true", default=False, help="Generar UMAP 2D")
+    parser.add_argument("--umap-3d", action="store_true", default=False, help="Generar UMAP 3D")
+    parser.add_argument("--algoritmo-pca", type=str, default="GMM", choices=["GMM", "K-Means", "LDA"], help="Clustering para PCA")
+    parser.add_argument("--estilo-visual", type=str, default="Elipses", choices=["Elipses", "Fronteras"], help="Estilo visual 2D")
+    parser.add_argument("--lowpass", type=float, default=500.0, help="Frecuencia de corte pasabajos (Hz)")
+    parser.add_argument("--highpass", type=float, default=20.0, help="Frecuencia de corte pasaaltos (Hz)")
+    parser.add_argument("--notch-q", type=float, default=30.0, help="Factor Q del filtro Notch")
+    parser.add_argument("--correccion-intersesion", action="store_true", default=False, help="Activar calibración de ganancia intersesión")
+    parser.add_argument("--canales", nargs="+", default=["canal_0", "canal_1", "canal_2"], help="Canales a incluir")
+    
+    if len(sys.argv) > 1:
+        args = parser.parse_args()
+        
+        if args.base_dir is None:
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            possible_bases = [
+                os.path.join(os.path.dirname(os.path.dirname(script_dir)), "base_de_datos_electrodos"),
+                os.path.abspath("EMG_desarrollo/base_de_datos_electrodos"),
+                os.path.abspath("base_de_datos_electrodos")
+            ]
+            base_dir = next((p for p in possible_bases if os.path.exists(p)), possible_bases[0])
+        else:
+            base_dir = os.path.abspath(args.base_dir)
+            
+        if args.mediciones:
+            meds = args.mediciones
+        elif args.fecha:
+            todas = procesar_mediciones(base_dir)
+            meds = [m for m in todas if m.startswith(args.fecha) and not any(ign in m for ign in ["SecuenciaContinua", "Reposo", "Ruido", "Desplazado"])]
+        else:
+            meds = procesar_mediciones(base_dir)
+            
+        if not meds:
+            print(f"[Error] No se encontraron mediciones válidas para la configuración dada en {base_dir}")
+            sys.exit(1)
+            
+        print(f"[Agente Generador PCA] Ejecutando sobre {len(meds)} mediciones en {base_dir}...")
+        
+        params_2d = {
+            "alpha_ruido": 0.5,
+            "gate_ratio_ruido": 0.0,
+            "snr_threshold": 0.5,
+            "outlier_contamination": 0.10,
+            "smooth_ms": 90,
+            "target_length": 20,
+            "tipo_filtro_ruido": "notch",
+            "notch_q": args.notch_q,
+            "highpass_cutoff_hz": args.highpass,
+            "lowpass_cutoff_hz": args.lowpass
+        }
+        
+        params_3d = {
+            "alpha_ruido": 0.5,
+            "gate_ratio_ruido": 0.0,
+            "snr_threshold": 0.5,
+            "outlier_contamination": 0.10,
+            "smooth_ms": 125,
+            "target_length": 20,
+            "tipo_filtro_ruido": "notch",
+            "notch_q": args.notch_q,
+            "highpass_cutoff_hz": args.highpass,
+            "lowpass_cutoff_hz": args.lowpass
+        }
+        
+        params_umap = {
+            "alpha_ruido": 1.0,
+            "gate_ratio_ruido": 0.0,
+            "snr_threshold": 0.5,
+            "outlier_contamination": 0.10,
+            "smooth_ms": 125,
+            "target_length": 20,
+            "tipo_filtro_ruido": "notch",
+            "notch_q": args.notch_q,
+            "highpass_cutoff_hz": args.highpass,
+            "lowpass_cutoff_hz": args.lowpass
+        }
+        
+        ejecutar_procesamiento(
+            meds,
+            base_dir,
+            params_2d=params_2d,
+            params_3d=params_3d,
+            params_umap=params_umap,
+            proc_pca_2d=args.pca_2d,
+            proc_pca_3d=args.pca_3d,
+            proc_umap_2d=args.umap_2d,
+            proc_umap_3d=args.umap_3d,
+            aplicar_trevisan=False,
+            algoritmo_clustering_pca=args.algoritmo_pca,
+            modo_alineacion="Pico Volumen Micrófono",
+            pre_pct=0.4,
+            post_pct=0.6,
+            canales_features=args.canales,
+            ocultar_leyenda=False,
+            estilo_visual=args.estilo_visual,
+            ignorar_ventana_cero=False,
+            out_dir=args.out_dir,
+            aplicar_correccion_intersesion=args.correccion_intersesion,
+            correccion_impedancia=True,
+            tipo_filtro_ruido="notch",
+            notch_q=args.notch_q,
+            highpass_cutoff_hz=args.highpass,
+            lowpass_cutoff_hz=args.lowpass
+        )
+        return
+
     root = tk.Tk()
     app = GeneradorPCAGUI(root)
     try:

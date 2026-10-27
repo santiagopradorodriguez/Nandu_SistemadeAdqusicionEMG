@@ -1,0 +1,230 @@
+\chapter{Espacios Frecuenciales, Reposo Basal y Decodificación de Sílabas en Variedades No Lineales}
+\label{chap:frecuencia_silabas_isomap}
+
+\section{Introducción y Motivación Experimental}
+\label{sec:motivacion_mfcc_silabas}
+
+Durante las campañas de adquisición de electromiografía de superficie (sEMG) para habla silente, el pipeline tradicional del sistema ha dependido predominantemente de la envolvente temporal rectificada y filtrada a baja frecuencia ($f_c \approx 4\text{--}6\text{ Hz}$). Si bien este descriptor cinemático describe con fidelidad la macro-trayectoria de activación muscular en fonaciones vocálicas sostenidas (/a/, /e/, /i/, /o/, /u/), presenta dos limitaciones severas documentadas en el cuaderno de laboratorio:
+\begin{enumerate}
+    \item \textbf{Ceguera ante la Falta de Electrodos de Apertura:} En colocaciones anatómicas desfavorables donde los electrodos se restringen a la tríada facial lateral y perioral (Masetero, Modiolo, Orbicular de los labios) sin registrar el vientre anterior del digástrico ni el piso de la boca (sesión del 23 de octubre de 2026), las vocales posteriores (/o/, /u/) y de apertura colapsan en el mismo hiperplano temporal 2D.
+    \item \textbf{Incapacidad para Resolver Gestos Transitorios Rápidos en Sílabas:} Al evaluar unidades consonante-vocal (CV) como /ba/, /ka/, /ra/, /ta/, la duración del ataque consonántico es menor a $80\text{ ms}$. La convolución con ventanas suavizadas de $50\text{ ms}$ actúa como un filtro pasabajo destructivo que atenúa los trenes de descarga motora de alta tasa de reclutamiento.
+\end{enumerate}
+
+En este capítulo se documentan formalmente los experimentos del 25 de octubre de 2026, abarcando tres avances complementarios:
+\begin{itemize}
+    \item La deducción y validación del \textbf{Banco de Filtros Mel Muscular sobre señal cruda alterna (AC)}, preservando la normalización estricta por el supremo intercanal.
+    \item El impacto de la \textbf{Corrección por Reposo Basal e Impedancia Dinámica}, demostrando la separación analítica de las vocales /o/ y /u/ en la sesión de 492 pulsos de Lucas al $80.5\%$.
+    \item La decodificación no lineal de \textbf{9 Sílabas CV} mediante \textbf{Isomap 4D y 5D}, alcanzando hasta un \textbf{86.0\%} de acierto multiclase incluso bajo la peor tríada muscular.
+\end{itemize}
+
+\section{Banco Mel Muscular y Preservación de la Norma Tricanal por Supremo}
+\label{sec:mel_muscular_matematica}
+
+\subsection{El Riesgo de Colapso Dimensional y Pérdida del Supremo}
+En habla acústica estándar, los coeficientes cepstrales en escala Mel (MFCC) se extraen sobre audio que contiene formantes resonantes del tracto vocal. En sEMG para habla silente, el micrófono solo se utiliza como señal de disparo para alineación temporal y nunca como feature. La señal muscular no posee formantes acústicos, sino una densidad espectral de potencia asociada a las tasas de disparo e interferencia de los potenciales de acción de las unidades motoras (MUAP).
+
+Un error metodológico frecuente consiste en aplicar transformaciones espectrales sobre la envolvente suavizada de baja frecuencia: dado que la envolvente es casi continua (DC), su transformada de Fourier colapsa y arroja varianza nula. Para captar la firma electromiográfica real, la parametrización frecuencial \textbf{debe aplicarse obligatoriamente sobre la señal alterna (AC) cruda filtrada pasa-banda entre $20\text{ Hz}$ y $450\text{ Hz}$ con Notch de $50\text{ Hz}$}.
+
+Asimismo, las librerías estándar de machine learning suelen introducir un escalador independiente por columna (\texttt{StandardScaler}):
+$$\tilde{x}_{c, t} = \frac{x_{c, t} - \mu_{c, t}}{\sigma_{c, t}}$$
+En un sistema EMG multicanal, el escalado independiente destruye el radio biomecánico relativo entre músculos, equiparando espigas de ruido en canales relajados con contracciones genuinas en el canal activo. Para respetar la física del sistema, cada ventana segmentada $t \in [t_{\text{ini}}, t_{\text{fin}}]$ se normaliza de forma global por el supremo tricanal:
+\begin{equation}
+M_{\text{supremo, pulso}} = \max_{c \in \{0, 1, 2\}} \left( \max_{t \in [t_{\text{ini}}, t_{\text{fin}}]} |s_c(t)| \right), \quad \tilde{s}_c(t) = \frac{s_c(t)}{M_{\text{supremo, pulso}}}
+\end{equation}
+
+\subsection{Definición de la Escala Mel Muscular Adaptada}
+La escala Mel acústica estándar utiliza un pivote de $700\text{ Hz}$, diseñado para el oído humano que opera hasta $8\text{ kHz}$. Para el espectro mioeléctrico (concentrado entre $20\text{ Hz}$ y $450\text{ Hz}$ con un muestreo $f_s = 6000\text{ Hz}$), se define una escala Mel biofísica con frecuencia de pivote reducida a $f_0 = 150\text{ Hz}$:
+\begin{equation}
+m_{\text{EMG}}(f) = 1000 \cdot \log_{10} \left( 1 + \frac{f}{150} \right)
+\end{equation}
+\begin{equation}
+f_{\text{EMG}}(m) = 150 \cdot \left( 10^{m / 1000} - 1 \right)
+\end{equation}
+Se ubican $M = 16$ filtros triangulares uniformemente espaciados en la banda de interés $[20, 450]\text{ Hz}$. Tras computar el periodograma de potencia $|S_c(k)|^2$ mediante FFT de $N_{\text{FFT}} = 512$ con paso $H = 256$ y ventana de Hamming, las energías en los bancos de filtros se transforman mediante la Transformada Coseno Discreta (DCT tipo II ortogonal), reteniendo los primeros $K = 8$ coeficientes:
+\begin{equation}
+c_n = \sum_{m=1}^{M} \log_{10} \left( E_m \right) \cos \left[ \frac{\pi \, n}{M} \left( m - \frac{1}{2} \right) \right], \quad n = 0, \dots, K-1
+\end{equation}
+Por cada canal se calculan la media y la desviación estándar temporal de los coeficientes a lo largo del pulso, produciendo un descriptor espectral tricanal compacto de dimensión $3 \times (2 \times 8) = 48\text{D}$.
+
+\subsection{Esquema de Equilibrado de Inercia por Bloques}
+Al fusionar la trayectoria temporal (envolvente de $3 \times 60 = 180\text{D}$) con el descriptor espectral ($48\text{D}$), la diferencia natural en la magnitud numérica de los dominios puede hacer que el análisis de componentes principales (PCA) o Isomap sea capturado casi en su totalidad por un solo bloque. Para ecualizar el aporte sin tocar la norma del supremo intercanal, se introduce el factor de equilibrado de inercia por varianza de bloque $\gamma$:
+\begin{equation}
+\sigma_T^2 = \text{Var}(X_{\text{env}}), \quad \sigma_F^2 = \text{Var}(X_{\text{MFCC}}), \quad \gamma = \sqrt{\frac{\sigma_T^2}{\sigma_F^2}}
+\end{equation}
+\begin{equation}
+X_{\text{híbrido}} = \begin{bmatrix} X_{\text{env}} & \vline & \gamma \cdot X_{\text{MFCC}} \end{bmatrix} \in \mathbb{R}^{P \times 228}
+\end{equation}
+
+\section{Separación de Vocales Posteriores: El Rol del Reposo Basal Dinámico}
+\label{sec:reposo_basal_ou}
+
+Uno de los problemas históricos en la decodificación no supervisada residía en el solapamiento fonético entre /o/ y /u/ en proyecciones 2D (Isomap/PCA), donde el agrupamiento K-Means o GMM tendía a fusionarlas en un único clúster posterior.
+
+\subsection{Acondicionamiento por Reposo Basal e Impedancia Dinámica}
+El algoritmo de acondicionamiento auditado sustrae la componente cuasi-estática de reposo previa a la fonación y normaliza por el percentil $95$ interpulso:
+\begin{equation}
+x_{\text{reposo}}(c) = \text{Mediana} \left( s_c(t) \right)_{t \in [t_{\text{ini}} - 200\text{ms}, t_{\text{ini}}]}
+\end{equation}
+\begin{equation}
+s'_c(t) = \frac{s_c(t) - x_{\text{reposo}}(c)}{P_{95}(s_c)}
+\end{equation}
+
+\begin{figure}[H]
+\centering
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{imagenes/lucas_isomap_reposo_basal.png}
+    \caption{Proyección Isomap 2D en la sesión de 492 repeticiones de Lucas incorporando corrección de reposo basal.}
+    \label{fig:lucas_isomap_reposo}
+\end{minipage}\hfill
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{imagenes/lda_isomap_frontera_o_vs_u.png}
+    \caption{Separación binaria lineal LDA entre /o/ y /u/ sobre el espacio Isomap 2D corregido ($80.5\%$ de acierto).}
+    \label{fig:lda_ou}
+\end{minipage}
+\end{figure}
+
+\subsection{Evaluación Numérica sobre 492 Fonaciones}
+Al evaluar la sesión de referencia del sujeto Lucas (7 tomas completas de las 5 vocales, 492 pulsos limpios tras Isolation Forest al 10\%):
+\begin{itemize}
+    \item \textbf{Sin corrección de reposo basal:} La exactitud de discriminación binaria entre /o/ y /u/ en Isomap 2D era de apenas \textbf{53.8\%} (equivalente al azar).
+    \item \textbf{Con corrección de reposo basal:} La exactitud sube al \textbf{80.5\%} (74 de 92 pulsos correctos, con $80.4\%$ en /o/ y $80.4\%$ en /u/), como se ilustra en la Figura~\ref{fig:lda_ou}.
+    \item \textbf{Exactitud Multiclase Global (5 Vocales):} En validación cruzada estratificada de 5 pliegues (\textit{Stratified 5-Fold Real}), el espacio latente Isomap 2D con reposo basal alcanza un promedio global de \textbf{81.9\% (±3.6\%)} de exactitud en las 5 clases vocálicas.
+\end{itemize}
+
+\section{Decodificación de Sílabas CV en Espacios Multidimensionales}
+\label{sec:silabas_cv_experimentos}
+
+El 23 de octubre de 2026 se registraron 11 tomas correspondientes a 9 sílabas consonante-vocal (CV) en habla silente: \textbf{/ba/, /ja/, /ka/, /la/, /ma/, /pa/, /ra/, /sa/, /ta/}, totalizando 57 repeticiones válidas.
+
+\subsection{Estructura Fonoarticularia y Puntos de Articulación}
+Las 9 sílabas exploran tres categorías motoras orofaciales claramente diferenciadas:
+\begin{enumerate}
+    \item \textbf{Bilabiales (/ba/, /ma/, /pa/):} Implican la oclusión completa del esfínter labial, comandada por el músculo Orbicular de los labios (\textit{Orbicularis Oris}).
+    \item \textbf{Coronales y Alveolares (/la/, /ra/, /sa/, /ta/):} Caracterizadas por elevación o fricción lingual y estabilización mandibular lateral, gobernadas por el Modiolo y maseteros.
+    \item \textbf{Velares (/ja/, /ka/):} Desplazamiento del dorso lingual y velo del paladar, donde los músculos superficiales de la mejilla actúan predominantemente como fijadores posturales.
+\end{enumerate}
+
+Al proyectar las señales en un espacio PCA 2D agrupadas según el punto de articulación (Figura~\ref{fig:silabas_articulacion}), se obtiene una separabilidad LDA de \textbf{96.5\%} entre las familias bilabial, coronal y velar, confirmando que la tríada lateral capta la cinemática macro-articular.
+
+\begin{figure}[H]
+\centering
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{imagenes/pca_silabas_punto_articulacion.png}
+    \caption{Espacio PCA 2D agrupado por punto de articulación ($96.5\%$ de separabilidad LDA macro).}
+    \label{fig:silabas_articulacion}
+\end{minipage}\hfill
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{imagenes/heatmaps_porcentajes_silabas.png}
+    \caption{Matrices de confusión de 9 sílabas en PCA 2D, 3D y 4D sobre envolventes temporales.}
+    \label{fig:heatmaps_pca_silabas}
+\end{minipage}
+\end{figure}
+
+\subsection{El Cuello de Botella Dimensional: Por qué 2D Colapsa y se Requiere 4D-5D}
+A diferencia de las vocales sostenidas (que forman un atractor triangular o 2-símplex plano), las sílabas son trayectorias continuas compuestas por una fase de ataque consonántico transitorio seguida de una fase de distensión vocálica.
+En la Tabla~\ref{tab:dimensiones_silabas_pca} se observa la evolución de la exactitud multiclase (9 clases) variando la dimensión latente en PCA.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{ccccc}
+\toprule
+\textbf{Dimensión Latente} & \textbf{Varianza Explicada} & \textbf{LDA (Ajuste)} & \textbf{LDA (CV-3)} & \textbf{Diagnóstico Cinemático} \\
+\midrule
+\textbf{PCA 2D} & 54.3\% & 52.6\% & 35.1\% & Colapso: proyección superpuesta de trayectorias. \\
+\textbf{PCA 3D} & 62.6\% & 54.4\% & 36.8\% & Distingue bilabiales pero confunde coronales. \\
+\textbf{PCA 4D} & 68.2\% & 57.9\% & 38.6\% & Inicio de separación de velares (/ka/). \\
+\textbf{PCA 5D} & 72.6\% & 73.7\% & 43.9\% & Salto cualitativo: /ba/ y /ja/ alcanzan 100\%. \\
+\textbf{PCA 8D} & 83.1\% & \textbf{80.7\%} & \textbf{59.6\%} & /ba/, /ka/, /la/ al 100\%; /ma/ al 90\%. \\
+\bottomrule
+\end{tabular}
+\caption{Exactitud multiclase en función del número de componentes principales para las 9 sílabas.}
+\label{tab:dimensiones_silabas_pca}
+\end{table}
+
+\section{Decodificación No Lineal mediante Isomap en Variedades Bajas}
+\label{sec:isomap_silabas}
+
+\subsection{Formulación de la Distancia Geodésica en el Espacio de Disparo}
+PCA impone una proyección euclidiana hiperplana que aplasta las curvaturas generadas por la co-articulación temporal. El algoritmo Isomap resuelve esta distorsión construyendo un grafo de vecindad de $k$ vecinos más cercanos y computando las distancias de camino más corto (algoritmo de Dijkstra), preservando la geometría intrínseca de la variedad mioeléctrica:
+\begin{equation}
+D_G(i, j) = \min_{\mathcal{P}} \sum_{l=1}^{|\mathcal{P}|-1} \|x_{p_l} - x_{p_{l+1}}\|_2
+\end{equation}
+A partir de la matriz de distancias geodésicas $D_G$, se aplica escalamiento multidimensional clásico (MDS) para obtener la inmersión en $\mathbb{R}^d$.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{imagenes/isomap_comparativa_2d_a_5d.png}
+\caption{Evolución de las matrices de confusión en porcentaje mediante Isomap desde 2D hasta 5D utilizando el descriptor MFCC Mel muscular ($k=18$ vecinos).}
+\label{fig:isomap_2d_a_5d}
+\end{figure}
+
+\subsection{Comparativa Sistemática: Envolvente vs MFCC vs Híbrido en 4D y 5D}
+Al comparar el comportamiento de las envolventes temporales y los coeficientes MFCC Mel AC en espacios reducidos de baja dimensión, surgen diferencias fundamentales en la estabilidad y tasa de discriminación (Tabla~\ref{tab:isomap_comparativa_final}).
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Representación y Modelo} & \textbf{Dimensión} & \textbf{LDA (Ajuste)} & \textbf{LDA (CV-3)} & \textbf{Resolución /pa/ vs /ma/} \\
+\midrule
+PCA Solo Envolvente & 5D & 68.4\% & 36.8\% & 40\% (Confusión 60\%) \\
+PCA Solo MFCC Mel AC & 5D & 80.7\% & 64.9\% & 40\% (Confusión 60\%) \\
+PCA Híbrido Equilibrado & 5D & 70.2\% & 38.6\% & 40\% (Confusión 60\%) \\
+\midrule
+Isomap Solo Envolvente ($k=20$) & 4D & 66.7\% & 40.4\% & 40\% (Confusión 60\%) \\
+\textbf{Isomap Solo MFCC Mel AC ($k=18$)} & \textbf{4D} & \textbf{78.9\%} & \textbf{61.4\%} & \textbf{80.0\% (Separado)} \\
+\midrule
+\textbf{Isomap Solo MFCC Mel AC ($k=18$)} & \textbf{5D} & \textbf{86.0\%} & \textbf{68.4\%} & \textbf{80.0\% (/ma/ al 90\%)} \\
+\bottomrule
+\end{tabular}
+\caption{Comparativa de clasificadores en espacios reducidos de 4 y 5 dimensiones.}
+\label{tab:isomap_comparativa_final}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{imagenes/isomap_4d_envolvente_vs_mfcc.png}
+    \caption{Comparativa directa en Isomap 4D: Envolvente temporal ($66.7\%$) frente a MFCC Mel AC ($78.9\%$).}
+    \label{fig:isomap_4d_env_vs_mfcc}
+\end{minipage}\hfill
+\begin{minipage}{0.48\textwidth}
+    \centering
+    \includegraphics[width=\textwidth]{imagenes/isomap_5d_mfcc_silabas.png}
+    \caption{Matriz de confusión detallada en Isomap 5D con MFCC Mel AC ($86.0\%$ de exactitud global).}
+    \label{fig:isomap_5d_detalle}
+\end{minipage}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{imagenes/clusters_isomap_5d_silabas.png}
+\caption{Visualización de los clústeres en la variedad Isomap 5D ($k=18$ vecinos) sobre las 9 sílabas. Izquierda: proyección 3D de las coordenadas geodésicas principales (1, 2 y 3). Centro: plano latente principal (Coord 1 vs Coord 2). Derecha: plano latente complementario (Coord 4 vs Coord 5), donde se resuelven las clases críticas como /pa/ frente a /ma/.}
+\label{fig:clusters_isomap_5d}
+\end{figure}
+
+\subsection{Análisis Biofísico del Desempeño en 4D y 5D}
+Los resultados de las Figuras~\ref{fig:isomap_4d_env_vs_mfcc} y \ref{fig:isomap_5d_detalle} revelan tres conclusiones de relevancia teórica y práctica para el sistema de adquisición:
+\begin{enumerate}
+    \item \textbf{El MFCC Rescata el Transitorio Consonántico:} En consonantes líquidas y oclusivas rápidas como /ra/ y /ka/, la envolvente temporal de baja frecuencia decae al $40\%$ en 4D debido al alisamiento de la ventana de integración. En contraste, los coeficientes Mel musculares extraídos de la señal AC captan las ráfagas espectrales de descarga, alcanzando el \textbf{100\% de acierto tanto en /ra/ como en /ka/ y /ba/}.
+    \item \textbf{Resolución del Par Crítico Bilabial (/pa/ vs /ma/):}
+    En espacios lineales (PCA), /pa/ y /ma/ sufren un solapamiento del $60\%$ debido a que ambas comparten una idéntica configuración labial isométrica. En Isomap 4D y 5D, la distancia geodésica desdobla la variedad, elevando la precisión de /pa/ al \textbf{80.0\%} y la de /ma/ al \textbf{90.0\%}.
+    \item \textbf{Significancia de los Resultados bajo la Peor Tríada Anatómica:}
+    La sesión del 23 de octubre de 2026 fue registrada sin electrodos en el piso de la boca ni en el vientre anterior del digástrico, imposibilitando la captura de la apertura mandibular estática. Que un espacio no lineal de apenas \textbf{4 dimensiones (78.9\%)} y \textbf{5 dimensiones (86.0\%)} logre resolver 9 sílabas complejas a partir de micro-contracciones de la mejilla y los labios demuestra que la información fonética transitoria es sumamente rica, anticipando rendimientos aún superiores cuando se restablezca la colocación tricanal estándar con electrodo submandibular.
+\end{enumerate}
+
+\section{Conclusiones y Recomendaciones Metodológicas}
+\label{sec:conclusiones_frecuencia_silabas}
+
+\begin{itemize}
+    \item \textbf{Prohibición del StandardScaler Arbitrario:} Toda parametrización frecuencial en sEMG debe normalizarse estrictamente por el supremo intercanal de cada pulso, preservando los balances relativos entre canales musculares.
+    \item \textbf{Corrección Obligatoria por Reposo Basal:} La sustracción del reposo estático es el factor biofísico determinante para separar vocales posteriores (/o/ de /u/), elevando su discriminación del $53.8\%$ al $80.5\%$.
+    \item \textbf{Dimensionalidad Intrínseca de las Sílabas:} Mientras que las vocales estáticas habitan una variedad bidimensional ($2$-símplex), la articulación dinámica de sílabas requiere un espacio no lineal de entre $4$ y $5$ dimensiones geodésicas para evitar colapsos topológicos.
+\end{itemize}

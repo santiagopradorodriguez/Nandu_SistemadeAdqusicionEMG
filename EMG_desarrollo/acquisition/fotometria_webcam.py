@@ -8,10 +8,13 @@
 # ==============================================================================
 
 import csv
+import hashlib
 import json
 import os
+import pathlib
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import threading
@@ -423,14 +426,18 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
         self._manual_points_px: List[Tuple[float, float]] = []
         self._differential_pairs: List[Dict[str, Any]] = []
         self._pending_pos_pole: Optional[Tuple[float, float]] = None
+        self._pending_pos_anchor: Optional[Dict[str, Any]] = None
         self._gnd_electrode_px: Optional[Tuple[float, float]] = None
+        self._gnd_electrode_anchor: Optional[Dict[str, Any]] = None
+        self._manual_points_anchors: List[Optional[Dict[str, Any]]] = []
         self._marking_gnd_active: bool = False
         self._ghost_reference_data: Optional[Dict[str, Any]] = None
         self._ghost_reference_path: str = ""
         self._profile_45_mode: bool = False
+        self._alignment_pose_target: str = "frontal"
 
         self.setWindowTitle(
-            f"Asistente de Alineacion Facial 3D y Mapeo de Electrodos sEMG — {self.sujeto} ({self.prueba})"
+            f"Asistente de Alineacion Facial 3D y Mapeo de Electrodos sEMG - {self.sujeto} : {self.prueba}"
         )
         self.resize(1180, 760)
         self._apply_dark_theme()
@@ -529,7 +536,7 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
         left_col.addWidget(self.video_label, stretch=1)
 
         # Barra de semáforos en tiempo real (Yaw, Pitch, Roll, Distancia)
-        hud_group = QtWidgets.QGroupBox("Semáforo de Alineación 3D y Biometría Articular en Vivo")
+        hud_group = QtWidgets.QGroupBox("Semaforo de Alineacion 3D y Biometria Articular en Vivo")
         hud_layout = QtWidgets.QGridLayout(hud_group)
         hud_layout.setSpacing(8)
 
@@ -559,7 +566,7 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
         right_col.setSpacing(10)
 
         # 1. Grupo de Configuración y Marcado de Electrodos
-        elec_group = QtWidgets.QGroupBox("1. Configuración y Marcado de Electrodos")
+        elec_group = QtWidgets.QGroupBox("1: Configuracion y Marcado de Electrodos")
         elec_layout = QtWidgets.QVBoxLayout(elec_group)
 
         type_row = QtWidgets.QHBoxLayout()
@@ -613,7 +620,7 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
         right_col.addWidget(elec_group)
 
         # 2. Grupo de Referencia Métrica y Calibración
-        calib_group = QtWidgets.QGroupBox("2. Referencia Métrica y Calibración de Escala")
+        calib_group = QtWidgets.QGroupBox("2: Referencia Metrica y Dimensiones de Electrodos")
         calib_layout = QtWidgets.QVBoxLayout(calib_group)
 
         self.combo_calibration_mode = QtWidgets.QComboBox()
@@ -658,6 +665,32 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
 
         calib_layout.addLayout(calib_param_row)
 
+        # Dimensiones de electrodos para protocolo experimental (siempre visibles)
+        dims_grid = QtWidgets.QGridLayout()
+        lbl_gel = QtWidgets.QLabel("Diametro Gel / Parche:")
+        lbl_gel.setStyleSheet("color: #b0bec5; font-weight: bold;")
+        self.spin_gel_diam_mm = QtWidgets.QDoubleSpinBox()
+        self.spin_gel_diam_mm.setRange(1.0, 50.0)
+        self.spin_gel_diam_mm.setValue(10.0)
+        self.spin_gel_diam_mm.setSingleStep(0.5)
+        self.spin_gel_diam_mm.setSuffix(" mm")
+        self.spin_gel_diam_mm.valueChanged.connect(self._update_preview)
+
+        lbl_ied_nom = QtWidgets.QLabel("Distancia Inter-Electrodo Centro a Centro:")
+        lbl_ied_nom.setStyleSheet("color: #b0bec5; font-weight: bold;")
+        self.spin_ied_nominal_mm = QtWidgets.QDoubleSpinBox()
+        self.spin_ied_nominal_mm.setRange(2.0, 80.0)
+        self.spin_ied_nominal_mm.setValue(20.0)
+        self.spin_ied_nominal_mm.setSingleStep(0.5)
+        self.spin_ied_nominal_mm.setSuffix(" mm")
+        self.spin_ied_nominal_mm.valueChanged.connect(self._update_preview)
+
+        dims_grid.addWidget(lbl_gel, 0, 0)
+        dims_grid.addWidget(self.spin_gel_diam_mm, 0, 1)
+        dims_grid.addWidget(lbl_ied_nom, 1, 0)
+        dims_grid.addWidget(self.spin_ied_nominal_mm, 1, 1)
+        calib_layout.addLayout(dims_grid)
+
         self.chk_show_ears = QtWidgets.QCheckBox("Mostrar Detección de Orejas (Trago y Lóbulo)")
         self.chk_show_ears.setChecked(True)
         self.chk_show_ears.toggled.connect(self._update_preview)
@@ -666,7 +699,7 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
         right_col.addWidget(calib_group)
 
         # 3. Grupo Ghost Overlay (Referencia Anterior)
-        ghost_group = QtWidgets.QGroupBox("3. Repetibilidad entre Sesiones (Ghost Overlay)")
+        ghost_group = QtWidgets.QGroupBox("3: Repetibilidad entre Sesiones - Ghost Overlay")
         ghost_layout = QtWidgets.QVBoxLayout(ghost_group)
 
         self.btn_load_ghost = QtWidgets.QPushButton("Cargar Referencia Anterior (Ghost Overlay)")
@@ -685,45 +718,89 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
 
         right_col.addWidget(ghost_group)
 
-        # 4. Grupo de Capturas de Referencia
-        captures_group = QtWidgets.QGroupBox("4. Capturas de Referencia de la Sesión")
+        # 4. Grupo de Capturas de Referencia (3 fotos guiadas + close-up)
+        captures_group = QtWidgets.QGroupBox("4: Capturas de Referencia de la Sesion")
         captures_layout = QtWidgets.QVBoxLayout(captures_group)
+        captures_layout.setSpacing(6)
+
+        # Selector de pose guia interactiva
+        guide_row = QtWidgets.QHBoxLayout()
+        self.btn_guide_frontal = QtWidgets.QPushButton("Guia: Frente")
+        self.btn_guide_frontal.setCheckable(True)
+        self.btn_guide_frontal.setChecked(True)
+        self.btn_guide_frontal.setStyleSheet("QPushButton:checked { background-color: #004d40; border-color: #00ffcc; color: #00ffcc; }")
+
+        self.btn_guide_perfil_izq = QtWidgets.QPushButton("Guia: Perfil Izq +45°")
+        self.btn_guide_perfil_izq.setCheckable(True)
+        self.btn_guide_perfil_izq.setStyleSheet("QPushButton:checked { background-color: #004d40; border-color: #00ffcc; color: #00ffcc; }")
+
+        self.btn_guide_perfil_der = QtWidgets.QPushButton("Guia: Perfil Der -45°")
+        self.btn_guide_perfil_der.setCheckable(True)
+        self.btn_guide_perfil_der.setStyleSheet("QPushButton:checked { background-color: #004d40; border-color: #00ffcc; color: #00ffcc; }")
+
+        self.guide_group = QtWidgets.QButtonGroup(self)
+        self.guide_group.addButton(self.btn_guide_frontal, 0)
+        self.guide_group.addButton(self.btn_guide_perfil_izq, 1)
+        self.guide_group.addButton(self.btn_guide_perfil_der, 2)
+        self.guide_group.buttonClicked.connect(self._on_guide_button_clicked)
+
+        guide_row.addWidget(self.btn_guide_frontal)
+        guide_row.addWidget(self.btn_guide_perfil_izq)
+        guide_row.addWidget(self.btn_guide_perfil_der)
+        captures_layout.addLayout(guide_row)
 
         self.btn_capture_frontal = QtWidgets.QPushButton(
-            "1. Capturar Frontal + Triangular Electrodos"
+            "1: Capturar Foto Frontal + Triangular Electrodos"
         )
         self.btn_capture_frontal.setStyleSheet(
-            "QPushButton { background-color: #004d40; border: 2px solid #00ffcc; padding: 9px; font-size: 13px; }"
+            "QPushButton { background-color: #004d40; border: 2px solid #00ffcc; padding: 8px; font-size: 12px; }"
             "QPushButton:hover { background-color: #00695c; }"
         )
         self.btn_capture_frontal.clicked.connect(self._on_capture_frontal)
         captures_layout.addWidget(self.btn_capture_frontal)
 
-        profile_row = QtWidgets.QHBoxLayout()
-        self.chk_profile_guide = QtWidgets.QCheckBox("Guía Yaw 45°")
-        self.chk_profile_guide.toggled.connect(self._on_toggle_profile_mode)
-        profile_row.addWidget(self.chk_profile_guide)
+        perfiles_btn_row = QtWidgets.QHBoxLayout()
+        self.btn_capture_perfil_izq = QtWidgets.QPushButton("2: Foto Perfil Izq")
+        self.btn_capture_perfil_izq.setStyleSheet(
+            "QPushButton { background-color: #1a3a4b; border: 1px solid #00b0ff; padding: 7px; font-size: 11px; }"
+            "QPushButton:hover { background-color: #245269; }"
+        )
+        self.btn_capture_perfil_izq.clicked.connect(self._on_capture_perfil_izquierdo)
+        perfiles_btn_row.addWidget(self.btn_capture_perfil_izq)
 
-        self.btn_capture_profile = QtWidgets.QPushButton("2. Capturar Perfil 45° (Opcional)")
-        self.btn_capture_profile.clicked.connect(self._on_capture_profile_45)
-        profile_row.addWidget(self.btn_capture_profile, stretch=1)
-        captures_layout.addLayout(profile_row)
+        self.btn_capture_perfil_der = QtWidgets.QPushButton("3: Foto Perfil Der")
+        self.btn_capture_perfil_der.setStyleSheet(
+            "QPushButton { background-color: #1a3a4b; border: 1px solid #00b0ff; padding: 7px; font-size: 11px; }"
+            "QPushButton:hover { background-color: #245269; }"
+        )
+        self.btn_capture_perfil_der.clicked.connect(self._on_capture_perfil_derecho)
+        perfiles_btn_row.addWidget(self.btn_capture_perfil_der)
+        captures_layout.addLayout(perfiles_btn_row)
 
-        # Miniaturas de verificación
-        thumbs_row = QtWidgets.QHBoxLayout()
-        self.lbl_thumb_frontal = self._create_thumbnail_label("Frontal 3D\n(Pendiente)")
-        self.lbl_thumb_lips = self._create_thumbnail_label("Close-up Labios\n(Pendiente)")
-        self.lbl_thumb_profile = self._create_thumbnail_label("Perfil 45°\n(Opcional)")
-        thumbs_row.addWidget(self.lbl_thumb_frontal)
-        thumbs_row.addWidget(self.lbl_thumb_lips)
-        thumbs_row.addWidget(self.lbl_thumb_profile)
-        captures_layout.addLayout(thumbs_row)
+        # Referencia retrocompatible
+        self.btn_capture_profile = self.btn_capture_perfil_izq
+        self.chk_profile_guide = self.btn_guide_perfil_izq
+
+        # Miniaturas de verificación 2x2
+        thumbs_grid = QtWidgets.QGridLayout()
+        thumbs_grid.setSpacing(6)
+        self.lbl_thumb_frontal = self._create_thumbnail_label("1: Frontal 3D\nPendiente")
+        self.lbl_thumb_perfil_izq = self._create_thumbnail_label("2: Perfil Izq\nPendiente")
+        self.lbl_thumb_perfil_der = self._create_thumbnail_label("3: Perfil Der\nPendiente")
+        self.lbl_thumb_lips = self._create_thumbnail_label("Close-up Labios\nPendiente")
+        self.lbl_thumb_profile = self.lbl_thumb_perfil_izq
+
+        thumbs_grid.addWidget(self.lbl_thumb_frontal, 0, 0)
+        thumbs_grid.addWidget(self.lbl_thumb_perfil_izq, 0, 1)
+        thumbs_grid.addWidget(self.lbl_thumb_perfil_der, 1, 0)
+        thumbs_grid.addWidget(self.lbl_thumb_lips, 1, 1)
+        captures_layout.addLayout(thumbs_grid)
 
         self.lbl_capture_summary = QtWidgets.QLabel(
-            "Alinee el rostro dentro de la elipse guía y capture la referencia frontal."
+            "Alinee el rostro dentro de la elipse guia y capture las 3 fotos de referencia."
         )
         self.lbl_capture_summary.setWordWrap(True)
-        self.lbl_capture_summary.setStyleSheet("color: #00ffcc; font-size: 12px;")
+        self.lbl_capture_summary.setStyleSheet("color: #00ffcc; font-size: 11px;")
         captures_layout.addWidget(self.lbl_capture_summary)
 
         right_col.addWidget(captures_group)
@@ -768,7 +845,7 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
     def _create_thumbnail_label(placeholder: str) -> QtWidgets.QLabel:
         lbl = QtWidgets.QLabel(placeholder)
         lbl.setAlignment(QtCore.Qt.AlignCenter)
-        lbl.setFixedSize(115, 86)
+        lbl.setFixedSize(110, 70)
         lbl.setStyleSheet(
             "background-color: #121212; color: #757575; border: 1px dashed #444444; "
             "border-radius: 4px; font-size: 10px;"
@@ -921,9 +998,22 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
         if self.combo_detection_mode.currentIndex() != 0:
             self.combo_detection_mode.setCurrentIndex(0)
 
-        # Si el usuario activó marcar Tierra GND
+        # Anclaje dinamico a la malla facial 3D (Skin-Tracking)
+        anchor_clic = None
+        if self._last_fiduciarios and "puntos_2d_px" in self._last_fiduciarios:
+            pts_2d = self._last_fiduciarios["puntos_2d_px"]
+            dists = np.hypot(pts_2d[:, 0] - img_x, pts_2d[:, 1] - img_y)
+            v_idx = int(np.argmin(dists))
+            anchor_clic = {
+                "v_idx": v_idx,
+                "dx": float(img_x - pts_2d[v_idx, 0]),
+                "dy": float(img_y - pts_2d[v_idx, 1]),
+            }
+
+        # Si el usuario activo marcar Tierra GND
         if self._marking_gnd_active:
             self._gnd_electrode_px = (img_x, img_y)
+            self._gnd_electrode_anchor = anchor_clic
             self._marking_gnd_active = False
             self.btn_mark_gnd.setChecked(False)
             self._refresh_channel_list_ui()
@@ -938,11 +1028,15 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
                 # Primer clic: Polo (+)
                 if len(self._differential_pairs) < total_ch:
                     self._pending_pos_pole = (img_x, img_y)
+                    self._pending_pos_anchor = anchor_clic
             else:
                 # Segundo clic: Polo (-)
                 pos_pt = self._pending_pos_pole
+                pos_anc = self._pending_pos_anchor
                 neg_pt = (img_x, img_y)
+                neg_anc = anchor_clic
                 self._pending_pos_pole = None
+                self._pending_pos_anchor = None
 
                 ch_idx = len(self._differential_pairs)
                 ch_num = self.active_channel_indices[ch_idx] if ch_idx < len(self.active_channel_indices) else ch_idx
@@ -960,21 +1054,26 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
                     "es_bipolar": True,
                     "polo_positivo": pos_pt,
                     "polo_negativo": neg_pt,
-                    "centroide": (cx, cy),
+                    "anchor_positivo": pos_anc,
+                    "anchor_negativo": neg_anc,
                     "ied_px": ied_px,
                     "ied_mm": ied_mm,
                     "angulo_deg": ang_deg,
                     "canal_fisico": ch_num,
                     "nombre": musc,
+                    "diametro_gel_mm": float(self.spin_gel_diam_mm.value()),
+                    "distancia_interelectrodo_nominal_mm": float(self.spin_ied_nominal_mm.value()),
                 }
                 self._differential_pairs.append(pair_info)
-                self._manual_points_px.append((cx, cy))
         else:
             max_channels = max(len(self.etiquetas_canales), 1)
             if len(self._manual_points_px) < max_channels:
                 self._manual_points_px.append((img_x, img_y))
+                self._manual_points_anchors.append(anchor_clic)
             else:
                 self._manual_points_px[-1] = (img_x, img_y)
+                if self._manual_points_anchors:
+                    self._manual_points_anchors[-1] = anchor_clic
 
         self._refresh_channel_list_ui()
         self._update_preview()
@@ -985,22 +1084,30 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
             self.btn_mark_gnd.setChecked(False)
         elif self._pending_pos_pole is not None:
             self._pending_pos_pole = None
+            self._pending_pos_anchor = None
         elif self.combo_electrode_type.currentIndex() == 0:
             if self._differential_pairs:
                 self._differential_pairs.pop()
             if self._manual_points_px:
                 self._manual_points_px.pop()
+            if self._manual_points_anchors:
+                self._manual_points_anchors.pop()
         else:
             if self._manual_points_px:
                 self._manual_points_px.pop()
+            if self._manual_points_anchors:
+                self._manual_points_anchors.pop()
         self._refresh_channel_list_ui()
         self._update_preview()
 
     def _clear_manual_points(self) -> None:
         self._manual_points_px.clear()
+        self._manual_points_anchors.clear()
         self._differential_pairs.clear()
         self._pending_pos_pole = None
+        self._pending_pos_anchor = None
         self._gnd_electrode_px = None
+        self._gnd_electrode_anchor = None
         self._marking_gnd_active = False
         self.btn_mark_gnd.setChecked(False)
         self._refresh_channel_list_ui()
@@ -1156,13 +1263,28 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
         dist_cm = pose["distancia_camara_cm"]
         metodo_d = pose.get("metodo_distancia", "antropometria")
 
-        # Evaluar tolerancias según modo frontal o perfil 45°
-        if self._profile_45_mode:
+        # Evaluar tolerancias según pose activa (Frontal, Perfil Izq, Perfil Der)
+        target_mode = getattr(self, "_alignment_pose_target", "frontal")
+        if target_mode == "perfil_izquierdo":
+            yaw_ok = 30.0 <= yaw <= 55.0
+            yaw_warn = 22.0 <= yaw <= 62.0
+            modo_str = "+45°"
+            target_str = "Perfil Izquierdo: Gire cabeza a la derecha - Yaw +45 deg"
+        elif target_mode == "perfil_derecho":
+            yaw_ok = -55.0 <= yaw <= -30.0
+            yaw_warn = -62.0 <= yaw <= -22.0
+            modo_str = "-45°"
+            target_str = "Perfil Derecho: Gire cabeza a la izquierda - Yaw -45 deg"
+        elif self._profile_45_mode:
             yaw_ok = 30.0 <= abs(yaw) <= 55.0
             yaw_warn = 22.0 <= abs(yaw) <= 62.0
+            modo_str = "45°"
+            target_str = "Modo Perfil: Gire rostro hasta 30 a 55 grados"
         else:
             yaw_ok = abs(yaw) <= 6.0
             yaw_warn = abs(yaw) <= 10.0
+            modo_str = "0°"
+            target_str = "Ajuste giro e inclinacion hasta poner semaforos en verde"
 
         pitch_ok = abs(pitch) <= 8.0
         pitch_warn = abs(pitch) <= 13.0
@@ -1220,10 +1342,9 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
                 cv2.circle(canvas, (lx, ly), 3, (204, 255, 0), -1, cv2.LINE_AA)
 
         # Actualizar badges en el panel Qt
-        modo_str = "45°" if self._profile_45_mode else "0°"
         self._set_badge_status(
             self.badge_yaw,
-            f"Yaw ({modo_str}): {yaw:+.1f}°",
+            f"Yaw - {modo_str}: {yaw:+.1f}°",
             "ok" if yaw_ok else ("warn" if yaw_warn else "bad"),
         )
         self._set_badge_status(
@@ -1259,11 +1380,7 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
         estado_txt = (
             "ALINEACION OPTIMA (VERDE) - LISTO PARA CAPTURAR"
             if all_aligned
-            else (
-                "MODO PERFIL 45: GIRE EL ROSTRO HASTA 30-55 GRADOS"
-                if self._profile_45_mode
-                else "AJUSTE GIRO / INCLINACION HASTA PONER SEMAFOROS EN VERDE"
-            )
+            else target_str.upper()
         )
         cv2.putText(
             canvas,
@@ -1327,6 +1444,61 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
             (255, 150, 100),
         ]
 
+        # Calculo de factor de escala para radio fisico en pixeles
+        escala_preview = self._get_current_scale_mm_per_px()
+        if escala_preview is None or escala_preview <= 0:
+            if fiduciarios is not None and "distancia_interpupilar_px" in fiduciarios:
+                d_ip_px = float(fiduciarios["distancia_interpupilar_px"])
+                if d_ip_px > 1e-4:
+                    d_ip_mm = float(self.spin_dip_mm.value())
+                    escala_preview = d_ip_mm / d_ip_px
+
+        # Actualizacion dinamica de coordenadas ancladas a la piel facial (Skin-Tracking)
+        if fiduciarios is not None and "puntos_2d_px" in fiduciarios:
+            pts_2d = fiduciarios["puntos_2d_px"]
+            for pair in self._differential_pairs:
+                anc_pos = pair.get("anchor_positivo")
+                if anc_pos and anc_pos.get("v_idx") is not None and anc_pos["v_idx"] < len(pts_2d):
+                    v_p = anc_pos["v_idx"]
+                    pair["polo_positivo"] = (
+                        float(pts_2d[v_p, 0] + anc_pos.get("dx", 0.0)),
+                        float(pts_2d[v_p, 1] + anc_pos.get("dy", 0.0)),
+                    )
+                anc_neg = pair.get("anchor_negativo")
+                if anc_neg and anc_neg.get("v_idx") is not None and anc_neg["v_idx"] < len(pts_2d):
+                    v_n = anc_neg["v_idx"]
+                    pair["polo_negativo"] = (
+                        float(pts_2d[v_n, 0] + anc_neg.get("dx", 0.0)),
+                        float(pts_2d[v_n, 1] + anc_neg.get("dy", 0.0)),
+                    )
+
+            if self._pending_pos_pole is not None and getattr(self, "_pending_pos_anchor", None):
+                anc_pend = self._pending_pos_anchor
+                if anc_pend.get("v_idx") is not None and anc_pend["v_idx"] < len(pts_2d):
+                    v_pen = anc_pend["v_idx"]
+                    self._pending_pos_pole = (
+                        float(pts_2d[v_pen, 0] + anc_pend.get("dx", 0.0)),
+                        float(pts_2d[v_pen, 1] + anc_pend.get("dy", 0.0)),
+                    )
+
+            if self._gnd_electrode_px is not None and getattr(self, "_gnd_electrode_anchor", None):
+                anc_gnd = self._gnd_electrode_anchor
+                if anc_gnd.get("v_idx") is not None and anc_gnd["v_idx"] < len(pts_2d):
+                    v_gnd = anc_gnd["v_idx"]
+                    self._gnd_electrode_px = (
+                        float(pts_2d[v_gnd, 0] + anc_gnd.get("dx", 0.0)),
+                        float(pts_2d[v_gnd, 1] + anc_gnd.get("dy", 0.0)),
+                    )
+
+            if hasattr(self, "_manual_points_anchors"):
+                for m_i, anc_m in enumerate(self._manual_points_anchors):
+                    if anc_m and m_i < len(self._manual_points_px) and anc_m.get("v_idx") is not None and anc_m["v_idx"] < len(pts_2d):
+                        v_m = anc_m["v_idx"]
+                        self._manual_points_px[m_i] = (
+                            float(pts_2d[v_m, 0] + anc_m.get("dx", 0.0)),
+                            float(pts_2d[v_m, 1] + anc_m.get("dy", 0.0)),
+                        )
+
         if mode_idx == 0 and es_bipolar:
             # Dibujar pares diferenciales bipolares (dos polos fisicos reales: + y -)
             for idx, pair in enumerate(self._differential_pairs):
@@ -1336,6 +1508,16 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
 
                 # Flecha que representa el vector dipolo diferencial D = P_+ - P_- (de negativo a positivo)
                 cv2.arrowedLine(canvas, (neg_x, neg_y), (pos_x, pos_y), (220, 220, 220), 2, tipLength=0.25)
+
+                # Radio fisico a escala del parche/gel alrededor de cada polo
+                diam_gel = float(pair.get("diametro_gel_mm", self.spin_gel_diam_mm.value()))
+                radio_px = (
+                    max(int(round((diam_gel / 2.0) / escala_preview)), 4)
+                    if (escala_preview is not None and escala_preview > 0)
+                    else 12
+                )
+                cv2.circle(canvas, (pos_x, pos_y), radio_px, (0, 255, 204), 1, cv2.LINE_AA)
+                cv2.circle(canvas, (neg_x, neg_y), radio_px, (0, 255, 204), 1, cv2.LINE_AA)
 
                 # Polo (+) en rojo/naranja
                 cv2.circle(canvas, (pos_x, pos_y), 7, (0, 69, 255), -1, cv2.LINE_AA)
@@ -1370,6 +1552,13 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
             # Si hay un polo (+) pendiente de completar con su polo (-)
             if self._pending_pos_pole is not None:
                 px, py = int(round(self._pending_pos_pole[0])), int(round(self._pending_pos_pole[1]))
+                diam_gel_p = float(self.spin_gel_diam_mm.value())
+                radio_px_p = (
+                    max(int(round((diam_gel_p / 2.0) / escala_preview)), 4)
+                    if (escala_preview is not None and escala_preview > 0)
+                    else 12
+                )
+                cv2.circle(canvas, (px, py), radio_px_p, (0, 255, 204), 1, cv2.LINE_AA)
                 cv2.circle(canvas, (px, py), 7, (0, 69, 255), -1, cv2.LINE_AA)
                 cv2.circle(canvas, (px, py), 9, (255, 255, 255), 1, cv2.LINE_AA)
                 cv2.putText(canvas, "+ [Marque Polo -]", (px + 10, py - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 1, cv2.LINE_AA)
@@ -1389,6 +1578,13 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
             for idx, (px, py) in enumerate(pts_to_draw):
                 color = colores[idx % len(colores)]
                 ix, iy = int(round(px)), int(round(py))
+                diam_gel_m = float(self.spin_gel_diam_mm.value())
+                radio_px_m = (
+                    max(int(round((diam_gel_m / 2.0) / escala_preview)), 4)
+                    if (escala_preview is not None and escala_preview > 0)
+                    else 12
+                )
+                cv2.circle(canvas, (ix, iy), radio_px_m, color, 1, cv2.LINE_AA)
                 if nariz_pt is not None:
                     cv2.line(canvas, nariz_pt, (ix, iy), color, 1, cv2.LINE_AA)
                 cv2.circle(canvas, (ix, iy), 7, color, -1, cv2.LINE_AA)
@@ -1507,6 +1703,8 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
             distancia_fija_camara_cm=dist_fija_cm,
             escala_mm_por_px=escala_mm_px,
             punto_referencia_gnd=self._gnd_electrode_px,
+            diametro_gel_mm=float(self.spin_gel_diam_mm.value()),
+            ied_nominal_mm=float(self.spin_ied_nominal_mm.value()),
         )
 
         fiduciarios = resultado.get("_fiduciarios_cache") or self.agent.extraer_malla_facial_3d(frame)
@@ -1546,10 +1744,23 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
             )
         return True
 
-    def _on_capture_profile_45(self) -> None:
-        # Si el usuario aún no activó la guía 45°, activarla y capturar el cuadro actual
-        if not self.chk_profile_guide.isChecked():
-            self.chk_profile_guide.setChecked(True)
+    def _on_guide_button_clicked(self, button: QtWidgets.QAbstractButton) -> None:
+        if button == self.btn_guide_perfil_izq:
+            self._alignment_pose_target = "perfil_izquierdo"
+            self._profile_45_mode = True
+        elif button == self.btn_guide_perfil_der:
+            self._alignment_pose_target = "perfil_derecho"
+            self._profile_45_mode = True
+        else:
+            self._alignment_pose_target = "frontal"
+            self._profile_45_mode = False
+        self._update_preview()
+
+    def _on_capture_perfil_izquierdo(self) -> None:
+        if self._alignment_pose_target != "perfil_izquierdo":
+            self.btn_guide_perfil_izq.setChecked(True)
+            self._alignment_pose_target = "perfil_izquierdo"
+            self._profile_45_mode = True
 
         frame = self._get_current_source_frame()
         if frame is None:
@@ -1564,11 +1775,11 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
         vis_perfil = frame.copy()
         yaw_val = pose.get("yaw_deg", 0.0)
         dist_val = pose.get("distancia_camara_cm", 0.0)
-        cv2.rectangle(vis_perfil, (10, 10), (430, 62), (0, 0, 0), -1)
-        cv2.rectangle(vis_perfil, (10, 10), (430, 62), (0, 255, 204), 1)
+        cv2.rectangle(vis_perfil, (10, 10), (450, 62), (0, 0, 0), -1)
+        cv2.rectangle(vis_perfil, (10, 10), (450, 62), (0, 255, 204), 1)
         cv2.putText(
             vis_perfil,
-            f"Referencia Perfil 45 Grados | {self.sujeto}",
+            f"Referencia Perfil Izquierdo - {self.sujeto}",
             (20, 32),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.52,
@@ -1587,14 +1798,70 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
             cv2.LINE_AA,
         )
 
+        self.reference_images["perfil_izquierdo"] = vis_perfil
         self.reference_images["perfil_45"] = vis_perfil
         if self.calibracion_inicial_data is not None:
+            self.calibracion_inicial_data["pose_perfil_izquierdo"] = pose
             self.calibracion_inicial_data["pose_perfil_45"] = pose
 
         self._refresh_thumbnails_from_state()
         self.lbl_capture_summary.setText(
-            f"[OK] Perfil 45 capturado (Yaw = {yaw_val:+.1f} deg). Puede volver a Frontal o Confirmar."
+            f"[OK] Perfil Izquierdo capturado - Yaw: {yaw_val:+.1f} deg. Proceda a Perfil Derecho o Confirmar."
         )
+
+    def _on_capture_perfil_derecho(self) -> None:
+        if self._alignment_pose_target != "perfil_derecho":
+            self.btn_guide_perfil_der.setChecked(True)
+            self._alignment_pose_target = "perfil_derecho"
+            self._profile_45_mode = True
+
+        frame = self._get_current_source_frame()
+        if frame is None:
+            return
+
+        fiduciarios = self.agent.extraer_malla_facial_3d(frame)
+        pose = (
+            self.agent.calcular_pose_y_biometria_facial(fiduciarios, frame.shape[:2])
+            if fiduciarios is not None
+            else {}
+        )
+        vis_perfil = frame.copy()
+        yaw_val = pose.get("yaw_deg", 0.0)
+        dist_val = pose.get("distancia_camara_cm", 0.0)
+        cv2.rectangle(vis_perfil, (10, 10), (450, 62), (0, 0, 0), -1)
+        cv2.rectangle(vis_perfil, (10, 10), (450, 62), (0, 255, 204), 1)
+        cv2.putText(
+            vis_perfil,
+            f"Referencia Perfil Derecho - {self.sujeto}",
+            (20, 32),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.52,
+            (255, 255, 255),
+            1,
+            cv2.LINE_AA,
+        )
+        cv2.putText(
+            vis_perfil,
+            f"Yaw: {yaw_val:+.1f} deg | Dist: {dist_val:.1f} cm",
+            (20, 52),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.48,
+            (0, 255, 204),
+            1,
+            cv2.LINE_AA,
+        )
+
+        self.reference_images["perfil_derecho"] = vis_perfil
+        if self.calibracion_inicial_data is not None:
+            self.calibracion_inicial_data["pose_perfil_derecho"] = pose
+
+        self._refresh_thumbnails_from_state()
+        self.lbl_capture_summary.setText(
+            f"[OK] Perfil Derecho capturado - Yaw: {yaw_val:+.1f} deg. Calibracion de 3 fotos completa."
+        )
+
+    def _on_capture_profile_45(self) -> None:
+        self._on_capture_perfil_izquierdo()
 
     def _on_confirm_session(self) -> None:
         if "frontal_cruda" not in self.reference_images or self.calibracion_inicial_data is None:
@@ -1610,9 +1877,17 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
             self._display_bgr_on_label(
                 self.reference_images["closeup_labios"], self.lbl_thumb_lips
             )
-        if "perfil_45" in self.reference_images:
+        if "perfil_izquierdo" in self.reference_images:
             self._display_bgr_on_label(
-                self.reference_images["perfil_45"], self.lbl_thumb_profile
+                self.reference_images["perfil_izquierdo"], self.lbl_thumb_perfil_izq
+            )
+        elif "perfil_45" in self.reference_images:
+            self._display_bgr_on_label(
+                self.reference_images["perfil_45"], self.lbl_thumb_perfil_izq
+            )
+        if "perfil_derecho" in self.reference_images:
+            self._display_bgr_on_label(
+                self.reference_images["perfil_derecho"], self.lbl_thumb_perfil_der
             )
 
     @staticmethod
@@ -1630,6 +1905,2185 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
             QtCore.Qt.SmoothTransformation,
         )
         label.setPixmap(scaled)
+
+    def closeEvent(self, event: QtGui.QCloseEvent) -> None:
+        self._timer.stop()
+        super().closeEvent(event)
+
+    def done(self, result: int) -> None:
+        self._timer.stop()
+        super().done(result)
+
+
+# ==============================================================================
+# Asistente Lineal Simple de Fotometria y Guia AR en Vivo - Montaje de Electrodos
+# ==============================================================================
+
+NOMBRE_FOTO_FRONTAL = "01_frontal.png"
+NOMBRE_FOTO_PERFIL_IZQUIERDO = "02_perfil_izquierdo.png"
+NOMBRE_FOTO_PERFIL_DERECHO = "03_perfil_derecho.png"
+NOMBRE_METADATA_FOTOMETRIA = "metadata_fotometria.json"
+D_IP_NOMINAL_DEFECTO_MM = 63.0
+TICKS_VERDE_CAPTURA = 16
+
+PALETA_CANALES_MONTAJE = [
+    (0, 255, 128),
+    (0, 190, 255),
+    (255, 100, 255),
+    (255, 255, 0),
+    (100, 255, 255),
+    (255, 150, 100),
+]
+COLOR_FANTASMA = (255, 255, 0)
+COLOR_FANTASMA_LINEA = (170, 200, 90)
+
+
+def resolver_directorio_proyecto() -> str:
+    """Resuelve la raiz del proyecto en ejecucion dev y en distribucion empaquetada."""
+    if getattr(sys, "frozen", False):
+        raiz = os.path.dirname(os.path.abspath(sys.executable))
+        if os.path.basename(raiz) == "_internal":
+            raiz = os.path.dirname(raiz)
+    else:
+        raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return raiz
+
+
+def listar_sesiones_fotometria_previas() -> List[Dict[str, Any]]:
+    """
+    Escanea base_de_datos_electrodos y lista las mediciones previas guardadas
+    que incluyen metadata_fotometria.json, de la mas reciente a la mas antigua.
+
+    Retorna elementos con: etiqueta, ruta_meta, carpeta_sesion, fecha y nombre.
+    """
+    sesiones: List[Dict[str, Any]] = []
+    raiz_base = os.path.join(resolver_directorio_proyecto(), "base_de_datos_electrodos")
+    if not os.path.isdir(raiz_base):
+        return sesiones
+    fechas_ordenadas = sorted(
+        [d for d in os.listdir(raiz_base) if os.path.isdir(os.path.join(raiz_base, d))],
+        reverse=True,
+    )
+    for fecha in fechas_ordenadas:
+        dir_fecha = os.path.join(raiz_base, fecha)
+        carpetas_ordenadas = sorted(
+            [c for c in os.listdir(dir_fecha) if os.path.isdir(os.path.join(dir_fecha, c))],
+            reverse=True,
+        )
+        for carpeta in carpetas_ordenadas:
+            dir_sesion = os.path.join(dir_fecha, carpeta)
+            ruta_meta = os.path.join(dir_sesion, NOMBRE_METADATA_FOTOMETRIA)
+            if os.path.isfile(ruta_meta):
+                sesiones.append({
+                    "etiqueta": f"{fecha} - {carpeta}",
+                    "ruta_meta": ruta_meta,
+                    "carpeta_sesion": dir_sesion,
+                    "fecha": fecha,
+                    "nombre": carpeta,
+                })
+    return sesiones
+
+
+def limpiar_para_json(valor: Any) -> Any:
+    """Convierte tipos numpy y estructuras compuestas a tipos nativos serializables."""
+    if isinstance(valor, dict):
+        return {str(clave): limpiar_para_json(item) for clave, item in valor.items()}
+    if isinstance(valor, (list, tuple)):
+        return [limpiar_para_json(item) for item in valor]
+    if isinstance(valor, np.integer):
+        return int(valor)
+    if isinstance(valor, np.floating):
+        return float(valor)
+    return valor
+
+
+def dibujar_circulo_punteado(
+    imagen: np.ndarray,
+    centro_px: Optional[Tuple[float, float]],
+    radio_px: float,
+    color: Tuple[int, int, int],
+    grosor: int = 2,
+) -> None:
+    """Dibuja un circulo de trazo punteado: holograma objetivo de la guia AR."""
+    if centro_px is None or radio_px <= 1:
+        return
+    cx = int(round(centro_px[0]))
+    cy = int(round(centro_px[1]))
+    radio = max(int(round(radio_px)), 2)
+    angulo = 0.0
+    while angulo < 360.0:
+        fin = min(angulo + 16.0, 360.0)
+        cv2.ellipse(imagen, (cx, cy), (radio, radio), 0.0, angulo, fin, color, grosor, cv2.LINE_AA)
+        angulo += 26.0
+
+
+def posicion_polo_desde_anclaje(
+    ancla: Optional[Dict[str, Any]],
+    punto_fallback: Optional[Tuple[float, float]],
+    fiduciarios: Optional[Dict[str, Any]],
+) -> Optional[Tuple[float, float]]:
+    """
+    Re-ubica un polo anclado a la piel con v_idx y offsets dx, dy sobre la
+    malla facial en vivo. Si no hay malla o ancla, usa la posicion cruda.
+    """
+    if fiduciarios is not None and ancla:
+        v_idx = ancla.get("v_idx")
+        if v_idx is not None:
+            puntos_2d = fiduciarios.get("puntos_2d_px")
+            if puntos_2d is not None and 0 <= int(v_idx) < len(puntos_2d):
+                return (
+                    float(puntos_2d[int(v_idx), 0] + float(ancla.get("dx", 0.0))),
+                    float(puntos_2d[int(v_idx), 1] + float(ancla.get("dy", 0.0))),
+                )
+    if punto_fallback is not None:
+        return (float(punto_fallback[0]), float(punto_fallback[1]))
+    return None
+
+
+# =====================================================================
+# Guia por voz WAV-first del asistente lineal
+# Frases canonica compartida por la pantalla y el audio; los WAV se
+# generan una sola vez con la misma voz Piper del asistente TARS.
+# =====================================================================
+DIRECTORIO_VOZ_ASISTENTE = pathlib.Path(__file__).resolve().parent / "voz_asistente"
+DIRECTORIO_CACHE_VOZ = pathlib.Path("/tmp/voz_asistente_cache")
+MODELO_PIPER_RUTA = pathlib.Path(
+    "~/.local/share/piper-voices/es_ES-sharvard-medium.onnx"
+).expanduser()
+PIPER_BINARIO_RUTA = pathlib.Path("~/.local/bin/piper/piper").expanduser()
+
+FRASES_VOZ_ASISTENTE: Dict[str, str] = {
+    "paso1": "Paso 1 de 4. Mire de frente a la camara hasta que el semaforo quede verde. "
+    "La foto se toma automaticamente",
+    "paso2": "Paso 2 de 4. Gire la cabeza 45 grados a la derecha hasta que el semaforo "
+    "quede verde. La foto se toma automaticamente",
+    "paso3": "Paso 3 de 4. Vuelva al centro y gire la cabeza 45 grados a la izquierda "
+    "para la foto de control. La foto se toma automaticamente",
+    "paso4": "Paso 4 de 4. Se abre la ventana del comentario de la sesion. "
+    "Escribalo si lo desea y confirme para grabar la sesion",
+    "activada": "Guia por voz activada",
+    "prueba": "Guia por voz activada: si escucha esta frase, el motor funciona correctamente",
+    "comentario": "Desea guardar un comentario sobre la sesion? Escribalo y presione "
+    "Guardar, o continue sin comentario",
+    "canal0": "Canal 0: haga clic en el polo positivo y despues en el polo negativo "
+    "sobre la foto congelada",
+    "canal1": "Canal 1: haga clic en el polo positivo y despues en el polo negativo "
+    "sobre la foto congelada",
+    "canal2": "Canal 2: haga clic en el polo positivo y despues en el polo negativo "
+    "sobre la foto congelada",
+    "canal3": "Canal 3: haga clic en el polo positivo y despues en el polo negativo "
+    "sobre la foto congelada",
+    "canal4": "Canal 4: haga clic en el polo positivo y despues en el polo negativo "
+    "sobre la foto congelada",
+    "canal5": "Canal 5: haga clic en el polo positivo y despues en el polo negativo "
+    "sobre la foto congelada",
+    "sin_rostro": "Ningun rostro detectado: ubiquese frente a la camara",
+    "alejese": "Alejese un poco de la camara",
+    "acerquese": "Acerquese un poco a la camara",
+    "centro": "Gire la cabeza hacia el centro: mire de frente a la camara",
+    "casi_frontal": "Casi: alinee la mirada con el centro de la camara",
+    "siga_derecha": "Siga girando la cabeza hasta los 45 grados a la derecha",
+    "siga_izquierda": "Siga girando la cabeza hasta los 45 grados a la izquierda",
+    "regrese": "Regrese un poco el giro: se paso de los 45 grados",
+    "casi_perfil": "Casi: sostenga el giro de 45 grados",
+    "no_incline": "No incline la cabeza adelante ni atras",
+    "enderece": "Enderece la cabeza: esta inclinada hacia uno de los hombros",
+    "ajuste_dist": "Ajuste la distancia: quedo muy cerca o muy lejos de la camara",
+    "casi_barbilla": "Casi: nivele la barbilla arriba y abajo",
+    "casi_enderece": "Casi: enderece la cabeza ligeramente",
+    "mantenga": "Mantenga la pose: capturando la foto automaticamente",
+}
+
+# Calma de la guia hablada: el consejo solo se dice cuando se sostiene un rato
+# en pantalla y con una pausa grande entre comentarios, para no agobiar.
+TICKS_VOZ_ESTABLE = 40
+PAUSA_SEGUNDOS_VOZ = 8.0
+
+
+def _rango_absoluto(rango: Tuple[float, float]) -> Tuple[float, float]:
+    """Version absoluta de un rango; las bandas simetricas parten de cero."""
+    inferior, superior = float(rango[0]), float(rango[1])
+    if inferior <= 0.0 <= superior:
+        return (0.0, superior)
+    if inferior >= 0.0:
+        return (inferior, superior)
+    return (abs(inferior), abs(superior))
+
+
+def _texto_sin_acentos(texto: str) -> str:
+    """Version ASCII sin tildes de un texto para dibujarlo con cv2.putText."""
+    mapa = str.maketrans({
+        "á": "a", "é": "e", "í": "i", "ó": "o", "ú": "u", "ü": "u", "ñ": "n",
+        "Á": "A", "É": "E", "Í": "I", "Ó": "O", "Ú": "U", "Ü": "U", "Ñ": "N",
+    })
+    return str(texto or "").translate(mapa)
+
+
+def resolver_wav_asistente(clave: str) -> Optional[pathlib.Path]:
+    """Ruta del WAV pre-generado de una clave de la guia por voz."""
+    if not clave:
+        return None
+    candidata = DIRECTORIO_VOZ_ASISTENTE / f"{clave}.wav"
+    if candidata.is_file():
+        return candidata
+    candidata_cache = DIRECTORIO_CACHE_VOZ / f"clave_{clave}.wav"
+    if candidata_cache.is_file():
+        return candidata_cache
+    return None
+
+
+class _VozGuia(QtCore.QObject):
+    """Guia por voz del asistente lineal basada en archivos WAV.
+
+    Los audios principales se pre-generan una vez en acquisition/voz_asistente
+    con la voz Piper de TARS; el asistente solo los reproduce con pw-play o
+    paplay. Para textos dinamicos, como los nombres de musculos, sintetiza
+    a demanda en el directorio temporal. Si no hay WAV ni Piper, intenta los
+    sintetizadores por consola y por ultimo la voz nativa de Qt.
+    """
+
+    def __init__(self, parent: Optional[QtCore.QObject] = None) -> None:
+        super().__init__(parent)
+        self.reproductor: str = ""
+        self.motor: Any = None
+        self.metodo: str = "ninguno"
+        self.disponible: bool = False
+        self._proceso_anterior: Any = None
+        self._pyttsx3_listo = threading.Event()
+        self._inicializar()
+        print(
+            f"[FotometriaWebcam] Guia por voz del asistente lineal: "
+            f"metodo={self.metodo} disponible={self.disponible}"
+        )
+
+    def _inicializar(self) -> None:
+        # Reproduce el patron del asistente TARS: WAVs generados con Piper y
+        # reproducidos con pw-play o paplay.
+        for comando in ("pw-play", "paplay", "aplay"):
+            ruta = shutil.which(comando)
+            if ruta:
+                self.reproductor = ruta
+                break
+        if self.reproductor and DIRECTORIO_VOZ_ASISTENTE.is_dir() and any(
+            DIRECTORIO_VOZ_ASISTENTE.glob("*.wav")
+        ):
+            self.metodo = "wav"
+            self.disponible = True
+            return
+        if self.reproductor and PIPER_BINARIO_RUTA.is_file() and MODELO_PIPER_RUTA.is_file():
+            self.metodo = "piper"
+            self.disponible = True
+            return
+        # Prioridad: sintetizadores por linea de comandos, verificados en este
+        # equipo; el motor nativo de Qt queda como ultimo recurso.
+        for comando, metodo in (("spd-say", "spd"), ("espeak-ng", "espeak"), ("espeak", "espeak")):
+            ruta = shutil.which(comando)
+            if ruta:
+                self.motor = ruta
+                self.metodo = metodo
+                self.disponible = True
+                return
+        try:
+            from PySide6.QtTextToSpeech import QTextToSpeech  # type: ignore
+            motor = QTextToSpeech(self)
+            nombre_engines = [str(e) for e in motor.availableEngines()]
+            eng_actual = ""
+            try:
+                eng_acceso = getattr(motor, "engine", None)
+                eng_actual = str(eng_acceso()) if callable(eng_acceso) else str(eng_acceso)
+            except Exception:
+                eng_actual = ""
+            if eng_actual == "mock" and "speechd" in nombre_engines:
+                motor.setEngine("speechd")
+                eng_actual = "speechd"
+            voces = motor.availableVoices()
+            if not voces:
+                raise RuntimeError("sin voces")
+            for voz in voces:
+                try:
+                    if str(voz.locale().name()).lower().startswith("es"):
+                        motor.setVoice(voz)
+                        break
+                except Exception:
+                    continue
+            motor.setVolume(1.0)
+            motor.setRate(-0.1)
+            self.motor = motor
+            self.metodo = "qt"
+            self.disponible = True
+            return
+        except Exception:
+            self.motor = None
+        threading.Thread(target=self._preparar_pyttsx3, daemon=True).start()
+
+    def _preparar_pyttsx3(self) -> None:
+        """Prepara pyttsx3 en un hilo aparte para no congelar la interfaz."""
+        motor = None
+        try:
+            import pyttsx3  # type: ignore
+            motor = pyttsx3.init()
+        except Exception:
+            motor = None
+        finally:
+            self._pyttsx3_listo.set()
+        if motor is not None and self.metodo == "ninguno":
+            self.motor = motor
+            self.metodo = "pyttsx3"
+            self.disponible = True
+
+    def decir(self, texto: str, clave: Optional[str] = None) -> None:
+        if not texto:
+            return
+        try:
+            if self.reproductor and clave:
+                ruta = resolver_wav_asistente(clave)
+                if ruta is not None:
+                    self._reproducir(ruta)
+                    return
+            if self.metodo in ("wav", "piper"):
+                ruta = self._generar_wav_piper(texto, clave)
+                if ruta is not None:
+                    self._reproducir(ruta)
+                    return
+                # Piper no disponible para este texto: sintetizadores por consola
+                for comando, extras in (
+                    ("spd-say", ("-l", "es")),
+                    ("espeak-ng", ("-v", "es")),
+                    ("espeak", ("-v", "es")),
+                ):
+                    binario = shutil.which(comando)
+                    if binario:
+                        subprocess.Popen(
+                            [binario, *extras, texto],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                        )
+                        return
+                return
+            if self.metodo == "spd" and self.motor:
+                subprocess.Popen(
+                    [str(self.motor), "-l", "es", texto],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            elif self.metodo == "qt" and self.motor is not None:
+                self.motor.say(texto)
+            elif self.metodo == "pyttsx3" and self.motor is not None and self._pyttsx3_listo.is_set():
+                threading.Thread(
+                    target=self._hablar_pyttsx3, args=(texto,), daemon=True
+                ).start()
+            elif self.metodo == "espeak" and self.motor:
+                subprocess.Popen(
+                    [str(self.motor), "-v", "es", texto],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+        except Exception:
+            pass
+
+    def _generar_wav_piper(self, texto: str, clave: Optional[str]) -> Optional[pathlib.Path]:
+        """Sintetiza un WAV a demanda con la voz Piper de TARS y lo cachea."""
+        try:
+            if not (PIPER_BINARIO_RUTA.is_file() and MODELO_PIPER_RUTA.is_file()):
+                return None
+            DIRECTORIO_CACHE_VOZ.mkdir(parents=True, exist_ok=True)
+            if clave:
+                destino = DIRECTORIO_CACHE_VOZ / f"clave_{clave}.wav"
+            else:
+                huella = hashlib.sha1(texto.encode("utf-8")).hexdigest()[:10]
+                destino = DIRECTORIO_CACHE_VOZ / f"texto_{huella}.wav"
+            if destino.is_file() and destino.stat().st_size > 0:
+                return destino
+            entorno = dict(os.environ)
+            entorno.setdefault("LC_ALL", "C.utf8")
+            entorno.setdefault("LANG", "C.utf8")
+            resultado = subprocess.run(
+                [str(PIPER_BINARIO_RUTA), "--model", str(MODELO_PIPER_RUTA),
+                 "--output_file", str(destino)],
+                input=texto.encode("utf-8"),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=90,
+                env=entorno,
+            )
+            if resultado.returncode == 0 and destino.is_file() and destino.stat().st_size > 0:
+                return destino
+            if destino.is_file():
+                destino.unlink()
+        except Exception:
+            pass
+        return None
+
+    def _reproducir(self, ruta: Optional[pathlib.Path]) -> None:
+        try:
+            if not self.reproductor or ruta is None or not pathlib.Path(ruta).is_file():
+                return
+            anterior = self._proceso_anterior
+            if anterior is not None and anterior.poll() is None:
+                anterior.terminate()
+            self._proceso_anterior = subprocess.Popen(
+                [self.reproductor, str(ruta)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except Exception:
+            pass
+
+    def _hablar_pyttsx3(self, texto: str) -> None:
+        try:
+            self.motor.say(texto)
+            self.motor.runAndWait()
+        except Exception:
+            pass
+
+
+class _DialogoComentarioSesion(QtWidgets.QDialog):
+    """Ventana del Paso 4 que pregunta por el comentario de la sesion y
+    permite ajustar el diametro de gel y el IED nominal antes de confirmar."""
+
+    def __init__(self, dialogo_padre: QtWidgets.QWidget) -> None:
+        super().__init__(dialogo_padre)
+        self._padre = dialogo_padre
+        self.setWindowTitle("Paso 4 : Comentario de la Sesion y Parametros")
+        self.setModal(True)
+        self.setMinimumWidth(500)
+        self.setStyleSheet(
+            """
+            QDialog { background-color: #1a1a1a; color: #e6edf3; }
+            QLabel { color: #e6edf3; }
+            QLineEdit {
+                background-color: #141414; color: #e6edf3;
+                border: 1px solid #444444; border-radius: 4px; padding: 6px;
+            }
+            QDoubleSpinBox {
+                background-color: #141414; color: #00ffcc;
+                border: 1px solid #444444; border-radius: 4px; padding: 4px; font-weight: bold;
+            }
+            QPushButton {
+                background-color: #2a2a2a; color: #ffffff;
+                border: 1px solid #00ffcc; border-radius: 5px;
+                padding: 8px 12px; font-weight: bold;
+            }
+            QPushButton:hover { background-color: #004d40; }
+            """
+        )
+
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setSpacing(10)
+
+        lbl_pregunta = QtWidgets.QLabel("¿Desea guardar un comentario sobre la sesión?")
+        lbl_pregunta.setStyleSheet("color: #00ffcc; font-weight: bold; font-size: 15px;")
+        lbl_pregunta.setWordWrap(True)
+        layout.addWidget(lbl_pregunta)
+
+        self.edit_comentario = QtWidgets.QLineEdit()
+        self.edit_comentario.setText(str(self._padre.edit_comentario.text()))
+        self.edit_comentario.setPlaceholderText("Escriba aqui el comentario de la sesion")
+        layout.addWidget(self.edit_comentario)
+
+        cuadricula = QtWidgets.QGridLayout()
+        lbl_gel = QtWidgets.QLabel("Diametro de Gel / Parche:")
+        lbl_gel.setStyleSheet("color: #b0bec5; font-weight: bold;")
+        self.spin_gel = QtWidgets.QDoubleSpinBox()
+        self.spin_gel.setRange(1.0, 50.0)
+        self.spin_gel.setSingleStep(0.5)
+        self.spin_gel.setSuffix(" mm")
+        self.spin_gel.setValue(float(self._padre.spin_gel_diam_mm.value()))
+        lbl_ied = QtWidgets.QLabel("Distancia Inter-Electrodo Nominal:")
+        lbl_ied.setStyleSheet("color: #b0bec5; font-weight: bold;")
+        self.spin_ied = QtWidgets.QDoubleSpinBox()
+        self.spin_ied.setRange(2.0, 80.0)
+        self.spin_ied.setSingleStep(0.5)
+        self.spin_ied.setSuffix(" mm")
+        self.spin_ied.setValue(float(self._padre.spin_ied_nominal_mm.value()))
+        cuadricula.addWidget(lbl_gel, 0, 0)
+        cuadricula.addWidget(self.spin_gel, 0, 1)
+        cuadricula.addWidget(lbl_ied, 1, 0)
+        cuadricula.addWidget(self.spin_ied, 1, 1)
+        layout.addLayout(cuadricula)
+
+        layout.addStretch(1)
+
+        self.btn_guardar = QtWidgets.QPushButton("Guardar Comentario y Confirmar Sesion")
+        self.btn_guardar.setStyleSheet(
+            "QPushButton { background-color: #00c853; color: #0a0a0a; border: 2px solid #00ffcc; }"
+        )
+        self.btn_guardar.clicked.connect(self._al_guardar)
+        layout.addWidget(self.btn_guardar)
+
+        self.btn_sin_comentario = QtWidgets.QPushButton("Continuar Sin Comentario")
+        self.btn_sin_comentario.clicked.connect(self._al_continuar_sin_comentario)
+        layout.addWidget(self.btn_sin_comentario)
+
+        self.btn_volver = QtWidgets.QPushButton("Volver al Asistente")
+        self.btn_volver.setStyleSheet("QPushButton { border-color: #757575; color: #bdbdbd; }")
+        self.btn_volver.clicked.connect(self.reject)
+        layout.addWidget(self.btn_volver)
+
+    def _copiar_valores(self, comentario: str) -> None:
+        self._padre.edit_comentario.setText(comentario)
+        self._padre.spin_gel_diam_mm.setValue(float(self.spin_gel.value()))
+        self._padre.spin_ied_nominal_mm.setValue(float(self.spin_ied.value()))
+
+    def _al_guardar(self) -> None:
+        self._copiar_valores(self.edit_comentario.text().strip())
+        self.accept()
+
+    def _al_continuar_sin_comentario(self) -> None:
+        self._copiar_valores("")
+        self.accept()
+
+
+class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
+    """
+    Asistente Lineal Simple de Fotometria: guia foto a foto para registrar la
+    colocacion de electrodos sEMG de la sesion y proyectar en vivo, como hologramas
+    punteados sobre la piel, la colocacion de una medicion anterior.
+
+    Secuencia lineal:
+      - Paso 1 de 4: Foto Frontal + marcado de Canal 0 y Canal 2
+      - Paso 2 de 4: Foto Perfil Izquierdo + marcado de Canal 1
+      - Paso 3 de 4: Foto de Control Perfil Derecho
+      - Paso 4 de 4: Parametros de montaje y comentario de sesion
+
+    Al confirmar entrega las fotos del montaje y metadata_fotometria con
+    coordenadas 2D, vertices 3D anclados por v_idx y offsets dx/dy, IED en mm,
+    escala mm/px, diametro de gel y comentario.
+    """
+
+    PASO_FRONTAL = 0
+    PASO_MARCA_FRONTAL = 1
+    PASO_PERFIL_IZQ = 2
+    PASO_MARCA_PERFIL = 3
+    PASO_PERFIL_DER = 4
+    PASO_PARAMETROS = 5
+
+    def __init__(
+        self,
+        capture_thread: Optional[WebcamCaptureThread],
+        agent: AntigravityAgent,
+        parent: Optional[QtWidgets.QWidget] = None,
+        nombres_musculos: Optional[List[str]] = None,
+        active_channel_indices: Optional[List[int]] = None,
+        sujeto: str = "",
+        prueba: str = "",
+        sesiones_previas: Optional[List[Dict[str, Any]]] = None,
+        d_ip_nominal_mm: float = D_IP_NOMINAL_DEFECTO_MM,
+    ) -> None:
+        super().__init__(parent)
+        self.capture_thread = capture_thread
+        self.agent = agent
+        self.sujeto = sujeto or "Sujeto"
+        self.prueba = prueba or "Experimento"
+        self.d_ip_nominal_mm = float(d_ip_nominal_mm)
+
+        if active_channel_indices and len(active_channel_indices) > 0:
+            self.active_channel_indices: List[int] = [int(c) for c in active_channel_indices]
+        else:
+            total_inicial = len(nombres_musculos) if nombres_musculos else 3
+            self.active_channel_indices = list(range(max(total_inicial, 1)))
+
+        self.nombres_musculos: List[str] = []
+        for pos in range(len(self.active_channel_indices)):
+            if nombres_musculos and pos < len(nombres_musculos) and str(nombres_musculos[pos]).strip():
+                self.nombres_musculos.append(str(nombres_musculos[pos]).strip())
+            else:
+                self.nombres_musculos.append(f"Canal {self.active_channel_indices[pos]}")
+
+        # Distribucion lineal de canales: frontal marca el Canal 0 y el Canal 2;
+        # perfil izquierdo marca el Canal 1.
+        total = len(self.active_channel_indices)
+        self._canales_frontal: List[int] = [0, 2] if total >= 3 else ([0] if total >= 1 else [])
+        self._canales_perfil: List[int] = [1] if total >= 2 else []
+
+        # Estado del asistente
+        self._paso: int = self.PASO_FRONTAL
+        self._pares_por_canal: Dict[int, Dict[str, Any]] = {}
+        self._cola_marcado: List[int] = []
+        self._canales_marcado_paso: List[int] = []
+        self._pend_pos_pole: Optional[Tuple[float, float]] = None
+        self._pend_pos_anchor: Optional[Dict[str, Any]] = None
+        self._fotos: Dict[str, Optional[np.ndarray]] = {
+            "frontal": None,
+            "perfil_izquierdo": None,
+            "perfil_derecho": None,
+        }
+        self._pose_fotos: Dict[str, Any] = {}
+        self._dip_px_fotos: Dict[str, Optional[float]] = {"frontal": None}
+        self._escala_mm_px_frontal: Optional[float] = None
+        self._meta_calibracion_frontal: Optional[Dict[str, Any]] = None
+        self._frozen_frame: Optional[np.ndarray] = None
+        self._frozen_fiduciarios: Optional[Dict[str, Any]] = None
+        self._last_live_frame: Optional[np.ndarray] = None
+        self._fiduciarios_marco: Optional[Dict[str, Any]] = None
+        self._ultimo_pose: Dict[str, Any] = {}
+        self._frames_verde: int = 0
+        self._destello_hasta: float = 0.0
+        self._datos_sesion: Optional[Dict[str, Any]] = None
+
+        # Guia AR de repeticion
+        self._fantasma_activado: bool = False
+        self._montaje_referencia: Optional[Dict[str, Dict[str, Any]]] = None
+        self._fantasma_dist_ref_cm: Optional[float] = None
+        self._lista_sesiones_previas: List[Dict[str, Any]] = list(sesiones_previas or [])
+
+        # Guia hablada y consejos dinamicos de colocacion
+        self._voz = _VozGuia(self)
+        self._ultimo_consejo: str = ""
+        self._ultima_vez_voz: float = 0.0
+        self._canal_anunciado: Optional[int] = None
+        self._clave_pendiente: str = ""
+        self._frames_clave: int = 0
+        self._dialogo_comentario_activo: bool = False
+
+        self.setWindowTitle(f"Asistente Lineal Simple de Fotometria - {self.sujeto} : {self.prueba}")
+        self.resize(1240, 780)
+        self._aplicar_tema_oscuro()
+        self._construir_ui()
+        self._ir_a_paso(self.PASO_FRONTAL)
+
+        self._timer = QtCore.QTimer(self)
+        self._timer.setInterval(50)
+        self._timer.timeout.connect(self._update_preview)
+        self._timer.start()
+
+    def _aplicar_tema_oscuro(self) -> None:
+        self.setStyleSheet(
+            """
+            QDialog {
+                background-color: #1a1a1a;
+                color: #e6edf3;
+                font-family: 'Segoe UI', 'Ubuntu', sans-serif;
+            }
+            QGroupBox {
+                background-color: #222222;
+                border: 1px solid #333333;
+                border-radius: 6px;
+                margin-top: 10px;
+                padding-top: 10px;
+                font-weight: bold;
+                color: #00ffcc;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }
+            QLabel {
+                color: #e6edf3;
+            }
+            QPushButton {
+                background-color: #2a2a2a;
+                color: #ffffff;
+                border: 1px solid #00ffcc;
+                border-radius: 5px;
+                padding: 7px 12px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #004d40;
+                border-color: #33ffdd;
+            }
+            QPushButton:pressed {
+                background-color: #00ffcc;
+                color: #111111;
+            }
+            QPushButton:disabled {
+                border-color: #444444;
+                color: #777777;
+            }
+            QComboBox {
+                background-color: #262626;
+                color: #00ffcc;
+                border: 1px solid #444444;
+                border-radius: 4px;
+                padding: 5px;
+                font-weight: bold;
+            }
+            QListWidget {
+                background-color: #141414;
+                color: #e6edf3;
+                border: 1px solid #333333;
+                border-radius: 4px;
+                font-size: 12px;
+            }
+            QLineEdit {
+                background-color: #141414;
+                color: #e6edf3;
+                border: 1px solid #444444;
+                border-radius: 4px;
+                padding: 6px;
+            }
+            QDoubleSpinBox {
+                background-color: #141414;
+                color: #00ffcc;
+                border: 1px solid #444444;
+                border-radius: 4px;
+                padding: 4px;
+                font-weight: bold;
+            }
+            QScrollArea {
+                border: none;
+                background-color: #1a1a1a;
+            }
+            QCheckBox {
+                color: #e6edf3;
+                font-weight: bold;
+                padding: 4px;
+            }
+            """
+        )
+
+    def _construir_ui(self) -> None:
+        layout_principal = QtWidgets.QHBoxLayout(self)
+        layout_principal.setContentsMargins(12, 12, 12, 12)
+        layout_principal.setSpacing(14)
+
+        # --- Columna izquierda: video en vivo + semaforo de alineacion ---
+        col_izq = QtWidgets.QVBoxLayout()
+        col_izq.setSpacing(8)
+
+        lbl_cabecera = QtWidgets.QLabel(
+            "<b>Vista en Vivo con Guia AR</b> - Clic izquierdo marca Polos | Clic derecho deshace"
+        )
+        lbl_cabecera.setWordWrap(True)
+        col_izq.addWidget(lbl_cabecera)
+
+        self.video_label = _ClickableVideoLabel(self)
+        self.video_label.setStyleSheet(
+            "background-color: #0d0d0d; border: 2px solid #00ffcc; border-radius: 6px;"
+        )
+        self.video_label.pointClicked.connect(self._al_clic_izquierdo)
+        self.video_label.rightClicked.connect(self._al_clic_derecho)
+        col_izq.addWidget(self.video_label, stretch=1)
+
+        grupo_semaforo = QtWidgets.QGroupBox("Semáforo de Alineación en Vivo")
+        cuadricula = QtWidgets.QGridLayout(grupo_semaforo)
+        cuadricula.setSpacing(8)
+        self.badge_yaw = self._crear_badge("Yaw: --")
+        self.badge_pitch = self._crear_badge("Pitch: --")
+        self.badge_roll = self._crear_badge("Roll: --")
+        self.badge_dist = self._crear_badge("Dist: -- cm")
+        cuadricula.addWidget(self.badge_yaw, 0, 0)
+        cuadricula.addWidget(self.badge_pitch, 0, 1)
+        cuadricula.addWidget(self.badge_roll, 0, 2)
+        cuadricula.addWidget(self.badge_dist, 0, 3)
+        col_izq.addWidget(grupo_semaforo)
+
+        self.lbl_consejo = QtWidgets.QLabel("")
+        self.lbl_consejo.setWordWrap(True)
+        self.lbl_consejo.setStyleSheet(
+            "color: #ffd54f; font-weight: bold; font-size: 14px; padding: 2px;"
+        )
+        col_izq.addWidget(self.lbl_consejo)
+
+        self.lbl_estado_paso = QtWidgets.QLabel("")
+        self.lbl_estado_paso.setWordWrap(True)
+        self.lbl_estado_paso.setStyleSheet("color: #00ffcc; font-weight: bold; padding: 2px;")
+        col_izq.addWidget(self.lbl_estado_paso)
+
+        layout_principal.addLayout(col_izq, stretch=3)
+
+        # --- Columna derecha: pasos, progreso, guia AR, parametros y acciones ---
+        panel = QtWidgets.QWidget()
+        layout_panel = QtWidgets.QVBoxLayout(panel)
+        layout_panel.setContentsMargins(0, 0, 0, 0)
+        layout_panel.setSpacing(10)
+
+        grupo_pasos = QtWidgets.QGroupBox("Guia Paso a Paso")
+        layout_pasos = QtWidgets.QVBoxLayout(grupo_pasos)
+        layout_pasos.setSpacing(6)
+
+        self.lbl_titulo_paso = QtWidgets.QLabel("")
+        self.lbl_titulo_paso.setStyleSheet("color: #00ffcc; font-size: 15px; font-weight: bold;")
+        self.lbl_titulo_paso.setWordWrap(True)
+        layout_pasos.addWidget(self.lbl_titulo_paso)
+
+        self.lbl_instruccion_paso = QtWidgets.QLabel("")
+        self.lbl_instruccion_paso.setStyleSheet("color: #e6edf3; font-size: 12px;")
+        self.lbl_instruccion_paso.setWordWrap(True)
+        layout_pasos.addWidget(self.lbl_instruccion_paso)
+
+        self.lbl_sub_paso = QtWidgets.QLabel("")
+        self.lbl_sub_paso.setStyleSheet("color: #9e9e9e; font-size: 11px;")
+        self.lbl_sub_paso.setWordWrap(True)
+        layout_pasos.addWidget(self.lbl_sub_paso)
+
+        fila_foto = QtWidgets.QHBoxLayout()
+        self.btn_tomar_ahora = QtWidgets.QPushButton("Tomar de Todas Formas")
+        self.btn_tomar_ahora.clicked.connect(self._al_tomar_de_todas_formas)
+        fila_foto.addWidget(self.btn_tomar_ahora)
+        self.btn_repetir_foto = QtWidgets.QPushButton("Repetir Foto de este Paso")
+        self.btn_repetir_foto.clicked.connect(self._repetir_foto)
+        fila_foto.addWidget(self.btn_repetir_foto)
+        layout_pasos.addLayout(fila_foto)
+
+        self.btn_continuar_paso = QtWidgets.QPushButton("Continuar al Siguiente Paso")
+        self.btn_continuar_paso.setStyleSheet(
+            "QPushButton { background-color: #004d40; border-color: #00ffcc; color: #00ffcc; padding: 8px; }"
+            "QPushButton:hover { background-color: #00695c; }"
+        )
+        self.btn_continuar_paso.clicked.connect(self._continuar_paso)
+        layout_pasos.addWidget(self.btn_continuar_paso)
+
+        fila_voz = QtWidgets.QHBoxLayout()
+        self.chk_voz = QtWidgets.QCheckBox("Guia por voz durante el asistente")
+        self.chk_voz.setChecked(self._voz.disponible)
+        self.chk_voz.setEnabled(self._voz.disponible)
+        if not self._voz.disponible:
+            self.chk_voz.setToolTip(
+                "Sintesis de voz no disponible en este equipo; la guia seguira solo en pantalla"
+            )
+        self.chk_voz.toggled.connect(self._al_alternar_voz)
+        fila_voz.addWidget(self.chk_voz, stretch=1)
+        self.btn_probar_voz = QtWidgets.QPushButton("Probar Voz")
+        self.btn_probar_voz.setToolTip("Escucha una frase de prueba del motor de voz")
+        self.btn_probar_voz.clicked.connect(self._probar_voz)
+        fila_voz.addWidget(self.btn_probar_voz)
+        layout_pasos.addLayout(fila_voz)
+
+        layout_panel.addWidget(grupo_pasos)
+
+        grupo_progreso = QtWidgets.QGroupBox("Montaje Registrado")
+        layout_progreso = QtWidgets.QVBoxLayout(grupo_progreso)
+        self.list_progreso = QtWidgets.QListWidget()
+        self.list_progreso.setMaximumHeight(190)
+        layout_progreso.addWidget(self.list_progreso)
+        layout_panel.addWidget(grupo_progreso)
+
+        # Guia AR de repeticion: superponer la colocacion de una medicion previa
+        grupo_fantasma = QtWidgets.QGroupBox("Guia AR de Repeticion - Sesion Anterior")
+        layout_fantasma = QtWidgets.QVBoxLayout(grupo_fantasma)
+        layout_fantasma.setSpacing(6)
+
+        layout_selector = QtWidgets.QHBoxLayout()
+        lbl_selector = QtWidgets.QLabel("Medición de referencia:")
+        lbl_selector.setStyleSheet("color: #b0bec5; font-weight: bold;")
+        layout_selector.addWidget(lbl_selector)
+        self.combo_mediciones_previas = QtWidgets.QComboBox()
+        for sesion_previa in self._lista_sesiones_previas:
+            self.combo_mediciones_previas.addItem(sesion_previa["etiqueta"])
+        layout_selector.addWidget(self.combo_mediciones_previas, stretch=1)
+        layout_fantasma.addLayout(layout_selector)
+
+        self.btn_fantasma = QtWidgets.QPushButton(
+            "Ver cómo estaban ubicados los electrodos en la sesión anterior"
+        )
+        self.btn_fantasma.setCheckable(True)
+        self.btn_fantasma.setDisabled(len(self._lista_sesiones_previas) == 0)
+        if len(self._lista_sesiones_previas) == 0:
+            self.btn_fantasma.setToolTip(
+                "No hay mediciones previas con metadata_fotometria.json en base_de_datos_electrodos"
+            )
+        self.btn_fantasma.toggled.connect(self._al_alternar_fantasma)
+        layout_fantasma.addWidget(self.btn_fantasma)
+
+        self.lbl_fantasma_estado = QtWidgets.QLabel("Sin referencia previa cargada.")
+        self.lbl_fantasma_estado.setWordWrap(True)
+        self.lbl_fantasma_estado.setStyleSheet("color: #9e9e9e; font-size: 11px;")
+        layout_fantasma.addWidget(self.lbl_fantasma_estado)
+        layout_panel.addWidget(grupo_fantasma)
+
+        # Parametros del montaje: paso 4
+        self.grupo_parametros = QtWidgets.QGroupBox("Paso 4 : Parametros de Montaje y Comentario")
+        layout_parametros = QtWidgets.QVBoxLayout(self.grupo_parametros)
+        layout_parametros.setSpacing(6)
+
+        cuadricula_param = QtWidgets.QGridLayout()
+        lbl_gel = QtWidgets.QLabel("Diametro de Gel / Parche:")
+        lbl_gel.setStyleSheet("color: #b0bec5; font-weight: bold;")
+        self.spin_gel_diam_mm = QtWidgets.QDoubleSpinBox()
+        self.spin_gel_diam_mm.setRange(1.0, 50.0)
+        self.spin_gel_diam_mm.setValue(10.0)
+        self.spin_gel_diam_mm.setSingleStep(0.5)
+        self.spin_gel_diam_mm.setSuffix(" mm")
+        lbl_ied = QtWidgets.QLabel("Distancia Inter-Electrodo Nominal Esperada:")
+        lbl_ied.setStyleSheet("color: #b0bec5; font-weight: bold;")
+        self.spin_ied_nominal_mm = QtWidgets.QDoubleSpinBox()
+        self.spin_ied_nominal_mm.setRange(2.0, 80.0)
+        self.spin_ied_nominal_mm.setValue(20.0)
+        self.spin_ied_nominal_mm.setSingleStep(0.5)
+        self.spin_ied_nominal_mm.setSuffix(" mm")
+        cuadricula_param.addWidget(lbl_gel, 0, 0)
+        cuadricula_param.addWidget(self.spin_gel_diam_mm, 0, 1)
+        cuadricula_param.addWidget(lbl_ied, 1, 0)
+        cuadricula_param.addWidget(self.spin_ied_nominal_mm, 1, 1)
+        layout_parametros.addLayout(cuadricula_param)
+
+        lbl_comentario = QtWidgets.QLabel("¿Desea guardar un comentario sobre la sesión?")
+        lbl_comentario.setStyleSheet("color: #ffd54f; font-weight: bold;")
+        layout_parametros.addWidget(lbl_comentario)
+        self.edit_comentario = QtWidgets.QLineEdit()
+        self.edit_comentario.setPlaceholderText("Escriba aqui el comentario de la sesion")
+        layout_parametros.addWidget(self.edit_comentario)
+
+        self.btn_abrir_comentario = QtWidgets.QPushButton("Ventana de Comentario y Confirmacion")
+        self.btn_abrir_comentario.clicked.connect(self._abrir_dialogo_comentario)
+        layout_parametros.addWidget(self.btn_abrir_comentario)
+
+        layout_panel.addWidget(self.grupo_parametros)
+
+        layout_panel.addStretch(1)
+
+        fila_acciones = QtWidgets.QHBoxLayout()
+        self.btn_omitir = QtWidgets.QPushButton("Omitir Asistente")
+        self.btn_omitir.setStyleSheet("QPushButton { border-color: #757575; color: #bdbdbd; }")
+        self.btn_omitir.clicked.connect(self.reject)
+        fila_acciones.addWidget(self.btn_omitir)
+        self.btn_confirmar = QtWidgets.QPushButton("Confirmar y Grabar Sesión")
+        self.btn_confirmar.setStyleSheet(
+            "QPushButton { background-color: #00c853; color: #0a0a0a; border: 2px solid #00ffcc; "
+            "padding: 10px 16px; font-size: 14px; font-weight: bold; }"
+            "QPushButton:hover { background-color: #00e676; }"
+        )
+        self.btn_confirmar.clicked.connect(self._al_confirmar)
+        fila_acciones.addWidget(self.btn_confirmar, stretch=1)
+        layout_panel.addLayout(fila_acciones)
+
+        scroll = QtWidgets.QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(panel)
+        col_der = QtWidgets.QVBoxLayout()
+        col_der.addWidget(scroll)
+        layout_principal.addLayout(col_der, stretch=2)
+
+    @staticmethod
+    def _crear_badge(texto: str) -> QtWidgets.QLabel:
+        badge = QtWidgets.QLabel(texto)
+        badge.setAlignment(QtCore.Qt.AlignCenter)
+        badge.setStyleSheet(
+            "background-color: #2b2b2b; color: #ffffff; border: 1px solid #555555; "
+            "border-radius: 4px; padding: 6px; font-weight: bold; font-size: 12px;"
+        )
+        return badge
+
+    def _set_badge_status(self, badge: QtWidgets.QLabel, texto: str, estado: str) -> None:
+        if estado == "ok":
+            fondo, texto_color, borde = "#003d1f", "#00ff88", "#00e676"
+        elif estado == "warn":
+            fondo, texto_color, borde = "#4d3800", "#ffd54f", "#ffb300"
+        else:
+            fondo, texto_color, borde = "#4a1212", "#ff8a80", "#ff5252"
+        badge.setText(texto)
+        badge.setStyleSheet(
+            f"background-color: {fondo}; color: {texto_color}; border: 1px solid {borde}; "
+            "border-radius: 4px; padding: 6px; font-weight: bold; font-size: 12px;"
+        )
+
+    @staticmethod
+    def _mostrar_bgr(bgr_img: np.ndarray, etiqueta: QtWidgets.QLabel) -> None:
+        if bgr_img is None or bgr_img.size == 0:
+            return
+        rgb = cv2.cvtColor(bgr_img, cv2.COLOR_BGR2RGB)
+        alto, ancho, canales = rgb.shape
+        qimg = QtGui.QImage(rgb.data, ancho, alto, canales * ancho, QtGui.QImage.Format_RGB888).copy()
+        pix = QtGui.QPixmap.fromImage(qimg)
+        escalado = pix.scaled(
+            etiqueta.size(),
+            QtCore.Qt.KeepAspectRatio,
+            QtCore.Qt.SmoothTransformation,
+        )
+        etiqueta.setPixmap(escalado)
+
+    def _nombre_canal(self, pos_canal: int) -> Tuple[int, str]:
+        """Retorna el indice fisico y el nombre del musculo de un canal activo."""
+        fisico = (
+            self.active_channel_indices[pos_canal]
+            if pos_canal < len(self.active_channel_indices)
+            else pos_canal
+        )
+        nombre = (
+            self.nombres_musculos[pos_canal]
+            if pos_canal < len(self.nombres_musculos)
+            else f"Canal {fisico}"
+        )
+        return fisico, nombre
+
+    # =====================================================================
+    # Maquina de pasos lineal
+    # =====================================================================
+
+    def _textos_paso_actual(self) -> Dict[str, str]:
+        """Textos de guia del paso actual para la interfaz y el marco del video."""
+        paso = self._paso
+        if paso == self.PASO_FRONTAL:
+            canales_txt = ", ".join(
+                f"Canal {self._nombre_canal(p)[0]} - {self._nombre_canal(p)[1]}"
+                for p in self._canales_frontal
+            ) or "sin canales activos"
+            return {
+                "titulo": "Paso 1 de 4 : Foto Frontal",
+                "instruccion": "Mire de frente hasta que el semaforo quede en verde. "
+                               "La foto frontal se toma automaticamente.",
+                "sub": f"Luego se marcaran los canales: {canales_txt}",
+            }
+        if paso == self.PASO_MARCA_FRONTAL:
+            return {
+                "titulo": "Paso 1 de 4 : Foto Frontal - Marcado de Electrodos",
+                "instruccion": "",
+                "sub": "Clic izquierdo marca los Polos sobre la foto congelada | Clic derecho deshace | Continuar avanza al terminar",
+            }
+        if paso == self.PASO_PERFIL_IZQ:
+            return {
+                "titulo": "Paso 2 de 4 : Foto Perfil Izquierdo",
+                "instruccion": "Gire el rostro 45 grados a la derecha hasta poner el semaforo en verde.",
+                "sub": f"Luego se marcara el Canal {self._nombre_canal(1)[0]} - {self._nombre_canal(1)[1]}"
+                       if len(self._canales_perfil) > 0
+                       else "Sin canales activos para marcar en perfil",
+            }
+        if paso == self.PASO_MARCA_PERFIL:
+            return {
+                "titulo": "Paso 2 de 4 : Foto Perfil Izquierdo - Marcado de Electrodos",
+                "instruccion": "",
+                "sub": "Clic izquierdo marca los Polos sobre la foto congelada | Clic derecho deshace | Continuar avanza al terminar",
+            }
+        if paso == self.PASO_PERFIL_DER:
+            return {
+                "titulo": "Paso 3 de 4 : Foto de Control Perfil Derecho",
+                "instruccion": "Gire el rostro 45 grados a la izquierda para la foto de control.",
+                "sub": "La foto de control se toma automaticamente al poner el semaforo en verde",
+            }
+        return {
+            "titulo": "Paso 4 de 4 : Parametros de Montaje",
+            "instruccion": "Revise diametro de gel y distancia inter-electrodo nominal; "
+                           "agregue un comentario si lo desea. Confirme para grabar la sesion.",
+            "sub": "Al confirmar, el montaje se guarda en la carpeta activa de la medicion",
+        }
+
+    def _ir_a_paso(self, nuevo_paso: int) -> None:
+        self._paso = nuevo_paso
+        self._frames_verde = 0
+        es_paso_congelado = nuevo_paso in (self.PASO_MARCA_FRONTAL, self.PASO_MARCA_PERFIL)
+        if not es_paso_congelado:
+            self._frozen_frame = None
+            self._frozen_fiduciarios = None
+        if nuevo_paso == self.PASO_MARCA_FRONTAL:
+            self._iniciar_marcado(self._canales_frontal)
+        elif nuevo_paso == self.PASO_MARCA_PERFIL:
+            self._iniciar_marcado(self._canales_perfil)
+        self._canal_anunciado = None
+        self._clave_pendiente = ""
+        self._frames_clave = 0
+        self._anunciar_paso(nuevo_paso)
+        self._refrescar_estado_ui()
+        if nuevo_paso == self.PASO_PARAMETROS:
+            QtCore.QTimer.singleShot(400, self._abrir_dialogo_comentario)
+
+    def _iniciar_marcado(self, canales: List[int]) -> None:
+        self._canales_marcado_paso = list(canales)
+        # Solo encola canales que aun no tengan su par registrado.
+        self._cola_marcado = [p for p in canales if p not in self._pares_por_canal]
+        self._pend_pos_pole = None
+        self._pend_pos_anchor = None
+
+    def _canal_actual_marca(self) -> Optional[int]:
+        return self._cola_marcado[0] if self._cola_marcado else None
+
+    def _refrescar_estado_ui(self) -> None:
+        textos = self._textos_paso_actual()
+        paso_marca = self._paso in (self.PASO_MARCA_FRONTAL, self.PASO_MARCA_PERFIL)
+        if paso_marca:
+            canal = self._canal_actual_marca()
+            if canal is not None:
+                fisico, nombre = self._nombre_canal(canal)
+                self.lbl_titulo_paso.setText(
+                    f"Ubique el Canal {fisico}: Clic en Polo + y Clic en Polo -"
+                )
+                self.lbl_instruccion_paso.setText(
+                    f"Musculo: {nombre} - "
+                    + ("Marque ahora el Polo -" if self._pend_pos_pole is not None else
+                       "Marque primero el Polo + y luego el Polo -")
+                )
+                self._mostrar_consejo(
+                    f"Marque el Canal {fisico} - {nombre}: "
+                    "clic en Polo + y luego en Polo - sobre la foto congelada",
+                    "info",
+                )
+                if canal != self._canal_anunciado:
+                    self._canal_anunciado = canal
+                    texto_canal = (
+                        f"Marque el Canal {fisico}: {nombre}. Haga clic en el Polo + "
+                        "y despues en el Polo - sobre la foto congelada"
+                    )
+                    self._decir(texto_canal, clave=f"canal{fisico}")
+            else:
+                self.lbl_titulo_paso.setText("Todos los canales de esta foto estan marcados")
+                self.lbl_instruccion_paso.setText(
+                    "Clic derecho para deshacer un par; Continuar para avanzar al siguiente paso"
+                )
+                self._mostrar_consejo(
+                    "Foto completa: revise los pares y pulse Continuar al Siguiente Paso", "ok"
+                )
+        else:
+            self.lbl_titulo_paso.setText(textos["titulo"])
+            self.lbl_instruccion_paso.setText(textos["instruccion"])
+        self.lbl_sub_paso.setText(textos["sub"])
+
+        es_paso_espera = self._paso in (self.PASO_FRONTAL, self.PASO_PERFIL_IZQ, self.PASO_PERFIL_DER)
+        self.btn_tomar_ahora.setVisible(es_paso_espera)
+        self.btn_tomar_ahora.setEnabled(es_paso_espera)
+        self.btn_repetir_foto.setVisible(paso_marca)
+        self.btn_repetir_foto.setEnabled(paso_marca)
+        continuar_visible = paso_marca and not self._cola_marcado
+        self.btn_continuar_paso.setVisible(continuar_visible)
+        self.btn_continuar_paso.setEnabled(continuar_visible)
+
+        # El grupo queda siempre activo para cargar el comentario antes del Paso 4
+        self.grupo_parametros.setEnabled(True)
+        self.btn_confirmar.setEnabled(self._paso == self.PASO_PARAMETROS)
+
+        self._actualizar_lista_progreso()
+        self._actualizar_estado_inferior()
+
+    def _actualizar_estado_inferior(self) -> None:
+        """Texto de estado bajo el semaforo segun el paso activo."""
+        total_pares = len(self._pares_por_canal)
+        total_canales = len(self.active_channel_indices)
+        textos = self._textos_paso_actual()
+        self.lbl_estado_paso.setText(
+            f"{textos['titulo']} | Pares marcados: {total_pares} de {total_canales}"
+        )
+
+    def _actualizar_lista_progreso(self) -> None:
+        self.list_progreso.clear()
+        for clave, nombre_foto in (
+            ("frontal", "01_frontal.png"),
+            ("perfil_izquierdo", "02_perfil_izquierdo.png"),
+            ("perfil_derecho", "03_perfil_derecho.png"),
+        ):
+            toma = self._fotos.get(clave)
+            estado_foto = "capturada" if toma is not None else "pendiente"
+            self.list_progreso.addItem(
+                f"[{'OK' if toma is not None else '  '}] {nombre_foto} - {estado_foto}"
+            )
+        for pos in range(len(self.active_channel_indices)):
+            fisico, nombre = self._nombre_canal(pos)
+            par = self._pares_por_canal.get(pos)
+            en_cola = pos in self._cola_marcado and self._canal_actual_marca() == pos
+            if par is not None:
+                ied_txt = (
+                    f"{par['ied_mm']:.1f} mm" if par.get("ied_mm") is not None
+                    else f"{par['ied_px']:.0f} px"
+                )
+                self.list_progreso.addItem(
+                    f"[OK] Canal {fisico} - {nombre} - Polo + y Polo - marcados | IED: {ied_txt}"
+                )
+            elif en_cola:
+                if self._pend_pos_pole is not None:
+                    self.list_progreso.addItem(
+                        f"[ >] Canal {fisico} - {nombre} - Polo + marcado, marque Polo -"
+                    )
+                else:
+                    self.list_progreso.addItem(
+                        f"[ >] Canal {fisico} - {nombre} - Marque Polo +"
+                    )
+            else:
+                self.list_progreso.addItem(
+                    f"[  ] Canal {fisico} - {nombre} - Pendiente"
+                )
+
+    # =====================================================================
+    # Marcado de polos sobre la foto congelada
+    # =====================================================================
+
+    def _registrar_anclaje(
+        self, fiduciarios: Optional[Dict[str, Any]], img_x: float, img_y: float
+    ) -> Optional[Dict[str, Any]]:
+        """Ancla un clic al vertice de malla mas cercano: v_idx, offsets dx dy y datos 3D."""
+        if fiduciarios is None or "puntos_2d_px" not in fiduciarios:
+            return None
+        puntos_2d = fiduciarios["puntos_2d_px"]
+        distancias = np.hypot(puntos_2d[:, 0] - img_x, puntos_2d[:, 1] - img_y)
+        v_idx = int(np.argmin(distancias))
+        ancla = {
+            "v_idx": v_idx,
+            "dx": float(img_x - puntos_2d[v_idx, 0]),
+            "dy": float(img_y - puntos_2d[v_idx, 1]),
+            "dip_px": float(fiduciarios.get("distancia_interpupilar_px", 0.0)),
+        }
+        puntos_3d = fiduciarios.get("puntos_3d")
+        if puntos_3d is not None and v_idx < len(puntos_3d):
+            ancla["vertice_3d"] = [float(v) for v in puntos_3d[v_idx]]
+        return ancla
+
+    def _al_clic_izquierdo(self, img_x: float, img_y: float) -> None:
+        if self._paso not in (self.PASO_MARCA_FRONTAL, self.PASO_MARCA_PERFIL):
+            return
+        canal_pos = self._canal_actual_marca()
+        if canal_pos is None:
+            return
+        ancla = self._registrar_anclaje(self._frozen_fiduciarios, img_x, img_y)
+        if self._pend_pos_pole is None:
+            self._pend_pos_pole = (float(img_x), float(img_y))
+            self._pend_pos_anchor = ancla
+            self._refrescar_estado_ui()
+        else:
+            pos_pt = self._pend_pos_pole
+            pos_anc = self._pend_pos_anchor or {}
+            self._completar_par(canal_pos, pos_pt, pos_anc, (float(img_x), float(img_y)), ancla)
+            self._cola_marcado.pop(0)
+            self._pend_pos_pole = None
+            self._pend_pos_anchor = None
+            # Sin salto automatico: si quedan canales se pide el siguiente;
+            # si esta foto ya esta completa, el usuario revisa y pulsa Continuar.
+            self._refrescar_estado_ui()
+        self._actualizar_lista_progreso()
+
+    def _al_clic_derecho(self, _img_x: float, _img_y: float) -> None:
+        if self._paso not in (self.PASO_MARCA_FRONTAL, self.PASO_MARCA_PERFIL):
+            return
+        if self._pend_pos_pole is not None:
+            self._pend_pos_pole = None
+            self._pend_pos_anchor = None
+        else:
+            # Deshacer: retomar el ultimo par ya completado entre los canales
+            # que corresponden a la foto del paso actual.
+            completados_paso = [
+                pos for pos in self._canales_marcado_paso if pos in self._pares_por_canal
+            ]
+            if completados_paso:
+                objetivo = max(completados_paso)
+                self._pares_por_canal.pop(objetivo)
+                self._pend_pos_pole = None
+                self._pend_pos_anchor = None
+                if objetivo not in self._cola_marcado:
+                    self._cola_marcado.insert(0, objetivo)
+        self._refrescar_estado_ui()
+        self._actualizar_lista_progreso()
+
+    def _completar_par(
+        self,
+        canal_pos: int,
+        pos_pt: Tuple[float, float],
+        pos_anc: Dict[str, Any],
+        neg_pt: Tuple[float, float],
+        neg_anc: Optional[Dict[str, Any]],
+    ) -> None:
+        """Registra un par bipolar completo con anclajes, IED y angulo."""
+        fisico, nombre = self._nombre_canal(canal_pos)
+        ied_px = float(np.hypot(neg_pt[0] - pos_pt[0], neg_pt[1] - pos_pt[1]))
+        dip_px = self._dip_px_del_paso()
+        escala = (self.d_ip_nominal_mm / dip_px) if dip_px and dip_px > 1.0 else None
+        ied_mm = ied_px * escala if escala is not None else None
+        angulo = float(np.degrees(np.arctan2(neg_pt[1] - pos_pt[1], neg_pt[0] - pos_pt[0])))
+        par = {
+            "es_bipolar": True,
+            "canal_pos": canal_pos,
+            "canal_fisico": fisico,
+            "nombre": nombre,
+            "polo_positivo": (float(pos_pt[0]), float(pos_pt[1])),
+            "polo_negativo": (float(neg_pt[0]), float(neg_pt[1])),
+            "anchor_positivo": pos_anc or {},
+            "anchor_negativo": neg_anc or {},
+            "ied_px": ied_px,
+            "ied_mm": ied_mm,
+            "angulo_deg": angulo,
+            "dip_px_foto": float(dip_px) if dip_px else 0.0,
+            "escala_mm_px": escala,
+            "diametro_gel_mm": float(self.spin_gel_diam_mm.value()),
+            "distancia_interelectrodo_nominal_mm": float(self.spin_ied_nominal_mm.value()),
+        }
+        self._pares_por_canal[canal_pos] = par
+
+    def _dip_px_del_paso(self) -> Optional[float]:
+        fiduciarios = self._frozen_fiduciarios if self._frozen_frame is not None else self._fiduciarios_marco
+        if fiduciarios is not None:
+            dip = float(fiduciarios.get("distancia_interpupilar_px", 0.0))
+            if dip > 1.0:
+                return dip
+        return None
+
+    def _continuar_paso(self) -> None:
+        """Avanza al paso despues de revisar la foto marcada de este paso."""
+        if self._cola_marcado:
+            return
+        if self._paso == self.PASO_MARCA_FRONTAL:
+            self._ir_a_paso(self.PASO_PERFIL_IZQ)
+        elif self._paso == self.PASO_MARCA_PERFIL:
+            self._ir_a_paso(self.PASO_PERFIL_DER)
+
+    # =====================================================================
+    # Guia hablada y consejos dinamicos de colocacion
+    # =====================================================================
+
+    def _voz_habilitada(self) -> bool:
+        """Indica si la sintesis de voz esta activada en este momento."""
+        voz = getattr(self, "_voz", None)
+        casillero = getattr(self, "chk_voz", None)
+        return bool(
+            voz is not None
+            and voz.disponible
+            and casillero is not None
+            and casillero.isChecked()
+        )
+
+    def _decir(self, texto: str, clave: Optional[str] = None) -> None:
+        """Habla una instruccion: prefiere el WAV de la clave pre-generado."""
+        if texto and self._voz_habilitada():
+            self._voz.decir(texto, clave)
+
+    def _al_alternar_voz(self, activado: bool) -> None:
+        if activado:
+            self._decir(FRASES_VOZ_ASISTENTE["activada"], clave="activada")
+
+    def _probar_voz(self) -> None:
+        """Prueba audible del motor de voz elegido; reporta en la consola."""
+        if not self._voz.disponible:
+            self._mostrar_consejo(
+                "Sintesis de voz no disponible en este equipo: instale espeak-ng o speech-dispatcher",
+                "rojo",
+            )
+            QtWidgets.QMessageBox.information(
+                self,
+                "Guia por Voz No Disponible",
+                "No hay motor de voz en este equipo.\n"
+                "Instale el paquete espeak-ng o el servicio speech-dispatcher "
+                "y vuelva a abrir el asistente.",
+            )
+            return
+        print(
+            f"[FotometriaWebcam] Prueba de voz del asistente lineal: metodo={self._voz.metodo}"
+        )
+        self._decir(FRASES_VOZ_ASISTENTE["prueba"], clave="prueba")
+
+    def _abrir_dialogo_comentario(self) -> None:
+        """Abre la ventana del Paso 4 que pregunta el comentario de la sesion."""
+        if not self.isVisible() or self._dialogo_comentario_activo:
+            return
+        self._dialogo_comentario_activo = True
+        self._decir(FRASES_VOZ_ASISTENTE["comentario"], clave="comentario")
+        self._ultima_vez_voz = time.perf_counter()
+        dialogo = _DialogoComentarioSesion(self)
+        resultado = dialogo.exec()
+        self._dialogo_comentario_activo = False
+        if resultado == QtWidgets.QDialog.Accepted:
+            self._al_confirmar()
+
+    def _mostrar_consejo(self, texto: str, estado: str = "info") -> None:
+        """Panel de consejo grande debajo del semaforo."""
+        color = {"ok": "#00ff88", "info": "#ffd54f", "rojo": "#ff8a80"}.get(estado, "#ffd54f")
+        self.lbl_consejo.setText(texto)
+        self.lbl_consejo.setStyleSheet(
+            f"color: {color}; font-weight: bold; font-size: 14px; padding: 2px;"
+        )
+
+    def _anunciar_paso(self, paso: int) -> None:
+        """Anuncia por voz la instruccion principal de un paso de captura.
+        Los pasos de marcado los anuncia el cambio de canal."""
+        claves = {
+            self.PASO_FRONTAL: "paso1",
+            self.PASO_PERFIL_IZQ: "paso2",
+            self.PASO_PERFIL_DER: "paso3",
+            self.PASO_PARAMETROS: "paso4",
+        }
+        clave = claves.get(paso)
+        if clave:
+            self._decir(FRASES_VOZ_ASISTENTE[clave], clave=clave)
+            self._ultima_vez_voz = time.perf_counter()
+
+    def _sugerencia_pose(self, pose: Dict[str, Any]) -> str:
+        """Clave del consejo comparando la pose medida con la objetivo del paso."""
+        paso = self._paso
+        if paso == self.PASO_PARAMETROS:
+            return "paso4"
+        bandas = self._bandas_objetivo()
+        yaw = float(pose.get("yaw_deg", 0.0))
+        pitch = float(pose.get("pitch_deg", 0.0))
+        roll = float(pose.get("roll_deg", 0.0))
+        dist = float(pose.get("distancia_camara_cm", 0.0))
+        dist_medible = pose.get("metodo_distancia", "estimada") not in (None, "no_disponible")
+
+        if dist_medible and dist < bandas["dist_warn"][0]:
+            return "alejese"
+        if dist_medible and dist > bandas["dist_warn"][1]:
+            return "acerquese"
+        if paso == self.PASO_FRONTAL:
+            if abs(yaw) > bandas["yaw_warn"][1]:
+                return "centro"
+            if abs(yaw) > bandas["yaw"][1]:
+                return "casi_frontal"
+        elif paso in (self.PASO_PERFIL_IZQ, self.PASO_PERFIL_DER):
+            if abs(yaw) < bandas["yaw_warn"][0]:
+                return "siga_derecha" if paso == self.PASO_PERFIL_IZQ else "siga_izquierda"
+            if abs(yaw) > bandas["yaw_warn"][1]:
+                return "regrese"
+            if not self._en_rango(abs(yaw), bandas["yaw_absoluto"]):
+                return "casi_perfil"
+        if not self._en_rango(pitch, bandas["pitch_warn"]):
+            return "no_incline"
+        if not self._en_rango(roll, bandas["roll_warn"]):
+            return "enderece"
+        if dist_medible and not self._en_rango(dist, bandas["dist"]):
+            return "ajuste_dist"
+        if not self._en_rango(pitch, bandas["pitch"]):
+            return "casi_barbilla"
+        if not self._en_rango(roll, bandas["roll"]):
+            return "casi_enderece"
+        return "mantenga"
+
+    def _guiar_en_vivo(self, pose: Dict[str, Any], verde: bool, fiduciarios: Any) -> None:
+        """Consejo en pantalla en vivo; la voz solo cuando el mismo consejo se
+        sostiene un rato y con una pausa larga entre comentarios."""
+        if fiduciarios is None or not pose:
+            clave = "sin_rostro"
+            estado = "rojo"
+        elif verde:
+            # Sincronizado con el semaforo: nunca pide sostener pose si no captura
+            clave = "mantenga"
+            estado = "ok"
+        else:
+            clave = self._sugerencia_pose(pose)
+            estado = "info"
+        texto = FRASES_VOZ_ASISTENTE.get(clave, clave)
+        self._mostrar_consejo(texto, estado)
+        # El consejo debe mantenerse estable un rato antes de llegar a la voz
+        if clave != self._clave_pendiente:
+            self._clave_pendiente = clave
+            self._frames_clave = 0
+        else:
+            self._frames_clave += 1
+        ahora = time.perf_counter()
+        if (
+            clave != "paso4"
+            and texto != self._ultimo_consejo
+            and self._frames_clave >= TICKS_VOZ_ESTABLE
+            and (ahora - self._ultima_vez_voz) >= PAUSA_SEGUNDOS_VOZ
+        ):
+            self._decir(texto, clave=clave)
+            self._ultima_vez_voz = ahora
+            self._ultimo_consejo = texto
+
+    def _repetir_foto(self) -> None:
+        """Vuelve al paso de captura actual para repetir la foto."""
+        if self._paso == self.PASO_MARCA_FRONTAL:
+            for pos_canal in self._canales_frontal:
+                self._pares_por_canal.pop(pos_canal, None)
+            self._ir_a_paso(self.PASO_FRONTAL)
+        elif self._paso == self.PASO_MARCA_PERFIL:
+            for pos_canal in self._canales_perfil:
+                self._pares_por_canal.pop(pos_canal, None)
+            self._ir_a_paso(self.PASO_PERFIL_IZQ)
+
+    def _al_tomar_de_todas_formas(self) -> None:
+        if self._paso in (self.PASO_FRONTAL, self.PASO_PERFIL_IZQ, self.PASO_PERFIL_DER):
+            self._capturar_paso()
+
+    # =====================================================================
+    # Alineacion, semaforo y captura de fotos guiadas
+    # =====================================================================
+
+    def _bandas_objetivo(self) -> Dict[str, Any]:
+        """Rangos del semaforo segun la pose objetivo del paso actual.
+
+        El signo del yaw depende de la convencion geometrica de la malla
+        facial, por eso los perfiles se comparan con el valor absoluto.
+        """
+        paso = self._paso
+        if paso in (self.PASO_PERFIL_IZQ, self.PASO_PERFIL_DER):
+            yaw_rango, yaw_rango_warn = (25.0, 65.0), (18.0, 72.0)
+        else:
+            yaw_rango, yaw_rango_warn = (-8.0, 8.0), (-14.0, 14.0)
+        return {
+            "yaw": yaw_rango,
+            "yaw_warn": yaw_rango_warn,
+            "yaw_absoluto": _rango_absoluto(yaw_rango),
+            "yaw_absoluto_warn": _rango_absoluto(yaw_rango_warn),
+            "pitch": (-10.0, 10.0),
+            "pitch_warn": (-16.0, 16.0),
+            "roll": (-6.0, 6.0),
+            "roll_warn": (-11.0, 11.0),
+            "dist": (30.0, 70.0),
+            "dist_warn": (24.0, 82.0),
+        }
+
+    def _en_rango(self, valor: float, rango: Tuple[float, float]) -> bool:
+        return rango[0] <= valor <= rango[1]
+
+    def _yaw_ok(self, yaw: float, estricto: bool) -> bool:
+        """Compara el valor absoluto del yaw con la banda del paso actual."""
+        bandas = self._bandas_objetivo()
+        clave = "yaw_absoluto" if estricto else "yaw_absoluto_warn"
+        return self._en_rango(abs(float(yaw)), bandas[clave])
+
+    def _alineacion_verde(self, pose: Dict[str, Any]) -> bool:
+        bandas = self._bandas_objetivo()
+        return (
+            self._yaw_ok(pose.get("yaw_deg", 0.0), True)
+            and self._en_rango(pose.get("pitch_deg", 0.0), bandas["pitch"])
+            and self._en_rango(pose.get("roll_deg", 0.0), bandas["roll"])
+            and self._en_rango(pose.get("distancia_camara_cm", 0.0), bandas["dist"])
+        )
+
+    def _actualizar_badges(self, pose: Dict[str, Any]) -> None:
+        bandas = self._bandas_objetivo()
+        yaw = pose.get("yaw_deg", 0.0)
+        pitch = pose.get("pitch_deg", 0.0)
+        roll = pose.get("roll_deg", 0.0)
+        dist = pose.get("distancia_camara_cm", 0.0)
+        if self._yaw_ok(yaw, True):
+            estado_yaw = "ok"
+        elif self._yaw_ok(yaw, False):
+            estado_yaw = "warn"
+        else:
+            estado_yaw = "bad"
+        estado_pitch = "ok" if self._en_rango(pitch, bandas["pitch"]) else (
+            "warn" if self._en_rango(pitch, bandas["pitch_warn"]) else "bad"
+        )
+        estado_roll = "ok" if self._en_rango(roll, bandas["roll"]) else (
+            "warn" if self._en_rango(roll, bandas["roll_warn"]) else "bad"
+        )
+        estado_dist = "ok" if self._en_rango(dist, bandas["dist"]) else (
+            "warn" if self._en_rango(dist, bandas["dist_warn"]) else "bad"
+        )
+        self._set_badge_status(self.badge_yaw, f"Yaw: {yaw:+.1f}°", estado_yaw)
+        self._set_badge_status(self.badge_pitch, f"Pitch: {pitch:+.1f}°", estado_pitch)
+        self._set_badge_status(self.badge_roll, f"Roll: {roll:+.1f}°", estado_roll)
+        self._set_badge_status(self.badge_dist, f"Dist: {dist:.1f} cm", estado_dist)
+
+    def _get_frame_origen(self) -> Optional[np.ndarray]:
+        if self._frozen_frame is not None:
+            return self._frozen_frame
+        if self.capture_thread is not None:
+            frame, _ = self.capture_thread.get_latest_frame()
+            if frame is not None:
+                self._last_live_frame = frame
+                return frame
+        return self._last_live_frame
+
+    def _update_preview(self) -> None:
+        congelado = self._frozen_frame is not None
+        frame = self._get_frame_origen()
+        if frame is None:
+            placeholder = np.zeros((480, 640, 3), dtype=np.uint8)
+            hilo = self.capture_thread
+            if hilo is None:
+                texto_espera = "Cierre y abra el asistente: sin hilo de captura"
+            elif not hilo.is_camera_open:
+                texto_espera = f"Camara {hilo.camera_index} no responde"
+            else:
+                texto_espera = f"Camara {hilo.camera_index}: esperando fotograma"
+            cv2.putText(
+                placeholder, texto_espera, (40, 210),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.58, (204, 255, 0), 2, cv2.LINE_AA,
+            )
+            cv2.putText(
+                placeholder, "Revise la tecla de privacidad de la camara", (40, 255),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.58, (204, 255, 0), 2, cv2.LINE_AA,
+            )
+            cv2.putText(
+                placeholder, "y cierre otros programas que la usen", (40, 300),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.58, (204, 255, 0), 2, cv2.LINE_AA,
+            )
+            self._mostrar_bgr(placeholder, self.video_label)
+            return
+
+        alto, ancho = frame.shape[:2]
+        self.video_label.set_image_dimensions(ancho, alto)
+
+        if congelado:
+            fiduciarios = self._frozen_fiduciarios
+        elif self.agent is not None:
+            fiduciarios = self.agent.extraer_malla_facial_3d(frame)
+        else:
+            fiduciarios = None
+        self._fiduciarios_marco = fiduciarios
+
+        canvas = frame.copy()
+        pose = None
+        verde = False
+        if fiduciarios is not None and self.agent is not None:
+            pose = self.agent.calcular_pose_y_biometria_facial(
+                fiduciarios, (alto, ancho), d_ip_real_cm=self.d_ip_nominal_mm / 10.0
+            )
+            self._ultimo_pose = pose
+            verde = self._alineacion_verde(pose)
+            self._actualizar_badges(pose)
+        else:
+            self._set_badge_status(self.badge_yaw, "Yaw: Sin rostro", "bad")
+            self._set_badge_status(self.badge_pitch, "Pitch: Sin rostro", "bad")
+            self._set_badge_status(self.badge_roll, "Roll: Sin rostro", "bad")
+            self._set_badge_status(self.badge_dist, "Dist: --", "bad")
+
+        self._dibujar_marco(canvas, verde, congelado)
+        self._dibujar_marcas(canvas, fiduciarios, congelado)
+
+        if not congelado:
+            es_paso_espera = self._paso in (
+                self.PASO_FRONTAL, self.PASO_PERFIL_IZQ, self.PASO_PERFIL_DER
+            )
+            if verde and es_paso_espera and fiduciarios is not None:
+                self._frames_verde += 1
+                if self._frames_verde >= TICKS_VERDE_CAPTURA:
+                    self._capturar_paso()
+                    return
+            else:
+                self._frames_verde = 0
+            self._guiar_en_vivo(pose, verde and es_paso_espera, fiduciarios)
+            if self._fantasma_activado:
+                self._dibujar_fantasma(canvas, fiduciarios, pose or {})
+
+        self._aplicar_destello(canvas)
+        self._mostrar_bgr(canvas, self.video_label)
+
+    def _dibujar_marco(self, canvas: np.ndarray, verde: bool, congelado: bool) -> None:
+        """Elipse guia, semaforo circular y banner con el paso actual."""
+        alto, ancho = canvas.shape[:2]
+        cx, cy = ancho // 2, alto // 2
+        rx, ry = int(ancho * 0.21), int(alto * 0.34)
+        color_guia = (118, 230, 0) if verde else (0, 215, 255)
+        if not congelado:
+            cv2.ellipse(canvas, (cx, cy), (rx, ry), 0, 0, 360, color_guia, 2, cv2.LINE_AA)
+
+        es_paso_espera = self._paso in (self.PASO_FRONTAL, self.PASO_PERFIL_IZQ, self.PASO_PERFIL_DER)
+        if es_paso_espera and not congelado:
+            centro_semaforo = (ancho - 46, 26)
+            color_semaforo = (90, 225, 90) if verde else (60, 60, 230)
+            cv2.circle(canvas, centro_semaforo, 13, color_semaforo, -1, cv2.LINE_AA)
+            cv2.circle(canvas, centro_semaforo, 13, (255, 255, 255), 1, cv2.LINE_AA)
+
+        textos = self._textos_paso_actual()
+        canal = self._canal_actual_marca()
+        if canal is not None and congelado:
+            fisico, _nombre = self._nombre_canal(canal)
+            estado_banner = f"Ubique el Canal {fisico}: Clic en Polo + y Clic en Polo -"
+        elif congelado:
+            estado_banner = "Marcado de electrodos sobre la foto congelada"
+        elif verde and es_paso_espera:
+            restante_s = max(TICKS_VERDE_CAPTURA - self._frames_verde, 0) * 0.05
+            estado_banner = f"Semaforo verde: mantenga la pose, auto captura en {restante_s:0.1f} s"
+        elif es_paso_espera:
+            estado_banner = "Alinee el rostro hasta que el semaforo quede en verde"
+        else:
+            estado_banner = textos["titulo"]
+        fondo = (20, 75, 20) if verde else (20, 45, 70)
+        if congelado:
+            fondo = (70, 55, 20)
+        cv2.rectangle(canvas, (10, 8), (ancho - 10, 42), fondo, -1)
+        cv2.rectangle(canvas, (10, 8), (ancho - 10, 42), color_guia, 1)
+        cv2.putText(
+            canvas, estado_banner, (20, 32),
+            cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1, cv2.LINE_AA,
+        )
+
+        fila_pie = alto - 12
+        if self._frozen_frame is not None:
+            cv2.putText(
+                canvas, "Foto congelada para marcado - Clic izquierdo: Polo | Clic derecho: deshacer",
+                (12, fila_pie), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (170, 170, 170), 1, cv2.LINE_AA,
+            )
+
+    def _dibujar_marcas(
+        self,
+        canvas: np.ndarray,
+        fiduciarios: Optional[Dict[str, Any]],
+        congelado: bool,
+    ) -> None:
+        """Dibuja los pares ya marcados y el polo pendiente de completar."""
+        dip_px = self._dip_px_del_paso()
+        escala = self.d_ip_nominal_mm / dip_px if dip_px and dip_px > 1.0 else None
+        for pos_canal, par in sorted(self._pares_por_canal.items()):
+            color = PALETA_CANALES_MONTAJE[pos_canal % len(PALETA_CANALES_MONTAJE)]
+            p_pos = posicion_polo_desde_anclaje(
+                par.get("anchor_positivo"), par.get("polo_positivo"), fiduciarios
+            )
+            p_neg = posicion_polo_desde_anclaje(
+                par.get("anchor_negativo"), par.get("polo_negativo"), fiduciarios
+            )
+            if p_pos is None or p_neg is None:
+                continue
+            pos_x, pos_y = int(round(p_pos[0])), int(round(p_pos[1]))
+            neg_x, neg_y = int(round(p_neg[0])), int(round(p_neg[1]))
+            cv2.arrowedLine(canvas, (neg_x, neg_y), (pos_x, pos_y), (220, 220, 220), 2, tipLength=0.25)
+            radio = (
+                max(int(round((par.get("diametro_gel_mm", 10.0) / 2.0) / escala)), 4)
+                if escala is not None else 12
+            )
+            cv2.circle(canvas, (pos_x, pos_y), radio, color, 1, cv2.LINE_AA)
+            cv2.circle(canvas, (neg_x, neg_y), radio, color, 1, cv2.LINE_AA)
+            cv2.circle(canvas, (pos_x, pos_y), 7, (0, 69, 255), -1, cv2.LINE_AA)
+            cv2.circle(canvas, (pos_x, pos_y), 9, (255, 255, 255), 1, cv2.LINE_AA)
+            cv2.putText(canvas, "+", (pos_x - 4, pos_y + 4), cv2.FONT_HERSHEY_SIMPLEX, 0.4,
+                        (255, 255, 255), 1, cv2.LINE_AA)
+            cv2.circle(canvas, (neg_x, neg_y), 7, (255, 120, 0), -1, cv2.LINE_AA)
+            cv2.circle(canvas, (neg_x, neg_y), 9, (255, 255, 255), 1, cv2.LINE_AA)
+            cv2.putText(canvas, "-", (neg_x - 3, neg_y + 3), cv2.FONT_HERSHEY_SIMPLEX, 0.4,
+                        (255, 255, 255), 1, cv2.LINE_AA)
+            etiqueta = f"Canal {par['canal_fisico']} - {par['nombre']}"
+            mid_x, mid_y = (pos_x + neg_x) // 2, (pos_y + neg_y) // 2
+            cv2.putText(canvas, etiqueta, (mid_x + 10, mid_y - 6), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.46, color, 2, cv2.LINE_AA)
+
+        if congelado and self._pend_pos_pole is not None:
+            pend_x, pend_y = int(round(self._pend_pos_pole[0])), int(round(self._pend_pos_pole[1]))
+            radio = (
+                max(int(round((self.spin_gel_diam_mm.value() / 2.0) / escala)), 4)
+                if escala is not None else 12
+            )
+            cv2.circle(canvas, (pend_x, pend_y), radio, COLOR_FANTASMA_LINEA, 1, cv2.LINE_AA)
+            cv2.circle(canvas, (pend_x, pend_y), 7, (0, 69, 255), -1, cv2.LINE_AA)
+            cv2.circle(canvas, (pend_x, pend_y), 9, (255, 255, 255), 1, cv2.LINE_AA)
+            cv2.putText(canvas, "+ [Marque Polo -]", (pend_x + 10, pend_y - 4),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 1, cv2.LINE_AA)
+
+    def _aplicar_destello(self, canvas: np.ndarray) -> None:
+        if time.perf_counter() < self._destello_hasta:
+            blanco = np.full_like(canvas, 255)
+            cv2.addWeighted(blanco, 0.35, canvas, 0.65, 0.0, dst=canvas)
+
+    def _capturar_paso(self) -> None:
+        """Toma la foto del paso actual, congela el cuadro y avanza la secuencia."""
+        frame = self._last_live_frame
+        if frame is None:
+            return
+        fiduciarios = None
+        if self.agent is not None:
+            fiduciarios = self.agent.extraer_malla_facial_3d(frame)
+        pose = {"rostro_detectado": False}
+        if self.agent is not None and fiduciarios is not None:
+            pose = self.agent.calcular_pose_y_biometria_facial(
+                fiduciarios, frame.shape[:2], d_ip_real_cm=self.d_ip_nominal_mm / 10.0
+            )
+        pose["rostro_detectado"] = bool(fiduciarios)
+
+        if self._paso == self.PASO_FRONTAL:
+            self._fotos["frontal"] = frame.copy()
+            self._pose_fotos["frontal"] = limpiar_para_json(pose)
+            dip = float(fiduciarios["distancia_interpupilar_px"]) if fiduciarios else None
+            self._dip_px_fotos["frontal"] = dip
+            self._escala_mm_px_frontal = (
+                self.d_ip_nominal_mm / dip if dip and dip > 1.0 else None
+            )
+            destino = (
+                self.PASO_MARCA_FRONTAL
+                if len(self._canales_frontal) > 0
+                else self.PASO_PERFIL_IZQ
+            )
+        elif self._paso == self.PASO_PERFIL_IZQ:
+            self._fotos["perfil_izquierdo"] = frame.copy()
+            self._pose_fotos["perfil_izquierdo"] = limpiar_para_json(pose)
+            destino = (
+                self.PASO_MARCA_PERFIL
+                if len(self._canales_perfil) > 0
+                else self.PASO_PERFIL_DER
+            )
+        else:
+            self._fotos["perfil_derecho"] = frame.copy()
+            self._pose_fotos["perfil_derecho"] = limpiar_para_json(pose)
+            destino = self.PASO_PARAMETROS
+
+        self._frozen_frame = frame.copy()
+        self._frozen_fiduciarios = fiduciarios
+        self._destello_hasta = time.perf_counter() + 0.30
+        self._ir_a_paso(destino)
+
+    # =====================================================================
+    # Guia AR de Repeticion: copiar la colocacion de la sesion anterior
+    # =====================================================================
+
+    @staticmethod
+    def _normalizar_polo_referente(polo: Any) -> Optional[Dict[str, Any]]:
+        """Valida y normaliza un polo de referencia con v_idx y offsets dx, dy."""
+        if not isinstance(polo, dict):
+            return None
+        v_idx = polo.get("v_idx")
+        if v_idx is None:
+            return None
+        try:
+            return {
+                "v_idx": int(v_idx),
+                "dx": float(polo.get("dx") or 0.0),
+                "dy": float(polo.get("dy") or 0.0),
+                "dip_px": float(polo.get("dip_px") or 0.0),
+            }
+        except (TypeError, ValueError):
+            return None
+
+    def _al_cambiar_sesion_previa(self) -> None:
+        indice = self.combo_mediciones_previas.currentIndex()
+        if not 0 <= indice < len(self._lista_sesiones_previas):
+            self.lbl_fantasma_estado.setText("No hay mediciones previas disponibles.")
+            return
+        sesion = self._lista_sesiones_previas[indice]
+        if self._cargar_montaje_referencia(sesion["ruta_meta"]):
+            self.lbl_fantasma_estado.setText(
+                f"[Guia AR activa] {sesion['etiqueta']} - hologramas punteados sobre la piel en verde"
+            )
+            self.lbl_fantasma_estado.setStyleSheet(
+                "color: #00ff88; font-size: 11px; font-weight: bold;"
+            )
+        else:
+            self._fantasma_activado = False
+            self.btn_fantasma.blockSignals(True)
+            self.btn_fantasma.setChecked(False)
+            self.btn_fantasma.blockSignals(False)
+            self.lbl_fantasma_estado.setText("No se pudo leer esa medicion previa.")
+            self.lbl_fantasma_estado.setStyleSheet("color: #ff8a80; font-size: 11px;")
+
+    def _al_alternar_fantasma(self, activado: bool) -> None:
+        self._fantasma_activado = bool(activado)
+        if not activado:
+            self.lbl_fantasma_estado.setText("Guia AR desactivada.")
+            self.lbl_fantasma_estado.setStyleSheet("color: #9e9e9e; font-size: 11px;")
+            return
+        if not getattr(self, "_fantasma_selector_conectado", False):
+            self.combo_mediciones_previas.currentIndexChanged.connect(self._al_cambiar_sesion_previa)
+            self._fantasma_selector_conectado = True
+        self._al_cambiar_sesion_previa()
+
+    def _cargar_montaje_referencia(self, ruta_archivo: str) -> bool:
+        """
+        Lee el metadata_fotometria.json de una medicion previa y extrae, por cada
+        canal, los indices de vertices MediaPipe y offsets locales de cada polo.
+        """
+        try:
+            with open(ruta_archivo, "r", encoding="utf-8") as handle:
+                datos = json.load(handle)
+        except Exception as exc:
+            QtWidgets.QMessageBox.critical(
+                self, "Error al Cargar Referencia", f"No se pudo leer el archivo:\n{exc}"
+            )
+            return False
+
+        montaje = datos.get("montaje", {}) if isinstance(datos, dict) else {}
+        if not montaje:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Referencia Invalida",
+                "El archivo no contiene el montaje de canales del asistente lineal.",
+            )
+            return False
+
+        referencia: Dict[str, Dict[str, Any]] = {}
+        for clave, info in montaje.items():
+            if not isinstance(info, dict):
+                continue
+            foto_origen = str(info.get("foto", ""))
+            pose_ref = "perfil_izq" if foto_origen.startswith("02") else "frontal"
+            referencia[str(clave)] = {
+                "musculo": str(info.get("musculo", "")),
+                "pose": pose_ref,
+                "gel": float(info.get("diametro_gel_mm", 10.0) or 10.0),
+                "polo_positivo": self._normalizar_polo_referente(info.get("polo_positivo")),
+                "polo_negativo": self._normalizar_polo_referente(info.get("polo_negativo")),
+            }
+
+        pose_fotos = datos.get("pose_fotos", {}) or {}
+        frontal = pose_fotos.get("frontal", {}) or {}
+        dist_ref = frontal.get("distancia_camara_cm")
+        self._fantasma_dist_ref_cm = (
+            float(dist_ref)
+            if isinstance(dist_ref, (int, float)) and float(dist_ref) > 0
+            else None
+        )
+        self._montaje_referencia = referencia
+        return len(referencia) > 0
+
+    def _dibujar_fantasma(
+        self,
+        canvas: np.ndarray,
+        fiduciarios: Optional[Dict[str, Any]],
+        pose: Dict[str, Any],
+    ) -> None:
+        """Proyecta hologramas punteados con la colocacion de la medicion previa."""
+        if not self._fantasma_activado or self._montaje_referencia is None:
+            return
+        alto, ancho = canvas.shape[:2]
+        if fiduciarios is None or not pose:
+            self._franja_aviso_fantasma(canvas, ancho,
+                "Guia AR activa: ubique el rostro frente a la camara")
+            return
+
+        dist_cm = float(pose.get("distancia_camara_cm", 0.0))
+        pitch = float(pose.get("pitch_deg", 0.0))
+        roll = float(pose.get("roll_deg", 0.0))
+        if self._fantasma_dist_ref_cm is not None:
+            banda_min = max(20.0, self._fantasma_dist_ref_cm * 0.75)
+            banda_max = min(150.0, self._fantasma_dist_ref_cm * 1.30)
+        else:
+            banda_min, banda_max = 30.0, 70.0
+        dist_ok = banda_min <= dist_cm <= banda_max
+        pose_ok = abs(pitch) <= 16.0 and abs(roll) <= 11.0
+        if not (dist_ok and pose_ok):
+            if not dist_ok:
+                aviso = (
+                    "Guia AR: muestrese mas cerca de la camara"
+                    if dist_cm > banda_max
+                    else "Guia AR: alejese de la camara"
+                )
+                aviso += f" - Referencia: {banda_min:.0f} a {banda_max:.0f} cm"
+            else:
+                aviso = "Guia AR: nivelar pitch y roll para superponer los objetivos"
+            self._franja_aviso_fantasma(canvas, ancho, aviso)
+            return
+
+        dip_live = float(fiduciarios.get("distancia_interpupilar_px", 0.0))
+        if dip_live <= 1.0:
+            return
+        yaw = float(pose.get("yaw_deg", 0.0))
+        puntos_2d = fiduciarios["puntos_2d_px"]
+
+        for clave, info in self._montaje_referencia.items():
+            pose_ref = info.get("pose", "frontal")
+            if pose_ref in ("perfil_izq", "perfil_der"):
+                compatible = 20.0 <= abs(yaw) <= 65.0
+            else:
+                compatible = abs(yaw) <= 15.0
+            if not compatible:
+                continue
+            gel_mm = float(info.get("gel", 10.0))
+            escala_live = self.d_ip_nominal_mm / dip_live
+            radio = max(int(round((gel_mm / 2.0) / escala_live)), 6)
+            posiciones = {}
+            for clave_polo, simbolo in (("polo_positivo", "+"), ("polo_negativo", "-")):
+                polo_ref = info.get(clave_polo)
+                if polo_ref is None:
+                    continue
+                v_idx = int(polo_ref["v_idx"])
+                if not 0 <= v_idx < len(puntos_2d):
+                    continue
+                dip_ref = float(polo_ref.get("dip_px") or 0.0)
+                factor = (dip_live / dip_ref) if dip_ref > 1.0 else 1.0
+                tx = float(puntos_2d[v_idx, 0] + polo_ref["dx"] * factor)
+                ty = float(puntos_2d[v_idx, 1] + polo_ref["dy"] * factor)
+                posiciones[simbolo] = (tx, ty)
+                dibujar_circulo_punteado(canvas, (tx, ty), radio, COLOR_FANTASMA, 2)
+                texto = f"{clave} - Polo {simbolo}"
+                cv2.putText(canvas, texto, (int(tx) + 12, int(ty) - 8),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.44, COLOR_FANTASMA, 1, cv2.LINE_AA)
+            if "+" in posiciones and "-" in posiciones:
+                self._dibujar_linea_punteada(
+                    canvas, posiciones["-"], posiciones["+"], COLOR_FANTASMA_LINEA
+                )
+
+    def _franja_aviso_fantasma(self, canvas: np.ndarray, ancho: int, texto: str) -> None:
+        cv2.rectangle(canvas, (10, 48), (ancho - 10, 76), (90, 80, 20), -1)
+        cv2.rectangle(canvas, (10, 48), (ancho - 10, 76), COLOR_FANTASMA, 1)
+        cv2.putText(canvas, texto, (20, 68), cv2.FONT_HERSHEY_SIMPLEX, 0.45,
+                    (255, 255, 255), 1, cv2.LINE_AA)
+
+    @staticmethod
+    def _dibujar_linea_punteada(
+        canvas: np.ndarray,
+        p1: Tuple[float, float],
+        p2: Tuple[float, float],
+        color: Tuple[int, int, int],
+        partes: int = 10,
+    ) -> None:
+        dif_x = (float(p2[0]) - float(p1[0])) / float(partes)
+        dif_y = (float(p2[1]) - float(p1[1])) / float(partes)
+        for par_de_segmento in range(partes):
+            if par_de_segmento % 2 != 0:
+                continue
+            x1 = int(round(p1[0] + dif_x * par_de_segmento))
+            y1 = int(round(p1[1] + dif_y * par_de_segmento))
+            x2 = int(round(p1[0] + dif_x * (par_de_segmento + 1))) - 1
+            y2 = int(round(p1[1] + dif_y * (par_de_segmento + 1))) - 1
+            cv2.line(canvas, (x1, y1), (x2, y2), color, 2, cv2.LINE_AA)
+
+    # =====================================================================
+    # Confirmacion y metadata del montaje
+    # =====================================================================
+
+    def _calibrar_montaje_frontal(self) -> None:
+        """Genera el payload clasico de triangulacion para compatibilidad retroactiva."""
+        foto_frontal = self._fotos.get("frontal")
+        if foto_frontal is None:
+            return
+        pares_frontales = [
+            self._pares_por_canal[pos]
+            for pos in self._canales_frontal
+            if pos in self._pares_por_canal
+        ]
+        if not pares_frontales:
+            return
+        try:
+            resultado = self.agent.triangular_electrodos(
+                foto_frontal,
+                puntos_centroides_manuales=pares_frontales,
+                usar_broches_metalicos=False,
+                asignar_musculos_automatico=True,
+                nombres_canales=self.nombres_musculos,
+                indices_canales_fisicos=self.active_channel_indices,
+                d_ip_real_cm=self.d_ip_nominal_mm / 10.0,
+                escala_mm_por_px=self._escala_mm_px_frontal,
+                punto_referencia_gnd=None,
+                diametro_gel_mm=float(self.spin_gel_diam_mm.value()),
+                ied_nominal_mm=float(self.spin_ied_nominal_mm.value()),
+            )
+            meta = resultado.get("metadatos_calibracion_espacial", {})
+            if meta:
+                self._meta_calibracion_frontal = limpiar_para_json(meta)
+        except Exception as exc:
+            sys.stderr.write(
+                f"[FotometriaWebcam] Aviso de triangulacion frontal del asistente: {exc}\n"
+            )
+
+    def _polo_del_par(self, par: Dict[str, Any], clave_ancla: str, clave_polo: str) -> Dict[str, Any]:
+        ancla = par.get(clave_ancla) or {}
+        punto = par.get(clave_polo)
+        dip = par.get("dip_px_foto") or 0.0
+        vertice_3d = ancla.get("vertice_3d") or []
+        return {
+            "px_2d": [round(float(punto[0]), 2), round(float(punto[1]), 2)] if punto else None,
+            "v_idx": int(ancla["v_idx"]) if ancla.get("v_idx") is not None else None,
+            "dx": round(float(ancla.get("dx", 0.0)), 3),
+            "dy": round(float(ancla.get("dy", 0.0)), 3),
+            "dip_px": round(float(dip), 2) if dip > 1.0 else None,
+            "vertice_3d": [round(float(v), 5) for v in vertice_3d] if vertice_3d else None,
+        }
+
+    def _construir_metadata_fotometria(self) -> Dict[str, Any]:
+        """Construye el documento metadata_fotometria.json de la sesion."""
+        gel = float(self.spin_gel_diam_mm.value())
+        ied_nominal = float(self.spin_ied_nominal_mm.value())
+        comentario = str(self.edit_comentario.text().strip())
+
+        montaje: Dict[str, Any] = {}
+        for pos_canal, par in self._pares_por_canal.items():
+            fisico, nombre = self._nombre_canal(pos_canal)
+            foto_canal = (
+                NOMBRE_FOTO_FRONTAL
+                if pos_canal in self._canales_frontal
+                else NOMBRE_FOTO_PERFIL_IZQUIERDO
+            )
+            montaje[f"Ch{pos_canal}"] = {
+                "canal_pos": pos_canal,
+                "canal_fisico": fisico,
+                "musculo": nombre,
+                "foto": foto_canal,
+                "diametro_gel_mm": round(gel, 2),
+                "distancia_interelectrodo_nominal_mm": round(ied_nominal, 2),
+                "ied_px": round(float(par["ied_px"]), 2),
+                "ied_mm": round(float(par["ied_mm"]), 2) if par.get("ied_mm") is not None else None,
+                "angulo_deg": round(float(par["angulo_deg"]), 2),
+                "dip_px_foto": round(float(par.get("dip_px_foto") or 0.0), 2),
+                "polo_positivo": self._polo_del_par(par, "anchor_positivo", "polo_positivo"),
+                "polo_negativo": self._polo_del_par(par, "anchor_negativo", "polo_negativo"),
+            }
+
+        pose_frontal = self._pose_fotos.get("frontal") or {}
+        metadata = {
+            "tipo": "asistente_lineal_fotometria",
+            "version": 1,
+            "fecha_iso": datetime.now().isoformat(),
+            "sujeto": self.sujeto,
+            "prueba": self.prueba,
+            "canales_activos_fisicos": list(self.active_channel_indices),
+            "nombres_musculos_canales": list(self.nombres_musculos),
+            "diametro_gel_mm": round(gel, 2),
+            "distancia_interelectrodo_nominal_mm": round(ied_nominal, 2),
+            "distancia_interpupilar_nominal_mm": self.d_ip_nominal_mm,
+            "escala_mm_px": (
+                round(float(self._escala_mm_px_frontal), 5)
+                if self._escala_mm_px_frontal is not None
+                else None
+            ),
+            "comentario_sesion": comentario,
+            "fotos_montaje": [
+                NOMBRE_FOTO_FRONTAL,
+                NOMBRE_FOTO_PERFIL_IZQUIERDO,
+                NOMBRE_FOTO_PERFIL_DERECHO,
+            ],
+            "fotos_montaje_dir": "fotos_montaje",
+            "montaje": montaje,
+            "pose_fotos": self._pose_fotos,
+            "pose_resumen_frontal": {
+                "distancia_camara_cm": pose_frontal.get("distancia_camara_cm"),
+                "yaw_deg": pose_frontal.get("yaw_deg"),
+                "rostro_detectado": pose_frontal.get("rostro_detectado", False),
+            },
+        }
+        if self._meta_calibracion_frontal is not None:
+            metadata["metadatos_calibracion_espacial"] = self._meta_calibracion_frontal
+        return limpiar_para_json(metadata)
+
+    def _construir_fotos_con_marcas(self) -> Dict[str, np.ndarray]:
+        """Copia de cada foto con los electrodos marcados dibujados encima.
+
+        Usa el mismo estilo del marcado en pantalla: anillo del color del canal
+        con el diametro de gel escogido, punto rojo en el Polo +, naranja en el
+        Polo - y la etiqueta del canal. Guardar la foto cruda sin anotar
+        resultaba en puntos perdidos para la revision posterior.
+        """
+        resultado: Dict[str, np.ndarray] = {}
+        for clave, canales_foto in (
+            ("frontal", self._canales_frontal),
+            ("perfil_izquierdo", self._canales_perfil),
+        ):
+            base = self._fotos.get(clave)
+            if base is None or base.size == 0:
+                continue
+            pares = [
+                (pos, self._pares_por_canal[pos])
+                for pos in canales_foto
+                if pos in self._pares_por_canal
+            ]
+            if not pares:
+                continue
+            canvas = base.copy()
+            for pos_canal, par in pares:
+                color = PALETA_CANALES_MONTAJE[pos_canal % len(PALETA_CANALES_MONTAJE)]
+                p_pos = par.get("polo_positivo")
+                p_neg = par.get("polo_negativo")
+                if not p_pos or not p_neg:
+                    continue
+                pos_x, pos_y = int(round(float(p_pos[0]))), int(round(float(p_pos[1])))
+                neg_x, neg_y = int(round(float(p_neg[0]))), int(round(float(p_neg[1])))
+                escala = par.get("escala_mm_px")
+                radio = (
+                    max(int(round((float(par.get("diametro_gel_mm", 10.0)) / 2.0) / escala)), 4)
+                    if escala
+                    else 12
+                )
+                cv2.arrowedLine(
+                    canvas, (neg_x, neg_y), (pos_x, pos_y), (220, 220, 220), 2, tipLength=0.25
+                )
+                cv2.circle(canvas, (pos_x, pos_y), radio, color, 1, cv2.LINE_AA)
+                cv2.circle(canvas, (neg_x, neg_y), radio, color, 1, cv2.LINE_AA)
+                cv2.circle(canvas, (pos_x, pos_y), 7, (0, 69, 255), -1, cv2.LINE_AA)
+                cv2.circle(canvas, (pos_x, pos_y), 9, (255, 255, 255), 1, cv2.LINE_AA)
+                cv2.putText(
+                    canvas, "+", (pos_x - 4, pos_y + 4),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1, cv2.LINE_AA,
+                )
+                cv2.circle(canvas, (neg_x, neg_y), 7, (255, 120, 0), -1, cv2.LINE_AA)
+                cv2.circle(canvas, (neg_x, neg_y), 9, (255, 255, 255), 1, cv2.LINE_AA)
+                cv2.putText(
+                    canvas, "-", (neg_x - 3, neg_y + 3),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1, cv2.LINE_AA,
+                )
+                etiqueta = (
+                    f"Canal {par.get('canal_fisico', pos_canal)} "
+                    f"- {_texto_sin_acentos(par.get('nombre', ''))}"
+                )
+                mid_x, mid_y = (pos_x + neg_x) // 2, (pos_y + neg_y) // 2
+                cv2.putText(
+                    canvas, etiqueta, (mid_x + 10, mid_y - 6),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.46, color, 2, cv2.LINE_AA,
+                )
+            resultado[clave] = canvas
+        return resultado
+
+    def _al_confirmar(self) -> None:
+        if self._fotos.get("frontal") is None:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Faltan Capturas",
+                "Complete la captura frontal antes de confirmar la sesion.",
+            )
+            return
+        self._calibrar_montaje_frontal()
+        self._datos_sesion = {
+            "fotos": dict(self._fotos),
+            "fotos_con_marcas": self._construir_fotos_con_marcas(),
+            "metadata": self._construir_metadata_fotometria(),
+            "comentario": str(self.edit_comentario.text().strip()),
+        }
+        self.accept()
+
+    def obtener_datos_sesion(self) -> Dict[str, Any]:
+        """Retorna fotos, metadata_fotometria y el comentario de la sesion."""
+        return dict(self._datos_sesion) if self._datos_sesion else {}
 
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:
         self._timer.stop()
@@ -1660,6 +4114,8 @@ class WebcamPhotometryManager(QtCore.QObject):
         self.camera_index: int = int(camera_index)
         self.calibracion_inicial_data: Optional[Dict[str, Any]] = None
         self.reference_images: Dict[str, np.ndarray] = {}
+        # Montaje del Asistente Lineal Simple de Fotometria de la sesion activa
+        self.fotometria_sesion: Optional[Dict[str, Any]] = None
 
         self.agent = AntigravityAgent(refine_landmarks=True)
         self.capture_thread: Optional[WebcamCaptureThread] = None
@@ -1709,7 +4165,19 @@ class WebcamPhotometryManager(QtCore.QObject):
                 break
             time.sleep(0.03)
 
-        return bool(self.capture_thread and self.capture_thread.is_camera_open)
+        hilo = self.capture_thread
+        if hilo is None or not hilo.is_camera_open:
+            sys.stderr.write(
+                f"[FotometriaWebcam] Camara indice {self.camera_index} no se pudo abrir: "
+                "el dispositivo no existe o esta ocupado por otro programa\n"
+            )
+            return False
+        if not self._esperar_senal_camara(0.2):
+            sys.stderr.write(
+                f"[FotometriaWebcam] Camara indice {self.camera_index} abierta pero sin "
+                "fotogramas: revise privacidad o driver V4L2\n"
+            )
+        return True
 
     def stop_worker(self) -> None:
         """Detiene de forma segura el hilo de captura de cámara web."""
@@ -1719,6 +4187,44 @@ class WebcamPhotometryManager(QtCore.QObject):
             except Exception as exc:
                 sys.stderr.write(f"[FotometriaWebcam] Aviso al detener worker: {exc}\n")
             self.capture_thread = None
+
+    def _esperar_senal_camara(self, segundos: float) -> bool:
+        """Espera hasta que el hilo de captura entregue un cuadro real."""
+        hilo = self.capture_thread
+        if hilo is None:
+            return False
+        limite = time.perf_counter() + max(float(segundos), 0.0)
+        while time.perf_counter() < limite:
+            if hilo.is_camera_open:
+                frame, _ = hilo.get_latest_frame()
+                if frame is not None:
+                    return True
+            if not hilo.isRunning():
+                return False
+            time.sleep(0.05)
+        return False
+
+    def _asegurar_camara_disponible(self, parent_widget: Optional[QtWidgets.QWidget]) -> bool:
+        """Verifica senal de camara, prueba indices alternativos y avisua si no hay."""
+        if self._esperar_senal_camara(2.5):
+            return True
+        for indice in range(0, 4):
+            if indice == self.camera_index:
+                continue
+            self.start_worker(indice)
+            if self._esperar_senal_camara(1.2):
+                return True
+        self.stop_worker()
+        QtWidgets.QMessageBox.warning(
+            parent_widget,
+            "Camara No Disponible",
+            "No hay senal de ninguna camara web.\n\n"
+            "Revise:\n"
+            " - La tecla de privacidad o la tapa fisica de la camara\n"
+            " - Que otro programa no la este usando\n"
+            " - Reconectar la camara externa o reiniciar el equipo",
+        )
+        return False
 
     def open_alignment_dialog(
         self,
@@ -1733,6 +4239,8 @@ class WebcamPhotometryManager(QtCore.QObject):
         Retorna True si el usuario confirmó la calibración para la sesión.
         """
         self.start_worker(self.camera_index)
+        if not self._asegurar_camara_disponible(parent_widget):
+            return False
 
         dialog = InitialAlignmentDialog(
             capture_thread=self.capture_thread,
@@ -1752,6 +4260,135 @@ class WebcamPhotometryManager(QtCore.QObject):
             self.is_enabled = True
             return True
         return False
+
+    def listar_sesiones_fotometria_previas(self) -> List[Dict[str, Any]]:
+        """
+        Escanea base_de_datos_electrodos y retorna las mediciones previas guardadas
+        con metadata_fotometria.json, de la mas reciente a la mas antigua.
+        """
+        return listar_sesiones_fotometria_previas()
+
+    def open_asistente_lineal(
+        self,
+        parent_widget: Optional[QtWidgets.QWidget] = None,
+        nombres_musculos: Optional[List[str]] = None,
+        active_channel_indices: Optional[List[int]] = None,
+        sujeto: str = "",
+        prueba: str = "",
+    ) -> bool:
+        """
+        Abre el Asistente Lineal Simple de Fotometria: guia foto a foto de
+        colocacion de electrodos con guia AR de repeticion en vivo.
+
+        Retorna True solo si el usuario confirmo el montaje. Si omite o cancela
+        conscientemente, retorna False sin interrumpir el flujo del DAQ.
+        """
+        self.start_worker(self.camera_index)
+        if not self._asegurar_camara_disponible(parent_widget):
+            return False
+        self.fotometria_sesion = None
+
+        dialog = AsistenteLinealFotometriaDialog(
+            capture_thread=self.capture_thread,
+            agent=self.agent,
+            parent=parent_widget,
+            nombres_musculos=nombres_musculos,
+            active_channel_indices=active_channel_indices,
+            sujeto=sujeto,
+            prueba=prueba,
+            sesiones_previas=self.listar_sesiones_fotometria_previas(),
+        )
+        resultado = dialog.exec()
+        if resultado == QtWidgets.QDialog.Accepted:
+            self.fotometria_sesion = dialog.obtener_datos_sesion()
+            self.is_enabled = True
+            return True
+        return False
+
+    def guardar_fotometria_inmediata(
+        self, sujeto: str, prueba: str, es_continua: bool = False
+    ) -> Optional[str]:
+        """
+        Persiste de inmediato el montaje confirmado del asistente lineal en la
+        carpeta activa de la sesion, replicando el esquema de nombres del DAQ:
+          - Autograbado: base_de_datos_electrodos/fecha/prueba_sujeto
+          - Secuencia Continua: base_de_datos_electrodos/fecha/SecuenciaContinua_prueba_sujeto
+
+        Retorna la carpeta de sesion o None si no hay montaje pendiente.
+        """
+        if not self.fotometria_sesion:
+            return None
+        fecha = datetime.now().strftime("%Y-%m-%d")
+        nombre_carpeta = (
+            f"SecuenciaContinua_{prueba}_{sujeto}" if es_continua else f"{prueba}_{sujeto}"
+        )
+        carpeta_sesion = os.path.join(
+            resolver_directorio_proyecto(),
+            "base_de_datos_electrodos",
+            fecha,
+            nombre_carpeta,
+        )
+        if self.guardar_fotometria_en_carpeta(carpeta_sesion):
+            return carpeta_sesion
+        return None
+
+    def guardar_fotometria_en_carpeta(self, output_dir: str) -> bool:
+        """
+        Escribe el montaje del asistente lineal dentro de una carpeta de medicion:
+          - fotos_montaje/01_frontal.png
+          - fotos_montaje/02_perfil_izquierdo.png
+          - fotos_montaje/03_perfil_derecho.png
+          - metadata_fotometria.json
+
+        Retorna True si existia montaje pendiente y se persistio sin errores.
+        """
+        datos = self.fotometria_sesion
+        if not datos:
+            return False
+        fotos = datos.get("fotos", {}) or {}
+        fotos_con_marcas = datos.get("fotos_con_marcas", {}) or {}
+        metadata = datos.get("metadata", {}) or {}
+        mapeo_fotos = {
+            "frontal": NOMBRE_FOTO_FRONTAL,
+            "perfil_izquierdo": NOMBRE_FOTO_PERFIL_IZQUIERDO,
+            "perfil_derecho": NOMBRE_FOTO_PERFIL_DERECHO,
+        }
+        try:
+            dir_montaje = os.path.join(str(output_dir), "fotos_montaje")
+            os.makedirs(dir_montaje, exist_ok=True)
+            escritas: List[str] = []
+            marcas_escritas: List[str] = []
+            for clave, nombre_archivo in mapeo_fotos.items():
+                imagen = fotos.get(clave)
+                if imagen is None or imagen.size == 0:
+                    continue
+                destino = os.path.join(dir_montaje, nombre_archivo)
+                if not os.path.exists(destino):
+                    cv2.imwrite(destino, imagen)
+                escritas.append(nombre_archivo)
+                imagen_marcas = fotos_con_marcas.get(clave)
+                if imagen_marcas is None or imagen_marcas.size == 0:
+                    continue
+                base, ext = os.path.splitext(nombre_archivo)
+                nombre_marcas = f"{base}_marcas{ext}"
+                destino_marcas = os.path.join(dir_montaje, nombre_marcas)
+                if not os.path.exists(destino_marcas):
+                    cv2.imwrite(destino_marcas, imagen_marcas)
+                marcas_escritas.append(nombre_marcas)
+            metadata.setdefault("fotos_montaje", escritas)
+            metadata.setdefault("fotos_montaje_marcas", marcas_escritas)
+            metadata.setdefault(
+                "comentario_sesion", str(datos.get("comentario", "") or "")
+            )
+            ruta_json = os.path.join(str(output_dir), NOMBRE_METADATA_FOTOMETRIA)
+            with open(ruta_json, "w", encoding="utf-8") as handle:
+                json.dump(metadata, handle, indent=2, ensure_ascii=False)
+            return True
+        except Exception as exc:
+            sys.stderr.write(
+                f"[FotometriaWebcam] Error al escribir metadata_fotometria: {exc}\n"
+            )
+            return False
 
     def start_take_session(
         self,
@@ -1893,6 +4530,27 @@ class WebcamPhotometryManager(QtCore.QObject):
             capturas_dir = os.path.join(fotometria_dir, "capturas_toma")
             os.makedirs(capturas_dir, exist_ok=True)
 
+            # 0. Persistir el montaje del Asistente Lineal Simple de Fotometria
+            #    en la carpeta activa de la medicion: fotos_montaje/ + metadata_fotometria.json
+            archivo_metadata_fotometria: Optional[str] = None
+            fotos_montaje_escritas: List[str] = []
+            if self.fotometria_sesion is not None:
+                if self.guardar_fotometria_en_carpeta(output_dir):
+                    archivo_metadata_fotometria = NOMBRE_METADATA_FOTOMETRIA
+                    dir_montaje_sesion = os.path.join(str(output_dir), "fotos_montaje")
+                    for nombre_foto in (
+                        NOMBRE_FOTO_FRONTAL,
+                        NOMBRE_FOTO_PERFIL_IZQUIERDO,
+                        NOMBRE_FOTO_PERFIL_DERECHO,
+                    ):
+                        if os.path.isfile(os.path.join(dir_montaje_sesion, nombre_foto)):
+                            fotos_montaje_escritas.append(nombre_foto)
+                else:
+                    sys.stderr.write(
+                        "[FotometriaWebcam] Aviso: no se pudo persistir el montaje "
+                        "del asistente lineal en la medicion\n"
+                    )
+
             # 1. Asegurar generación y guardado de imágenes de referencia pre-sesión:
             #    ref_frontal_cruda.jpg, ref_frontal_triangulada.png, ref_perfil_45.jpg, ref_closeup_labios.jpg
             calibracion_data = (
@@ -1926,33 +4584,58 @@ class WebcamPhotometryManager(QtCore.QObject):
                         crop_lips = InitialAlignmentDialog._crop_closeup_labios(frame_base, fids_base)
                         self.reference_images["closeup_labios"] = crop_lips
 
-                    if "perfil_45" not in self.reference_images:
+                    if "perfil_izquierdo" not in self.reference_images and "perfil_45" not in self.reference_images:
                         for snap in snapshots:
                             fids_snap = self.agent.extraer_malla_facial_3d(snap[0])
                             if fids_snap is not None:
                                 pose_snap = self.agent.calcular_pose_y_biometria_facial(fids_snap, snap[0].shape[:2])
-                                if 25.0 <= abs(pose_snap.get("yaw_deg", 0.0)) <= 65.0:
+                                if 25.0 <= pose_snap.get("yaw_deg", 0.0) <= 65.0:
                                     vis_p = snap[0].copy()
-                                    cv2.rectangle(vis_p, (10, 10), (430, 62), (0, 0, 0), -1)
-                                    cv2.rectangle(vis_p, (10, 10), (430, 62), (0, 255, 204), 1)
+                                    cv2.rectangle(vis_p, (10, 10), (450, 62), (0, 0, 0), -1)
+                                    cv2.rectangle(vis_p, (10, 10), (450, 62), (0, 255, 204), 1)
                                     cv2.putText(
                                         vis_p,
-                                        f"Perfil Extraido de Toma | Yaw: {pose_snap['yaw_deg']:+.1f} deg",
+                                        f"Perfil Izq Extraido de Toma - Yaw: {pose_snap['yaw_deg']:+.1f} deg",
                                         (20, 40),
                                         cv2.FONT_HERSHEY_SIMPLEX,
-                                        0.50,
+                                        0.48,
                                         (0, 255, 204),
                                         1,
                                         cv2.LINE_AA,
                                     )
+                                    self.reference_images["perfil_izquierdo"] = vis_p
                                     self.reference_images["perfil_45"] = vis_p
+                                    break
+
+                    if "perfil_derecho" not in self.reference_images:
+                        for snap in snapshots:
+                            fids_snap = self.agent.extraer_malla_facial_3d(snap[0])
+                            if fids_snap is not None:
+                                pose_snap = self.agent.calcular_pose_y_biometria_facial(fids_snap, snap[0].shape[:2])
+                                if -65.0 <= pose_snap.get("yaw_deg", 0.0) <= -25.0:
+                                    vis_p = snap[0].copy()
+                                    cv2.rectangle(vis_p, (10, 10), (450, 62), (0, 0, 0), -1)
+                                    cv2.rectangle(vis_p, (10, 10), (450, 62), (0, 255, 204), 1)
+                                    cv2.putText(
+                                        vis_p,
+                                        f"Perfil Der Extraido de Toma - Yaw: {pose_snap['yaw_deg']:+.1f} deg",
+                                        (20, 40),
+                                        cv2.FONT_HERSHEY_SIMPLEX,
+                                        0.48,
+                                        (0, 255, 204),
+                                        1,
+                                        cv2.LINE_AA,
+                                    )
+                                    self.reference_images["perfil_derecho"] = vis_p
                                     break
 
             archivos_referencia: Dict[str, str] = {}
             mapping_nombres_exactos = {
                 "frontal_cruda": "ref_frontal_cruda.jpg",
                 "frontal_triangulada": "ref_frontal_triangulada.png",
-                "perfil_45": "ref_perfil_45.jpg",
+                "perfil_izquierdo": "ref_perfil_izquierdo.jpg",
+                "perfil_derecho": "ref_perfil_derecho.jpg",
+                "perfil_45": "ref_perfil_izquierdo.jpg",
                 "closeup_labios": "ref_closeup_labios.jpg",
             }
 
@@ -2087,7 +4770,9 @@ class WebcamPhotometryManager(QtCore.QObject):
                             "pose_y_biometria": pose_bio,
                         })
 
+                    t_seg = round(float(t_daq_s), 6) if t_daq_s is not None else 0.0
                     telemetria_rows.append({
+                        "Tiempo (s)": t_seg,
                         "idx": idx,
                         "timestamp_iso": ts_iso,
                         "t_daq_s": t_daq_s,
@@ -2121,6 +4806,7 @@ class WebcamPhotometryManager(QtCore.QObject):
             # 5. Escribir fotometria_telemetria.csv
             csv_path = os.path.join(fotometria_dir, "fotometria_telemetria.csv")
             csv_fields = [
+                "Tiempo (s)",
                 "idx",
                 "timestamp_iso",
                 "t_daq_s",
@@ -2194,6 +4880,8 @@ class WebcamPhotometryManager(QtCore.QObject):
                 "archivo_telemetria_csv": os.path.join("fotometria", "fotometria_telemetria.csv"),
                 "archivo_landmarks_json": os.path.join("fotometria", "fotometria_landmarks.json"),
                 "archivo_video_toma": archivo_video_rel,
+                "archivo_metadata_fotometria": archivo_metadata_fotometria,
+                "fotos_montaje": fotos_montaje_escritas,
                 "resumen_estadistico_toma": resumen_pose,
                 "calibracion_inicial_resumen": {
                     "distancia_interpupilar_3d": (calibracion_data or {}).get("distancia_interpupilar_3d"),

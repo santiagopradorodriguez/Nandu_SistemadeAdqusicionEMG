@@ -164,11 +164,82 @@
              3) CH 2 (Orbicularis Oris): Borde peribucal.
              4) CH 3 (Micrófono): Sincronismo acústico. Tierra en clavícula.
            - **Exploraciones Previas (Exp 1 y Exp 2):** Barrido inicial de posiciones de masetero hasta hallar separación (Exp 1 monocanal 2000 Hz) y prueba comparativa previa de Anterior Belly vs Orbicularis (Exp 2 bicanal 2000 Hz, parches recortados a la mitad de $24\text{ mm}$).
-           - **Reportes Oficiales Compilados:** Generados y compilados `Reporte_EMG_2026-10-23_Exp1_Masetero_Monocanal.pdf` (38 págs), `Reporte_EMG_2026-10-23_Exp2_Belly_Orbi_x25.pdf` (33 págs) y `Reporte_EMG_2026-10-23_Exp3_Triada_Masetero_x25.pdf` (54 págs), documentados en `registro_experimento_2026_10_23.md`.
+           - **Reportes Oficiales Compilados:** Generados y compilados `Reporte_EMG_2026-10-23_Exp1_Masetero_Monocanal.pdf` (38 págs, PCA 2D 62.51%, PCA 3D 58.90%), `Reporte_EMG_2026-10-23_Exp2_Belly_Orbi_x25.pdf` (33 págs, PCA 2D/3D 50.00%) y `Reporte_EMG_2026-10-23_Exp3_Triada_Masetero_x25.pdf` (52 págs, PCA 2D 50.70%, PCA 3D 53.37%), documentados en `registro_experimento_2026_10_23.md`. Corregida la escala de fotografías de montaje (`height=5.2cm,keepaspectratio` y salto de página limpio en `report_engine.py`) para evitar corte de imágenes en la parte inferior.
+
+       21. **Hito 21 - Integración de PCA en Reporte 2026-09-29 y Consolidación de Configuraciones 1 y 2 del 2026-09-23 [COMPLETADO]:**
+           - **Adición de PCA a `Reporte_EMG_2026-09-29.pdf` (Candela, `orbicularis + modiolo`):** Ejecutado Grid Search 2D/3D en `analisis_pca_generado_2026_09_29/` (PCA 3D: **71.32%**, /a/ 87.0%, /e/ 84.0%, /i/ 79.2%, /o/ 44.0%, /u/ 62.5%; PCA 2D: **67.67%**) e insertada la sección de PCA en `Reporte_EMG_2026-09-29.tex` sin eliminar notas ni fotos originales.
+           - **Configuración 1 del 2026-09-23 (`Reporte_EMG_2026-09-23_Config1_Masetero_Orbiculares.pdf`, Serie S1 a S4):** Medición de la tarde (carpeta `2026-09-21`, 3 canales activos: `Masetero + Orbi vertical + Orbi Horizontal`). Generado con foto del montaje de la presentación (`foto_montaje_2026_09_21_s1_s4.png`), alcanzando **84.48% en PCA 3D** (/a/ 93.3%, /e/ 93.3%, /i/ 100.0%, /o/ 64.3%, /u/ 71.4%) y **79.14% en PCA 2D**.
+           - **Configuración 2 del 2026-09-23 (`Reporte_EMG_2026-09-23_Config2_Masetero_Orbi.pdf`, Pruebat1 y Prueba2 a 5):** Medición bicanal previa de la misma tarde (carpeta `2026-09-23`, 2 canales activos: `Masetero + Orbi`, sin foto). Alcanza **82.70% en PCA 3D** (/a/ 100.0%, /e/ 100.0%, /i/ 87.5%, /o/ 76.0%, /u/ 50.0%), **79.48% en PCA 2D** y **77.14% en PCA 3D monocanal de Masetero**.
+           - **Diagnóstico Anatómico Comparativo (09-23 C1 y C2 / 09-29 vs 10-23 Exp 3):** En 09-29 el par bipolar de `Modiolo` se orientó lateralmente hacia la mejilla con electrodos recortados sin contacto (`71.32%`), mientras que en 10-23 Exp 3 el segundo electrodo de `Modiolo` bajó hacia el labio inferior/mentón encintado junto a `Orbicularis` (colinealidad $r = 0.903$) y el electrodo inferior de `Masetero` se desplazó en diagonal hacia adelante unido por la misma tira de cinta que `Orbicularis`, degradando la ortogonalidad a `53.37%`.
+           - **Paquetes Listos para Google Drive:** Estructuradas 6 carpetas individuales en `reportes_experimentos/para_subir_al_drive/` conteniendo cada una su reporte PDF oficial, fotos de montaje, registros de autograbado y subcarpeta `mediciones/` con enlaces duros para subida limpia sin duplicación de almacenamiento.
+
+       22. **Hito 22 - Reorganización Integral del Repositorio de Campañas de Candela para Drive [COMPLETADO]:**
+           - **Descompresión y Estructuración (3.2 GB):** Descomprimido el conjunto multi-parte de Google Drive (`Candela-*.zip`) y estructuradas 11 carpetas cronológicas formales en `Candela_Organizado_Drive/` abarcando desde septiembre hasta octubre de 2026.
+           - **Nomenclatura Canónica:** Normalizadas todas las tomas de medición al estándar `<Vocal>_<Prueba>_Candela` (reemplazando `_Sujeto1` y `_cande`, capitalizando vocales y nombres de prueba, y actualizando `metadata.json` con `"subject": "Candela"`).
+           - **Filtrado Estricto de Registro Fotográfico (`fotos_montaje/`):** Depuración y unificación de carpetas de imágenes en las 11 campañas; eliminados gráficos de tomas, curvas y espectrogramas, conservando exclusivamente fotografías reales de electrodos sobre el sujeto, marcas anatómicas y material de laboratorio.
+           - **Métricas Completas de PCA:** Recuperadas e integradas todas las métricas de exactitud multiclase no supervisada (PCA 2D y 3D con algoritmo húngaro) para todas las campañas: 09-01 (81.88%), 09-15 (78.02%), 09-18 (73.51%), 09-23 C1 (84.48%), 09-23 C2 (82.70%), 09-25 (84.64%), 09-29 (71.32%), 10-20 (73.46%), 10-23 E1 (58.90%), E2 (50.00%) y E3 (53.37%).
+           - **Compilación de Catálogo Oficial en PDF:** Generado y compilado `README_CATALOGO_CAMPANAS_CANDELA.pdf` y `README.pdf` en `Candela_Organizado_Drive/` (2 páginas, tipografía LaTeX profesional, tabla completa de campañas y evolución biomecánica de tríadas).
+           - **Depuración de Temporales:** Eliminado `candela_staging/` tras verificar la integridad de los enlaces y archivos finales en `Candela_Organizado_Drive/`.
 
 ---
 
-## 6. Infraestructura de Memoria y Tokens
+        23. **Hito 23 - Módulo de Separabilidad Vocálica Multivariada y Diagnóstico Anatómico en Vivo [COMPLETADO]:**
+            - **Diálogo y Botón de Lanzamiento:** Implementada la clase `TestSeparabilidadVocalesDialog` y su botón `btn_test_vocales` ("TEST VOCALES") en la barra de transporte de `autoforge_daq_experimental.py`.
+            - **Protocolo Multiclase y Captura Rápida:** Evaluación conjunta de las 5 vocales (/A/, /E/, /I/, /O/, /U/) con código de color oficial (#E63946, #1F77B4, #2CA02C, #9D4EDD, #E7A61A), repeticiones configurables (2 a 50, default 12), selector de secuencia (Alternada Anti-fatiga / Bloques) y botones de captura directa `+ /A/`, `+ /E/`, `+ /I/`, `+ /O/`, `+ /U/`.
+            - **Proyección Latente 2D y 3D:** Selector con conmutación dinámica entre PyQtGraph 2D (PCA y LDA) y canvas interactivo Matplotlib 3D con rotación 360° por mouse y centroides en diamante.
+            - **Matrices Multivariadas 5x5:**
+              1) Ángulos de separación direccional $\theta(v_1, v_2)$ en grados entre centroides.
+              2) Distancia multivariada de Fisher / Mahalanobis $J(v_1, v_2)$ con covarianza agrupada $\boldsymbol{\Sigma}_{\text{pool}}$.
+              3) Matriz de confusión 5x5 en conteos y porcentajes normalizados con validación cruzada Leave-One-Out (LOO-LDA / Mahalanobis).
+              4) Matriz de correlación cruzada a lag cero $|r_{ij}|$ en banda 20–500 Hz con filtro Butterworth de 4to orden.
+            - **Diagnóstico Anatómico y Semáforo de 3 Estados:**
+              1) Verde (OPTIMO): $\theta_{\min} \ge 12^\circ$, solapamiento $< 25\%$, $|r_{\max}| < 0.60$.
+              2) Amarillo (ALERTA DE SOLAPAMIENTO): discrimina grupo anterior /A/-/E/-/I/ (ajuste Zygomaticus/Risorio vs Digástrico) de grupo posterior /O/-/U/ (ajuste Orbicularis/Mentoniano vs Digástrico).
+              3) Rojo (CROSSTALK ALTO): $|r_{\max}| \ge 0.60$ (alerta de puente salino o conducción de volumen).
+            - **Modo Simulación Sintética:** 3 escenarios evaluables sin hardware DAQ (Óptimo, Solapamiento O-U y A-E, Crosstalk Alto).
+            - **Persistencia:** Botón para anexar diagnóstico a `txt_notas_live` y guardar el diccionario completo en `last_separability_metrics`, integrado automáticamente en `metadata.json` ("diagnostico_separabilidad_vocales").
+
+---
+
+        24. **Hito 24 - Integración de Core DAQ, Canales Físicos Discontinuos y Rutinas CVM [COMPLETADO]:**
+            - **Mapeo de Canales Físicos Discontinuos:** Implementado `active_channel_indices`, `nombres_musculos_hw` y `factores_calibracion_hw` en `RealTimePlotter`, permitiendo rutear cualquier combinación de canales físicos (ej. ai0, ai2, ai3) con ganancias individuales y visualización `ai{hw_idx} - {musculo}` con porcentaje de dominancia muscular `% Dom`.
+            - **Protección Dimensional en Pre-Roll:** `PreRollRecordingBuffer` adaptado con detección de cambios de dimensión de canales y limpieza automática previa a concatenación para prevenir `ValueError`.
+            - **Desacople de Micrófono y DSP:** Filtro pasabanda desacoplado mediante `_is_mic_channel(ch)`, preservando la señal acústica pura sin distorsión espectral.
+            - **Protocolo CVM Vocálico por Metrónomo:** Triángulo vocálico /A/, /I/, /U/ en 9 tomas (18 pulsos sincronizados por `on_metro_beat`: impares preparación, pares contracción) con cálculo multiparamétrico (pico, p95, rms, energía, auc) y exclusión estricta del micrófono en los supremos globales EMG.
+            - **Trazabilidad de Metadatos y Ruido Final:** Guardado atómico de `metadata.json` en raíz de carpeta de sesión y en subcarpetas `canal_*/`, con retroactualización de `ruido_basal["final"]` en todas las carpetas registradas durante la sesión.
+            - **Configuración Dinámica de Músculos:** Reemplazado el popup de inicio bloqueante por `MuscleSelectionDialog` en caliente accesible desde el panel de hardware, basado en `STANDARD_MUSCLES_LIST` de `config_manager.py`.
+
+---
+
+## 5. Espacios Frecuenciales, Reposo Basal y Sílabas CV (Hito 25)
+- **Banco Mel Muscular en Señal Cruda AC (2026-10-25):**
+  - Parametrización espectral sobre señal cruda alterna (20–450 Hz) con $f_{\text{pivote}} = 150\text{ Hz}$, $M=16$ filtros, $K=8$ cepstrales por canal (48D).
+  - Prohibido aplicar sobre envolventes (colapso DC) y prohibido `StandardScaler` (destruye la norma del supremo intercanal).
+  - Equilibrado de inercia por bloques temporal/espectral: $\gamma = \sqrt{\sigma^2_T / \sigma^2_F}$.
+- **Separación Analítica /o/ vs /u/ por Reposo Basal:**
+  - Sustracción de componente cuasi-estática previa al pulso y reescalado por P95 (`acondicionar_reposo_impedancia`).
+  - En sesión histórica de Lucas (492 repeticiones), la separación LDA binaria de /o/ vs /u/ pasa de 53.8% al **80.5%**, y la exactitud global multiclase 5 vocales alcanza **81.9% (CV-5 Real)**.
+- **Decodificación de 9 Sílabas CV en Variedades No Lineales:**
+  - 57 repeticiones (/ba/, /ja/, /ka/, /la/, /ma/, /pa/, /ra/, /sa/, /ta/) en sesión subóptima (sin electrodo de piso de boca).
+  - Separabilidad por punto de articulación (Bilabial vs Coronal vs Velar): **96.5%**.
+  - **PCA 5D:** 73.7% LDA con envolvente, 80.7% con MFCC Mel AC.
+  - **Isomap 4D:** 66.7% con envolvente, **78.9% (CV 61.4%) con MFCC Mel AC** ($k=18$). Despega el par crítico /pa/ (80%) vs /ma/ (70%).
+  - **Isomap 5D:** **86.0% (CV 68.4%) con MFCC Mel AC**. /ba/, /ka/, /ra/ al 100%; /ma/, /ta/ al 90%.
+- **Capítulo Oficial en Libro de Experimentos IA:**
+  - Anexado `capitulo_frecuencia_silabas_isomap.tex` a `libro_de_experimentos_ia.tex` (188 páginas compiladas con éxito).
+
+---
+
+## 6. Atlas Oficial de Activación Muscular sEMG (Hito 139)
+- **Atlas Completo de Candela (2026-10-25):**
+  - Compilación integral cronológica de las 11 campañas (`Candela_Organizado_Drive/`) en un documento vectorial unificado de 12 láminas (`atlas_oficial_candela_multicampana.pdf`) y PNGs de alta resolución (`diapositiva_00_indice_cronologico.png` a `diapositiva_11_2026-10-23_Exp3.png`).
+  - Total de fonaciones segmentadas: **2047 pulsos válidos** evaluados bajo normalización estricta por supremo tricanal de pulso individual y ventana $[-600, +800]\,\text{ms}$.
+  - Rendimiento LDA en espacio PCA 3D: oscila entre $46.7\%$ y $82.7\%$ según acoplamiento y configuración muscular.
+  - Regla de formato estricto: Lámina inicial de índice general, fotos fiduciarias 3:4 nativas sin bandas negras, tablas biométricas con $D_{\text{pred}} \pm 3.5\,\text{mm}$ entre centros y referencias faciales estimadas, y vistas PCA 3D 100% cuadradas con etiquetas al doble de tamaño.
+
+---
+
+## 7. Infraestructura de Memoria y Tokens
 - **Memoria de Trabajo:** `.agents/MEMORIA_ACTIVA.md` (~50 líneas, ~600 tokens al arrancar).
 - **Historial Completo:** `.agents/historial/bitacora_completa_hitos_001_al_138.md` indexado por `.agents/INDICE_HITOS.md`.
 - **Reglas del Proyecto:** `.agents/AGENTS.md` compactado a 5.3 KB (ahorro del 81.4% de tokens base por turno).

@@ -37,6 +37,9 @@ except Exception:
     mp_extra_datas = []
 cv2_datas, cv2_binaries, cv2_hiddenimports = _safe_collect('cv2')
 torch_datas, torch_binaries, torch_hiddenimports = _safe_collect('torch')
+mne_datas, mne_binaries, mne_hiddenimports = _safe_collect('mne')
+llvmlite_datas, llvmlite_binaries, llvmlite_hiddenimports = _safe_collect('llvmlite')
+sklearn_datas, sklearn_binaries, sklearn_hiddenimports = _safe_collect('sklearn')
 nitypes_metadata = _safe_metadata('nitypes')
 
 block_cipher = None
@@ -131,35 +134,45 @@ hidden_imports = [
     'matplotlib.backends.backend_qtagg',
     'nidaqmx', 'sounddevice', 'soundfile', 'pyqtgraph', 'pandas', 'PIL',
     'PySide6', 'qdarkstyle', 'utils', 'acquisition', 'analysis', 'core', 'views',
-    'deep_learning', 'tkinter', 'numba', 'tqdm', 'decouple', 'requests',
+    'deep_learning', 'tkinter', 'numba', 'llvmlite', 'tqdm', 'decouple', 'requests',
     'tzlocal', 'hightime', 'sklearn', 'sklearn.utils._typedefs',
     'sklearn.neighbors._quad_tree',
-    'sklearn.tree._utils', 'pynndescent', 'cv2', 'mediapipe', 'torch',
+    'sklearn.tree._utils', 'umap', 'pynndescent', 'seaborn', 'mne', 'cv2', 'mediapipe', 'torch',
     'EMG_desarrollo.acquisition.calibracion_espacial_electrodos',
     'EMG_desarrollo.acquisition.fotometria_webcam',
     'calibracion_espacial_electrodos',
     'fotometria_webcam',
-] + additional_modules + nidaqmx_hiddenimports + sd_hiddenimports + sf_hiddenimports + umap_hiddenimports + sns_hiddenimports + tly_hiddenimports + numba_hiddenimports + pynndescent_hiddenimports + tqdm_hiddenimports + mp_hiddenimports + cv2_hiddenimports + torch_hiddenimports
+] + additional_modules + nidaqmx_hiddenimports + sd_hiddenimports + sf_hiddenimports + umap_hiddenimports + sns_hiddenimports + tly_hiddenimports + numba_hiddenimports + pynndescent_hiddenimports + tqdm_hiddenimports + mp_hiddenimports + cv2_hiddenimports + torch_hiddenimports + mne_hiddenimports + llvmlite_hiddenimports + sklearn_hiddenimports
 
 datas = [
-        ('/home/santiago/Documentos/codigos/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/icono.ico', '.'),
-        ('/home/santiago/Documentos/codigos/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/config_general.json', '.'),
-        ('/home/santiago/Documentos/codigos/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/metronome_config.json', '.'),
-        ('/home/santiago/Documentos/codigos/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/palabras.txt', '.'),
-        ('/home/santiago/Documentos/codigos/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/palabras.txt', 'acquisition'),
-        ('/home/santiago/Documentos/codigos/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/archivos_md', 'archivos_md'),
-        ('/home/santiago/Documentos/codigos/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/DataConfig', 'DataConfig'),
-        ('/home/santiago/Documentos/codigos/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/DataConfig/modelos_vision', 'DataConfig/modelos_vision'),
-        ('/home/santiago/Documentos/codigos/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/DataConfig/modelos_vision/face_landmarker.task', 'DataConfig/modelos_vision'),
-        ('/home/santiago/Documentos/codigos/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/acquisition/calibracion_espacial_electrodos.py', 'acquisition'),
-        ('/home/santiago/Documentos/codigos/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/acquisition/fotometria_webcam.py', 'acquisition'),
-        ('/home/santiago/Documentos/codigos/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/fotos', 'fotos'),
-        ('/home/santiago/Documentos/codigos/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/modelos', 'modelos'),
-        ('/home/santiago/Documentos/codigos/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/resultados', 'resultados'),
-        ('/home/santiago/Documentos/codigos/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/resultados', 'EMG_desarrollo/resultados')
-] + nidaqmx_datas + sd_datas + sf_datas + umap_datas + sns_datas + tly_datas + numba_datas + pynndescent_datas + tqdm_datas + mp_datas + mp_extra_datas + cv2_datas + torch_datas + nitypes_metadata
+        ('icono.ico', '.'),
+        ('config_general.json', '.'),
+        ('metronome_config.json', '.'),
+        ('palabras.txt', '.'),
+        ('palabras.txt', 'acquisition'),
+        ('archivos_md', 'archivos_md'),
+        ('papers', 'papers'),
+        ('DataConfig', 'DataConfig'),
+        ('DataConfig/modelos_vision', 'DataConfig/modelos_vision'),
+        ('DataConfig/modelos_vision/face_landmarker.task', 'DataConfig/modelos_vision'),
+        ('/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/DataConfig/modelos_vision/face_landmarker.task', 'DataConfig/modelos_vision'),
+        ('acquisition', 'acquisition'),
+        ('analysis', 'analysis'),
+        ('deep_learning', 'deep_learning'),
+        ('acquisition/calibracion_espacial_electrodos.py', 'acquisition'),
+        ('/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/acquisition/fotometria_webcam.py', 'acquisition'),
+        ('/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/acquisition/calibracion_espacial_electrodos.py', 'acquisition'),
+        ('fotos', 'fotos'),
+        ('logo_nandu_lsd.png', '.'),
+        ('logo_nandu_lsd.png', 'gui_app/assets'),
+        ('logo_nandu_lsd.png', 'gui_app'),
+        ('usb-621x-manual.pdf', '.'),
+        ('/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/modelos', 'modelos'),
+        ('resultados', 'resultados'),
+        ('/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/resultados', 'EMG_desarrollo/resultados')
+] + nidaqmx_datas + sd_datas + sf_datas + umap_datas + sns_datas + tly_datas + numba_datas + pynndescent_datas + tqdm_datas + mp_datas + mp_extra_datas + cv2_datas + torch_datas + mne_datas + llvmlite_datas + sklearn_datas + nitypes_metadata
 
-binaries = nidaqmx_binaries + sd_binaries + sf_binaries + umap_binaries + sns_binaries + tly_binaries + numba_binaries + pynndescent_binaries + tqdm_binaries + mp_binaries + cv2_binaries + torch_binaries
+binaries = nidaqmx_binaries + sd_binaries + sf_binaries + umap_binaries + sns_binaries + tly_binaries + numba_binaries + pynndescent_binaries + tqdm_binaries + mp_binaries + cv2_binaries + torch_binaries + mne_binaries + llvmlite_binaries + sklearn_binaries
 
 a_scripts = [
     s for s in [

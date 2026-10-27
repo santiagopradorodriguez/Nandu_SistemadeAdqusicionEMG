@@ -121,6 +121,8 @@ class ElectrodoEspacial:
     vector_norm_dip: Optional[List[float]] = None
     id_par: Optional[int] = None
     centroide_2d_px: Optional[List[float]] = None
+    diametro_gel_mm: float = 10.0
+    distancias_anatomicas_mm: Dict[str, float] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.coordenadas_2d_px and self.centroide_2d_px:
@@ -133,6 +135,10 @@ class ElectrodoEspacial:
         if datos.get("vector_norm_dip") is None:
             datos["vector_norm_dip"] = list(self.vector_3d_relativo_normalizado)
         datos["centroide_2d_px"] = list(self.coordenadas_2d_px)
+        datos["diametro_gel_mm"] = round(float(self.diametro_gel_mm), 2)
+        datos["distancias_anatomicas_mm"] = {
+            k: round(float(v), 2) for k, v in self.distancias_anatomicas_mm.items()
+        }
         return datos
 
 
@@ -152,6 +158,8 @@ class ParDiferencialEspacial:
     distancia_interelectrodo_px: float
     distancia_interelectrodo_mm: Optional[float]
     angulo_orientacion_deg: float
+    diametro_gel_mm: float = 10.0
+    distancia_interelectrodo_nominal_mm: float = 20.0
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -159,6 +167,8 @@ class ParDiferencialEspacial:
             "canal_fisico_ai": self.canal_fisico_ai,
             "etiqueta_canal": self.etiqueta_canal,
             "musculo": self.musculo,
+            "diametro_gel_mm": round(float(self.diametro_gel_mm), 2),
+            "distancia_interelectrodo_nominal_mm": round(float(self.distancia_interelectrodo_nominal_mm), 2),
             "polo_positivo": self.electrodo_positivo.to_dict(),
             "polo_negativo": self.electrodo_negativo.to_dict(),
             "vector_dipolo_3d": [round(float(v), 6) for v in self.vector_dipolo_3d],
@@ -776,6 +786,8 @@ class AntigravityAgent:
         distancia_fija_camara_cm: Optional[float] = None,
         escala_mm_por_px: Optional[float] = None,
         punto_referencia_gnd: Optional[Tuple[float, float]] = None,
+        diametro_gel_mm: float = 10.0,
+        ied_nominal_mm: float = 20.0,
     ) -> Dict[str, Any]:
         """
         Ejecuta la triangulación geométrica completa de los electrodos sEMG.
@@ -839,6 +851,7 @@ class AntigravityAgent:
             ch_num: Optional[int],
             par_id: Optional[int],
             elec_id: int,
+            diam_gel: float = diametro_gel_mm,
         ) -> ElectrodoEspacial:
             distancias_2d = np.hypot(puntos_2d_px[:, 0] - px, puntos_2d_px[:, 1] - py)
             vertice_cercano = int(np.argmin(distancias_2d))
@@ -849,6 +862,40 @@ class AntigravityAgent:
             distancia_3d_absoluta = float(np.linalg.norm(delta_3d))
             distancia_3d_normalizada = float(distancia_3d_absoluta / dist_ip_3d) if dist_ip_3d > 0 else 0.0
             delta_3d_normalizado = (delta_3d / dist_ip_3d).tolist() if dist_ip_3d > 0 else [0.0, 0.0, 0.0]
+
+            # Factores de conversion metrica
+            mm_por_unidad_3d = (float(d_ip_real_cm) * 10.0) / float(dist_ip_3d) if dist_ip_3d > 1e-6 else 1.0
+            mm_por_px = float(escala_mm_por_px) if (escala_mm_por_px is not None and escala_mm_por_px > 0) else (
+                (float(d_ip_real_cm) * 10.0) / float(dist_ip_px) if dist_ip_px > 1e-6 else 1.0
+            )
+
+            # Determinacion de hemicara (izquierda vs derecha) segun la posicion horizontal respecto a la nariz
+            punta_nariz_x = float(fiduciarios["punta_nariz_px"][0])
+            es_hemicara_izq = (px <= punta_nariz_x)
+            idx_comisura = INDICE_COMISURA_IZQ if es_hemicara_izq else INDICE_COMISURA_DER
+            idx_trago = INDICE_TRAGO_OREJA_IZQ if es_hemicara_izq else INDICE_TRAGO_OREJA_DER
+
+            # Calculo de distancias metricas anatomicas en milimetros
+            d_nariz_mm = float(np.linalg.norm(vertice_3d - puntos_3d[INDICE_NARIZ_PUNTA]) * mm_por_unidad_3d)
+            d_menton_mm = float(np.linalg.norm(vertice_3d - puntos_3d[INDICE_MENTON_GNATHION]) * mm_por_unidad_3d)
+            d_comisura_mm = float(np.linalg.norm(vertice_3d - puntos_3d[idx_comisura]) * mm_por_unidad_3d)
+            d_trago_mm = float(np.linalg.norm(vertice_3d - puntos_3d[idx_trago]) * mm_por_unidad_3d)
+
+            # Distancia a GND o lobulo/mastoide ipsilateral estimado
+            if punto_referencia_gnd is not None:
+                d_gnd_px = float(np.hypot(px - punto_referencia_gnd[0], py - punto_referencia_gnd[1]))
+            else:
+                target_lobulo = fiduciarios["oreja_lobulo_izq_px"] if es_hemicara_izq else fiduciarios["oreja_lobulo_der_px"]
+                d_gnd_px = float(np.hypot(px - target_lobulo[0], py - target_lobulo[1]))
+            d_gnd_mm = float(d_gnd_px * mm_por_px)
+
+            dist_anatomicas = {
+                "origen_nariz_mm": round(d_nariz_mm, 2),
+                "menton_gnathion_mm": round(d_menton_mm, 2),
+                "comisura_ipsilateral_mm": round(d_comisura_mm, 2),
+                "trago_oreja_ipsilateral_mm": round(d_trago_mm, 2),
+                "tierra_gnd_mastoide_mm": round(d_gnd_mm, 2),
+            }
 
             return ElectrodoEspacial(
                 id=elec_id,
@@ -866,6 +913,8 @@ class AntigravityAgent:
                 musculo_asignado=musculo,
                 vector_norm_dip=[round(float(v), 6) for v in delta_3d_normalizado],
                 id_par=par_id,
+                diametro_gel_mm=round(float(diam_gel), 2),
+                distancias_anatomicas_mm=dist_anatomicas,
             )
 
         electrodos_objetos: List[ElectrodoEspacial] = []
@@ -904,6 +953,9 @@ class AntigravityAgent:
                 else:
                     musculo_tag = f"Canal {ch_num}"
 
+                par_gel = float(pair_dict.get("diametro_gel_mm", diametro_gel_mm))
+                par_ied_nominal = float(pair_dict.get("ied_nominal_mm", pair_dict.get("distancia_interelectrodo_nominal_mm", ied_nominal_mm)))
+
                 id_pos = len(electrodos_objetos)
                 elec_pos = _asociar_punto_a_malla(
                     px=pos_pt[0],
@@ -914,6 +966,7 @@ class AntigravityAgent:
                     ch_num=ch_num,
                     par_id=k,
                     elec_id=id_pos,
+                    diam_gel=par_gel,
                 )
                 electrodos_objetos.append(elec_pos)
 
@@ -927,6 +980,7 @@ class AntigravityAgent:
                     ch_num=ch_num,
                     par_id=k,
                     elec_id=id_neg,
+                    diam_gel=par_gel,
                 )
                 electrodos_objetos.append(elec_neg)
 
@@ -958,6 +1012,8 @@ class AntigravityAgent:
                     distancia_interelectrodo_px=round(ied_px, 2),
                     distancia_interelectrodo_mm=round(ied_mm, 2) if ied_mm is not None else None,
                     angulo_orientacion_deg=round(ang_deg, 2),
+                    diametro_gel_mm=round(par_gel, 2),
+                    distancia_interelectrodo_nominal_mm=round(par_ied_nominal, 2),
                 )
                 pares_diferenciales_objetos.append(par_obj)
 

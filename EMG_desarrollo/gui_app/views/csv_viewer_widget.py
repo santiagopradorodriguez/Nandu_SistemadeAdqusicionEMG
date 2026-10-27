@@ -212,7 +212,7 @@ class PhotometryGalleryDialog(QDialog):
         self._current_pixmap = None
 
         med_name = os.path.basename(medicion_dir) if medicion_dir else "Medición"
-        self.setWindowTitle(f"📷 Fotometría 3D y Telemetría Facial — {med_name}")
+        self.setWindowTitle(f"Fotometría 3D y Telemetría Facial - {med_name}")
         self.resize(1180, 740)
         self.setStyleSheet(
             "QDialog { background-color: #0d1117; color: #e6edf3; }"
@@ -245,7 +245,7 @@ class PhotometryGalleryDialog(QDialog):
         left_layout = QVBoxLayout(left_widget)
         left_layout.setContentsMargins(0, 0, 0, 0)
 
-        grp_gallery = QGroupBox("🖼️ Capturas de Referencia 3D y Tomas de Sesión")
+        grp_gallery = QGroupBox("Capturas de Referencia 3D y Tomas de Sesión")
         lyt_gallery = QHBoxLayout(grp_gallery)
 
         self.list_images = QListWidget()
@@ -278,8 +278,8 @@ class PhotometryGalleryDialog(QDialog):
         # --- PANEL DERECHO: Tablas de Coordenadas 3D y Telemetría ---
         right_splitter = QSplitter(Qt.Vertical)
 
-        # Tabla 1: Coordenadas 3D de Electrodos (calibracion_espacial.json)
-        grp_elec = QGroupBox("📍 Coordenadas 3D de Electrodos (calibracion_espacial.json)")
+        # Tabla 1: Coordenadas 3D de Electrodos - calibracion_espacial.json
+        grp_elec = QGroupBox("Coordenadas 3D de Electrodos - calibracion_espacial.json")
         lyt_elec = QVBoxLayout(grp_elec)
         self.tbl_electrodos = QTableWidget()
         self.tbl_electrodos.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -288,8 +288,8 @@ class PhotometryGalleryDialog(QDialog):
         lyt_elec.addWidget(self.tbl_electrodos)
         right_splitter.addWidget(grp_elec)
 
-        # Tabla 2: Telemetría Facial (Yaw, Pitch, Roll, Apertura Labial)
-        grp_telem = QGroupBox("📊 Telemetría Facial: Pose 3D (Yaw, Pitch, Roll) y Apertura Labial")
+        # Tabla 2: Telemetría Facial: Pose 3D - Yaw, Pitch, Roll - y Apertura Labial
+        grp_telem = QGroupBox("Telemetría Facial: Pose 3D - Yaw, Pitch, Roll - y Apertura Labial")
         lyt_telem = QVBoxLayout(grp_telem)
         self.tbl_telemetria = QTableWidget()
         self.tbl_telemetria.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -327,18 +327,18 @@ class PhotometryGalleryDialog(QDialog):
 
         added_paths = set()
         priority_files = [
-            ("ref_frontal_triangulada.png", "🎯 Ref. Frontal Triangulada"),
-            ("ref_frontal_triangulada.jpg", "🎯 Ref. Frontal Triangulada"),
-            ("ref_frontal_cruda.jpg", "📷 Ref. Frontal Cruda"),
-            ("ref_frontal_cruda.png", "📷 Ref. Frontal Cruda"),
-            ("ref_perfil_45.jpg", "📐 Ref. Perfil 45°"),
-            ("ref_perfil_45.png", "📐 Ref. Perfil 45°"),
+            ("ref_frontal_triangulada.png", "Ref. Frontal Triangulada"),
+            ("ref_frontal_triangulada.jpg", "Ref. Frontal Triangulada"),
+            ("ref_frontal_cruda.jpg", "Ref. Frontal Cruda"),
+            ("ref_frontal_cruda.png", "Ref. Frontal Cruda"),
+            ("ref_perfil_45.jpg", "Ref. Perfil 45°"),
+            ("ref_perfil_45.png", "Ref. Perfil 45°"),
         ]
 
         for fname, label_prefix in priority_files:
             fpath = os.path.join(self.fotometria_dir, fname)
             if os.path.isfile(fpath) and fpath not in added_paths:
-                item = QListWidgetItem(f"{label_prefix} ({fname})")
+                item = QListWidgetItem(f"{label_prefix} - {fname}")
                 item.setData(Qt.UserRole, fpath)
                 self.list_images.addItem(item)
                 added_paths.add(fpath)
@@ -349,14 +349,13 @@ class PhotometryGalleryDialog(QDialog):
             for fname in sorted(os.listdir(self.fotometria_dir)):
                 fpath = os.path.join(self.fotometria_dir, fname)
                 if os.path.isfile(fpath) and fname.lower().endswith(valid_exts) and fpath not in added_paths:
-                    item = QListWidgetItem(f"🖼️ {fname}")
+                    item = QListWidgetItem(fname)
                     item.setData(Qt.UserRole, fpath)
                     self.list_images.addItem(item)
                     added_paths.add(fpath)
         except Exception:
             pass
 
-        # Capturas dentro de capturas_toma/
         # Capturas dentro de capturas_toma/ o capturas/
         for sub_name in ("capturas_toma", "capturas"):
             capturas_dir = os.path.join(self.fotometria_dir, sub_name)
@@ -365,7 +364,7 @@ class PhotometryGalleryDialog(QDialog):
                     for fname in sorted(os.listdir(capturas_dir)):
                         fpath = os.path.join(capturas_dir, fname)
                         if os.path.isfile(fpath) and fname.lower().endswith(valid_exts) and fpath not in added_paths:
-                            item = QListWidgetItem(f"📸 Toma: {fname}")
+                            item = QListWidgetItem(f"Toma: {fname}")
                             item.setData(Qt.UserRole, fpath)
                             self.list_images.addItem(item)
                             added_paths.add(fpath)
@@ -380,7 +379,7 @@ class PhotometryGalleryDialog(QDialog):
                     for fname in sorted(os.listdir(fotos_dir)):
                         fpath = os.path.join(fotos_dir, fname)
                         if os.path.isfile(fpath) and fname.lower().endswith(valid_exts) and fpath not in added_paths:
-                            item = QListWidgetItem(f"📸 {fname}")
+                            item = QListWidgetItem(fname)
                             item.setData(Qt.UserRole, fpath)
                             self.list_images.addItem(item)
                             added_paths.add(fpath)
@@ -513,11 +512,46 @@ class PhotometryGalleryDialog(QDialog):
 
         # Poblar tabla de electrodos 3D
         headers_el = [
-            "Canal", "Músculo Asignado/Estimado", "Centroide 2D (px)",
-            "Vértice 3D", "Vector 3D Rel. Norm. (X, Y, Z)", "Dist. 3D Norm."
+            "Canal", "Polo", "Músculo", "Centroide 2D - px",
+            "Vértice 3D", "Vector 3D Norm. - X, Y, Z", "Dist. 3D Norm.",
+            "Dist. Interel. - mm", "Diám. Gel - mm", "Dist. Anatómica - mm"
         ]
         self.tbl_electrodos.setColumnCount(len(headers_el))
         self.tbl_electrodos.setHorizontalHeaderLabels(headers_el)
+
+        # Si no hay electrodos directos pero hay pares_diferenciales, expandir polos individuales
+        pares = meta_esp.get("pares_diferenciales", meta_esp.get("pares", []))
+        if not electrodos and isinstance(pares, list) and pares:
+            for par in pares:
+                if isinstance(par, dict):
+                    pos = par.get("polo_positivo")
+                    if isinstance(pos, dict):
+                        pos_copy = dict(pos)
+                        if "distancia_interelectrodo_mm" not in pos_copy and par.get("distancia_interelectrodo_mm") is not None:
+                            pos_copy["distancia_interelectrodo_mm"] = par.get("distancia_interelectrodo_mm")
+                        if "diametro_gel_mm" not in pos_copy and par.get("diametro_gel_mm") is not None:
+                            pos_copy["diametro_gel_mm"] = par.get("diametro_gel_mm")
+                        electrodos.append(pos_copy)
+                    neg = par.get("polo_negativo")
+                    if isinstance(neg, dict):
+                        neg_copy = dict(neg)
+                        if "distancia_interelectrodo_mm" not in neg_copy and par.get("distancia_interelectrodo_mm") is not None:
+                            neg_copy["distancia_interelectrodo_mm"] = par.get("distancia_interelectrodo_mm")
+                        if "diametro_gel_mm" not in neg_copy and par.get("diametro_gel_mm") is not None:
+                            neg_copy["diametro_gel_mm"] = par.get("diametro_gel_mm")
+                        electrodos.append(neg_copy)
+
+        pares_map = {}
+        if isinstance(pares, list):
+            for par in pares:
+                if isinstance(par, dict):
+                    ch_k = str(par.get("canal_fisico_ai", par.get("etiqueta_canal", ""))).strip().lower()
+                    if ch_k:
+                        pares_map[ch_k] = par
+                    p_id = par.get("id")
+                    if p_id is not None:
+                        pares_map[str(p_id)] = par
+
         self.tbl_electrodos.setRowCount(len(electrodos))
 
         for r_idx, el in enumerate(electrodos):
@@ -526,32 +560,44 @@ class PhotometryGalleryDialog(QDialog):
             canal_str = str(el.get("canal", f"CH_{el.get('id', r_idx)}"))
             phys = el.get("canal_fisico_ai")
             if phys and str(phys).lower() != str(canal_str).lower():
-                canal_str = f"{canal_str} ({phys})"
+                canal_str = f"{canal_str} - {phys}"
+
+            polo_raw = str(el.get("polo", "")).strip().lower()
+            if polo_raw in ("positivo", "+", "pos", "anodo"):
+                polo_str = "+"
+            elif polo_raw in ("negativo", "-", "neg", "catodo"):
+                polo_str = "-"
+            elif "tierra" in polo_raw or "gnd" in polo_raw or "ref" in polo_raw:
+                polo_str = "GND"
+            elif polo_raw:
+                polo_str = polo_raw.upper()
+            else:
+                polo_str = "-"
 
             musc_str = str(el.get("musculo_asignado") or el.get("musculo_estimado") or el.get("musculo", "-"))
 
             c2d = el.get("centroide_2d_px", el.get("coordenadas_2d_px", []))
             if isinstance(c2d, (list, tuple)) and len(c2d) >= 2:
                 try:
-                    c2d_str = f"({float(c2d[0]):.1f}, {float(c2d[1]):.1f})"
+                    c2d_str = f"[{float(c2d[0]):.1f}, {float(c2d[1]):.1f}]"
                 except Exception:
-                    c2d_str = f"({c2d[0]}, {c2d[1]})"
+                    c2d_str = f"[{c2d[0]}, {c2d[1]}]"
             else:
-                c2d_str = str(c2d)
+                c2d_str = str(c2d) if c2d else "-"
 
             vert_str = str(el.get("vertice_malla_3d", el.get("landmark_id", "-")))
 
             v3d = el.get(
                 "vector_3d_relativo_normalizado",
-                el.get("coordenadas_3d_absolutas", el.get("coordenadas_3d", []))
+                el.get("vector_norm_dip", el.get("coordenadas_3d_absolutas", el.get("coordenadas_3d", [])))
             )
             if isinstance(v3d, (list, tuple)) and len(v3d) >= 3:
                 try:
-                    v3d_str = f"({float(v3d[0]):.4f}, {float(v3d[1]):.4f}, {float(v3d[2]):.4f})"
+                    v3d_str = f"[{float(v3d[0]):.4f}, {float(v3d[1]):.4f}, {float(v3d[2]):.4f}]"
                 except Exception:
                     v3d_str = str(v3d)
             else:
-                v3d_str = str(v3d)
+                v3d_str = str(v3d) if v3d else "-"
 
             d_norm = el.get("distancia_3d_normalizada", el.get("distancia_3d_al_origen", None))
             if d_norm is not None:
@@ -562,7 +608,56 @@ class PhotometryGalleryDialog(QDialog):
             else:
                 d_norm_str = "-"
 
-            row_vals = [canal_str, musc_str, c2d_str, vert_str, v3d_str, d_norm_str]
+            # Distancia interelectrodo - mm
+            d_ie = el.get("distancia_interelectrodo_mm")
+            if d_ie is None:
+                par_match = pares_map.get(str(el.get("id_par", "")).lower()) or pares_map.get(str(canal_str).lower()) or pares_map.get(str(phys).lower())
+                if par_match and par_match.get("distancia_interelectrodo_mm") is not None:
+                    d_ie = par_match.get("distancia_interelectrodo_mm")
+            if d_ie is not None:
+                try:
+                    dist_interel_str = f"{float(d_ie):.2f}"
+                except Exception:
+                    dist_interel_str = str(d_ie)
+            else:
+                dist_interel_str = "-"
+
+            # Diámetro de gel - mm
+            d_gel = el.get("diametro_gel_mm")
+            if d_gel is None:
+                par_match = pares_map.get(str(el.get("id_par", "")).lower()) or pares_map.get(str(canal_str).lower()) or pares_map.get(str(phys).lower())
+                if par_match and par_match.get("diametro_gel_mm") is not None:
+                    d_gel = par_match.get("diametro_gel_mm")
+                else:
+                    d_gel = 10.0
+            try:
+                diam_gel_str = f"{float(d_gel):.1f}"
+            except Exception:
+                diam_gel_str = str(d_gel)
+
+            # Distancias anatómicas reconstruidas - mm
+            dist_anat = el.get("distancias_anatomicas_mm", {})
+            if isinstance(dist_anat, dict) and dist_anat:
+                anat_items = []
+                for k_a, v_a in dist_anat.items():
+                    k_clean = str(k_a).replace("_mm", "").replace("distancia_", "").capitalize()
+                    try:
+                        anat_items.append(f"{k_clean}: {float(v_a):.1f}mm")
+                    except Exception:
+                        anat_items.append(f"{k_clean}: {v_a}")
+                dist_anat_str = ", ".join(anat_items)
+            elif el.get("distancia_3d_absoluta") is not None:
+                try:
+                    dist_anat_str = f"Origen: {float(el.get('distancia_3d_absoluta')):.2f}mm"
+                except Exception:
+                    dist_anat_str = str(el.get("distancia_3d_absoluta"))
+            else:
+                dist_anat_str = "-"
+
+            row_vals = [
+                canal_str, polo_str, musc_str, c2d_str, vert_str,
+                v3d_str, d_norm_str, dist_interel_str, diam_gel_str, dist_anat_str
+            ]
             for c_idx, val in enumerate(row_vals):
                 it = QTableWidgetItem(val)
                 it.setTextAlignment(Qt.AlignCenter)
@@ -743,7 +838,7 @@ class CsvViewerWidget(QWidget):
         self.slayout.addWidget(self.grp_channels)
 
         # Notas del Experimento y Fotometría 3D
-        self.grp_notas = QGroupBox("📝 Notas del Experimento")
+        self.grp_notas = QGroupBox("Notas del Experimento")
         self.grp_notas.setStyleSheet("font-weight: bold; color: #aaa;")
         lyt_notas = QVBoxLayout(self.grp_notas)
 
@@ -763,7 +858,7 @@ class CsvViewerWidget(QWidget):
         )
         lyt_notas.addWidget(self.txt_notas_sesion)
 
-        self.btn_guardar_notas = QPushButton("💾 Guardar Notas en Medición")
+        self.btn_guardar_notas = QPushButton("Guardar Notas en Medición")
         self.btn_guardar_notas.setStyleSheet(
             "QPushButton {"
             " background-color: #1b4332;"
@@ -778,7 +873,7 @@ class CsvViewerWidget(QWidget):
         self.btn_guardar_notas.clicked.connect(self._save_session_notes)
         lyt_notas.addWidget(self.btn_guardar_notas)
 
-        self.btn_ver_fotometria = QPushButton("📷 Ver Fotometría / Capturas 3D")
+        self.btn_ver_fotometria = QPushButton("Ver Fotometría y Capturas 3D")
         self.btn_ver_fotometria.setStyleSheet(
             "QPushButton {"
             " background-color: #1a2a3a;"
@@ -975,7 +1070,7 @@ class CsvViewerWidget(QWidget):
         self.lbl_status.setText(f"Cargando medición: {medicion_name} ...")
         self.loader = DataLoaderThread(filepath)
         self.loader.finished_loading.connect(self._on_csv_loaded)
-        self.loader.error_loading.connect(lambda err: self.lbl_status.setText(f"⚠️ {err}"))
+        self.loader.error_loading.connect(lambda err: self.lbl_status.setText(f"Error: {err}"))
         self.loader.start()
 
     def _extract_session_notes_and_summary(self, medicion_dir):
@@ -1037,8 +1132,58 @@ class CsvViewerWidget(QWidget):
                     pass
 
         extra_parts = []
-        # 1. Separabilidad /O/ vs /U/ en metadata.json
+        # 1. Diagnóstico de separabilidad de vocales y métricas en metadata.json
         for md in meta_dicts:
+            diag_voc = md.get("diagnostico_separabilidad_vocales")
+            if isinstance(diag_voc, dict):
+                est = diag_voc.get("estado") or diag_voc.get("diagnostico_estado") or diag_voc.get("status") or "-"
+                loo = diag_voc.get("exactitud_loo_global_pct") or diag_voc.get("exactitud_loo") or diag_voc.get("loo_accuracy")
+                if loo is not None:
+                    try:
+                        loo_val = float(loo)
+                        if loo_val <= 1.0:
+                            loo_val *= 100.0
+                        loo_str = f"{loo_val:.1f}%"
+                    except Exception:
+                        loo_str = str(loo)
+                else:
+                    loo_str = "-"
+
+                theta = diag_voc.get("theta_min") or diag_voc.get("theta_min_deg") or diag_voc.get("angulo_minimo_deg")
+                if theta is None and "matriz_angulos_deg" in diag_voc:
+                    m_ang = diag_voc.get("matriz_angulos_deg")
+                    if isinstance(m_ang, (list, tuple)):
+                        vals = []
+                        for i_a, row_a in enumerate(m_ang):
+                            if isinstance(row_a, (list, tuple)):
+                                for j_a, a_val in enumerate(row_a):
+                                    if i_a != j_a:
+                                        try:
+                                            vals.append(abs(float(a_val)))
+                                        except Exception:
+                                            pass
+                        if vals:
+                            theta = min(vals)
+                if theta is not None:
+                    try:
+                        theta_str = f"{float(theta):.1f}°"
+                    except Exception:
+                        theta_str = str(theta)
+                else:
+                    theta_str = "-"
+
+                r_max = diag_voc.get("crosstalk_maximo_r") or diag_voc.get("r_max") or diag_voc.get("r_max_abs") or diag_voc.get("crosstalk_r")
+                if r_max is not None:
+                    try:
+                        r_str = f"{abs(float(r_max)):.3f}"
+                    except Exception:
+                        r_str = str(r_max)
+                else:
+                    r_str = "-"
+
+                extra_parts.append(f"Separabilidad Vocales: Estado={est}, LOO={loo_str}, θ_min={theta_str}, |r_max|={r_str}")
+                break
+
             sep_info = (
                 md.get("separabilidad_o_u")
                 or md.get("resumen_separabilidad")
@@ -1047,9 +1192,9 @@ class CsvViewerWidget(QWidget):
             if sep_info:
                 if isinstance(sep_info, dict):
                     sep_items = [f"{k}: {v}" for k, v in sep_info.items()]
-                    extra_parts.append("📊 Separabilidad /O/ vs /U/: " + ", ".join(sep_items))
+                    extra_parts.append("Separabilidad /O/ vs /U/: " + ", ".join(sep_items))
                 else:
-                    extra_parts.append(f"📊 Separabilidad /O/ vs /U/: {sep_info}")
+                    extra_parts.append(f"Separabilidad /O/ vs /U/: {sep_info}")
                 break
 
         # 2. Fotometría 3D: calibración espacial y telemetría
@@ -1068,9 +1213,9 @@ class CsvViewerWidget(QWidget):
                     n_el = len(m_cal.get("electrodos", []))
                     dip = m_cal.get("distancia_interpupilar_px")
                     if dip is not None:
-                        cal_info_str = f"📐 Calibración 3D: {n_el} electrodos (D.IP={float(dip):.1f}px)"
+                        cal_info_str = f"Calibración 3D: {n_el} electrodos - D.IP={float(dip):.1f}px"
                     elif n_el > 0:
-                        cal_info_str = f"📐 Calibración 3D: {n_el} electrodos"
+                        cal_info_str = f"Calibración 3D: {n_el} electrodos"
             except Exception:
                 pass
 
@@ -1101,7 +1246,7 @@ class CsvViewerWidget(QWidget):
                         std_pool = np.sqrt(0.5 * (vals_o.var(ddof=0) + vals_u.var(ddof=0))) + 1e-9
                         d_cohen = abs(mean_o - mean_u) / std_pool
                         extra_parts.append(
-                            f"👄 Fotometría /O/ vs /U/: /O/={mean_o:.3f}, /U/={mean_u:.3f} (Δ={abs(mean_o-mean_u):.3f}, d={d_cohen:.2f})"
+                            f"Fotometría /O/ vs /U/: /O/={mean_o:.3f}, /U/={mean_u:.3f} - Δ={abs(mean_o-mean_u):.3f}, d={d_cohen:.2f}"
                         )
                 # Pose promedio si no había calibración espacial
                 if not cal_info_str:
@@ -1113,7 +1258,7 @@ class CsvViewerWidget(QWidget):
                             if not s_ang.empty:
                                 pose_strs.append(f"{a_label}: {s_ang.mean():.1f}°")
                     if pose_strs:
-                        extra_parts.append("📷 Pose Cabeza: " + ", ".join(pose_strs))
+                        extra_parts.append("Pose Cabeza: " + ", ".join(pose_strs))
             except Exception:
                 pass
         elif os.path.isdir(fotometria_dir) and not cal_info_str:
@@ -1125,9 +1270,9 @@ class CsvViewerWidget(QWidget):
             except Exception:
                 pass
             if n_fotos > 0:
-                extra_parts.append(f"📷 Fotometría 3D: {n_fotos} capturas disponibles")
+                extra_parts.append(f"Fotometría 3D: {n_fotos} capturas disponibles")
             else:
-                extra_parts.append("📷 Fotometría 3D: Activa")
+                extra_parts.append("Fotometría 3D: Activa")
 
         return notas_str, " | ".join(extra_parts)
 
@@ -1135,7 +1280,7 @@ class CsvViewerWidget(QWidget):
         _, summary_str = self._extract_session_notes_and_summary(medicion_dir)
         lines = []
         if notas_str and notas_str.strip():
-            lines.append(f"📝 <b>Notas del Experimento:</b> {notas_str.strip()}")
+            lines.append(f"<b>Notas del Experimento:</b> {notas_str.strip()}")
         if summary_str:
             lines.append(summary_str)
 
@@ -1148,7 +1293,7 @@ class CsvViewerWidget(QWidget):
 
     def _save_session_notes(self):
         if not self.current_medicion_dir or not os.path.isdir(self.current_medicion_dir):
-            self.lbl_status.setText("⚠️ No hay una medición cargada para guardar notas.")
+            self.lbl_status.setText("Aviso: No hay una medición cargada para guardar notas.")
             return
 
         notas_text = self.txt_notas_sesion.toPlainText().strip()
@@ -1213,16 +1358,16 @@ class CsvViewerWidget(QWidget):
         self._update_notas_banner(notas_text, self.current_medicion_dir)
         med_name = os.path.basename(self.current_medicion_dir)
         self.lbl_status.setText(
-            f"✅ Notas guardadas en '{med_name}' ({updated_files} archivo(s) metadata.json y notas_experimento.txt)."
+            f"Notas guardadas en '{med_name}' - {updated_files} archivo(s) metadata.json y notas_experimento.txt."
         )
 
     def _open_photometry_viewer(self):
         if not self.current_medicion_dir or not os.path.isdir(self.current_medicion_dir):
-            self.lbl_status.setText("⚠️ Seleccione primero una medición con datos de fotometría.")
+            self.lbl_status.setText("Aviso: Seleccione primero una medición con datos de fotometría.")
             return
         fotometria_dir = os.path.join(self.current_medicion_dir, "fotometria")
         if not os.path.isdir(fotometria_dir):
-            self.lbl_status.setText("⚠️ Esta medición no contiene carpeta 'fotometria/'.")
+            self.lbl_status.setText("Aviso: Esta medición no contiene carpeta 'fotometria/'.")
             return
         dlg = PhotometryGalleryDialog(self.current_medicion_dir, self)
         dlg.exec()

@@ -146,6 +146,12 @@ __pycache__/
 *.tar.gz
 *.7z
 
+# --- DATOS DE CAMPANAS Y SALIDAS GENERADAS (viven en Google Drive, no en git) ---
+Candela_Organizado_Drive/
+**/Candela_Organizado_Drive/
+reportes_experimentos/para_subir_al_drive/
+reportes_experimentos/libro_experimentos_ia/scripts_experimentos/salida_pca_report_engine/
+
 # Entornos y artefactos de compilacion PyInstaller
 build_linux/*
 !build_linux/.gitkeep

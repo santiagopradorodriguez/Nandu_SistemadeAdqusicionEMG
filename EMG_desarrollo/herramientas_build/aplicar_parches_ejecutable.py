@@ -60,7 +60,7 @@ def user_data_path(relative_path):
 def lanzar_script(script_name, args=[]):
     """ Genera el comando de subprocess compatible tanto en Python como en .exe """
     if getattr(sys, 'frozen', False):
-        return [sys.executable, script_name] + args
+        return [sys.executable, "--run-script", script_name] + args
     else:
         base_path = os.path.abspath(os.path.dirname(__file__))
         if os.path.basename(base_path) == "gui_app":
