@@ -239,7 +239,16 @@
 
 ---
 
-## 7. Infraestructura de Memoria y Tokens
+## 7. Compilación Nativa Windows Pro Suite y Actualización de Release en GitHub (Hito 26, 2026-10-27)
+- **Sincronización:** Repositorio en rama master sincronizado con commit 84e70ac y fix 36ec97c.
+- **Fix de unicode escape en Spec:** Normalizadas las barras invertidas a barras normales (clean_src.replace(\'\\\', \'/\')) en datas_tuples de crear_spec_ejecutable.py evitando SyntaxError en PyInstaller.
+- **Compilación PyInstaller y C# Multihilo:** uild.bat ejecutado exitosamente; empaquetado NanduLsd_Core.exe y launcher C# NanduLsd.exe con 23.008 archivos y recursos compilados en uild_windows/NanduLsd/.
+- **Prueba Empírica en Vivo:** Verificado el arranque de NanduLsd.exe y NanduLsd_Core.exe en Windows sin errores.
+- **Publicación en GitHub Releases:** Empaquetado NanduLsd_Windows_v5.1.zip (629.06 MB) y subido exitosamente a GitHub Releases en el tag oficial 5.1-estable.
+
+---
+
+## 8. Infraestructura de Memoria y Tokens
 - **Memoria de Trabajo:** `.agents/MEMORIA_ACTIVA.md` (~50 líneas, ~600 tokens al arrancar).
 - **Historial Completo:** `.agents/historial/bitacora_completa_hitos_001_al_138.md` indexado por `.agents/INDICE_HITOS.md`.
 - **Reglas del Proyecto:** `.agents/AGENTS.md` compactado a 5.3 KB (ahorro del 81.4% de tokens base por turno).
