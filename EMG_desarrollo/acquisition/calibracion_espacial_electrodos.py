@@ -1496,7 +1496,12 @@ def main() -> None:
     print("  's' - Guardar instantanea de calibracion (snapshot.json y snapshot.png)")
     print("  'm' - Conmutar entre marcadores HSV y broches metalicos")
 
-    cap = cv2.VideoCapture(0)
+    if sys.platform.startswith("win"):
+        cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+        if not cap.isOpened():
+            cap = cv2.VideoCapture(0)
+    else:
+        cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         print("Error: No se pudo acceder a la camara web (indice 0).")
         sys.exit(1)

@@ -213,6 +213,12 @@ class WebcamCaptureThread(QtCore.QThread):
                     if cap is not None:
                         cap.release()
                     cap = cv2.VideoCapture(self.camera_index)
+            elif sys.platform.startswith("win"):
+                cap = cv2.VideoCapture(self.camera_index, cv2.CAP_DSHOW)
+                if cap is None or not cap.isOpened():
+                    if cap is not None:
+                        cap.release()
+                    cap = cv2.VideoCapture(self.camera_index)
             else:
                 cap = cv2.VideoCapture(self.camera_index)
 
@@ -4155,7 +4161,7 @@ class WebcamPhotometryManager(QtCore.QObject):
         self.capture_thread.start()
 
         # Esperar brevemente hasta que el dispositivo entregue el primer cuadro o reporte fallo
-        t_deadline = time.perf_counter() + 1.8
+        t_deadline = time.perf_counter() + 3.5
         while time.perf_counter() < t_deadline:
             if self.capture_thread.is_camera_open:
                 frame, _ = self.capture_thread.get_latest_frame()
@@ -4206,13 +4212,13 @@ class WebcamPhotometryManager(QtCore.QObject):
 
     def _asegurar_camara_disponible(self, parent_widget: Optional[QtWidgets.QWidget]) -> bool:
         """Verifica senal de camara, prueba indices alternativos y avisua si no hay."""
-        if self._esperar_senal_camara(2.5):
+        if self._esperar_senal_camara(3.5):
             return True
         for indice in range(0, 4):
             if indice == self.camera_index:
                 continue
             self.start_worker(indice)
-            if self._esperar_senal_camara(1.2):
+            if self._esperar_senal_camara(2.0):
                 return True
         self.stop_worker()
         QtWidgets.QMessageBox.warning(
