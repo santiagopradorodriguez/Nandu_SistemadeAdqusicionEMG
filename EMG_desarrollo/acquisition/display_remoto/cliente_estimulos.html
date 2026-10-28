@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<!-- ==============================================================================
+     Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
+     Autores: Lucas Braunstein y Santiago Prado
+     Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
+     Descripción: Cliente HTML fullscreen de estímulos para el display remoto.
+                  Muestra la palabra/sílaba gigante (réplica de ventana_palabras.py)
+                  y el metrónomo visual renderizado LOCALEMENTE con el reloj
+                  sincronizado al servidor (handshake NTP-lite), de modo que el
+                  jitter de red no afecta la animación.
+                  Sin dependencias externas: cero CDN, cero fuentes/imágenes
+                  remotas. Funciona sin internet (red local o hotspot del celu).
+     Uso: http://<ip_pc>:<puerto>/?t=<token>   (el token es opcional)
+     Ficha: docs/PLAN_agentes_tracking_display_remoto.md — tarea B2
+     ============================================================================== -->
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#050505">
+<title>Ñandú LSD - Display remoto de estímulos</title>
+<style>
+  /* ---- Estética réplica de ventana_palabras.py: cian #00FFFF sobre #050505 ---- */
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: #050505;
+    color: #00FFFF;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-weight: bold;
+    overflow: hidden;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  /* Cursor oculto tras inactividad (solo tiene efecto en desktop) */
+  body.sin-cursor, body.sin-cursor * { cursor: none; }
+
+  #palabra {
+    font-size: 30vh;
+    line-height: 1.02;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: #00FFFF;
+    padding: 0 2vw;
+    word-break: break-word;
+    max-width: 98vw;
+  }
+  #contador {
+    font-size: 15vh;
+    line-height: 1;
+    margin-top: 2vh;
+    color: #00b3b3;
+    font-variant-numeric: tabular-nums;
+  }
+  /* Bloque de pulso: su fondo hace flash en cada sub-pulso */
+  #pulso {
+    width: 12vmin;
+    height: 12vmin;
+    min-width: 48px;
+    min-height: 48px;
+    margin-top: 3vh;
+    border-radius: 10px;
+    background: #0d1414;                /* estado apagado */
+    box-shadow: none;
+    transition: none;                   /* nada de transiciones: el flash es cuadro a cuadro */
+  }
+  #countin {
+    position: fixed;
+    top: 7vh;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 10vh;
+    line-height: 1;
+    color: #FF0000;
+    text-shadow: 0 0 24px rgba(255,0,0,0.55);
+    display: none;
+  }
+  /* Barra de estado mínima (sesión / grabando / bpm) */
+  #barra {
+    position: fixed;
+    bottom: 1.6vh;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 2vh;
+    font-weight: normal;
+    color: #4f6f6f;
+    letter-spacing: 0.06em;
+  }
+  #barra .punto {
+    display: inline-block;
+    width: 1.1vh;
+    height: 1.1vh;
+    border-radius: 50%;
+    background: #6a6a6a;
+    margin-right: 0.8vh;
+    vertical-align: middle;
+  }
+  #barra .punto.on { background: #33ff77; }
+  /* En fullscreen la UI queda mínima: al tocar se oculta/muestra la barra */
+  body.ui-minima #barra, body.ui-minima #btn-fullscreen { display: none; }
+
+  /* Banners */
+  #banner-conexion, #banner-wake {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 1.1vh 2.4vw;
+    border-radius: 8px;
+    font-size: 2.2vh;
+    font-weight: normal;
+    letter-spacing: 0.05em;
+    z-index: 20;
+    display: none;
+  }
+  #banner-conexion {
+    top: 1.6vh;
+    background: #3a0d0d;
+    color: #ff5252;
+    border: 1px solid #7a1a1a;
+  }
+  #banner-conexion.visible { display: block; }
+  #banner-wake {
+    bottom: 6vh;
+    background: #122323;
+    color: #7fbdbd;
+    border: 1px solid #1f3d3d;
+    font-size: 1.8vh;
+  }
+  #banner-wake.visible { display: block; }
+
+  #btn-fullscreen {
+    position: fixed;
+    top: 1.6vh;
+    right: 1.6vh;
+    z-index: 30;
+    background: #0d2626;
+    color: #00FFFF;
+    border: 1px solid #00FFFF55;
+    border-radius: 8px;
+    padding: 1.2vh 2vw;
+    font-size: 2.2vh;
+    font-family: inherit;
+  }
+  body.en-fullscreen #btn-fullscreen { display: none; }
+</style>
+</head>
+<body>
+
+  <div id="countin">INICIANDO</div>
+  <div id="palabra">ESPERANDO...</div>
+  <div id="contador">0</div>
+  <div id="pulso"></div>
+
+  <div id="barra"><span class="punto" id="punto"></span><span id="barra-texto">Sin estado</span></div>
+
+  <div id="banner-conexion">SIN CONEXIÓN — reintentando</div>
+  <div id="banner-wake">Pantalla sin bloqueo de suspensión (Wake Lock no disponible)</div>
+
+  <button id="btn-fullscreen" type="button">PANTALLA COMPLETA</button>
+
+<script>
+"use strict";
+/* ============================================================================
+   Cliente de estímulos NANDU LSD — vanilla JS, sin dependencias.
+
+   Ejes del diseño:
+   * Sincronía NTP-lite: 5 muestras de /sync, offset = mediana de (s + rtt/2 - c).
+     El reloj corregido es  Date.now() + offsetMs.
+   * El metrónomo NO se anima con setTimeout encadenado: requestAnimationFrame +
+     aritmética sobre el reloj corregido. Así el jitter de red no toca la animación.
+   * /estado se consulta cada 1 s SOLO para detectar cambios (comparación de
+     `secuencia`); la palabra y el pulso viven del reloj local.
+   ========================================================================== */
+
+// ------------------------------- Configuración -------------------------------
+var FLASH_MS = 80;          // duración del flash de sub-pulso (ms)
+var N_SYNC = 5;             // muestras del handshake NTP-lite
+var PERIODO_SYNC_MS = 10000;// resincronización periódica
+var PERIODO_ESTADO_MS = 1000;
+var PERIODO_REINTENTO_MS = 2000;
+var PAUSA_ENTRE_SYNC_MS = 60;
+var TIMEOUT_MS = 4000;      // timeout por fetch
+
+// --------------------------------- Token ------------------------------------
+// Si la URL trae ?t=<token> se preserva en TODOS los fetch (/estado y /sync).
+var params = new URLSearchParams(window.location.search);
+var TOKEN = params.get("t") || "";
+
+function conToken(path) {
+  if (!TOKEN) return path;
+  return path + (path.indexOf("?") >= 0 ? "&" : "?") + "t=" + encodeURIComponent(TOKEN);
+}
+
+function fetchJSON(path) {
+  var ctrl = new AbortController();
+  var t = setTimeout(function () { ctrl.abort(); }, TIMEOUT_MS);
+  return fetch(conToken(path), { cache: "no-store", signal: ctrl.signal })
+    .then(function (r) {
+      clearTimeout(t);
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    }, function (e) { clearTimeout(t); throw e; });
+}
+
+// --------------------------------- Estado -----------------------------------
+var offsetMs = 0;          // corrección de reloj (mediana de muestras)
+var sincronizado = false;   // hubo al menos un handshake exitoso
+var estado = null;          // último JSON de /estado
+var secuenciaVista = -1;
+var palabraMostrada = "";
+var sesionVista = null;
+var t0ms = null;            // epoch (ms, reloj corregido) del pulso 0
+var countInNum = null;      // valor de count_in (opcional) o null
+
+var timerPoll = null, timerSync = null, timerReintento = null;
+var pollEnCurso = false, syncEnCurso = false;
+
+var elPalabra = document.getElementById("palabra");
+var elContador = document.getElementById("contador");
+var elPulso = document.getElementById("pulso");
+var elCountIn = document.getElementById("countin");
+var elBarra = document.getElementById("barra-texto");
+var elPunto = document.getElementById("punto");
+var elBanner = document.getElementById("banner-conexion");
+var elBannerWake = document.getElementById("banner-wake");
+
+var FUEGO = { apagado: "#0d1414", sub: "rgba(0,255,255,0.42)", principal: "rgba(150,255,255,0.95)" };
+var pulsoEstadoActual = "";
+
+function relojCorregido() { return Date.now() + offsetMs; }
+
+// Normaliza epochs: el servidor B1 manda t0_epoch en segundos y ts_epoch en ms.
+function epochAMs(v) {
+  if (typeof v !== "number" || !isFinite(v)) return null;
+  return v < 1e12 ? v * 1000 : v;
+}
+
+// ------------------------- Sincronía de reloj (NTP-lite) ---------------------
+function medirOffsetUnaMuestra() {
+  var c = Date.now();
+  var t1 = c;
+  return fetchJSON("/sync?c=" + c).then(function (j) {
+    var t2 = Date.now();
+    if (typeof j.s !== "number") throw new Error("sync sin campo s");
+    var rtt = t2 - t1;                 // ida y vuelta entero, acá
+    return j.s + rtt / 2 - c;          // offset estimado de esta muestra
+  });
+}
+
+function medirOffset() {
+  if (syncEnCurso) return Promise.resolve(false);
+  syncEnCurso = true;
+  var muestras = [];
+  var cadena = Promise.resolve();
+  for (var i = 0; i < N_SYNC; i++) {
+    cadena = cadena.then(function () {
+      return medirOffsetUnaMuestra().then(
+        function (o) { muestras.push(o); },
+        function () { /* muestra descartada: no rompe la cadena */ }
+      ).then(function () { return esperar(PAUSA_ENTRE_SYNC_MS); });
+    });
+  }
+  return cadena.then(function () {
+    syncEnCurso = false;
+    if (muestras.length === 0) throw new Error("sync sin muestras");
+    muestras.sort(function (a, b) { return a - b; });
+    var mediana = muestras[Math.floor(muestras.length / 2)];
+    offsetMs = mediana;
+    sincronizado = true;
+    return true;
+  }, function (e) {
+    syncEnCurso = false;
+    throw e;
+  });
+}
+
+function esperar(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+// ------------------------------ Polling de estado ---------------------------
+function aplicarEstado(e) {
+  var seq = (typeof e.secuencia === "number") ? e.secuencia : -1;
+  var cambio = (seq !== secuenciaVista);
+  secuenciaVista = seq;
+  estado = e;
+
+  // --- Palabra (solo si cambió la secuencia) ---
+  var nuevaPalabra = (typeof e.palabra === "string") ? e.palabra.toUpperCase() : "";
+  if (cambio && nuevaPalabra && nuevaPalabra !== palabraMostrada) {
+    palabraMostrada = nuevaPalabra;
+    elPalabra.textContent = nuevaPalabra;
+    flashPalabra();
+  } else if (!palabraMostrada && nuevaPalabra) {
+    palabraMostrada = nuevaPalabra;
+    elPalabra.textContent = nuevaPalabra;
+  }
+
+  // --- Count-in (campo opcional; si no viene, se ignora) ---
+  var ci = (typeof e.count_in === "number" && isFinite(e.count_in)) ? e.count_in : null;
+  if (ci !== countInNum) {
+    countInNum = ci;
+    if (ci === null || ci <= 0) {
+      elCountIn.style.display = "none";
+    } else {
+      elCountIn.textContent = "INICIANDO " + ci;
+      elCountIn.style.display = "block";
+    }
+  }
+
+  // --- Ancla temporal del pulso 0 ---
+  // Regla: el t0 solo se (re)ancla cuando arranca una sesión nueva. Para no
+  // reiniciar el contador por un t0 que simplemente "se movió", se compara la
+  // FASE del t0 entrante respecto del actual (múltiplo del periodo = misma fase
+  // = no hay que tocar nada). Así el display no se reinicia si el servidor
+  // publica un t0 re-alineado en cada request.
+  var t0 = epochAMs(e.t0_epoch);
+  var grabando = (e.grabando === true);
+  var sesion = (typeof e.sesion === "string") ? e.sesion : "";
+  var sesionNueva = (sesionVista !== null && sesion !== sesionVista);
+  if (grabando) {
+    var bpm0 = (typeof e.bpm === "number" && e.bpm > 0) ? e.bpm : 60;
+    var periodo0 = 60000 / bpm0;
+    if (t0 === null) {
+      if (t0ms === null) {
+        // El servidor no mandó t0: anclamos en el momento en que llegó el
+        // primer estado con grabando=true, usando el reloj ya corregido.
+        t0ms = relojCorregido();
+      }
+    } else if (t0ms === null || sesionNueva) {
+      t0ms = t0;                        // primer ancla o sesión nueva
+      elContador.textContent = "0";
+    } else {
+      var salto = t0 - t0ms;
+      var reanclar = false;
+      if (Math.abs(salto) > 1e6) {
+        reanclar = true;                // salto enorme (≥ ~16 min): sesión nueva
+      } else {
+        var fase = salto - periodo0 * Math.round(salto / periodo0);
+        if (Math.abs(fase) > 0.3 * periodo0) reanclar = true;
+      }
+      if (reanclar) {
+        t0ms = t0;                      // arranque real de un pulso nuevo
+        elContador.textContent = "0";
+      }
+    }
+  } else {
+    t0ms = null;
+    elContador.textContent = "0";
+  }
+  sesionVista = sesion;
+
+  // --- Barra de estado ---
+  elPunto.className = "punto" + (grabando ? " on" : "");
+  var bpm = (typeof e.bpm === "number") ? e.bpm : 0;
+  var subdiv = (typeof e.subdiv === "number") ? e.subdiv : 1;
+  elBarra.textContent =
+    (e.sesion ? "SESIÓN " + e.sesion : "SIN SESIÓN") +
+    " · " + (grabando ? "GRABANDO" : "EN ESPERA") +
+    " · " + Math.round(bpm) + " bpm · subdiv " + subdiv +
+    (sincronizado ? "" : " · reloj sin sync");
+}
+
+// Flash breve al cambiar de palabra (Web Animations API; sin timers).
+function flashPalabra() {
+  if (typeof elPalabra.animate === "function") {
+    elPalabra.animate(
+      [
+        { opacity: 0.15, filter: "brightness(2.2)" },
+        { opacity: 1, filter: "brightness(1)" }
+      ],
+      { duration: 240, easing: "ease-out" }
+    );
+  }
+}
+
+function traerEstado() {
+  if (pollEnCurso) return Promise.resolve(false);
+  pollEnCurso = true;
+  return fetchJSON("/estado").then(
+    function (j) { pollEnCurso = false; aplicarEstado(j); return true; },
+    function (e) { pollEnCurso = false; throw e; }
+  );
+}
+
+// --------------------------- Bucle de conexión ------------------------------
+function detenerTemporizadores() {
+  if (timerPoll) { clearInterval(timerPoll); timerPoll = null; }
+  if (timerSync) { clearInterval(timerSync); timerSync = null; }
+}
+
+function conectar() {
+  detenerTemporizadores();
+  elBanner.className = "";                       // ocultar "SIN CONEXIÓN"
+  traerEstado().catch(function () { /* el reintento lo maneja falloDeRed */ });
+  medirOffset().then(function () {
+    // resincronización periódica del reloj
+    timerSync = setInterval(function () {
+      medirOffset().catch(function () { /* tolerable: seguimos con el offset viejo */ });
+    }, PERIODO_SYNC_MS);
+  }).catch(function () { /* sin sync seguimos con Date.now() crudo */ });
+  timerPoll = setInterval(function () {
+    traerEstado().catch(function () { falloDeRed(); });
+  }, PERIODO_ESTADO_MS);
+}
+
+function falloDeRed() {
+  if (timerReintento) return;                    // ya se está reintentando
+  detenerTemporizadores();
+  elBanner.className = "visible";                // "SIN CONEXIÓN — reintentando"
+  var reintento = function () {
+    fetchJSON("/estado").then(function (j) {
+      aplicarEstado(j);
+      timerReintento = null;
+      conectar();                                // al reconectar: resync de reloj
+    }).catch(function () {
+      timerReintento = setTimeout(reintento, PERIODO_REINTENTO_MS);
+    });
+  };
+  timerReintento = setTimeout(reintento, PERIODO_REINTENTO_MS);
+}
+
+// -------------------- Render del metrónomo (aritmético, rAF) ----------------
+var rafPendiente = false;
+function render() {
+  requestAnimationFrame(render);
+  var ahora = relojCorregido();
+
+  var bpm = (estado && typeof estado.bpm === "number") ? estado.bpm : 0;
+  var subdiv = (estado && typeof estado.subdiv === "number") ? Math.max(1, Math.round(estado.subdiv)) : 1;
+  var grabando = !!(estado && estado.grabando === true);
+
+  // Durante el count-in el metrónomo queda apagado y el contador en 0.
+  if (countInNum !== null) { pintarPulso(FUEGO.apagado); return; }
+  // Sin sesión activa: bloque apagado, contador en 0.
+  if (!grabando || bpm <= 0 || t0ms === null) { pintarPulso(FUEGO.apagado); return; }
+
+  var periodo = 60000 / bpm;          // ms por pulso principal
+  var subPeriodo = periodo / subdiv;  // ms por sub-pulso
+  var transcurrido = ahora - t0ms;
+  if (!(transcurrido >= 0)) {
+    // t0 en el futuro (reloj atrasado): esperamos sin animar.
+    pintarPulso(FUEGO.apagado);
+    return;
+  }
+
+  var nSub = Math.floor(transcurrido / subPeriodo);   // índice absoluto de sub-pulso
+  var dentroSub = transcurrido - nSub * subPeriodo;   // ms desde el arranque del sub-pulso
+  var principal = (nSub % subdiv === 0);
+  var nPulso = Math.floor(nSub / subdiv);             // contador de pulsos principales
+
+  var txt = String(nPulso);
+  if (elContador.textContent !== txt) { elContador.textContent = txt; }
+
+  // Flash: encendido durante los primeros FLASH_MS de cada sub-pulso.
+  // Intensidad mayor en el pulso principal (cada subdiv-ésimo).
+  if (dentroSub < FLASH_MS) {
+    pintarPulso(principal ? FUEGO.principal : FUEGO.sub);
+  } else {
+    pintarPulso(FUEGO.apagado);
+  }
+}
+
+function pintarPulso(color) {
+  if (color === pulsoEstadoActual) return;   // evito writes redundantes por cuadro
+  pulsoEstadoActual = color;
+  elPulso.style.background = color;
+  elPulso.style.boxShadow = (color === FUEGO.apagado)
+    ? "none"
+    : "0 0 " + (color === FUEGO.principal ? "34px" : "16px") + " " + color;
+}
+
+// ------------------------- Fullscreen + Wake Lock ---------------------------
+var elBtnFs = document.getElementById("btn-fullscreen");
+elBtnFs.addEventListener("click", function () {
+  var doc = document.documentElement;
+  if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+    var fs = doc.requestFullscreen || doc.webkitRequestFullscreen;
+    if (fs) { try { fs.call(doc); } catch (e) { /* sin soporte */ } }
+  } else {
+    var ex = document.exitFullscreen || document.webkitExitFullscreen;
+    if (ex) { try { ex.call(document); } catch (e) { /* sin soporte */ } }
+  }
+});
+
+function alCambiarFullscreen() {
+  var activo = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  document.body.classList.toggle("en-fullscreen", activo);
+  // En fullscreen la UI queda mínima (barra de sesión oculta hasta que se toque).
+  document.body.classList.toggle("ui-minima", activo);
+}
+document.addEventListener("fullscreenchange", alCambiarFullscreen);
+document.addEventListener("webkitfullscreenchange", alCambiarFullscreen);
+
+// Tap en fullscreen: muestra/oculta la UI mínima (barra de sesión).
+document.addEventListener("click", function (ev) {
+  var activo = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  if (!activo) return;
+  if (ev.target === elBtnFs) return;
+  document.body.classList.toggle("ui-minima");
+});
+
+// Wake Lock: se pide en el primer tap y se re-adquiere al volver a visible.
+var wakeLock = null;
+function pedirWakeLock() {
+  if (!("wakeLock" in navigator)) {
+    elBannerWake.className = "visible";
+    return;
+  }
+  navigator.wakeLock.request("screen").then(function (wl) {
+    wakeLock = wl;
+    elBannerWake.className = "";              // ok: sin banner
+    wl.addEventListener("release", function () { wakeLock = null; });
+  }).catch(function () {
+    elBannerWake.className = "visible";       // fallo (permisos / no soportado)
+  });
+}
+
+// "al primer tap"
+var primerTapHecho = false;
+function onPrimerTap() {
+  if (primerTapHecho) return;
+  primerTapHecho = true;
+  pedirWakeLock();
+}
+document.addEventListener("pointerdown", onPrimerTap, { once: true });
+document.addEventListener("touchend", onPrimerTap, { once: true });
+
+document.addEventListener("visibilitychange", function () {
+  if (document.visibilityState === "visible" && primerTapHecho && !wakeLock) {
+    pedirWakeLock();                          // re-adquirir al volver a visible
+  }
+});
+
+// ------------------------- Cursor oculto (desktop) --------------------------
+var timerCursor = null;
+function moverCursor() {
+  document.body.classList.remove("sin-cursor");
+  if (timerCursor) clearTimeout(timerCursor);
+  timerCursor = setTimeout(function () {
+    document.body.classList.add("sin-cursor");
+  }, 2500);
+}
+document.addEventListener("mousemove", moverCursor);
+moverCursor();
+
+// --------------------------------- Arranque ---------------------------------
+requestAnimationFrame(render);
+conectar();
+</script>
+</body>
+</html>
