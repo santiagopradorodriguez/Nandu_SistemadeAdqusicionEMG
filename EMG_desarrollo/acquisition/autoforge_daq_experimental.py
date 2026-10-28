@@ -4701,6 +4701,9 @@ class RealTimePlotter(QtWidgets.QWidget):
     # --- NUEVO: Guardar metadata.json con la fecha, hora, timestamp y músculos ---
     metadata = {
       "measurement_date": now.isoformat(),
+      "t0_epoch": time.time(),
+      "t0_perf_counter": time.perf_counter(),
+      "daq_sample_rate": self.SAMPLE_RATE,
       "timestamp": int(now.timestamp()),
       "sample_rate": self.SAMPLE_RATE,
       "channels": self.CANALES_DAQ,
@@ -6533,6 +6536,9 @@ class RealTimePlotter(QtWidgets.QWidget):
 
       metadata = {
         "measurement_date": now.isoformat(),
+        "t0_epoch": time.time(),
+        "t0_perf_counter": time.perf_counter(),
+        "daq_sample_rate": self.SAMPLE_RATE,
         "timestamp": int(now.timestamp()),
         "sample_rate": self.SAMPLE_RATE,
         "channels": self.CANALES_DAQ,
@@ -7189,6 +7195,9 @@ class RealTimePlotter(QtWidgets.QWidget):
 
       metadata = {
         "measurement_date": now.isoformat(),
+        "t0_epoch": time.time(),
+        "t0_perf_counter": time.perf_counter(),
+        "daq_sample_rate": self.SAMPLE_RATE,
         "timestamp": int(now.timestamp()),
         "sample_rate": self.SAMPLE_RATE,
         "channels": self.CANALES_DAQ,
