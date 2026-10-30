@@ -4287,13 +4287,6 @@ class RealTimePlotter(QtWidgets.QWidget):
                         self.is_cvm_recording_take = True
 
                         # Hook fotometria: snapshot durante contraccion maxima CVM
-                        if getattr(self, 'photometry_mgr', None):
-                            self.photometry_mgr.request_snapshot(
-                                fase="cvm",
-                                palabra=str(vocal),
-                                pulso=int(self.cvm_step_idx + 1),
-                                sample_rate=float(self.SAMPLE_RATE),
-                            )
                         if getattr(self, 'photometry_mgr', None) is not None and getattr(self.photometry_mgr, 'is_enabled', False):
                             t_daq = time.perf_counter() - getattr(self, 'recording_start_time', time.perf_counter())
                             self.photometry_mgr.request_snapshot(fase="cvm", palabra=vocal, pulso=toma, t_daq_s=t_daq, sample_rate=self.SAMPLE_RATE)
