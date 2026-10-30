@@ -1338,7 +1338,7 @@ def escribir_pulsos_metronomo_csv(pulsos, output_dir, base_name="pulsos_metronom
     os.makedirs(str(output_dir), exist_ok=True)
     path = os.path.join(str(output_dir), f"{base_name}.csv")
     campos = ["seq", "idx", "sub", "principal", "count_in", "t_epoch", "t_perf",
-              "t_daq_s", "sample_daq", "bpm", "subdiv", "palabra"]
+              "t_daq_s", "t_wav_s", "sample_daq", "offset_muestras", "bpm", "subdiv", "palabra"]
     with open(path, "w", encoding="utf-8", newline="") as fh:
       writer = _csv.DictWriter(fh, fieldnames=campos, extrasaction="ignore")
       writer.writeheader()
@@ -2175,6 +2175,8 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.counting_started = False # NUEVO: Bandera para controlar el inicio del conteo del metrónomo
     self.current_recording = []
     self.recording_start_time = None
+    # Muestras que el .wav ya contiene al fijar el ancla (pre-roll o ruido basal)
+    self._offset_muestras_ancla = 0
     self.acquisition_thread = None
     # --- REFACTOR: Encapsular cola y evento ---
     self.data_queue = queue.Queue()
@@ -4101,6 +4103,9 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.beep_thread.start()
 
     self.metro_timer = QtCore.QTimer()
+    # CoarseTimer (default) tiene +/-5% de tolerancia: a 250 ms son +/-12 ms y
+    # el pulso se adelanta. Para medir tiempos exactos hace falta PrecisionTimer.
+    self.metro_timer.setTimerType(QtCore.Qt.PreciseTimer)
     self.metro_timer.timeout.connect(self.on_metro_beat)
     
     # Hacer que el metrónomo sea visible por defecto
@@ -4111,6 +4116,8 @@ class RealTimePlotter(QtWidgets.QWidget):
     # Registro de tiempos exactos de los pulsos (impresion + CSV de sesion)
     self._metro_pulsos = []
     self._metro_pulso_seq = 0
+    # Reloj monotono absoluto del proximo pulso (evita deriva acumulada)
+    self._metro_next_perf = None
     
     self.COLOR_IDLE = "#111111"
     self.COLOR_BEAT = "#00FFFF"
@@ -4142,6 +4149,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.metro_subdiv_index = 0
     self._metro_pulsos = []
     self._metro_pulso_seq = 0
+    self._metro_next_perf = None
     self.on_metro_beat()
 
   def save_metronome_config(self):
@@ -4150,6 +4158,7 @@ class RealTimePlotter(QtWidgets.QWidget):
   def stop_native_metronome(self):
     self.metro_is_running = False
     self.metro_timer.stop()
+    self._metro_next_perf = None
     self.metro_pulse_frame.setStyleSheet(f"background-color: {self.COLOR_IDLE}; border: 2px solid #00FFFF;")
     self.metro_lbl_count.setText("0")
     self.metro_lbl_title.setText("PULSO")
@@ -4175,10 +4184,9 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     bpm = max(1, self.spin_bpm.value())
     num_subdivs = max(1, self.spin_metro_subdivs.value())
-    interval_ms = int(60000 / bpm)
-    sub_interval_ms = max(20, interval_ms // num_subdivs)
-    
-    self.metro_timer.start(sub_interval_ms)
+    sub_interval_s = (60.0 / bpm) / num_subdivs
+
+    self._programar_siguiente_pulso(sub_interval_s)
 
     is_main_beat = (self.metro_subdiv_index == 0)
 
@@ -4326,22 +4334,66 @@ class RealTimePlotter(QtWidgets.QWidget):
     self._registrar_pulso_metronomo(t_beat_epoch, t_beat_perf, sub_idx_actual, bpm, num_subdivs, count_in_actual)
     self.metro_subdiv_index = (self.metro_subdiv_index + 1) % num_subdivs
 
+  def _programar_siguiente_pulso(self, intervalo_s):
+    """Programa el proximo pulso sobre un reloj monotono absoluto.
+
+    Reiniciar el QTimer dentro del callback acumula el costo de proceso de cada
+    beat (se observaron ~14 ms por pulso a 120 BPM, ~1,7 s de deriva por minuto).
+    Aca el objetivo es siempre `anterior + intervalo`, asi el error no se suma.
+    """
+    try:
+      ahora = time.perf_counter()
+      intervalo = max(0.005, float(intervalo_s))
+      siguiente = getattr(self, "_metro_next_perf", None)
+      if siguiente is None:
+        siguiente = ahora
+      siguiente += intervalo
+      restante = siguiente - ahora
+      if restante < 0:
+        # Atraso grande (ventana bloqueada): re-anclar en vez de correr detras.
+        siguiente = ahora
+        restante = 0.0
+      self._metro_next_perf = siguiente
+      self.metro_timer.setSingleShot(True)
+      self.metro_timer.start(max(0, int(round(restante * 1000.0))))
+    except Exception as e:
+      print(f"[Metronomo] Error al programar el proximo pulso: {e}")
+
+  def _contar_muestras_recording(self):
+    """Muestras ya presentes en current_recording (pre-roll / ruido previo).
+
+    El .wav final concatena esos datos ANTES del instante ancla, asi que el
+    indice de muestra de un pulso dentro del archivo lleva este desplazamiento.
+    """
+    total = 0
+    for ch in (getattr(self, "current_recording", None) or []):
+      try:
+        total += int(ch.shape[1])
+      except Exception:
+        continue
+    return total
+
   def _registrar_pulso_metronomo(self, t_epoch, t_perf, sub_idx, bpm, num_subdivs, count_in=None):
     """Imprime y acumula el tiempo exacto de cada pulso del metronomo.
 
     Emite una linea por pulso con epoch, perf_counter (el mismo reloj que las
-    anclas t0_perf_counter de metadata) y, si hay grabacion activa, el tiempo
-    relativo a la DAQ y el indice de muestra estimado. Al guardar la sesion se
-    escribe pulsos_metronomo.csv en la carpeta de la medicion.
+    anclas t0_perf_counter de metadata), el tiempo relativo al ancla de
+    grabacion y el indice de muestra dentro del .wav final. Al guardar la
+    sesion se escribe pulsos_metronomo.csv en la carpeta de la medicion.
     """
     try:
       es_principal = (int(sub_idx) == 0)
       self._metro_pulso_seq = int(getattr(self, "_metro_pulso_seq", 0)) + 1
       t_daq_s = None
+      t_wav_s = None
       sample_daq = None
+      offset = int(getattr(self, "_offset_muestras_ancla", 0) or 0)
+      sr = float(getattr(self, "SAMPLE_RATE", 0) or 0)
       if getattr(self, "is_recording", False) and getattr(self, "recording_start_time", None) is not None:
         t_daq_s = float(t_perf - self.recording_start_time)
-        sample_daq = int(round(t_daq_s * float(self.SAMPLE_RATE)))
+        if sr > 0:
+          sample_daq = int(round(t_daq_s * sr)) + offset
+          t_wav_s = sample_daq / sr
       palabra = ""
       if getattr(self, "is_autoforge_running", False):
         words = getattr(self, "autoforge_words", []) or []
@@ -4359,7 +4411,9 @@ class RealTimePlotter(QtWidgets.QWidget):
         "t_epoch": round(float(t_epoch), 6),
         "t_perf": round(float(t_perf), 6),
         "t_daq_s": None if t_daq_s is None else round(t_daq_s, 6),
+        "t_wav_s": None if t_wav_s is None else round(t_wav_s, 6),
         "sample_daq": sample_daq,
+        "offset_muestras": offset if sample_daq is not None else None,
         "bpm": int(bpm),
         "subdiv": int(num_subdivs),
         "palabra": palabra,
@@ -4374,7 +4428,8 @@ class RealTimePlotter(QtWidgets.QWidget):
       print(
         f"[METRONOMO] #{registro['seq']} principal={registro['principal']} idx={registro['idx']} "
         f"sub={registro['sub']} t_epoch={registro['t_epoch']:.6f} t_perf={registro['t_perf']:.6f} "
-        f"t_daq_s={t_daq_txt} sample_daq={sample_txt} bpm={registro['bpm']} subdiv={registro['subdiv']}"
+        f"t_daq_s={t_daq_txt} sample_daq={sample_txt} offset={registro['offset_muestras']} "
+        f"bpm={registro['bpm']} subdiv={registro['subdiv']}"
         + (f" palabra={palabra}" if palabra else ""),
         flush=True,
       )
@@ -4644,6 +4699,8 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.current_recording = self.preroll_buffer.dump_preroll_for_recording()
       else:
         self.current_recording.clear()
+      # El .wav empieza con este pre-roll: desplazamiento de muestras del ancla.
+      self._offset_muestras_ancla = self._contar_muestras_recording()
 
       if hasattr(self, 'btn_pause'):
         self.btn_pause.setEnabled(True)
@@ -4943,7 +5000,9 @@ class RealTimePlotter(QtWidgets.QWidget):
       if hasattr(self, 'metro_is_running') and self.metro_is_running:
         bpm = max(1, self.spin_bpm.value())
         subdivs = max(1, self.spin_metro_subdivs.value())
-        self.metro_timer.start(int(60000 / bpm) // subdivs)
+        # Re-anclar el reloj absoluto tras la pausa
+        self._metro_next_perf = None
+        self._programar_siguiente_pulso((60.0 / bpm) / subdivs)
       if hasattr(self, 'session_timer') and getattr(self, 'is_autoforge_running', False):
         self.session_timer.start(1000)
 
@@ -6418,6 +6477,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.lbl_recording_space.setText("<div align='center' style='font-size: 50px; font-weight: 900; color: #FFFF00;'>GRABANDO RUIDO...</div>")
     
     self.current_recording = []
+    self._offset_muestras_ancla = 0
     
     self.noise_data_accumulated = [[] for _ in range(self.NUM_CANALES)]
     self.noise_levels = [0.0] * self.NUM_CANALES
@@ -6545,6 +6605,8 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.is_finishing_sequence = False
     
     self.current_recording = getattr(self, 'autoforge_ruido_guardado', []).copy()
+    # El .wav de la palabra arranca con el ruido basal ya grabado
+    self._offset_muestras_ancla = self._contar_muestras_recording()
     self.stats_time = [[] for _ in range(self.NUM_CANALES)]
     self.stats_snr = [[] for _ in range(self.NUM_CANALES)]
     self.stats_noise_mean = [[] for _ in range(self.NUM_CANALES)]
@@ -7001,6 +7063,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     )
     
     self.current_recording = []
+    self._offset_muestras_ancla = 0
     
     # Reiniciar arreglos de ruido
     self.noise_data_accumulated = [[] for _ in range(self.NUM_CANALES)]
@@ -7183,6 +7246,8 @@ class RealTimePlotter(QtWidgets.QWidget):
     
     # --- NUEVO: Limpiamos los buffers de guardado y estadísticas para cada palabra ---
     self.current_recording = getattr(self, 'autoforge_ruido_guardado', []).copy()
+    # El .wav de la palabra arranca con el ruido basal ya grabado
+    self._offset_muestras_ancla = self._contar_muestras_recording()
     self.stats_time = [[] for _ in range(self.NUM_CANALES)]
     self.stats_snr = [[] for _ in range(self.NUM_CANALES)]
     self.stats_noise_mean = [[] for _ in range(self.NUM_CANALES)]
