@@ -755,6 +755,30 @@ def moving_average(buffer: np.ndarray, window_size: int) -> np.ndarray:
         
     return out
 
+def generate_jittered_intervals(bpm: float, n_pulses: int, jitter_pct: float, mode: str = "exponential_hazard", seed: int = None) -> list:
+    """
+    Genera una lista de intervalos inter-pulso (ISI) en segundos con Jitter controlado
+    para evitar que el sujeto se sincronice o anticipe al metrónomo (anti-entrainment).
+    Garantiza suma cero (duración media igual a 60/bpm) y piso fisiológico >= 0.75 s.
+    """
+    tau_0 = 60.0 / max(1.0, float(bpm))
+    if jitter_pct <= 0.0 or n_pulses <= 0:
+        return [tau_0] * max(1, int(n_pulses) if n_pulses > 0 else 1)
+    rng = np.random.default_rng(seed)
+    tau_min = max(0.75, tau_0 * (1.0 - float(jitter_pct)))
+    tau_max = max(tau_min + 0.05, tau_0 * (1.0 + float(jitter_pct)))
+    if mode == "gaussian":
+        raw = rng.normal(loc=tau_0, scale=(float(jitter_pct) * tau_0) / 2.0, size=n_pulses)
+    elif mode == "exponential_hazard":
+        # Tasa de riesgo (Hazard Rate) constante tras tau_min: elimina predicción temporal
+        scale = max(0.05, tau_0 - tau_min)
+        raw = tau_min + rng.exponential(scale=scale, size=n_pulses)
+    else:
+        raw = rng.uniform(low=tau_min, high=tau_max, size=n_pulses)
+    clipped = np.clip(raw, tau_min, tau_max)
+    centered = clipped - np.mean(clipped) + tau_0
+    return np.clip(centered, tau_min, tau_max).tolist()
+
 def calcular_ruido_linea_50hz(noise_signal_uV: np.ndarray, fs: float) -> float:
     """
     Calcula el voltaje RMS en microvoltios (uV) de la componente de 50 Hz de la red eléctrica
@@ -1338,7 +1362,8 @@ def escribir_pulsos_metronomo_csv(pulsos, output_dir, base_name="pulsos_metronom
     os.makedirs(str(output_dir), exist_ok=True)
     path = os.path.join(str(output_dir), f"{base_name}.csv")
     campos = ["seq", "idx", "sub", "principal", "count_in", "t_epoch", "t_perf",
-              "t_daq_s", "t_wav_s", "sample_daq", "offset_muestras", "bpm", "subdiv", "palabra"]
+              "t_daq_s", "t_wav_s", "sample_daq", "offset_muestras", "bpm", "subdiv",
+              "intervalo_s", "jitter_mode", "palabra"]
     with open(path, "w", encoding="utf-8", newline="") as fh:
       writer = _csv.DictWriter(fh, fieldnames=campos, extrasaction="ignore")
       writer.writeheader()
@@ -1395,6 +1420,7 @@ def generar_grafico_grabacion(datos_completos, sample_rate, output_dir, num_cana
   meta_path_root = os.path.join(output_dir, "metadata.json")
   meta_file = meta_path_ch0 if os.path.exists(meta_path_ch0) else (meta_path_root if os.path.exists(meta_path_root) else None)
   
+  beat_timestamps = []
   if meta_file:
     try:
       with open(meta_file, 'r', encoding='utf-8') as f:
@@ -1403,8 +1429,23 @@ def generar_grafico_grabacion(datos_completos, sample_rate, output_dir, num_cana
         noise_seconds = md.get("noise_seconds", 5.0)
         muscles_map = md.get("muscles_map", {})
         muscles_list = md.get("muscles", [])
+        beat_timestamps = md.get("beat_timestamps_s", []) or []
     except Exception as e_meta:
       print(f"  [Aviso] Error leyendo metadatos: {e_meta}")
+
+  # Si no estaban en metadata.json pero existe pulsos_metronomo.csv, extraer t_wav_s de pulsos principales post-count-in
+  if not beat_timestamps:
+    pulsos_csv_file = os.path.join(output_dir, "pulsos_metronomo.csv")
+    if os.path.exists(pulsos_csv_file):
+      try:
+        import csv as _csv
+        with open(pulsos_csv_file, 'r', encoding='utf-8') as f_p:
+          reader = _csv.DictReader(f_p)
+          for row in reader:
+            if str(row.get("principal", "0")) == "1" and int(row.get("idx", "0") or 0) >= 1 and str(row.get("t_wav_s", "")).strip() not in ("", "None"):
+              beat_timestamps.append(float(row["t_wav_s"]))
+      except Exception:
+        pass
 
   # 2. Cargar configuraciones de canales y colores
   try:
@@ -1556,11 +1597,28 @@ def generar_grafico_grabacion(datos_completos, sample_rate, output_dir, num_cana
       ax.text(noise_seconds / 2.0, y_text, "Ruido Basal", color=span_color,
               fontsize=13, ha='center', va='top', fontweight='bold', alpha=0.9)
 
-    # Guías del metrónomo
-    if bpm and noise_seconds is not None and noise_seconds > 0:
+    # Guías del metrónomo (usa timestamps reales si existen; si no, grilla teórica)
+    win_color = '#ffffff'
+    beat_color = '#ffaa00'
+    t_limite_ruido = float(noise_seconds) if (noise_seconds is not None and noise_seconds > 0) else 0.0
+    valid_beats = sorted([float(b) for b in beat_timestamps if max(t_min, t_limite_ruido - 0.2) <= float(b) <= t_max])
+    beat_windows = []
+
+    if valid_beats:
+      tau_ref = (60.0 / bpm) if (bpm and bpm > 0) else 1.5
+      bounds = [max(t_min, valid_beats[0] - 0.5 * tau_ref)]
+      for idx_b in range(len(valid_beats) - 1):
+        bounds.append(0.5 * (valid_beats[idx_b] + valid_beats[idx_b + 1]))
+      bounds.append(min(t_max, valid_beats[-1] + 0.5 * tau_ref))
+      for t_b in valid_beats:
+        ax.axvline(x=t_b, color=beat_color, ls=':', lw=0.9, alpha=0.35)
+      for t_bnd in bounds:
+        if t_min <= t_bnd <= t_max:
+          ax.axvline(x=t_bnd, color=win_color, ls='--', lw=1.0, alpha=0.4)
+      for idx_b in range(len(valid_beats)):
+        beat_windows.append((bounds[idx_b], bounds[idx_b + 1]))
+    elif bpm and noise_seconds is not None and noise_seconds > 0:
       tau = 60.0 / bpm
-      win_color = '#ffffff'
-      beat_color = '#ffaa00'
       first_bound = noise_seconds - tau / 2.0
       if t_min <= first_bound <= t_max:
         ax.axvline(x=first_bound, color=win_color, ls='--', lw=1.0, alpha=0.4)
@@ -1570,6 +1628,8 @@ def generar_grafico_grabacion(datos_completos, sample_rate, output_dir, num_cana
         t_bound = t_beat + tau / 2.0
         if t_min <= t_beat <= t_max:
           ax.axvline(x=t_beat, color=beat_color, ls=':', lw=0.9, alpha=0.35)
+        if k >= 1 and (t_beat - tau / 2.0) <= t_max:
+          beat_windows.append((t_beat - tau / 2.0, t_bound))
         if t_bound > t_max:
           break
         if t_bound >= t_min:
@@ -1579,16 +1639,8 @@ def generar_grafico_grabacion(datos_completos, sample_rate, output_dir, num_cana
     # Detección y marcado de picos de contracción en señal cruda
     if not is_mic:
       picos_t, picos_y = [], []
-      t_limite_ruido = float(noise_seconds) if (noise_seconds is not None and noise_seconds > 0) else 0.0
-      if bpm and noise_seconds is not None and noise_seconds > 0:
-        tau = 60.0 / bpm
-        k_p = 1
-        while True:
-          t_beat_k = noise_seconds + k_p * tau
-          t_w_start = t_beat_k - tau / 2.0
-          t_w_end = t_beat_k + tau / 2.0
-          if t_w_start > t_max:
-            break
+      if beat_windows:
+        for t_w_start, t_w_end in beat_windows:
           t_start_val = max(t_min, max(t_limite_ruido, t_w_start))
           t_end_val = min(t_max, t_w_end)
           if t_start_val < t_end_val:
@@ -1603,7 +1655,6 @@ def generar_grafico_grabacion(datos_completos, sample_rate, output_dir, num_cana
                 if p_val > 0 and p_t >= t_limite_ruido:
                   picos_t.append(p_t)
                   picos_y.append(p_val)
-          k_p += 1
       else:
         try:
           from scipy import signal
@@ -1975,6 +2026,23 @@ class AutoForgeDialog(QtWidgets.QDialog):
     self.chk_calibrar_cvm.setChecked(True)
     self.chk_calibrar_cvm.setStyleSheet("color: #00ffcc; font-weight: bold;")
     self.layout.addRow("Calibración CVM:", self.chk_calibrar_cvm)
+
+    self.chk_jitter = QtWidgets.QCheckBox("Activar Jitter Anti-Sincronización")
+    jit_init = getattr(parent, 'chk_metro_jitter', None).isChecked() if hasattr(parent, 'chk_metro_jitter') else False
+    self.chk_jitter.setChecked(jit_init)
+    self.chk_jitter.setStyleSheet("color: #ff55ff; font-weight: bold;")
+    self.spin_jitter_pct = QtWidgets.QSpinBox()
+    self.spin_jitter_pct.setRange(5, 50)
+    self.spin_jitter_pct.setSingleStep(5)
+    pct_init = getattr(parent, 'spin_metro_jitter_pct', None).value() if hasattr(parent, 'spin_metro_jitter_pct') else 25
+    self.spin_jitter_pct.setValue(int(pct_init))
+    self.cmb_jitter_mode = QtWidgets.QComboBox()
+    self.cmb_jitter_mode.addItems(["exponential_hazard", "uniform", "gaussian"])
+    if hasattr(parent, 'cmb_metro_jitter_mode'):
+      self.cmb_jitter_mode.setCurrentText(parent.cmb_metro_jitter_mode.currentText())
+    self.layout.addRow("Modo Jitter:", self.chk_jitter)
+    self.layout.addRow("Jitter (+/- %):", self.spin_jitter_pct)
+    self.layout.addRow("Perfil Jitter:", self.cmb_jitter_mode)
     
     # Fila de control de palabras y aleatorización
     self.words_row_layout = QtWidgets.QHBoxLayout()
@@ -2476,8 +2544,8 @@ class RealTimePlotter(QtWidgets.QWidget):
     if not any_checked and self.channel_checkboxes:
       self.channel_checkboxes[0].setChecked(True)
 
-    self.btn_config_musculos = QtWidgets.QPushButton("Configurar Musculos")
-    self.btn_config_musculos.setStyleSheet("""
+    self.btn_config_musculos_panel = QtWidgets.QPushButton("Configurar Musculos")
+    self.btn_config_musculos_panel.setStyleSheet("""
       QPushButton {
         background-color: #141424;
         color: #00ffff;
@@ -2493,10 +2561,10 @@ class RealTimePlotter(QtWidgets.QWidget):
         color: #000000;
       }
     """)
-    self.btn_config_musculos.setToolTip("Configurar nombres de musculos asignados a los canales (detiene la adquisicion si esta corriendo)")
-    self.btn_config_musculos.clicked.connect(self.abrir_dialogo_musculos)
+    self.btn_config_musculos_panel.setToolTip("Configurar nombres de musculos asignados a los canales (detiene la adquisicion si esta corriendo)")
+    self.btn_config_musculos_panel.clicked.connect(self.abrir_dialogo_musculos)
     self.channel_layout.addSpacing(8)
-    self.channel_layout.addWidget(self.btn_config_musculos)
+    self.channel_layout.addWidget(self.btn_config_musculos_panel)
 
     self.btn_start_acq = QtWidgets.QPushButton("Iniciar Adquisicion")
     self.btn_start_acq.setStyleSheet(self.BTN_START_STYLE)
@@ -2634,6 +2702,23 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.filter_layout.addLayout(bpm_sub_layout, 3, 2, 1, 2)
     self.filter_layout.addWidget(self.label_noise_duration, 3, 4)
     self.filter_layout.addWidget(self.spin_noise_duration, 3, 5)
+
+    # Fila 4: Modo Jittering Anti-Sincronizacion
+    self.chk_metro_jitter = QtWidgets.QCheckBox("Jitter Anti-Sync")
+    self.chk_metro_jitter.setChecked(False)
+    self.chk_metro_jitter.setToolTip("Varía pseudoaleatoriamente el intervalo del metrónomo para evitar que la persona se sincronice o anticipe.")
+    self.label_jitter_pct = QtWidgets.QLabel("Jitter (%):")
+    self.spin_metro_jitter_pct = SpinBox(value=25, int=True, bounds=(5, 50), step=5)
+    self.spin_metro_jitter_pct.setFixedWidth(55)
+    self.spin_metro_jitter_pct.setFixedHeight(26)
+    self.cmb_metro_jitter_mode = QtWidgets.QComboBox()
+    self.cmb_metro_jitter_mode.addItems(["exponential_hazard", "uniform", "gaussian"])
+    self.cmb_metro_jitter_mode.setToolTip("exponential_hazard: Tasa de riesgo constante (no predecible). uniform: Uniforme. gaussian: Gaussiano.")
+
+    self.filter_layout.addWidget(self.chk_metro_jitter, 4, 0, 1, 2)
+    self.filter_layout.addWidget(self.label_jitter_pct, 4, 2)
+    self.filter_layout.addWidget(self.spin_metro_jitter_pct, 4, 3)
+    self.filter_layout.addWidget(self.cmb_metro_jitter_mode, 4, 4, 1, 2)
 
   def _setup_ui_controls(self):
     """
@@ -2897,11 +2982,6 @@ class RealTimePlotter(QtWidgets.QWidget):
         )
       else:
         self.btn_notas.setStyleSheet(BTN_CYBER_TOOL)
-
-  def abrir_dialogo_musculos(self):
-    dialog = MuscleSelectionDialog(self)
-    if dialog.exec():
-      self._reload_channel_muscles()
 
   def _reload_channel_muscles(self):
     self.nombres_musculos = []
@@ -3653,7 +3733,7 @@ class RealTimePlotter(QtWidgets.QWidget):
       elif self.chk_modo_prueba.isChecked():
         test_freq = self.spin_test_freq.value()
         tipo_prueba = self.cmb_fuente_prueba.currentText()
-        self.acquisition_thread = threading.Thread(target=simulador_thread, args=(chunk_samples_dinamico, self.SAMPLE_RATE, self.NUM_CANALES, self.data_queue, self.stop_event, test_freq, tipo_prueba), daemon=True)
+        self.acquisition_thread = threading.Thread(target=simulador_thread, args=(chunk_samples_dinamico, self.SAMPLE_RATE, self.NUM_CANALES, self.data_queue, self.stop_event, test_freq, tipo_prueba, self.active_channel_indices), daemon=True)
       else:
         if not NIDAQMX_DISPONIBLE:
           print("Error: nidaqmx no encontrado. No se puede correr en modo real.")
@@ -4104,7 +4184,7 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     self.metro_timer = QtCore.QTimer()
     # CoarseTimer (default) tiene +/-5% de tolerancia: a 250 ms son +/-12 ms y
-    # el pulso se adelanta. Para medir tiempos exactos hace falta PrecisionTimer.
+    # el pulso se adelanta. Para medir tiempos exactos hace falta PreciseTimer.
     self.metro_timer.setTimerType(QtCore.Qt.PreciseTimer)
     self.metro_timer.timeout.connect(self.on_metro_beat)
     
@@ -4113,11 +4193,18 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.metro_is_running = False
     self.metro_count_in_remaining = 0
     self.metro_beat_count = 0
-    # Registro de tiempos exactos de los pulsos (impresion + CSV de sesion)
+    # Registro de tiempos exactos de los pulsos (impresion + CSV de sesion + metadata)
     self._metro_pulsos = []
     self._metro_pulso_seq = 0
+    self.metro_beat_timestamps_s = []
+    self.metro_beat_sample_indices = []
+    self.metro_applied_intervals_s = []
+    self.metro_jitter_schedule = []
+    self.current_beat_tau_s = 1.0
     # Reloj monotono absoluto del proximo pulso (evita deriva acumulada)
     self._metro_next_perf = None
+    self._paused_metro_remaining_ms = 0
+    self._on_count_in_finished_cb = None
     
     self.COLOR_IDLE = "#111111"
     self.COLOR_BEAT = "#00FFFF"
@@ -4149,7 +4236,25 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.metro_subdiv_index = 0
     self._metro_pulsos = []
     self._metro_pulso_seq = 0
+    self.metro_beat_timestamps_s = []
+    self.metro_beat_sample_indices = []
+    self.metro_applied_intervals_s = []
     self._metro_next_perf = None
+    self._paused_metro_remaining_ms = 0
+
+    bpm_val = max(1, self.spin_bpm.value())
+    self.current_beat_tau_s = 60.0 / float(bpm_val)
+    if hasattr(self, 'chk_metro_jitter') and self.chk_metro_jitter.isChecked() and not getattr(self, 'is_cvm_active', False):
+        n_sched = max(60, int(getattr(self, 'autoforge_target_reps', 30)) * max(1, len(getattr(self, 'autoforge_words', [1]))))
+        self.metro_jitter_schedule = generate_jittered_intervals(
+            bpm=bpm_val,
+            n_pulses=n_sched,
+            jitter_pct=float(self.spin_metro_jitter_pct.value()) / 100.0,
+            mode=self.cmb_metro_jitter_mode.currentText()
+        )
+    else:
+        self.metro_jitter_schedule = []
+
     self.on_metro_beat()
 
   def save_metronome_config(self):
@@ -4159,6 +4264,8 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.metro_is_running = False
     self.metro_timer.stop()
     self._metro_next_perf = None
+    self._paused_metro_remaining_ms = 0
+    self._on_count_in_finished_cb = None
     self.metro_pulse_frame.setStyleSheet(f"background-color: {self.COLOR_IDLE}; border: 2px solid #00FFFF;")
     self.metro_lbl_count.setText("0")
     self.metro_lbl_title.setText("PULSO")
@@ -4183,20 +4290,36 @@ class RealTimePlotter(QtWidgets.QWidget):
     count_in_actual = int(getattr(self, "metro_count_in_remaining", 0))
 
     bpm = max(1, self.spin_bpm.value())
-    num_subdivs = max(1, self.spin_metro_subdivs.value())
-    sub_interval_s = (60.0 / bpm) / num_subdivs
-
-    self._programar_siguiente_pulso(sub_interval_s)
-
+    jitter_active = (
+        hasattr(self, 'chk_metro_jitter')
+        and self.chk_metro_jitter.isChecked()
+        and not getattr(self, 'is_cvm_active', False)
+        and self.metro_count_in_remaining <= 1
+    )
+    # En Modo Jitter activo durante fonación, suprimir sub-pulsos para que el sujeto
+    # no pueda anticipar cuándo caerá el siguiente pulso principal.
+    num_subdivs = 1 if jitter_active else max(1, self.spin_metro_subdivs.value())
     is_main_beat = (self.metro_subdiv_index == 0)
+
+    if jitter_active and getattr(self, 'metro_jitter_schedule', None) and is_main_beat:
+        sched_idx = max(0, self.metro_beat_count) % len(self.metro_jitter_schedule)
+        self.current_beat_tau_s = float(self.metro_jitter_schedule[sched_idx])
+    elif not jitter_active:
+        self.current_beat_tau_s = 60.0 / float(bpm)
+
+    sub_interval_s = self.current_beat_tau_s / float(num_subdivs)
+    self._programar_siguiente_pulso(sub_interval_s)
 
     if is_main_beat:
         if self.metro_count_in_remaining > 1:
+            cnt_val = self.metro_count_in_remaining - 1
             self.metro_lbl_title.setText("INICIANDO")
             self.metro_lbl_title.setStyleSheet("font-size: 16px; color: #FF0000; font-weight: bold;")
             self.metro_lbl_count.setStyleSheet("font-size: 48px; color: #FF0000; font-weight: bold;")
-            self.metro_lbl_count.setText(str(self.metro_count_in_remaining - 1))
+            self.metro_lbl_count.setText(str(cnt_val))
             self.metro_pulse_frame.setStyleSheet(f"background-color: {self.COLOR_PREP}; border: 2px solid #FF0000;")
+            if hasattr(self, 'countdown_text') and self.countdown_text.isVisible():
+                self.countdown_text.setText(f"PREPÁRATE...\n{cnt_val}")
             self.metro_count_in_remaining -= 1
             self.beep_queue.put((800, 200))
         else:
@@ -4204,8 +4327,26 @@ class RealTimePlotter(QtWidgets.QWidget):
                 self.metro_beat_count = 1
                 self.metro_count_in_remaining = 0
                 self.beep_queue.put((1200, 400))
+                # Disparar transición a grabación ANTES de registrar el pulso #1,
+                # sincronizando recording_start_time con t_beat_perf para que el Pulso 1
+                # quede registrado con t_daq_s = 0.0 y sample_daq = _offset_muestras_ancla.
+                cb_start = getattr(self, '_on_count_in_finished_cb', None)
+                self._on_count_in_finished_cb = None
+                if callable(cb_start):
+                    cb_start(anchor_perf=t_beat_perf)
             else:
                 self.metro_beat_count += 1
+                # En modo AutoForge discreto, al superar el número objetivo de repeticiones
+                # cerramos la palabra exactamente en el borde del pulso final.
+                if (
+                    getattr(self, 'is_autoforge_running', False)
+                    and not getattr(self, 'is_autoforge_continuo', False)
+                    and not getattr(self, 'is_cvm_active', False)
+                    and getattr(self, 'is_recording', False)
+                ):
+                    if self.metro_beat_count > self.autoforge_target_reps:
+                        self.estado_guardar_palabra()
+                        return
                 self.beep_queue.put((1000, 100))
 
             if getattr(self, 'is_autoforge_running', False):
@@ -4298,6 +4439,7 @@ class RealTimePlotter(QtWidgets.QWidget):
                     if not getattr(self, 'is_finishing_sequence', False):
                         self.is_finishing_sequence = True
                         self.estado_guardar_secuencia_continua()
+                        return
                 else:
                     idx = (self.metro_beat_count - 1) % len(self.autoforge_words)
                     palabra_actual = self.autoforge_words[idx].upper()
@@ -4387,6 +4529,12 @@ class RealTimePlotter(QtWidgets.QWidget):
         if sr > 0:
           sample_daq = int(round(t_daq_s * sr)) + offset
           t_wav_s = sample_daq / sr
+        if es_principal and int(getattr(self, "metro_beat_count", 0)) >= 1:
+          if sample_daq is not None:
+            self.metro_beat_sample_indices.append(int(sample_daq))
+          if t_wav_s is not None:
+            self.metro_beat_timestamps_s.append(round(float(t_wav_s), 6))
+          self.metro_applied_intervals_s.append(round(float(getattr(self, "current_beat_tau_s", 60.0 / max(1, bpm))), 6))
       palabra = ""
       if getattr(self, "is_autoforge_running", False):
         words = getattr(self, "autoforge_words", []) or []
@@ -4395,6 +4543,8 @@ class RealTimePlotter(QtWidgets.QWidget):
         else:
           idx_w = int(getattr(self, "autoforge_word_idx", 0))
         palabra = words[idx_w].upper() if words and 0 <= idx_w < len(words) else ""
+      jit_enabled = bool(hasattr(self, "chk_metro_jitter") and self.chk_metro_jitter.isChecked())
+      jit_mode = self.cmb_metro_jitter_mode.currentText() if (jit_enabled and hasattr(self, "cmb_metro_jitter_mode")) else "off"
       registro = {
         "seq": self._metro_pulso_seq,
         "idx": int(getattr(self, "metro_beat_count", 0)),
@@ -4409,6 +4559,8 @@ class RealTimePlotter(QtWidgets.QWidget):
         "offset_muestras": offset if sample_daq is not None else None,
         "bpm": int(bpm),
         "subdiv": int(num_subdivs),
+        "intervalo_s": round(float(getattr(self, "current_beat_tau_s", 60.0 / max(1, bpm))), 6),
+        "jitter_mode": jit_mode,
         "palabra": palabra,
       }
       pulsos = getattr(self, "_metro_pulsos", None)
@@ -4422,7 +4574,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         f"[METRONOMO] #{registro['seq']} principal={registro['principal']} idx={registro['idx']} "
         f"sub={registro['sub']} t_epoch={registro['t_epoch']:.6f} t_perf={registro['t_perf']:.6f} "
         f"t_daq_s={t_daq_txt} sample_daq={sample_txt} offset={registro['offset_muestras']} "
-        f"bpm={registro['bpm']} subdiv={registro['subdiv']}"
+        f"bpm={registro['bpm']} subdiv={registro['subdiv']} tau={registro['intervalo_s']:.3f}s"
         + (f" palabra={palabra}" if palabra else ""),
         flush=True,
       )
@@ -4855,6 +5007,14 @@ class RealTimePlotter(QtWidgets.QWidget):
       "daq_sample_rate": self.SAMPLE_RATE,
       "metronomo_pulsos": len(getattr(self, '_metro_pulsos', []) or []),
       "metronomo_pulsos_csv": "pulsos_metronomo.csv" if getattr(self, '_metro_pulsos', None) else None,
+      "beat_timestamps_s": list(getattr(self, 'metro_beat_timestamps_s', [])),
+      "beat_sample_indices": list(getattr(self, 'metro_beat_sample_indices', [])),
+      "beat_intervals_s": list(getattr(self, 'metro_applied_intervals_s', [])),
+      "jitter_config": {
+          "enabled": bool(hasattr(self, 'chk_metro_jitter') and self.chk_metro_jitter.isChecked()),
+          "pct": float(self.spin_metro_jitter_pct.value()) if hasattr(self, 'spin_metro_jitter_pct') else 0.0,
+          "mode": self.cmb_metro_jitter_mode.currentText() if hasattr(self, 'cmb_metro_jitter_mode') else "exponential_hazard"
+      },
       "timestamp": int(now.timestamp()),
       "sample_rate": self.SAMPLE_RATE,
       "channels": self.CANALES_DAQ,
@@ -4914,7 +5074,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     except Exception as e:
       print(f"--- ERROR AL GUARDAR METADATA.JSON RAIZ ---: {e}")
 
-    # 1. Guarda el .wav
+    # 1. Guarda los pulsos del metrónomo y el .wav
     try:
       escribir_pulsos_metronomo_csv(getattr(self, '_metro_pulsos', None), output_dir)
     except Exception as e:
@@ -4932,7 +5092,8 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     # 3. Genera el gráfico .png
     try:
-      print(f"--- ERROR AL GUARDAR METADATA.JSON RAIZ ---: {e}")
+      generar_grafico_grabacion(self.current_recording, self.SAMPLE_RATE, output_dir, self.NUM_CANALES, self.CANALES_DAQ)
+      ruta_photo = os.path.join(output_dir, "photo.png")
       if os.path.exists(ruta_photo):
         self.mostrar_preview_signal.emit(ruta_photo)
     except Exception as e:
@@ -4963,6 +5124,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         self._paused_phase_remaining_ms = max(50, self._phase_timer.remainingTime())
         self._phase_timer.stop()
       if hasattr(self, 'metro_timer') and self.metro_timer.isActive():
+        self._paused_metro_remaining_ms = max(10, self.metro_timer.remainingTime())
         self.metro_timer.stop()
       if hasattr(self, 'session_timer') and self.session_timer.isActive():
         self.session_timer.stop()
@@ -4991,11 +5153,14 @@ class RealTimePlotter(QtWidgets.QWidget):
       if getattr(self, '_scheduled_phase_cb', None) is not None and getattr(self, '_paused_phase_remaining_ms', 0) > 0:
         self._phase_timer.start(self._paused_phase_remaining_ms)
       if hasattr(self, 'metro_is_running') and self.metro_is_running:
-        bpm = max(1, self.spin_bpm.value())
-        subdivs = max(1, self.spin_metro_subdivs.value())
-        # Re-anclar el reloj absoluto tras la pausa
-        self._metro_next_perf = None
-        self._programar_siguiente_pulso((60.0 / bpm) / subdivs)
+        rem_ms = getattr(self, '_paused_metro_remaining_ms', 0)
+        if rem_ms <= 0:
+          bpm = max(1, self.spin_bpm.value())
+          subdivs = max(1, self.spin_metro_subdivs.value())
+          rem_ms = max(10, int(round((60000.0 / bpm) / subdivs)))
+        self._metro_next_perf = time.perf_counter() + (rem_ms / 1000.0)
+        self.metro_timer.setSingleShot(True)
+        self.metro_timer.start(rem_ms)
       if hasattr(self, 'session_timer') and getattr(self, 'is_autoforge_running', False):
         self.session_timer.start(1000)
 
@@ -5323,36 +5488,10 @@ class RealTimePlotter(QtWidgets.QWidget):
             self.label_rec_time.setStyleSheet("font-weight: bold; color: #FFFF00;") # Amarillo neón
           else:
             if getattr(self, 'is_autoforge_continuo', False):
-              bpm = self.spin_bpm.value()
-              if bpm <= 0: bpm = 60
-              beat_interval_s = 60.0 / bpm
-              current_beat = int(elapsed_time / beat_interval_s)
-              
-              if current_beat != getattr(self, 'last_continuo_beat', -1):
-                self.last_continuo_beat = current_beat
-                total_words = len(self.autoforge_words)
-                target_total = total_words * self.autoforge_target_reps
-                
-                if current_beat >= target_total:
-                  if not getattr(self, 'is_finishing_sequence', False):
-                    self.is_finishing_sequence = True
-                    self.estado_guardar_secuencia_continua()
-                else:
-                  palabra = self.autoforge_words[current_beat % total_words]
-                  try:
-                    if hasattr(self, 'word_window_process') and self.word_window_process:
-                      self.word_window_process.stdin.write(f"{palabra}\n")
-                      self.word_window_process.stdin.flush()
-                  except: pass
-                  
-              palabra_cur = self.autoforge_words[current_beat % len(self.autoforge_words)].upper() if len(self.autoforge_words) > 0 else ""
-              pulso_num = getattr(self, 'metro_beat_count', current_beat + 1)
+              pulso_num = max(1, getattr(self, 'metro_beat_count', 1))
+              palabra_cur = self.autoforge_words[(pulso_num - 1) % len(self.autoforge_words)].upper() if len(self.autoforge_words) > 0 else ""
               self.label_rec_time.setText(f"SECUENCIA: /{palabra_cur}/ (Pulso {pulso_num}) | {elapsed_time:.1f} s{cuadro_azul}")
               self.label_rec_time.setStyleSheet("font-weight: bold; color: #00FFCC; font-size: 15px;")
-              if palabra_cur:
-                vocal_colores = {'A': '#E63946', 'E': '#1F77B4', 'I': '#2CA02C', 'O': '#9D4EDD', 'U': '#E7A61A'}
-                v_col = vocal_colores.get(palabra_cur, '#00FFCC')
-                self.lbl_recording_space.setText(f"<div align='center' style='font-size: 70px; font-weight: 900; color: {v_col};'>/{palabra_cur}/</div>")
               if hasattr(self, 'countdown_text'):
                 self.countdown_text.hide()
             else:
@@ -5437,7 +5576,7 @@ class RealTimePlotter(QtWidgets.QWidget):
             self.rt_peaks = [[] for _ in range(self.NUM_CANALES)]
             self.rt_last_noise_eval = [0.0] * self.NUM_CANALES
 
-          period_s = 60.0 / max(1, self.spin_bpm.value())
+          period_s = float(getattr(self, 'current_beat_tau_s', 60.0 / max(1, self.spin_bpm.value())))
           
           for i in range(self.NUM_CANALES):
             # Obtener el tiempo del pico visual actual
@@ -5869,6 +6008,10 @@ class RealTimePlotter(QtWidgets.QWidget):
           self.spin_bpm.setValue(bpm)
           if hasattr(self, 'spin_metro_subdivs') and hasattr(dialog, 'spin_subdivs'):
             self.spin_metro_subdivs.setValue(dialog.spin_subdivs.value())
+          if hasattr(self, 'chk_metro_jitter') and hasattr(dialog, 'chk_jitter'):
+            self.chk_metro_jitter.setChecked(dialog.chk_jitter.isChecked())
+            self.spin_metro_jitter_pct.setValue(dialog.spin_jitter_pct.value())
+            self.cmb_metro_jitter_mode.setCurrentText(dialog.cmb_jitter_mode.currentText())
           self._save_metronome_config() # Guardar archivo JSON con el BPM y subdivisiones
         except:
           pass
@@ -6016,6 +6159,10 @@ class RealTimePlotter(QtWidgets.QWidget):
           self.spin_bpm.setValue(bpm)
           if hasattr(self, 'spin_metro_subdivs') and hasattr(dialog, 'spin_subdivs'):
             self.spin_metro_subdivs.setValue(dialog.spin_subdivs.value())
+          if hasattr(self, 'chk_metro_jitter') and hasattr(dialog, 'chk_jitter'):
+            self.chk_metro_jitter.setChecked(dialog.chk_jitter.isChecked())
+            self.spin_metro_jitter_pct.setValue(dialog.spin_jitter_pct.value())
+            self.cmb_metro_jitter_mode.setCurrentText(dialog.cmb_jitter_mode.currentText())
           self._save_metronome_config()
         except:
           pass
@@ -6367,10 +6514,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     if not getattr(self, 'is_autoforge_running', False): return
     self.autoforge_overlay.hide()
     target = getattr(self, '_post_cvm_target_method', None)
-    if callable(target):
-      target()
-
-    target = getattr(self, '_post_cvm_target_method', None)
+    self._post_cvm_target_method = None
     if callable(target):
       target()
 
@@ -6572,33 +6716,27 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.word_window_process.stdin.flush()
     except: pass
     
-    self.start_native_metronome(count_in=4, force_start=True)
-    
     self.autoforge_overlay.hide()
-    
     y_center = self._get_plot_y_center()
     self.countdown_text.setPos(-self.PLOT_DURATION_S/2.0, y_center)
-    self.countdown_text.show()
-    
     self.countdown_text.setText("PREPÁRATE...\n3")
-    QtCore.QTimer.singleShot(int(beat_interval_s * 1000), lambda: self.countdown_text.setText("PREPÁRATE...\n2"))
-    QtCore.QTimer.singleShot(int(2 * beat_interval_s * 1000), lambda: self.countdown_text.setText("PREPÁRATE...\n1"))
-    
-    self._schedule_phase(int(3 * beat_interval_s * 1000), self.estado_iniciar_grabacion_continua)
+    self.countdown_text.show()
+    self._on_count_in_finished_cb = self.estado_iniciar_grabacion_continua
+    self.start_native_metronome(count_in=4, force_start=True)
 
-  def estado_iniciar_grabacion_continua(self):
+  def estado_iniciar_grabacion_continua(self, anchor_perf=None):
     if not getattr(self, 'is_autoforge_running', False): return
     self.autoforge_overlay.hide()
     if hasattr(self, 'countdown_text'):
       self.countdown_text.hide()
     
     import time
-    self.recording_start_time = time.perf_counter()
+    self.recording_start_time = float(anchor_perf) if anchor_perf is not None else time.perf_counter()
     self.is_recording = True
     self.is_finishing_sequence = False
     
     self.current_recording = getattr(self, 'autoforge_ruido_guardado', []).copy()
-    # El .wav de la palabra arranca con el ruido basal ya grabado
+    # El .wav de la secuencia arranca con el ruido basal ya grabado
     self._offset_muestras_ancla = self._contar_muestras_recording()
     self.stats_time = [[] for _ in range(self.NUM_CANALES)]
     self.stats_snr = [[] for _ in range(self.NUM_CANALES)]
@@ -6642,10 +6780,16 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.autoforge_overlay.show()
     
     local_recording = self.current_recording.copy()
+    self.current_recording = []
     local_ruido = getattr(self, 'autoforge_ruido_guardado', []).copy()
-    # Copia congelada de los pulsos: el metronomo puede reiniciarse mientras
-    # este hilo escribe y borraria la lista viva.
     local_pulsos_metro = list(getattr(self, '_metro_pulsos', []) or [])
+    local_beat_timestamps = list(getattr(self, 'metro_beat_timestamps_s', []) or [])
+    local_beat_samples = list(getattr(self, 'metro_beat_sample_indices', []) or [])
+    local_beat_intervals = list(getattr(self, 'metro_applied_intervals_s', []) or [])
+    local_stats_time = [list(x) for x in getattr(self, 'stats_time', [])]
+    local_stats_snr = [list(x) for x in getattr(self, 'stats_snr', [])]
+    local_stats_noise_mean = [list(x) for x in getattr(self, 'stats_noise_mean', [])]
+    local_stats_noise_std = [list(x) for x in getattr(self, 'stats_noise_std', [])]
     
     import threading
     def guardar_async():
@@ -6706,6 +6850,14 @@ class RealTimePlotter(QtWidgets.QWidget):
         "daq_sample_rate": self.SAMPLE_RATE,
         "metronomo_pulsos": len(local_pulsos_metro),
         "metronomo_pulsos_csv": "pulsos_metronomo.csv" if local_pulsos_metro else None,
+        "beat_timestamps_s": local_beat_timestamps,
+        "beat_sample_indices": local_beat_samples,
+        "beat_intervals_s": local_beat_intervals,
+        "jitter_config": {
+            "enabled": bool(hasattr(self, 'chk_metro_jitter') and self.chk_metro_jitter.isChecked()),
+            "pct": float(self.spin_metro_jitter_pct.value()) if hasattr(self, 'spin_metro_jitter_pct') else 0.0,
+            "mode": self.cmb_metro_jitter_mode.currentText() if hasattr(self, 'cmb_metro_jitter_mode') else "exponential_hazard"
+        },
         "timestamp": int(now.timestamp()),
         "sample_rate": self.SAMPLE_RATE,
         "channels": self.CANALES_DAQ,
@@ -6781,7 +6933,7 @@ class RealTimePlotter(QtWidgets.QWidget):
           self.mostrar_preview_signal.emit(ruta_photo)
       except: pass
       
-      try: generar_grafico_estadisticas(self.stats_time, self.stats_snr, self.stats_noise_mean, self.stats_noise_std, str(base_dir), self.NUM_CANALES, self.CANALES_DAQ)
+      try: generar_grafico_estadisticas(local_stats_time, local_stats_snr, local_stats_noise_mean, local_stats_noise_std, str(base_dir), self.NUM_CANALES, self.CANALES_DAQ)
       except: pass
       
       # 5. Guardar archivo de texto con el registro del orden ejecutado
@@ -6805,8 +6957,6 @@ class RealTimePlotter(QtWidgets.QWidget):
       try:
         self.persistir_notas_experimento(str(base_dir), metadata_base=metadata)
       except Exception: pass
-
-      self.current_recording = [] 
       
     threading.Thread(target=guardar_async, daemon=True).start()
     
@@ -6996,12 +7146,9 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.on_start_acq_click() # Detiene el DAQ correctamente y llama a reset_autoforge_buttons()
       else:
         self.is_autoforge_running = False
-      if hasattr(self, 'btn_pause'):
-        self.btn_pause.setChecked(False)
-        self.btn_pause.setEnabled(False)
-      if hasattr(self, 'btn_pause'):
-        self.btn_pause.setChecked(False)
-        self.btn_pause.setEnabled(False)
+        if hasattr(self, 'btn_pause'):
+          self.btn_pause.setChecked(False)
+          self.btn_pause.setEnabled(False)
         self.reset_autoforge_buttons()
         
       self.config_stack.setCurrentIndex(0) # Restaurar configuración
@@ -7182,27 +7329,23 @@ class RealTimePlotter(QtWidgets.QWidget):
     # Lanzar el metrónomo AHORA MISMO con un Count-in de tipo carreras (3 graves, 1 ya estaba agregado)
     # (El metrónomo ya está fijo en el recuadro superior)
     
-    self.start_native_metronome(count_in=4, force_start=True)
-    
     self.autoforge_overlay.hide()
     
-    # --- NUEVO: Sincronización del texto amarillo de PREPARATE con el count-in acústico ---
+    # --- Sincronización exacta del texto de PREPARATE con el count-in acústico ---
     y_center = self._get_plot_y_center()
     self.countdown_text.setPos(-self.PLOT_DURATION_S/2.0, y_center)
+    self.countdown_text.setText("PREPÁRATE...\n3")
     self.countdown_text.show()
     
     # Asegurar que el gráfico esté en modo auto-scroll limpio al comenzar preparación
     self.chk_autoscroll.setChecked(True)
     self.on_autoscroll_toggle()
     
-    self.countdown_text.setText("PREPÁRATE...\n3")
-    QtCore.QTimer.singleShot(int(beat_interval_s * 1000), lambda: self.countdown_text.setText("PREPÁRATE...\n2"))
-    QtCore.QTimer.singleShot(int(2 * beat_interval_s * 1000), lambda: self.countdown_text.setText("PREPÁRATE...\n1"))
-    
-    # A los 3 compases justos (cuando suene el pitido Agudo), pasamos a la palabra.
-    self._schedule_phase(int(3 * beat_interval_s * 1000), self.estado_cambiar_ventana_palabra)
+    # Al sonar el pulso 1 real tras los 3 pulsos de preparación, on_metro_beat invoca estado_cambiar_ventana_palabra
+    self._on_count_in_finished_cb = self.estado_cambiar_ventana_palabra
+    self.start_native_metronome(count_in=4, force_start=True)
 
-  def estado_cambiar_ventana_palabra(self):
+  def estado_cambiar_ventana_palabra(self, anchor_perf=None):
     if not getattr(self, 'is_autoforge_running', False): return
     """
     Ejecuta la funcionalidad de estado_cambiar_ventana_palabra.
@@ -7225,7 +7368,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     
     # --- REACTIVAMOS LA GRABACIÓN: AQUÍ EMPIEZA LA PALABRA REAL ---
     import time
-    self.recording_start_time = time.perf_counter() # Reseteamos tiempo UI para empezar desde 0.0s en la palabra
+    self.recording_start_time = float(anchor_perf) if anchor_perf is not None else time.perf_counter()
     self.is_recording = True
 
     # Hook fotometria: captura al inicio/onset de la palabra
@@ -7260,11 +7403,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.lbl_recording_space.setText(f"<div align='center' style='font-size: 85px; font-weight: 900; color: {v_col};'>/{palabra}/</div>")
     self.word_window_process = None
     
-    # Iniciar la cuenta del guardado de los datos de la palabra
-    bpm = self.spin_bpm.value()
-    if bpm <= 0: bpm = 60
-    ms_totales = int((60000 / bpm) * self.autoforge_target_reps)
-    self._schedule_phase(ms_totales, self.estado_guardar_palabra)
+    # El cierre de la palabra lo dispara exactamente on_metro_beat al completar self.autoforge_target_reps pulsos
 
   def estado_guardar_palabra(self):
     if not getattr(self, 'is_autoforge_running', False): return
@@ -7293,9 +7432,14 @@ class RealTimePlotter(QtWidgets.QWidget):
     
     local_recording = self.current_recording.copy()
     self.current_recording = []
-    # Copia congelada de los pulsos (ver guardar_async: el metronomo puede
-    # reiniciarse durante el guardado).
     local_pulsos_metro = list(getattr(self, '_metro_pulsos', []) or [])
+    local_beat_timestamps = list(getattr(self, 'metro_beat_timestamps_s', []) or [])
+    local_beat_samples = list(getattr(self, 'metro_beat_sample_indices', []) or [])
+    local_beat_intervals = list(getattr(self, 'metro_applied_intervals_s', []) or [])
+    local_stats_time = [list(x) for x in getattr(self, 'stats_time', [])]
+    local_stats_snr = [list(x) for x in getattr(self, 'stats_snr', [])]
+    local_stats_noise_mean = [list(x) for x in getattr(self, 'stats_noise_mean', [])]
+    local_stats_noise_std = [list(x) for x in getattr(self, 'stats_noise_std', [])]
     
     import threading
     def guardar_async():
@@ -7380,6 +7524,14 @@ class RealTimePlotter(QtWidgets.QWidget):
         "daq_sample_rate": self.SAMPLE_RATE,
         "metronomo_pulsos": len(local_pulsos_metro),
         "metronomo_pulsos_csv": "pulsos_metronomo.csv" if local_pulsos_metro else None,
+        "beat_timestamps_s": local_beat_timestamps,
+        "beat_sample_indices": local_beat_samples,
+        "beat_intervals_s": local_beat_intervals,
+        "jitter_config": {
+            "enabled": bool(hasattr(self, 'chk_metro_jitter') and self.chk_metro_jitter.isChecked()),
+            "pct": float(self.spin_metro_jitter_pct.value()) if hasattr(self, 'spin_metro_jitter_pct') else 0.0,
+            "mode": self.cmb_metro_jitter_mode.currentText() if hasattr(self, 'cmb_metro_jitter_mode') else "exponential_hazard"
+        },
         "timestamp": int(now.timestamp()),
         "sample_rate": self.SAMPLE_RATE,
         "channels": self.CANALES_DAQ,
@@ -7439,7 +7591,7 @@ class RealTimePlotter(QtWidgets.QWidget):
           json.dump(metadata, f, indent=4)
       except: pass
 
-      # 3. Guardar Datos Raw CSV y WAV (las funciones internas ya manejan la división por canales)
+      # 3. Guardar Datos Raw CSV, Pulsos del Metrónomo y WAV
       try:
         escribir_pulsos_metronomo_csv(local_pulsos_metro, str(base_dir))
       except Exception as e:
@@ -7456,6 +7608,8 @@ class RealTimePlotter(QtWidgets.QWidget):
         ruta_photo = os.path.join(str(base_dir), "photo.png")
         if os.path.exists(ruta_photo):
           self.mostrar_preview_signal.emit(ruta_photo)
+      except: pass
+      try: generar_grafico_estadisticas(local_stats_time, local_stats_snr, local_stats_noise_mean, local_stats_noise_std, str(base_dir), self.NUM_CANALES, self.CANALES_DAQ)
       except: pass
       
       # 5. Guardar archivo con el orden completo de la sesión
@@ -8058,7 +8212,13 @@ class PhonatoryPulseDetector:
         bpm = float(plotter.spin_bpm.value()) if hasattr(plotter, 'spin_bpm') else 60.0
         if bpm <= 0:
             bpm = 60.0
-        tau = 60.0 / bpm
+        tau_nominal = 60.0 / bpm
+        tau = float(getattr(plotter, 'current_beat_tau_s', tau_nominal) or tau_nominal)
+        if hasattr(plotter, 'chk_metro_jitter') and plotter.chk_metro_jitter.isChecked():
+            jit_pct = float(plotter.spin_metro_jitter_pct.value()) / 100.0
+            tau_min_ref = max(0.75, tau_nominal * (1.0 - jit_pct))
+        else:
+            tau_min_ref = tau_nominal
 
         # Separar canales musculares vs canal acustico
         emg_indices = [i for i in range(plotter.NUM_CANALES) if not plotter._is_mic_channel(i)]
@@ -8096,7 +8256,7 @@ class PhonatoryPulseDetector:
         if n_search < min_samples:
             return
 
-        min_peak_dist = max(5, int(0.60 * tau * fs))
+        min_peak_dist = max(5, int(0.55 * tau_min_ref * fs))
         detected_event = None
         abs_ref = float(getattr(plotter, 'total_muestras_procesadas', 0))
 
@@ -8130,9 +8290,9 @@ class PhonatoryPulseDetector:
                 continue
 
             onset_abs = int(round(abs_ref + t_onset_rel * fs))
-            if onset_abs - self.last_pulse_abs_sample < 0.60 * tau * fs:
+            if onset_abs - self.last_pulse_abs_sample < 0.55 * tau_min_ref * fs:
                 continue
-            if now_wall - self.last_pulse_wall_time < 0.50 * tau:
+            if now_wall - self.last_pulse_wall_time < 0.45 * tau_min_ref:
                 continue
 
             pk_global = idx_start_search + pk_local
@@ -8176,7 +8336,7 @@ class PhonatoryPulseDetector:
 
                 dt_abs = t_pk_abs - self.last_pulse_t_abs
                 dt_wall = now_wall - self.last_pulse_wall_time
-                if dt_abs >= 0.60 * tau and dt_wall >= 0.50 * tau:
+                if dt_abs >= 0.55 * tau_min_ref and dt_wall >= 0.45 * tau_min_ref:
                     # En fonacion de Cande el pico de mic coincide o retrasa levemente al EMG (~150 ms).
                     # El ancla se desplaza 0.10*tau para preservar la ventana acustica historica
                     # de 40% pre / 60% post alrededor del centro acustico.
