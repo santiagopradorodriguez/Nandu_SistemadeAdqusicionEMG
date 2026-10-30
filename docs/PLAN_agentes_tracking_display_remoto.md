@@ -2,7 +2,23 @@
 
 Proyecto: NANDU LSD — Sistema de Adquisición EMG
 Fecha: 2026-10-27
-Estado: plan aprobado por Santiago, pendiente de ejecución por agentes
+Estado: **PAUSADO el 2026-10-29** (por decisión del usuario: priorizar bugs de AutoForge).
+Fase 1 completada; Fases 2 y 3 pendientes — retomar por el orden del §4.
+
+---
+
+## 0. Estado del plan (actualizado 2026-10-29)
+
+| Fase | Estado | Detalle |
+|---|---|---|
+| 1 (B1, B2, A1, A2) | ✅ COMPLETA | Commits `a5b2885` (plan), `3d98a49` (B1 servidor), `09bb8f7` (B2 cliente HTML), `2e3b0d6` (A1 ancla metadata), `efc86c3` (A2 FaceTrackingThread). Tests de aceptación de las 4 fichas pasados; demo servidor+cliente verificada en navegador. |
+| 2 (B3, A3, A4) | ⏸ PAUSADA | Nada integrado aún en `autoforge_daq_experimental.py` (0 referencias a `display_remoto`/`tracking_facial`). |
+| 3 (A5, B4) | ⏸ PAUSADA | A5 puede empezar ya (A1+A2 están listos); B4 después de B3. |
+| 4 (A6) / 5 (C1) | ⏸ Pendientes | C1 requiere la PC del labo (Windows 10 + DAQ). |
+
+**Punto exacto de retomada**: Fase 2 en orden estricto B3 → A3 → A4 (serial, mismo archivo).
+Sugerencia heredada de B2 para B3: publicar `count_in` en el pre-roll y `t0_epoch` = arranque del beat
+(después del count-in), para fase perfecta con el audio del metrónomo en canal_3.
 
 ---
 
