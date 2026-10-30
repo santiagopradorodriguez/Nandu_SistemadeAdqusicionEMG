@@ -84,20 +84,48 @@ escritura/lectura.
 
 ---
 
-## F5 — Metrónomo: modo jitter ⏳ PENDIENTE (necesita definición)
+## F5 — Metrónomo: tiempos exactos + modo jitter ⏳ PARCIAL (2026-10-30)
+
+### ✅ Hecho: registro de tiempos exactos de cada pulso (commits `3666e2b`, `8cf7426`)
+
+- `on_metro_beat` captura `time.time()` y `time.perf_counter()` **al entrar** al beat
+  (antes de UI/beep) y llama a `_registrar_pulso_metronomo`.
+- Una línea por pulso en consola:
+  `[METRONOMO] #seq principal=1 idx=3 sub=0 t_epoch=... t_perf=... t_daq_s=... sample_daq=... offset=0 bpm=60 subdiv=4 palabra=A`
+- `pulsos_metronomo.csv` en la carpeta de la sesión (los 3 flujos de guardado) con
+  columnas: `seq, idx, sub, principal, count_in, t_epoch, t_perf, t_daq_s, t_wav_s,
+  sample_daq, offset_muestras, bpm, subdiv, palabra`.
+- `t_daq_s` = relativo al ancla de grabación (`recording_start_time`); `t_wav_s` y
+  `sample_daq` = índice **dentro del .wav final**, incluyendo el offset de muestras que
+  el archivo ya trae al fijar el ancla (`offset_muestras`: pre-roll manual ≈1 s, o el
+  ruido basal en AutoForge). Antes se asumía erróneamente que el ancla era la muestra 0.
+- Metadata de sesión: `metronomo_pulsos` (cantidad) y `metronomo_pulsos_csv`.
+- `t0_epoch`/`t0_perf_counter` de metadata ahora se derivan de `recording_start_time`
+  (no del instante de guardado), así el CSV de pulsos y la metadata usan el mismo reloj.
+- Copia congelada de los pulsos en los guardados asíncronos (el metrónomo puede
+  reiniciarse mientras el hilo escribe).
+
+### ✅ Hecho: temporizador del metrónomo sin deriva
+
+- `Qt.CoarseTimer` (±5 %) reemplazado por `Qt.PreciseTimer`.
+- Programación por **reloj absoluto monotónico** (`_programar_siguiente_pulso`):
+  el objetivo es `anterior + intervalo`, no "intervalo desde que terminó el callback".
+  Medido a 120 BPM: antes 0,481→0,516 s con deriva acumulada (~14 ms/pulso ≈ 1,7 s/min);
+  ahora 0,493–0,505 s sin acumulación.
+- Intervalo calculado en segundos flotantes (sin `int()` en ms, que sesgaba 60/90 BPM).
+
+### ⏳ Pendiente: modo jitter
 
 **Objetivo**: que el pulso no caiga siempre exacto en el período, para evitar anticipación
 del sujeto (el estímulo deja de ser predecible).
 
 **Diseño propuesto**:
-- `metronomo_visual.py`: flag `--jitter-ms=X` (o `--jitter-pct=Y`), distribución uniforme
-  por pulso; el próximo intervalo = `base ± U(0, X)`.
-- Programación por reloj absoluto (monotónico) para evitar drift acumulado del `after()`.
-- Registro de los tiempos reales de cada pulso (`pulsos_reales.csv` o en consola) para
-  validación.
-- Persistir `jitter_ms`/`jitter_pct` en `metadata.json` de la sesión.
-- Nota de compatibilidad: la cadena de análisis alinea por picos del micrófono (canal_3), así
-  que el jitter es compatible; limitar a ±10–15 % para no clipar las ventanas 40/60 %.
+- Amplitud configurable en la UI (p. ej. ±% del período), distribución uniforme por pulso.
+- Se apoya en `_programar_siguiente_pulso` (ya usa reloj absoluto): el objetivo pasa a ser
+  `anterior + base*(1 + U(-j, +j))` en lugar de `anterior + base`.
+- Registrar el jitter aplicado en `pulsos_metronomo.csv` (columna `jitter_ms`) y el
+  parámetro en `metadata.json`.
+- Mantener el reloj absoluto re-anclando el objetivo si el atraso supera el intervalo.
 
 **Decisión pendiente del usuario**: amplitud (¿±ms o ±%?), distribución (uniforme vs normal)
 y si aplica a todos los pulsos o solo a algunos.
@@ -105,6 +133,16 @@ y si aplica a todos los pulsos o solo a algunos.
 **Estimación**: 0,5 día.
 
 ---
+
+## F5b — Fotometría: doble snapshot en CVM 🐞 DETECTADO (2026-10-30)
+
+En `on_metro_beat`, rama CVM "PAR" (contracción), hay **dos** llamadas consecutivas a
+`photometry_mgr.request_snapshot(fase="cvm", ...)` en el mismo beat (~líneas 4279 y 4286):
+la primera sin `t_daq_s`, la segunda con `t_daq_s`. Probable artefacto de merge → cada
+toma CVM pide dos snapshots. Revisar y dejar una sola (la que pasa `t_daq_s`).
+
+---
+
 
 ## F6 — Compatibilidad con "el main" ⏳ PENDIENTE de reproducción
 
