@@ -1325,6 +1325,32 @@ def guardar_grabacion_csv(datos_completos, sample_rate, output_dir, num_canales,
 # =============================================================================
 # BLOQUE 3.3: GENERADOR DE GRÁFICO (SEÑAL CRUDA NORMALIZADA / ESTÉTICA CALIBRADA)
 # =============================================================================
+def escribir_pulsos_metronomo_csv(pulsos, output_dir, base_name="pulsos_metronomo"):
+  """
+  Escribe el registro de pulsos del metronomo (tiempos exactos de disparo) en la
+  carpeta de la sesion. Cada fila incluye epoch, perf_counter, tiempo relativo a
+  la DAQ y el indice de muestra DAQ calculado con el ancla de grabacion.
+  """
+  if not pulsos:
+    return None
+  try:
+    import csv as _csv
+    os.makedirs(str(output_dir), exist_ok=True)
+    path = os.path.join(str(output_dir), f"{base_name}.csv")
+    campos = ["seq", "idx", "sub", "principal", "count_in", "t_epoch", "t_perf",
+              "t_daq_s", "sample_daq", "bpm", "subdiv", "palabra"]
+    with open(path, "w", encoding="utf-8", newline="") as fh:
+      writer = _csv.DictWriter(fh, fieldnames=campos, extrasaction="ignore")
+      writer.writeheader()
+      for p in pulsos:
+        writer.writerow({k: p.get(k, "") for k in campos})
+    print(f"[Metronomo] Pulsos guardados en: {path} ({len(pulsos)} filas)")
+    return path
+  except Exception as e:
+    print(f"[Metronomo] No se pudo escribir {base_name}.csv: {e}")
+    return None
+
+
 def generar_grafico_grabacion(datos_completos, sample_rate, output_dir, num_canales, canales_daq, base_name="photo"):
   """
   Genera el gráfico de señal cruda normalizada y calibrada al finalizar la grabación,
@@ -4082,6 +4108,9 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.metro_is_running = False
     self.metro_count_in_remaining = 0
     self.metro_beat_count = 0
+    # Registro de tiempos exactos de los pulsos (impresion + CSV de sesion)
+    self._metro_pulsos = []
+    self._metro_pulso_seq = 0
     
     self.COLOR_IDLE = "#111111"
     self.COLOR_BEAT = "#00FFFF"
@@ -4111,6 +4140,8 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.metro_is_running = True
     self.metro_beat_count = 0
     self.metro_subdiv_index = 0
+    self._metro_pulsos = []
+    self._metro_pulso_seq = 0
     self.on_metro_beat()
 
   def save_metronome_config(self):
@@ -4132,6 +4163,15 @@ class RealTimePlotter(QtWidgets.QWidget):
   def on_metro_beat(self):
     if not self.metro_is_running:
         return
+
+    # Instante exacto del disparo del pulso: se captura antes de cualquier
+    # trabajo de UI o de encolar el beep, y se registra al final del beat.
+    t_beat_epoch = time.time()
+    t_beat_perf = time.perf_counter()
+    sub_idx_actual = int(self.metro_subdiv_index)
+    # Se captura antes del decremento: valor 1 = este es el ultimo tick de
+    # count-in (el que arranca la toma), 0 = pulso real de la secuencia.
+    count_in_actual = int(getattr(self, "metro_count_in_remaining", 0))
 
     bpm = max(1, self.spin_bpm.value())
     num_subdivs = max(1, self.spin_metro_subdivs.value())
@@ -4283,7 +4323,63 @@ class RealTimePlotter(QtWidgets.QWidget):
             
         QtCore.QTimer.singleShot(60, self.reset_metro_color)
         
+    self._registrar_pulso_metronomo(t_beat_epoch, t_beat_perf, sub_idx_actual, bpm, num_subdivs, count_in_actual)
     self.metro_subdiv_index = (self.metro_subdiv_index + 1) % num_subdivs
+
+  def _registrar_pulso_metronomo(self, t_epoch, t_perf, sub_idx, bpm, num_subdivs, count_in=None):
+    """Imprime y acumula el tiempo exacto de cada pulso del metronomo.
+
+    Emite una linea por pulso con epoch, perf_counter (el mismo reloj que las
+    anclas t0_perf_counter de metadata) y, si hay grabacion activa, el tiempo
+    relativo a la DAQ y el indice de muestra estimado. Al guardar la sesion se
+    escribe pulsos_metronomo.csv en la carpeta de la medicion.
+    """
+    try:
+      es_principal = (int(sub_idx) == 0)
+      self._metro_pulso_seq = int(getattr(self, "_metro_pulso_seq", 0)) + 1
+      t_daq_s = None
+      sample_daq = None
+      if getattr(self, "is_recording", False) and getattr(self, "recording_start_time", None) is not None:
+        t_daq_s = float(t_perf - self.recording_start_time)
+        sample_daq = int(round(t_daq_s * float(self.SAMPLE_RATE)))
+      palabra = ""
+      if getattr(self, "is_autoforge_running", False):
+        words = getattr(self, "autoforge_words", []) or []
+        if getattr(self, "is_autoforge_continuo", False):
+          idx_w = (self.metro_beat_count - 1) % len(words) if words else 0
+        else:
+          idx_w = int(getattr(self, "autoforge_word_idx", 0))
+        palabra = words[idx_w].upper() if words and 0 <= idx_w < len(words) else ""
+      registro = {
+        "seq": self._metro_pulso_seq,
+        "idx": int(getattr(self, "metro_beat_count", 0)),
+        "sub": int(sub_idx),
+        "principal": int(es_principal),
+        "count_in": int(count_in) if count_in is not None else int(getattr(self, "metro_count_in_remaining", 0)),
+        "t_epoch": round(float(t_epoch), 6),
+        "t_perf": round(float(t_perf), 6),
+        "t_daq_s": None if t_daq_s is None else round(t_daq_s, 6),
+        "sample_daq": sample_daq,
+        "bpm": int(bpm),
+        "subdiv": int(num_subdivs),
+        "palabra": palabra,
+      }
+      pulsos = getattr(self, "_metro_pulsos", None)
+      if pulsos is None:
+        pulsos = []
+        self._metro_pulsos = pulsos
+      pulsos.append(registro)
+      t_daq_txt = "-" if t_daq_s is None else f"{t_daq_s:.6f}"
+      sample_txt = "-" if sample_daq is None else str(sample_daq)
+      print(
+        f"[METRONOMO] #{registro['seq']} principal={registro['principal']} idx={registro['idx']} "
+        f"sub={registro['sub']} t_epoch={registro['t_epoch']:.6f} t_perf={registro['t_perf']:.6f} "
+        f"t_daq_s={t_daq_txt} sample_daq={sample_txt} bpm={registro['bpm']} subdiv={registro['subdiv']}"
+        + (f" palabra={palabra}" if palabra else ""),
+        flush=True,
+      )
+    except Exception as e:
+      print(f"[Metronomo] Error al registrar pulso: {e}")
 
   def _get_plot_y_center(self):
     """Calcula dinámicamente el centro vertical visible del osciloscopio."""
@@ -4699,11 +4795,16 @@ class RealTimePlotter(QtWidgets.QWidget):
     }
 
     # --- NUEVO: Guardar metadata.json con la fecha, hora, timestamp y músculos ---
+    # Ancla temporal real de la grabacion (inicio de adquisicion, no el guardado)
+    _t0_perf = getattr(self, 'recording_start_time', None) or time.perf_counter()
+    _t0_epoch = time.time() - (time.perf_counter() - _t0_perf)
     metadata = {
       "measurement_date": now.isoformat(),
-      "t0_epoch": time.time(),
-      "t0_perf_counter": time.perf_counter(),
+      "t0_epoch": _t0_epoch,
+      "t0_perf_counter": _t0_perf,
       "daq_sample_rate": self.SAMPLE_RATE,
+      "metronomo_pulsos": len(getattr(self, '_metro_pulsos', []) or []),
+      "metronomo_pulsos_csv": "pulsos_metronomo.csv" if getattr(self, '_metro_pulsos', None) else None,
       "timestamp": int(now.timestamp()),
       "sample_rate": self.SAMPLE_RATE,
       "channels": self.CANALES_DAQ,
@@ -4764,6 +4865,10 @@ class RealTimePlotter(QtWidgets.QWidget):
       print(f"--- ERROR AL GUARDAR METADATA.JSON RAIZ ---: {e}")
 
     # 1. Guarda el .wav
+    try:
+      escribir_pulsos_metronomo_csv(getattr(self, '_metro_pulsos', None), output_dir)
+    except Exception as e:
+      print(f"[Aviso] No se pudieron guardar los pulsos del metronomo: {e}")
     try:
       guardar_grabacion_wav(self.current_recording, self.SAMPLE_RATE, output_dir, self.NUM_CANALES)
     except Exception as e:
@@ -6483,6 +6588,9 @@ class RealTimePlotter(QtWidgets.QWidget):
     
     local_recording = self.current_recording.copy()
     local_ruido = getattr(self, 'autoforge_ruido_guardado', []).copy()
+    # Copia congelada de los pulsos: el metronomo puede reiniciarse mientras
+    # este hilo escribe y borraria la lista viva.
+    local_pulsos_metro = list(getattr(self, '_metro_pulsos', []) or [])
     
     import threading
     def guardar_async():
@@ -6534,11 +6642,15 @@ class RealTimePlotter(QtWidgets.QWidget):
           "supremo_global_auc_uV_s": getattr(self, 'supremo_global_auc', 0.0)
       }
 
+      _t0_perf = getattr(self, 'recording_start_time', None) or time.perf_counter()
+      _t0_epoch = time.time() - (time.perf_counter() - _t0_perf)
       metadata = {
         "measurement_date": now.isoformat(),
-        "t0_epoch": time.time(),
-        "t0_perf_counter": time.perf_counter(),
+        "t0_epoch": _t0_epoch,
+        "t0_perf_counter": _t0_perf,
         "daq_sample_rate": self.SAMPLE_RATE,
+        "metronomo_pulsos": len(local_pulsos_metro),
+        "metronomo_pulsos_csv": "pulsos_metronomo.csv" if local_pulsos_metro else None,
         "timestamp": int(now.timestamp()),
         "sample_rate": self.SAMPLE_RATE,
         "channels": self.CANALES_DAQ,
@@ -6595,6 +6707,11 @@ class RealTimePlotter(QtWidgets.QWidget):
         with open(base_meta_path, 'w', encoding='utf-8') as f:
           json.dump(metadata, f, indent=4)
       except: pass
+
+      try:
+        escribir_pulsos_metronomo_csv(local_pulsos_metro, str(base_dir))
+      except Exception as e:
+        print(f"[Aviso] No se pudieron guardar los pulsos del metronomo: {e}")
 
       try: guardar_grabacion_csv(local_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion", canales_daq=self.CANALES_DAQ)
       except: pass
@@ -7118,6 +7235,9 @@ class RealTimePlotter(QtWidgets.QWidget):
     
     local_recording = self.current_recording.copy()
     self.current_recording = []
+    # Copia congelada de los pulsos (ver guardar_async: el metronomo puede
+    # reiniciarse durante el guardado).
+    local_pulsos_metro = list(getattr(self, '_metro_pulsos', []) or [])
     
     import threading
     def guardar_async():
@@ -7193,11 +7313,15 @@ class RealTimePlotter(QtWidgets.QWidget):
           "supremo_global_auc_uV_s": getattr(self, 'supremo_global_auc', 0.0)
       }
 
+      _t0_perf = getattr(self, 'recording_start_time', None) or time.perf_counter()
+      _t0_epoch = time.time() - (time.perf_counter() - _t0_perf)
       metadata = {
         "measurement_date": now.isoformat(),
-        "t0_epoch": time.time(),
-        "t0_perf_counter": time.perf_counter(),
+        "t0_epoch": _t0_epoch,
+        "t0_perf_counter": _t0_perf,
         "daq_sample_rate": self.SAMPLE_RATE,
+        "metronomo_pulsos": len(local_pulsos_metro),
+        "metronomo_pulsos_csv": "pulsos_metronomo.csv" if local_pulsos_metro else None,
         "timestamp": int(now.timestamp()),
         "sample_rate": self.SAMPLE_RATE,
         "channels": self.CANALES_DAQ,
@@ -7258,6 +7382,10 @@ class RealTimePlotter(QtWidgets.QWidget):
       except: pass
 
       # 3. Guardar Datos Raw CSV y WAV (las funciones internas ya manejan la división por canales)
+      try:
+        escribir_pulsos_metronomo_csv(local_pulsos_metro, str(base_dir))
+      except Exception as e:
+        print(f"[Aviso] No se pudieron guardar los pulsos del metronomo: {e}")
       try: guardar_grabacion_csv(local_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion", canales_daq=self.CANALES_DAQ)
       except: pass
       
