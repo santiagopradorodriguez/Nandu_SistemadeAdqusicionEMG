@@ -2523,6 +2523,9 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         self._last_live_frame: Optional[np.ndarray] = None
         self._fiduciarios_marco: Optional[Dict[str, Any]] = None
         self._ultimo_pose: Dict[str, Any] = {}
+        # Signo del yaw observado al capturar el perfil izquierdo; el perfil
+        # derecho exige el signo opuesto para no auto-capturar la pose anterior.
+        self._yaw_signo_perfil: Optional[int] = None
         self._frames_verde: int = 0
         self._destello_hasta: float = 0.0
         self._datos_sesion: Optional[Dict[str, Any]] = None
@@ -2959,6 +2962,10 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
     def _ir_a_paso(self, nuevo_paso: int) -> None:
         self._paso = nuevo_paso
         self._frames_verde = 0
+        # Recordar el lado solo dentro de una secuencia de escaneo: al arrancar
+        # (o repetir) el perfil izquierdo se olvida la referencia anterior.
+        if nuevo_paso in (self.PASO_FRONTAL, self.PASO_PERFIL_IZQ):
+            self._yaw_signo_perfil = None
         es_paso_congelado = nuevo_paso in (self.PASO_MARCA_FRONTAL, self.PASO_MARCA_PERFIL)
         if not es_paso_congelado:
             self._frozen_frame = None
@@ -3413,12 +3420,25 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
 
     def _alineacion_verde(self, pose: Dict[str, Any]) -> bool:
         bandas = self._bandas_objetivo()
-        return (
+        if not (
             self._yaw_ok(pose.get("yaw_deg", 0.0), True)
             and self._en_rango(pose.get("pitch_deg", 0.0), bandas["pitch"])
             and self._en_rango(pose.get("roll_deg", 0.0), bandas["roll"])
             and self._en_rango(pose.get("distancia_camara_cm", 0.0), bandas["dist"])
-        )
+        ):
+            return False
+        # --- FIX auto-captura de perfil derecho ---
+        # Para los perfiles el yaw se compara en valor absoluto (el signo depende
+        # de la convencion de la malla, no de la anatomia), pero eso hacia que al
+        # pasar del perfil izquierdo al derecho la pose anterior siguiera "verde"
+        # y la foto se tomara antes de que la persona girara. Solucion: registrar
+        # el signo del yaw del perfil izquierdo ya capturado y exigir el signo
+        # OPUESTO en el perfil derecho. Es agnostico a la convencion de la malla.
+        if self._paso == self.PASO_PERFIL_DER and self._yaw_signo_perfil is not None:
+            yaw = float(pose.get("yaw_deg", 0.0) or 0.0)
+            if yaw == 0.0 or (1 if yaw > 0.0 else -1) == self._yaw_signo_perfil:
+                return False
+        return True
 
     def _actualizar_badges(self, pose: Dict[str, Any]) -> None:
         bandas = self._bandas_objetivo()
@@ -3667,6 +3687,11 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         elif self._paso == self.PASO_PERFIL_IZQ:
             self._fotos["perfil_izquierdo"] = frame.copy()
             self._pose_fotos["perfil_izquierdo"] = limpiar_para_json(pose)
+            # Memorizar el lado realmente usado para exigir el opuesto en el
+            # perfil derecho (ver _alineacion_verde).
+            yaw_izq = float(pose.get("yaw_deg", 0.0) or 0.0)
+            if abs(yaw_izq) > 1.0:
+                self._yaw_signo_perfil = 1 if yaw_izq > 0.0 else -1
             destino = (
                 self.PASO_MARCA_PERFIL
                 if len(self._canales_perfil) > 0
