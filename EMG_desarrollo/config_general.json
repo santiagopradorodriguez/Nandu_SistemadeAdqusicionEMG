@@ -7,7 +7,7 @@
     "adquisicion": {
         "frecuencia_muestreo": 2000.0,
         "ruido_segundos": 5.0,
-        "bpm": 30,
+        "bpm": 20,
         "subdivisiones": 4,
         "notch_50hz_activo": false,
         "modo_prueba_activo": false,

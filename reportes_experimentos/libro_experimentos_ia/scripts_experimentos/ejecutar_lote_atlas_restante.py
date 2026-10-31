@@ -32,9 +32,9 @@ CONFIGS = [
         'camp': BASE_RAW,
         'subfolder': '2026-08-29',
         'canales': [
-            {'col_csv': 'Canal 0', 'musculo_linea1': 'Anterior Belly', 'musculo_linea2': 'Digástrico Submentoniano', 'funcion': 'Apertura mandibular activa', 'col': '#ef4444', 'foto': f'{OUT_DIR}/01_render_0829_belly_3x4.png'},
-            {'col_csv': 'Canal 1', 'musculo_linea1': 'Milohioideo', 'musculo_linea2': 'Piso Bucal (Desplazado)', 'funcion': 'Elevación del suelo bucal', 'col': '#38bdf8', 'foto': f'{OUT_DIR}/02_render_0829_milohioideo_3x4.png'},
-            {'col_csv': 'Canal 2', 'musculo_linea1': 'Orbicular', 'musculo_linea2': 'Labio Superior', 'funcion': 'Protrusión y esfínter oral', 'col': '#f59e0b', 'foto': f'{OUT_DIR}/03_render_0829_orbicularis_3x4.png'}
+            {'col_csv': 'Canal 0', 'musculo_linea1': 'Anterior Belly', 'musculo_linea2': 'Digástrico Submentoniano', 'funcion': 'Apertura mandibular activa', 'col': '#ef4444', 'foto': f'{OUT_DIR}/01_render_0829_belly_3x4.png', 'tam_electrodo': '5 x 5 mm (±0.02 mm)', 'ied': '19.4 ± 3.5 mm', 'dist_menton': '40.9 mm', 'dist_nariz': '114.1 mm', 'dist_trago': '117.6 mm', 'dist_comisura': '77.5 mm'},
+            {'col_csv': 'Canal 1', 'musculo_linea1': 'Milohioideo', 'musculo_linea2': 'Piso Bucal (Desplazado)', 'funcion': 'Elevación del suelo bucal', 'col': '#38bdf8', 'foto': f'{OUT_DIR}/02_render_0829_milohioideo_3x4.png', 'tam_electrodo': '5 x 5 mm (±0.02 mm)', 'ied': '23.1 ± 3.5 mm', 'dist_menton': '42.2 mm', 'dist_nariz': '72.3 mm', 'dist_trago': '64.9 mm', 'dist_comisura': '50.0 mm'},
+            {'col_csv': 'Canal 2', 'musculo_linea1': 'Orbicular', 'musculo_linea2': 'Labio Superior', 'funcion': 'Protrusión y esfínter oral', 'col': '#f59e0b', 'foto': f'{OUT_DIR}/03_render_0829_orbicularis_3x4.png', 'tam_electrodo': '5 x 5 mm (±0.02 mm)', 'ied': '19.4 ± 3.5 mm', 'dist_menton': '39.5 mm', 'dist_nariz': '22.6 mm', 'dist_trago': '65.3 mm', 'dist_comisura': '25.6 mm'}
         ],
         'filtro_pca': lambda d, p: os.path.isdir(p) and not 'Secuencia' in d,
         'ses_curvas': [
@@ -51,9 +51,9 @@ CONFIGS = [
         'camp': BASE_RAW,
         'subfolder': '2026-08-30',
         'canales': [
-            {'col_csv': 'Canal 0', 'musculo_linea1': 'Anterior Belly', 'musculo_linea2': 'Digástrico Submentoniano', 'funcion': 'Apertura mandibular activa', 'col': '#ef4444', 'foto': f'{OUT_DIR}/01_render_0829_belly_3x4.png'},
-            {'col_csv': 'Canal 1', 'musculo_linea1': 'Nudo de la Sonrisa', 'musculo_linea2': 'Modíolo / Risorio', 'funcion': 'Retracción comisural y sonrisa', 'col': '#9d4edd', 'foto': f'{OUT_DIR}/02_render_0830_nudo_3x4.png'},
-            {'col_csv': 'Canal 2', 'musculo_linea1': 'Orbicular', 'musculo_linea2': 'Labio Superior', 'funcion': 'Protrusión y esfínter oral', 'col': '#f59e0b', 'foto': f'{OUT_DIR}/03_render_0829_orbicularis_3x4.png'}
+            {'col_csv': 'Canal 0', 'musculo_linea1': 'Anterior Belly', 'musculo_linea2': 'Digástrico Submentoniano', 'funcion': 'Apertura mandibular activa', 'col': '#ef4444', 'foto': f'{OUT_DIR}/01_render_0829_belly_3x4.png', 'tam_electrodo': '5 x 5 mm (±0.02 mm)', 'ied': '19.4 ± 3.5 mm', 'dist_menton': '40.9 mm', 'dist_nariz': '114.1 mm', 'dist_trago': '117.6 mm', 'dist_comisura': '77.5 mm'},
+            {'col_csv': 'Canal 1', 'musculo_linea1': 'Nudo de la Sonrisa', 'musculo_linea2': 'Modíolo / Risorio', 'funcion': 'Retracción comisural y sonrisa', 'col': '#9d4edd', 'foto': f'{OUT_DIR}/02_render_0830_nudo_3x4.png', 'tam_electrodo': '5 x 5 mm (±0.02 mm)', 'ied': '20.4 ± 3.5 mm', 'dist_menton': '35.9 mm', 'dist_nariz': '48.7 mm', 'dist_trago': '39.0 mm', 'dist_comisura': '21.4 mm'},
+            {'col_csv': 'Canal 2', 'musculo_linea1': 'Orbicular', 'musculo_linea2': 'Labio Superior', 'funcion': 'Protrusión y esfínter oral', 'col': '#f59e0b', 'foto': f'{OUT_DIR}/03_render_0829_orbicularis_3x4.png', 'tam_electrodo': '5 x 5 mm (±0.02 mm)', 'ied': '19.4 ± 3.5 mm', 'dist_menton': '39.5 mm', 'dist_nariz': '22.6 mm', 'dist_trago': '65.3 mm', 'dist_comisura': '25.6 mm'}
         ],
         'filtro_pca': lambda d, p: os.path.isdir(p) and not 'Secuencia' in d,
         'ses_curvas': [
@@ -70,9 +70,9 @@ CONFIGS = [
         'camp': os.path.join(BASE_DRIVE, '2026-09-23_Config2_Masetero_y_Orbicularis_Candela'),
         'subfolder': 'mediciones',
         'canales': [
-            {'col_csv': 'Canal 0', 'musculo_linea1': 'Masetero', 'musculo_linea2': 'Cuerpo mandibular', 'funcion': 'Elevación mandibular y oclusión', 'col': '#f04e23', 'foto': ''},
+            {'col_csv': 'Canal 0', 'musculo_linea1': 'Masetero', 'musculo_linea2': 'Cuerpo mandibular', 'funcion': 'Elevación mandibular y oclusión', 'col': '#f04e23', 'foto': '', 'tam_electrodo': '5 x 5 mm (±0.02 mm)', 'ied': '21.0 ± 3.5 mm', 'dist_menton': '67.5 ± 4.0 mm', 'dist_nariz': '71.5 ± 4.0 mm', 'dist_trago': '44.5 ± 3.5 mm', 'dist_comisura': '41.5 ± 3.5 mm'},
             {'col_csv': 'Canal 1', 'musculo_linea1': 'Inactivo', 'musculo_linea2': 'Sin Conexión', 'funcion': 'Canal auxiliar desconectado', 'col': '#64748b', 'foto': '', 'activo': False},
-            {'col_csv': 'Canal 2', 'musculo_linea1': 'Orbicular', 'musculo_linea2': 'Labio Superior', 'funcion': 'Protrusión y esfínter oral', 'col': '#f59e0b', 'foto': ''}
+            {'col_csv': 'Canal 2', 'musculo_linea1': 'Orbicular', 'musculo_linea2': 'Labio Superior', 'funcion': 'Protrusión y esfínter oral', 'col': '#f59e0b', 'foto': '', 'tam_electrodo': '5 x 5 mm (±0.02 mm)', 'ied': '23.0 ± 3.5 mm', 'dist_menton': '46.5 ± 3.5 mm', 'dist_nariz': '16.5 ± 3.5 mm', 'dist_trago': '72.5 ± 4.0 mm', 'dist_comisura': '14.0 ± 3.5 mm'}
         ],
         'filtro_pca': lambda d, p: os.path.isdir(p) and not 'Secuencia' in d,
         'ses_curvas': [
@@ -246,7 +246,7 @@ CONFIGS = [
         'camp': os.path.join(BASE_DRIVE, '2026-10-23_Exp1_Masetero_Monocanal_Candela'),
         'subfolder': 'mediciones',
         'canales': [
-            {'col_csv': 'Canal 0', 'musculo_linea1': 'Masetero', 'musculo_linea2': 'Cuerpo mandibular', 'funcion': 'Elevación mandibular y oclusión', 'col': '#f04e23', 'foto': f'{OUT_DIR}/01_render_1023_exp1_masetero_3x4.png'},
+            {'col_csv': 'Canal 0', 'musculo_linea1': 'Masetero', 'musculo_linea2': 'Cuerpo mandibular', 'funcion': 'Elevación mandibular y oclusión', 'col': '#f04e23', 'foto': f'{OUT_DIR}/01_render_1023_exp1_masetero_3x4.png', 'tam_electrodo': '5 x 5 mm (±0.02 mm)', 'ied': '20.0 ± 3.5 mm', 'dist_menton': '66.0 ± 4.0 mm', 'dist_nariz': '73.0 ± 4.0 mm', 'dist_trago': '44.0 ± 3.5 mm', 'dist_comisura': '42.0 ± 3.5 mm'},
             {'col_csv': 'Canal 1', 'musculo_linea1': 'Inactivo', 'musculo_linea2': 'Sin Conexión', 'funcion': 'Canal auxiliar desconectado', 'col': '#64748b', 'foto': '', 'activo': False},
             {'col_csv': 'Canal 2', 'musculo_linea1': 'Inactivo', 'musculo_linea2': 'Sin Conexión', 'funcion': 'Canal auxiliar desconectado', 'col': '#64748b', 'foto': '', 'activo': False}
         ],
@@ -265,9 +265,9 @@ CONFIGS = [
         'camp': os.path.join(BASE_DRIVE, '2026-10-23_Exp2_Belly_y_Orbicularis_Candela'),
         'subfolder': 'mediciones',
         'canales': [
-            {'col_csv': 'Canal 0', 'musculo_linea1': 'Orbicular', 'musculo_linea2': 'Labio Superior', 'funcion': 'Protrusión y esfínter oral', 'col': '#f59e0b', 'foto': f'{OUT_DIR}/01_render_1023_exp2_orbi_3x4.png'},
+            {'col_csv': 'Canal 0', 'musculo_linea1': 'Orbicular', 'musculo_linea2': 'Labio Superior', 'funcion': 'Protrusión y esfínter oral', 'col': '#f59e0b', 'foto': f'{OUT_DIR}/01_render_1023_exp2_orbi_3x4.png', 'tam_electrodo': '5 x 5 mm (±0.02 mm)', 'ied': '22.0 ± 3.5 mm', 'dist_menton': '45.0 ± 3.5 mm', 'dist_nariz': '17.0 ± 3.5 mm', 'dist_trago': '72.0 ± 4.0 mm', 'dist_comisura': '14.0 ± 3.5 mm'},
             {'col_csv': 'Canal 1', 'musculo_linea1': 'Inactivo', 'musculo_linea2': 'Sin Conexión', 'funcion': 'Canal auxiliar desconectado', 'col': '#64748b', 'foto': '', 'activo': False},
-            {'col_csv': 'Canal 2', 'musculo_linea1': 'Anterior Belly', 'musculo_linea2': 'Digástrico Submentoniano', 'funcion': 'Apertura mandibular activa', 'col': '#ef4444', 'foto': f'{OUT_DIR}/02_render_1023_exp2_belly_3x4.png'}
+            {'col_csv': 'Canal 2', 'musculo_linea1': 'Anterior Belly', 'musculo_linea2': 'Digástrico Submentoniano', 'funcion': 'Apertura mandibular activa', 'col': '#ef4444', 'foto': f'{OUT_DIR}/02_render_1023_exp2_belly_3x4.png', 'tam_electrodo': '5 x 5 mm (±0.02 mm)', 'ied': '17.5 ± 3.5 mm', 'dist_menton': '28.0 ± 3.5 mm', 'dist_nariz': 'N/A (submentoniano)', 'dist_trago': '78.5 ± 4.5 mm', 'dist_comisura': '38.0 ± 3.5 mm'}
         ],
         'filtro_pca': lambda d, p: os.path.isdir(p) and not 'Secuencia' in d,
         'ses_curvas': [
@@ -284,9 +284,9 @@ CONFIGS = [
         'camp': os.path.join(BASE_DRIVE, '2026-10-23_Exp3_Triada_Masetero_Modiolo_Orbicularis_Candela'),
         'subfolder': 'mediciones',
         'canales': [
-            {'col_csv': 'Canal 0', 'musculo_linea1': 'Masetero', 'musculo_linea2': 'Cuerpo mandibular', 'funcion': 'Elevación mandibular y oclusión', 'col': '#f04e23', 'foto': f'{OUT_DIR}/01_render_1023_exp3_masetero_3x4.png'},
-            {'col_csv': 'Canal 1', 'musculo_linea1': 'Modíolo', 'musculo_linea2': 'Nudo Comisural', 'funcion': 'Coordinación perioral', 'col': '#9d4edd', 'foto': f'{OUT_DIR}/02_render_1023_exp3_modiolo_3x4.png'},
-            {'col_csv': 'Canal 2', 'musculo_linea1': 'Orbicular', 'musculo_linea2': 'Labio Superior', 'funcion': 'Protrusión y esfínter oral', 'col': '#f59e0b', 'foto': f'{OUT_DIR}/03_render_1023_exp3_orbi_3x4.png'}
+            {'col_csv': 'Canal 0', 'musculo_linea1': 'Masetero', 'musculo_linea2': 'Cuerpo mandibular', 'funcion': 'Elevación mandibular y oclusión', 'col': '#f04e23', 'foto': f'{OUT_DIR}/01_render_1023_exp3_masetero_3x4.png', 'tam_electrodo': '5 x 5 mm (±0.02 mm)', 'ied': '20.0 ± 3.5 mm', 'dist_menton': '66.0 ± 4.0 mm', 'dist_nariz': '73.0 ± 4.0 mm', 'dist_trago': '44.0 ± 3.5 mm', 'dist_comisura': '42.0 ± 3.5 mm'},
+            {'col_csv': 'Canal 1', 'musculo_linea1': 'Modíolo', 'musculo_linea2': 'Nudo Comisural', 'funcion': 'Coordinación perioral', 'col': '#9d4edd', 'foto': f'{OUT_DIR}/02_render_1023_exp3_modiolo_3x4.png', 'tam_electrodo': '5 x 5 mm (±0.02 mm)', 'ied': '19.0 ± 3.5 mm', 'dist_menton': '52.0 ± 4.0 mm', 'dist_nariz': '48.0 ± 4.0 mm', 'dist_trago': '99.0 ± 4.0 mm', 'dist_comisura': '11.0 ± 3.5 mm'},
+            {'col_csv': 'Canal 2', 'musculo_linea1': 'Orbicular', 'musculo_linea2': 'Labio Superior', 'funcion': 'Protrusión y esfínter oral', 'col': '#f59e0b', 'foto': f'{OUT_DIR}/03_render_1023_exp3_orbi_3x4.png', 'tam_electrodo': '5 x 5 mm (±0.02 mm)', 'ied': '23.0 ± 3.5 mm', 'dist_menton': '46.0 ± 3.5 mm', 'dist_nariz': '17.0 ± 3.5 mm', 'dist_trago': '72.0 ± 4.0 mm', 'dist_comisura': '14.0 ± 3.5 mm'}
         ],
         'filtro_pca': lambda d, p: os.path.isdir(p) and not 'Secuencia' in d,
         'ses_curvas': [

@@ -535,6 +535,88 @@ class AutoencoderNoSupervisadoGUI:
             subprocess.Popen(["xdg-open", filepath])
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Autoencoder No Supervisado (GUI y modo programable para Agentes).")
+    parser.add_argument("--cli", action="store_true", help="Ejecutar en modo consola / headless")
+    parser.add_argument("--rutas", nargs="+", default=None, help="Rutas de tomas o sesiones a procesar")
+    parser.add_argument("--fecha", type=str, default=None, help="Filtrar sesiones por fecha (ej. 2026-09-01)")
+    parser.add_argument("--modalidad", type=str, default="envolvente", choices=["envolvente", "cruda", "espectrograma", "espectrograma_2d", "espectrograma_3d"], help="Modalidad de entrada")
+    parser.add_argument("--latent-dim", type=int, default=2, help="Dimensión latente (2 o 3)")
+    parser.add_argument("--epochs", type=int, default=150, help="Cantidad de épocas de entrenamiento")
+    parser.add_argument("--batch-size", type=int, default=32, help="Tamaño del batch")
+    parser.add_argument("--lr", type=float, default=0.002, help="Tasa de aprendizaje")
+    parser.add_argument("--no-p95", action="store_true", help="Desactivar calibración P95")
+    parser.add_argument("--solo-extraer", action="store_true", help="Solo extraer dataset unificado y salir")
+    parser.add_argument("--solo-entrenar", action="store_true", help="Solo entrenar con el dataset existente y salir")
+    parser.add_argument("--solo-evaluar", action="store_true", help="Solo evaluar y generar ploteo del espacio latente")
+
+    # Si se pasan argumentos tipo flags (empiezan con '-') o --cli
+    args_flags = [a for a in sys.argv[1:] if a.startswith("-")]
+    if args_flags:
+        args = parser.parse_args()
+        
+        # Resolver rutas si se pasó --fecha o --rutas
+        rutas_finales = []
+        base_dir = os.path.join(emg_desarrollo_dir, "base_de_datos_electrodos")
+        if args.rutas:
+            rutas_finales = args.rutas
+        elif args.fecha and os.path.exists(base_dir):
+            for d in sorted(os.listdir(base_dir)):
+                if d.startswith(args.fecha) and not any(ign in d for ign in ["Reposo", "Ruido", "Desplazado"]):
+                    full_p = os.path.join(base_dir, d)
+                    if os.path.isdir(full_p):
+                        rutas_finales.append(full_p)
+        
+        usar_p95 = not args.no_p95
+        npz_salida = os.path.join(emg_desarrollo_dir, "cache_datos", "dataset_autoencoder_unificado.npz")
+        
+        # 1. Extracción
+        if not args.solo_entrenar and not args.solo_evaluar:
+            if not rutas_finales:
+                print(f"[Error CLI] Debe especificar --rutas o --fecha para extraer datos.")
+                sys.exit(1)
+            print(f"[Agente Autoencoder] Extrayendo dataset de {len(rutas_finales)} sesiones...")
+            npz_salida, n_p = motor.extraer_dataset_unificado(
+                rutas_finales, usar_calibracion_p95=usar_p95, callback_log=print
+            )
+            print(f"[Agente Autoencoder] Extracción finalizada. Pulsos: {n_p}")
+            if args.solo_extraer:
+                return
+
+        # Resolver modalidad y dimensión latente
+        mod = args.modalidad
+        lat_dim = args.latent_dim
+        if mod == "espectrograma_3d":
+            mod = "espectrograma"
+            lat_dim = 3
+        elif mod == "espectrograma_2d":
+            mod = "espectrograma"
+            lat_dim = 2
+
+        # 2. Entrenamiento
+        if not args.solo_evaluar:
+            print(f"[Agente Autoencoder] Entrenando Autoencoder No Supervisado ({mod}, dim={lat_dim}, epochs={args.epochs}, lr={args.lr})...")
+            modelo_entrenado, _ = motor.entrenar_autoencoder(
+                npz_salida, modalidad=mod, latent_dim=lat_dim,
+                epochs=args.epochs, batch_size=args.batch_size, lr=args.lr, callback_log=print
+            )
+            print(f"[Agente Autoencoder] Entrenamiento completado.")
+            if args.solo_entrenar:
+                return
+        else:
+            modelo_entrenado = None
+
+        # 3. Evaluación y ploteo
+        print(f"[Agente Autoencoder] Evaluando espacio latente canónico...")
+        res = motor.evaluar_espacio_latente(
+            npz_salida, modelo=modelo_entrenado, modalidad=mod, latent_dim=lat_dim,
+            callback_log=print, mostrar_grafico=False
+        )
+        print(f"[Agente Autoencoder] Resultado: GMM Acc: {res.get('gmm_acc', 0):.2f}% | Silueta: {res.get('silhouette', 0):+.3f}")
+        print(f"[Agente Autoencoder] Figura generada en: {res.get('fig_path', 'N/A')}")
+        return
+
+    # Si no se pasaron flags o solo se pasaron rutas directas para la GUI
     root = tk.Tk()
     rutas = sys.argv[1:] if len(sys.argv) > 1 else None
     app = AutoencoderNoSupervisadoGUI(root, rutas_preseleccionadas=rutas)

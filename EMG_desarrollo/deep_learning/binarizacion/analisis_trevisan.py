@@ -216,6 +216,131 @@ def _estimate_noise_window(signal_recortada, samplerate, noise_seconds, smooth_m
         return start_sample_noise, np.array([]), None, None, None
 
 # ---------------------- Detect maxima per cut & extract ---------------------
+
+def _cargar_anclas_pulsos_v6(carpeta, samplerate, start_sample_noise, muestras_pulso):
+    """
+    Lee metadata v6.0 (metadata.json, segmentos_dataset.csv o pulsos_metronomo.csv)
+    en la carpeta del canal o en su carpeta padre de medición para soportar:
+      - Pulsos desincronizados con Jitter (intervalos tau variables pulso a pulso).
+      - Secuencia Continua (etiqueta de vocal por pulso).
+      - Exclusión automática de pulsos marcados como inválidos manualmente.
+    Devuelve (lista_anclas, meta_info_dict). Si es una toma legada sin anclas explícitas,
+    devuelve (None, meta_info_dict).
+    """
+    parent_dir = os.path.dirname(carpeta)
+    meta_combined = {}
+    for mp in [os.path.join(parent_dir, "metadata.json"), os.path.join(carpeta, "metadata.json")]:
+        if os.path.isfile(mp):
+            try:
+                with open(mp, "r", encoding="utf-8") as fh:
+                    data = json.load(fh)
+                    if isinstance(data, dict):
+                        meta_combined.update(data)
+            except Exception:
+                pass
+
+    invalid_set = set()
+    for inv_k in ("pulsos_invalidados_manualmente", "excluded_windows"):
+        if isinstance(meta_combined.get(inv_k), list):
+            for x in meta_combined[inv_k]:
+                try:
+                    invalid_set.add(int(x))
+                except Exception:
+                    pass
+
+    # 1. Intentar leer segmentos_dataset.csv (fuente más rica de v6.0)
+    seg_csv = os.path.join(parent_dir, "segmentos_dataset.csv")
+    anclas = []
+    if os.path.isfile(seg_csv):
+        try:
+            with open(seg_csv, "r", encoding="utf-8") as fh:
+                reader = csv.DictReader(fh)
+                for idx_row, row in enumerate(reader):
+                    p_id = int(float(row.get("pulso_id") or (idx_row + 1)))
+                    vocal_r = str(row.get("vocal") or "").strip().upper()
+                    tau_s = float(row.get("tau_s") or (muestras_pulso / float(samplerate)))
+                    tau_samp = max(10, int(round(tau_s * float(samplerate))))
+                    s_beat = int(float(row.get("sample_beat") or 0))
+                    s_ini = int(float(row.get("sample_inicio_ventana") or max(0, s_beat - int(0.25 * tau_samp))))
+                    s_fin = int(float(row.get("sample_fin_ventana") or (s_beat + int(0.85 * tau_samp))))
+                    if s_fin <= s_ini:
+                        s_ini = max(0, s_beat - int(0.20 * tau_samp))
+                        s_fin = s_beat + int(0.80 * tau_samp)
+                    val_flag = int(float(row.get("valido_para_entrenamiento", 1))) == 1 and int(float(row.get("invalido_manual", 0))) == 0
+                    if p_id in invalid_set:
+                        val_flag = False
+                    anclas.append({
+                        "pulso_idx": p_id,
+                        "vocal": vocal_r,
+                        "anchor_sample": s_beat,
+                        "cut_start": max(0, s_ini),
+                        "cut_end": max(s_ini + 10, s_fin),
+                        "tau_samples": tau_samp,
+                        "valido": val_flag,
+                    })
+            if anclas:
+                return anclas, meta_combined
+        except Exception:
+            anclas = []
+
+    # 2. Intentar desde eventos_vocales_metronomo o beat_sample_indices en metadata.json
+    ev_list = meta_combined.get("eventos_vocales_metronomo")
+    if isinstance(ev_list, list) and len(ev_list) > 0:
+        for idx_e, ev in enumerate(ev_list):
+            p_id = int(ev.get("pulso_vocal_idx") or (idx_e + 1))
+            vocal_r = str(ev.get("palabra") or ev.get("vocal") or "").strip().upper()
+            tau_s = float(ev.get("intervalo_s") or (muestras_pulso / float(samplerate)))
+            tau_samp = max(10, int(round(tau_s * float(samplerate))))
+            if ev.get("sample_daq") is not None:
+                s_beat = int(ev["sample_daq"])
+            elif ev.get("t_wav_s") is not None:
+                s_beat = int(round(float(ev["t_wav_s"]) * float(samplerate)))
+            else:
+                s_beat = start_sample_noise + idx_e * muestras_pulso
+            c_start = max(0, s_beat - int(0.15 * tau_samp))
+            c_end = s_beat + int(0.85 * tau_samp)
+            anclas.append({
+                "pulso_idx": p_id,
+                "vocal": vocal_r,
+                "anchor_sample": s_beat,
+                "cut_start": c_start,
+                "cut_end": c_end,
+                "tau_samples": tau_samp,
+                "valido": (p_id not in invalid_set),
+            })
+        if anclas:
+            return anclas, meta_combined
+
+    beat_indices = meta_combined.get("beat_sample_indices")
+    if isinstance(beat_indices, list) and len(beat_indices) > 0:
+        intervals = meta_combined.get("beat_intervals_s") or []
+        seq_words = meta_combined.get("secuencia_completa_pulsos") or meta_combined.get("valid_words") or []
+        for idx_b, s_b in enumerate(beat_indices):
+            try:
+                s_beat = int(s_b)
+            except Exception:
+                continue
+            p_id = idx_b + 1
+            tau_s = float(intervals[idx_b]) if idx_b < len(intervals) and intervals[idx_b] else (muestras_pulso / float(samplerate))
+            tau_samp = max(10, int(round(tau_s * float(samplerate))))
+            vocal_r = str(seq_words[idx_b % len(seq_words)]).strip().upper() if seq_words else ""
+            c_start = max(0, s_beat - int(0.15 * tau_samp))
+            c_end = s_beat + int(0.85 * tau_samp)
+            anclas.append({
+                "pulso_idx": p_id,
+                "vocal": vocal_r,
+                "anchor_sample": s_beat,
+                "cut_start": c_start,
+                "cut_end": c_end,
+                "tau_samples": tau_samp,
+                "valido": (p_id not in invalid_set),
+            })
+        if anclas:
+            return anclas, meta_combined
+
+    return None, meta_combined
+
+
 def _detect_maxima_and_extract(env_recortada,
                                start_sample_noise,
                                muestras_pulso,
@@ -225,7 +350,8 @@ def _detect_maxima_and_extract(env_recortada,
                                n_pulsos_manual=None,
                                min_peak_distance_factor=0.5,
                                excluded_windows=None,
-                               verbose=True):
+                               verbose=True,
+                               pulse_anchors_v6=None):
     if len(env_recortada) == 0:
         return [], []
 
@@ -241,13 +367,23 @@ def _detect_maxima_and_extract(env_recortada,
     min_dist_samples = max(1, int(round(min_peak_distance_factor * float(muestras_pulso))))
     excluded_set = set(excluded_windows) if excluded_windows else set()
 
-    for i in range(n_pulsos):
-        cut_start = start_sample_noise + i * muestras_pulso
-        cut_end = cut_start + muestras_pulso
+    n_iter = len(pulse_anchors_v6) if (pulse_anchors_v6 and len(pulse_anchors_v6) > 0) else n_pulsos
+    for i in range(n_iter):
+        if pulse_anchors_v6 and i < len(pulse_anchors_v6):
+            anc = pulse_anchors_v6[i]
+            cut_start = int(anc.get("cut_start", start_sample_noise + i * muestras_pulso))
+            cut_end = int(anc.get("cut_end", cut_start + muestras_pulso))
+            window_number = int(anc.get("pulso_idx", i + 1))
+            if not anc.get("valido", True):
+                if verbose: print(f"    -> Omitiendo pulso #{window_number} (marcado inválido en metadata v6.0).")
+                continue
+        else:
+            cut_start = start_sample_noise + i * muestras_pulso
+            cut_end = cut_start + muestras_pulso
+            window_number = i + 1
         if cut_end > len(env_recortada):
             cut_end = len(env_recortada)
         
-        window_number = i + 1
         if window_number in excluded_set:
             if verbose: print(f"    -> Omitiendo ventana #{window_number} (excluida por el usuario).")
             continue
@@ -650,9 +786,17 @@ def procesar_wavs_promedio(
                         
         search_threshold_dinamico = np.mean(first_pass_peaks) * 0.5 if first_pass_peaks else base_threshold
             
+        pulse_anchors_v6, meta_v6_info = _cargar_anclas_pulsos_v6(
+            carpeta, samplerate, start_sample_noise, muestras_pulso
+        )
+        if pulse_anchors_v6 and len(pulse_anchors_v6) > 0:
+            n_pulsos_total = len(pulse_anchors_v6)
+            if verbose:
+                print(f"[Análisis v6.0] Usando {n_pulsos_total} anclas de pulso desde metadata (Jitter/Secuencia Continua).")
         maxima_per_cut, _ = _detect_maxima_and_extract(
             np.abs(env_recortada), start_sample_noise, muestras_pulso, pre_samples, post_samples,
-            search_threshold_dinamico, n_pulsos_manual=n_pulsos_manual, excluded_windows=initial_excluded, verbose=verbose)
+            search_threshold_dinamico, n_pulsos_manual=n_pulsos_total, excluded_windows=initial_excluded,
+            verbose=verbose, pulse_anchors_v6=pulse_anchors_v6)
 
         # --- Calcular nivel de ruido interpulso para TODAS las ventanas (1..n_pulsos_total) ---
         noise_levels = []
@@ -787,7 +931,9 @@ def procesar_wavs_promedio(
             'activation_threshold': activation_threshold,
             'activation_flags': activation_flags,
             'window_boundaries': window_boundaries,
-            'noise_levels': noise_levels
+            'noise_levels': noise_levels,
+            'pulse_anchors_v6': pulse_anchors_v6,
+            'meta_v6_info': meta_v6_info
         }
 
         export_results_for_file(output_root, filename, resultados[filename])

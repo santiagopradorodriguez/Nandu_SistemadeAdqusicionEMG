@@ -163,9 +163,9 @@ except ImportError:
   except ImportError:
     ServidorEstimulos = None
     def _ip_local(): return "127.0.0.1"
-    def _ip_tailscale(default_ip="100.118.12.94"): return default_ip
+    def _ip_tailscale(default_ip=""): return default_ip
     def configurar_adb_reverse(puerto=8765): return False, "display_remoto_servidor no disponible"
-    def configurar_red_tailscale(puerto=8765, ip_pc="100.118.12.94", ip_celu="100.102.47.75"): return False, "display_remoto_servidor no disponible"
+    def configurar_red_tailscale(puerto=8765, ip_pc="", ip_celu=""): return False, "display_remoto_servidor no disponible"
 
 
 try:
@@ -2720,7 +2720,7 @@ class VentanaEstimulosExterna(QtWidgets.QWidget):
 class DialogoPantallaExterna(QtWidgets.QDialog):
   """
   Diálogo de control para transmitir la ventana de palabras a una pantalla externa
-  (Tailscale 100.118.12.94 <-> Celu 100.102.47.75, Cable USB adb reverse o 2do Monitor HDMI).
+  (Tailscale  <-> Celu , Cable USB adb reverse o 2do Monitor HDMI).
   """
   def __init__(self, parent_plotter):
     super().__init__(parent_plotter)
@@ -2740,8 +2740,8 @@ class DialogoPantallaExterna(QtWidgets.QDialog):
     rem_cfg = self.plotter.config_mgr.get_remote_display_config() if hasattr(self.plotter.config_mgr, 'get_remote_display_config') else {}
     puerto_init = int(rem_cfg.get("puerto", 8765))
     token_init = str(rem_cfg.get("token", ""))
-    ts_pc_init = str(rem_cfg.get("tailscale_ip_pc", _ip_tailscale("100.118.12.94")))
-    ts_celu_init = str(rem_cfg.get("tailscale_ip_celu", "100.102.47.75"))
+    ts_pc_init = str(rem_cfg.get("tailscale_ip_pc", _ip_tailscale("")))
+    ts_celu_init = str(rem_cfg.get("tailscale_ip_celu", ""))
 
     # Auto-iniciar el servidor al abrir el diálogo si todavía no estaba corriendo
     srv = getattr(self.plotter, 'remote_display_server', None)
@@ -2756,9 +2756,9 @@ class DialogoPantallaExterna(QtWidgets.QDialog):
 
     ts_row = QtWidgets.QHBoxLayout()
     self.edit_ts_pc = QtWidgets.QLineEdit(ts_pc_init)
-    self.edit_ts_pc.setToolTip("IP Tailscale de esta PC (ej. 100.118.12.94)")
+    self.edit_ts_pc.setToolTip("IP Tailscale de esta PC (ej. )")
     self.edit_ts_celu = QtWidgets.QLineEdit(ts_celu_init)
-    self.edit_ts_celu.setToolTip("IP Tailscale de tu celular (ej. 100.102.47.75)")
+    self.edit_ts_celu.setToolTip("IP Tailscale de tu celular (ej. )")
     ts_row.addWidget(QtWidgets.QLabel("PC:"))
     ts_row.addWidget(self.edit_ts_pc)
     ts_row.addWidget(QtWidgets.QLabel("Celu:"))
@@ -2777,7 +2777,7 @@ class DialogoPantallaExterna(QtWidgets.QDialog):
     btn_row = QtWidgets.QHBoxLayout()
     self.btn_toggle_srv = QtWidgets.QPushButton("Detener Servidor Remoto")
     self.btn_toggle_srv.clicked.connect(self._on_toggle_srv)
-    self.btn_tailscale = QtWidgets.QPushButton("Abrir / Verificar Tailscale (100.118.12.94 <-> Celu)")
+    self.btn_tailscale = QtWidgets.QPushButton("Abrir / Verificar Tailscale ( <-> Celu)")
     self.btn_tailscale.setStyleSheet("QPushButton { background-color: #0d2b1d; color: #39ff14; border: 1.5px solid #39ff14; padding: 6px 12px; font-weight: bold; } QPushButton:hover { background-color: #39ff14; color: #050508; }")
     self.btn_tailscale.clicked.connect(self._on_tailscale_check)
     self.btn_usb_adb = QtWidgets.QPushButton("Túnel USB (adb reverse)")
@@ -2804,8 +2804,8 @@ class DialogoPantallaExterna(QtWidgets.QDialog):
     grp_help = QtWidgets.QGroupBox("Guía de Conexión Rápida (Tailscale / USB / 2do Monitor)")
     hl = QtWidgets.QVBoxLayout(grp_help)
     lbl_h = QtWidgets.QLabel(
-      "• <b>Opción 1 (Tailscale — Recomendada con Wi-Fi de Física):</b> Con Tailscale activo en la PC (<b>100.118.12.94</b>) "
-      "y en tu celular (<b>100.102.47.75</b>), entra desde el navegador del celular a <b>http://100.118.12.94:8765/</b>.<br>"
+      "• <b>Opción 1 (Tailscale — Recomendada con Wi-Fi de Física):</b> Con Tailscale activo en la PC (<b></b>) "
+      "y en tu celular (<b></b>), entra desde el navegador del celular a <b>http://:8765/</b>.<br>"
       "• <b>Opción 2 (Cable USB):</b> Conecta el celular por USB y pulsa 'Túnel USB' para abrir <b>http://127.0.0.1:8765/</b>.<br>"
       "• <b>Opción 3 (2do Monitor HDMI):</b> Pulsa 'Abrir Ventana Externa', arrástrala al segundo monitor y toca F11."
     )
@@ -2821,8 +2821,8 @@ class DialogoPantallaExterna(QtWidgets.QDialog):
 
   def _refresh_status_label(self):
     srv = getattr(self.plotter, 'remote_display_server', None)
-    ip_ts = self.edit_ts_pc.text().strip() or _ip_tailscale("100.118.12.94")
-    ip_celu = self.edit_ts_celu.text().strip() or "100.102.47.75"
+    ip_ts = self.edit_ts_pc.text().strip() or _ip_tailscale("")
+    ip_celu = self.edit_ts_celu.text().strip() or ""
     if srv is not None and srv.activo():
       ip_lan = _ip_local()
       p = srv.puerto
@@ -2849,8 +2849,8 @@ class DialogoPantallaExterna(QtWidgets.QDialog):
     self._refresh_status_label()
 
   def _on_tailscale_check(self):
-    ip_pc = self.edit_ts_pc.text().strip() or "100.118.12.94"
-    ip_celu = self.edit_ts_celu.text().strip() or "100.102.47.75"
+    ip_pc = self.edit_ts_pc.text().strip() or ""
+    ip_celu = self.edit_ts_celu.text().strip() or ""
     puerto = self.spin_puerto.value()
     self.plotter.config_mgr.set("display_remoto", "tailscale_ip_pc", ip_pc)
     self.plotter.config_mgr.set("display_remoto", "tailscale_ip_celu", ip_celu)
@@ -3371,7 +3371,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.timer.timeout.connect(self.actualizar_plot)
     self.timer.start(30) # Actualiza la GUI cada 30 ms
     
-    # Auto-iniciar servidor de estímulos (Tailscale 100.118.12.94:8765 / USB) en segundo plano
+    # Auto-iniciar servidor de estímulos (Tailscale :8765 / USB) en segundo plano
     try:
       rem_cfg = self.config_mgr.get_remote_display_config() if hasattr(self.config_mgr, 'get_remote_display_config') else {}
       if rem_cfg.get("habilitado", True):
@@ -3901,7 +3901,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.btn_marcar_invalido.clicked.connect(self.marcar_pulso_actual_invalido)
 
     self.btn_pantalla_externa = QtWidgets.QPushButton("PANTALLA EXTERNA (Tailscale/USB)")
-    self.btn_pantalla_externa.setToolTip("Transmitir vocales por Tailscale (100.118.12.94), USB o 2do Monitor para Modo Sujeto Ciego")
+    self.btn_pantalla_externa.setToolTip("Transmitir vocales por Tailscale (), USB o 2do Monitor para Modo Sujeto Ciego")
     self.btn_pantalla_externa.setStyleSheet(
       "QPushButton { background-color: #1a0f2e; color: #c77dff; border: 1.5px solid #c77dff; padding: 5px 10px; font-weight: bold; border-radius: 4px; font-size: 11px; } "
       "QPushButton:hover { background-color: #c77dff; color: #050508; }"

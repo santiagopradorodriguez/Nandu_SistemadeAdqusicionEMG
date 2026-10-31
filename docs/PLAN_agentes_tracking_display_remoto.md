@@ -26,9 +26,9 @@ Sugerencia heredada de B2 para B3: publicar `count_in` en el pre-roll y `t0_epoc
 
 | Máquina | Dónde | Rol | Red |
 |---|---|---|---|
-| `pop-os` (esta) | **Casa** | Desarrollo, repo, venv, tests | WiFi personal + **Tailscale activo** (100.118.12.94) |
+| `pop-os` (esta) | **Casa** | Desarrollo, repo, venv, tests | WiFi personal + **Tailscale activo** () |
 | PC del labo | **Labo** | Corre AutoForge DAQ + nidaqmx + servidor de estímulos | **Windows 10, SIN Tailscale**. Red del Dpto. Física: estado desconocido |
-| Celu (`a03-de-santiago`) | Con la persona | **Solo muestra la vocal/sílaba** (navegador) | Android, **ya está en la tailnet** (100.102.47.75, hoy offline) |
+| Celu (`dispositivo_remoto`) | Con la persona | **Solo muestra la vocal/sílaba** (navegador) | Android, **ya está en la tailnet** (, hoy offline) |
 | Lenovo Yoga | Opcional | Segunda pantalla / compu de respaldo | Linux, ya en la tailnet (hoy offline) |
 
 **Conclusión de red**: el desarrollo y los tests se hacen en casa (Linux); el despliegue es en

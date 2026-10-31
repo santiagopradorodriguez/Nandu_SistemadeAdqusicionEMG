@@ -225,8 +225,23 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, gate_ra
             continue
             
         vocal = partes[0].upper()
-        if vocal not in ['A', 'E', 'I', 'O', 'U']:
-            continue
+        es_secuencia_continua = ("secuenciacontinua" in med_name.lower()) or os.path.isfile(os.path.join(med_path, "segmentos_dataset.csv"))
+        if not es_secuencia_continua and vocal not in ['A', 'E', 'I', 'O', 'U']:
+            # Verificar si metadata.json declara Secuencia Continua o valid_words
+            meta_root_cand = os.path.join(med_path, "metadata.json")
+            meta_ch0_cand = os.path.join(med_path, "canal_0", "metadata.json")
+            for mc in (meta_root_cand, meta_ch0_cand):
+                if os.path.isfile(mc):
+                    try:
+                        with open(mc, "r", encoding="utf-8") as fm:
+                            md_tmp = json.load(fm)
+                        if md_tmp.get("es_secuencia_continua") or md_tmp.get("valid_words") or md_tmp.get("eventos_vocales_metronomo"):
+                            es_secuencia_continua = True
+                            break
+                    except Exception:
+                        pass
+            if not es_secuencia_continua:
+                continue
             
         # Leemos archivo manual de exclusiones si existe
         excluded_windows = []
@@ -385,13 +400,68 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, gate_ra
         ventanas_medicion = []
         picos_medicion = [] # para guardar el máximo de cada canal en la ventana
         
-        for win_idx, pico in enumerate(picos_alineacion):
+        # --- SOPORTE PROTOCOLO v6.0: Secuencia Continua y Pulsos Desincronizados (Jitter) ---
+        anclas_v6 = None
+        meta_v6 = {}
+        try:
+            ref_ch_key = ch_target if ch_target in canales_data else canales_features[0]
+            anclas_v6 = canales_data[ref_ch_key].get("pulse_anchors_v6")
+            meta_v6 = canales_data[ref_ch_key].get("meta_v6_info") or {}
+        except Exception:
+            anclas_v6 = None
+            meta_v6 = {}
+
+        # Si tenemos anclas v6 (de segmentos_dataset.csv, eventos_vocales_metronomo o beat_sample_indices),
+        # refinamos cada pulso alrededor de su propio anchor y período local tau_samples (soportando Jitter)
+        pulsos_a_extraer = []
+        if anclas_v6 and len(anclas_v6) > 0:
+            env_align_src = canales_data[ch_target]["env_recortada"] if ch_target in canales_data else canales_data[canales_features[0]]["env_recortada"]
+            for idx_a, anc in enumerate(anclas_v6):
+                if not anc.get("valido", True):
+                    continue
+                p_id = int(anc.get("pulso_idx", idx_a + 1))
+                if p_id in excluded_windows:
+                    continue
+                v_cand = str(anc.get("vocal") or vocal).strip().upper()
+                if v_cand not in ["A", "E", "I", "O", "U"]:
+                    if vocal in ["A", "E", "I", "O", "U"]:
+                        v_cand = vocal
+                    else:
+                        continue
+                tau_local = int(anc.get("tau_samples") or muestras_pulso)
+                c_ini = max(0, int(anc.get("cut_start", 0)))
+                c_fin = min(len(env_align_src), int(anc.get("cut_end", c_ini + tau_local)))
+                if c_fin <= c_ini + 4:
+                    continue
+                sub_env = env_align_src[c_ini:c_fin]
+                pico_local = c_ini + int(np.argmax(sub_env))
+                if modo_alineacion == "Pico Derivada Micrófono (Onset)" and "canal_3" in canales_data:
+                    deriv_local = np.gradient(sub_env)
+                    r_end = max(1, int(np.argmax(sub_env)))
+                    pico_local = c_ini + int(np.argmax(deriv_local[:r_end]))
+                pulsos_a_extraer.append((p_id - 1, pico_local, v_cand, tau_local))
+        else:
+            seq_words = meta_v6.get("secuencia_completa_pulsos") or meta_v6.get("valid_words") or []
+            for win_idx, pico in enumerate(picos_alineacion):
+                if (win_idx + 1) in excluded_windows:
+                    continue
+                if vocal in ["A", "E", "I", "O", "U"]:
+                    v_cand = vocal
+                elif seq_words:
+                    v_cand = str(seq_words[win_idx % len(seq_words)]).strip().upper()
+                else:
+                    v_cand = ""
+                if v_cand not in ["A", "E", "I", "O", "U"]:
+                    continue
+                pulsos_a_extraer.append((win_idx, int(pico), v_cand, int(muestras_pulso)))
+
+        for win_idx, pico, vocal_pulso, muestras_pulso_local in pulsos_a_extraer:
             if ignorar_ventana_cero and win_idx == 0:
                 continue
                 
-            # Definir ventana física simétrica basada en el pico de referencia
-            pre_samples = int(muestras_pulso * pre_pct)
-            post_samples = int(muestras_pulso * post_pct)
+            # Definir ventana física simétrica basada en el pico de referencia y el tau local del pulso (soporta Jitter)
+            pre_samples = int(muestras_pulso_local * pre_pct)
+            post_samples = int(muestras_pulso_local * post_pct)
             
             real_cut_start = pico - pre_samples
             real_cut_end = pico + post_samples
@@ -487,6 +557,7 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, gate_ra
                 
             ventanas_medicion.append({
                 'win_idx': win_idx,
+                'vocal_pulso': vocal_pulso,
                 'segs_brutos': segs_brutos,
                 'max_supremo': max_supremo,
                 'ruido_acumulado': ruido_acumulado_window
@@ -577,6 +648,7 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, gate_ra
         
         for i, v_data in enumerate(m_data['ventanas_medicion']):
             win_idx = v_data['win_idx']
+            vocal_item = v_data.get('vocal_pulso', vocal)
             segs_brutos = v_data['segs_brutos']
             ruido_acumulado_window = v_data['ruido_acumulado']
             
@@ -589,8 +661,8 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, gate_ra
                 
             if return_raw_cache:
                 X.append(segs_proc)
-                Y.append(vocal)
-                Tomas.append(f"{med_name}_Win{win_idx}")
+                Y.append(vocal_item)
+                Tomas.append(f"{med_name}_Win{win_idx}_{vocal_item}")
                 ruido_promedio_total = ruido_acumulado_window / float(len(canales_features))
                 snr = max_supremo / (ruido_promedio_total + 1e-9)
                 SNRs.append(snr)
@@ -614,8 +686,8 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, gate_ra
                 
             vector_concatenado = np.concatenate(vector_concatenado)
             X.append(vector_concatenado)
-            Y.append(vocal)
-            Tomas.append(f"{med_name}_Win{win_idx}")
+            Y.append(vocal_item)
+            Tomas.append(f"{med_name}_Win{win_idx}_{vocal_item}")
             ruido_promedio_total = ruido_acumulado_window / float(len(canales_features))
             snr = max_supremo / (ruido_promedio_total + 1e-9)
             SNRs.append(snr)
@@ -3079,10 +3151,10 @@ def main():
     parser.add_argument("--mediciones", nargs="+", default=None, help="Lista de mediciones relativas o carpetas")
     parser.add_argument("--base-dir", type=str, default=None, help="Directorio base de mediciones")
     parser.add_argument("--out-dir", type=str, default=None, help="Directorio de salida para resultados y figuras")
-    parser.add_argument("--pca-2d", action="store_true", default=True, help="Generar PCA 2D")
-    parser.add_argument("--pca-3d", action="store_true", default=False, help="Generar PCA 3D")
-    parser.add_argument("--umap-2d", action="store_true", default=False, help="Generar UMAP 2D")
-    parser.add_argument("--umap-3d", action="store_true", default=False, help="Generar UMAP 3D")
+    parser.add_argument("--pca-2d", action="store_true", default=None, help="Generar PCA 2D")
+    parser.add_argument("--pca-3d", action="store_true", default=None, help="Generar PCA 3D")
+    parser.add_argument("--umap-2d", action="store_true", default=None, help="Generar UMAP 2D")
+    parser.add_argument("--umap-3d", action="store_true", default=None, help="Generar UMAP 3D")
     parser.add_argument("--algoritmo-pca", type=str, default="GMM", choices=["GMM", "K-Means", "LDA"], help="Clustering para PCA")
     parser.add_argument("--estilo-visual", type=str, default="Elipses", choices=["Elipses", "Fronteras"], help="Estilo visual 2D")
     parser.add_argument("--lowpass", type=float, default=500.0, help="Frecuencia de corte pasabajos (Hz)")
@@ -3109,7 +3181,7 @@ def main():
             meds = args.mediciones
         elif args.fecha:
             todas = procesar_mediciones(base_dir)
-            meds = [m for m in todas if m.startswith(args.fecha) and not any(ign in m for ign in ["SecuenciaContinua", "Reposo", "Ruido", "Desplazado"])]
+            meds = [m for m in todas if m.startswith(args.fecha) and not any(ign in m for ign in ["Reposo", "Ruido", "Desplazado"])]
         else:
             meds = procesar_mediciones(base_dir)
             
@@ -3158,16 +3230,26 @@ def main():
             "lowpass_cutoff_hz": args.lowpass
         }
         
+        do_pca_2d = args.pca_2d if args.pca_2d is not None else False
+        do_pca_3d = args.pca_3d if args.pca_3d is not None else False
+        do_umap_2d = args.umap_2d if args.umap_2d is not None else False
+        do_umap_3d = args.umap_3d if args.umap_3d is not None else False
+
+        # Si el usuario no especificó ninguna proyección, por defecto corremos PCA 2D y PCA 3D
+        if not any([do_pca_2d, do_pca_3d, do_umap_2d, do_umap_3d]):
+            do_pca_2d = True
+            do_pca_3d = True
+
         ejecutar_procesamiento(
             meds,
             base_dir,
             params_2d=params_2d,
             params_3d=params_3d,
             params_umap=params_umap,
-            proc_pca_2d=args.pca_2d,
-            proc_pca_3d=args.pca_3d,
-            proc_umap_2d=args.umap_2d,
-            proc_umap_3d=args.umap_3d,
+            proc_pca_2d=do_pca_2d,
+            proc_pca_3d=do_pca_3d,
+            proc_umap_2d=do_umap_2d,
+            proc_umap_3d=do_umap_3d,
             aplicar_trevisan=False,
             algoritmo_clustering_pca=args.algoritmo_pca,
             modo_alineacion="Pico Volumen Micrófono",

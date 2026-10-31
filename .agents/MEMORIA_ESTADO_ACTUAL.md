@@ -61,7 +61,7 @@
 
 
 - **Hito 108:** Adaptabilidad de red dinámica y soporte multicasa/remoto para la WebApp de TARS:
-  - **Detección automática de IP local (`get_local_ip`):** Se eliminó la IP estática hardcodeada (`192.168.1.59`) en `tars_web_server.py`. Ahora detecta dinámicamente la IP asignada por cualquier router o red Wi-Fi al iniciar.
+  - **Detección automática de IP local (`get_local_ip`):** Se eliminó la IP estática hardcodeada (``) en `tars_web_server.py`. Ahora detecta dinámicamente la IP asignada por cualquier router o red Wi-Fi al iniciar.
   - **Auto-generación de certificados SSL con SAN multihost (`ensure_ssl_certificates`):** Si cambia de red Wi-Fi o casa, el servidor audita y regenera en 0.1s el certificado SSL incluyendo `DNS:pop-os.local`, `DNS:localhost`, `IP:127.0.0.1` y la nueva IP local (`IP Address`), habilitando el acceso por `https://pop-os.local:8443` o por la IP nueva sin bloqueos de navegador móvil.
   - **Soporte preparado para Tailscale:** Detección de IP remota de Tailscale (`tailscale ip -4`) para acceso a distancia fuera del hogar.
   - **Notificación visual de escritorio:** Al iniciar el servicio, Pop!_OS emite una notificación con la URL exacta para conectarse desde el celular.
@@ -72,9 +72,9 @@
   - **Resumen conversacional hablado (`extract_conversational_speech`):** En `tars_web_server.py`, las respuestas largas ya no se cortan abruptamente por conteo de caracteres. Elena sintetiza las primeras 1-2 oraciones clave del resultado y concluye con una frase natural de cierre ("El detalle completo y código lo tenés en pantalla"), permitiendo leer el reporte técnico en el celular sin saturar el audio.
 
 - **Hito 110:** Verificación y activación del enlace remoto de Tailscale en TARS:
-  - Se confirmó la conexión de Tailscale en la notebook con IP fija `100.118.12.94`.
-  - El servidor `tars_web_server.py` regeneró automáticamente los certificados SSL multihost incorporando tanto la IP local (`192.168.1.59`), los nombres mDNS (`pop-os.local`, `pop-os`) y la IP de la malla privada de Tailscale (`100.118.12.94`).
-  - Ambos endpoints (`https://100.118.12.94:8443` y `https://192.168.1.59:8443`) probados y respondiendo con éxito.
+  - Se confirmó la conexión de Tailscale en la notebook con IP fija ``.
+  - El servidor `tars_web_server.py` regeneró automáticamente los certificados SSL multihost incorporando tanto la IP local (``), los nombres mDNS (`pop-os.local`, `pop-os`) y la IP de la malla privada de Tailscale (``).
+  - Ambos endpoints (`https://:8443` y `https://:8443`) probados y respondiendo con éxito.
 
 - **Hito 111:** Corrección de sintaxis en `app.js` y restauración del selector de chats:
   - Se corrigió un error de sintaxis en la expresión regular de bloques de código en `app.js` que impedía la ejecución del archivo JavaScript en navegadores móviles.
@@ -86,7 +86,7 @@
   - Se confirmó la apertura del firewall en Pop!_OS (`8443/tcp` y `tailscale0` registrados en `user.rules`).
   - Se detectó que el proceso anterior (PID 4013) venía ejecutándose desde el arranque previo al enlace de Tailscale sin actualizar sockets.
   - Se finalizó dicho proceso y systemd inició un nuevo worker activo (PID 27208) con enlace verificado en `0.0.0.0:8443`.
-  - Se verificó respuesta `HTTP/1.1 200 OK` en las tres vías: `https://100.118.12.94:8443`, `https://pop-os.tail0ec03b.ts.net:8443` y `https://192.168.1.59:8443`.
+  - Se verificó respuesta `HTTP/1.1 200 OK` en las tres vías: `https://:8443`, `https://pop-os.tail0ec03b.ts.net:8443` y `https://:8443`.
 
 - **Hito 113:** Transmisión en vivo de pensamientos y comandos (Thinking/Tool Stream) a la pantalla del celular:
   - **Extracción de estado interno en backend:** `get_latest_transcript_message` en `tars_web_server.py` ahora analiza los bloques `PLANNER_RESPONSE` activos sin contenido final para extraer el pensamiento (`thinking`), el nombre de la herramienta (`tool_name`), la acción ejecutada (`tool_action`) y los detalles del comando o archivo (`tool_detail`).

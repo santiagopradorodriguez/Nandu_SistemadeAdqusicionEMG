@@ -609,7 +609,8 @@ class FaceTrackingThread(_BaseThread):
                 int(ok_det),
             ]
         )
-        self._csv_file.flush()
+        if (self._frame_idx % 15) == 0:
+            self._csv_file.flush()
 
         if self.escribir_landmarks and self._lm_writer is not None:
             row = [repr(float(t_perf)), int(self._frame_idx)]
@@ -625,7 +626,8 @@ class FaceTrackingThread(_BaseThread):
             else:
                 row += ["0.0", "0.0", "0.0"] * n_lm
             self._lm_writer.writerow(row)
-            self._lm_file.flush()
+            if (self._frame_idx % 15) == 0:
+                self._lm_file.flush()
 
         self._frame_idx += 1
         self._stats["frames"] = self._frame_idx

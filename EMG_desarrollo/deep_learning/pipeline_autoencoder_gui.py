@@ -542,6 +542,109 @@ class PipelineAutoencoderGUI:
         subprocess.Popen([sys.executable, plot_path])
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Pipeline Autoencoder Supervisado (GUI y modo CLI para Agentes).")
+    parser.add_argument("--cli", action="store_true", help="Ejecutar en modo no interactivo / consola")
+    parser.add_argument("--mediciones", nargs="+", default=None, help="Lista de carpetas de medición")
+    parser.add_argument("--fecha", type=str, default=None, help="Filtrar mediciones por fecha (ej. 2026-09-01)")
+    parser.add_argument("--epochs", type=int, default=80, help="Épocas de entrenamiento")
+    parser.add_argument("--batch-size", type=int, default=16, help="Tamaño de lote")
+    parser.add_argument("--latent-dim", type=int, default=3, help="Dimensión latente")
+    parser.add_argument("--kernel-size", type=int, default=5, help="Tamaño de kernel 1D")
+    parser.add_argument("--alpha-loss", type=float, default=0.3, help="Ponderación alpha loss")
+    parser.add_argument("--force-epochs", action="store_true", help="Forzar entrenamiento de todas las épocas")
+    parser.add_argument("--smooth-ms", type=float, default=150.0, help="Ventana de suavizado (ms)")
+    parser.add_argument("--target-length", type=int, default=100, help="Puntos de interpolación temporal")
+    parser.add_argument("--solo-extraer", action="store_true", help="Solo ejecutar extracción y salir")
+    parser.add_argument("--solo-entrenar", action="store_true", help="Solo ejecutar entrenamiento y salir")
+    parser.add_argument("--solo-plotear", action="store_true", help="Solo plotear espacio latente y salir")
+
+    args_flags = [a for a in sys.argv[1:] if a.startswith("-")]
+    if args_flags:
+        args = parser.parse_args()
+        
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        base_dir = os.path.join(os.path.dirname(os.path.dirname(script_dir)), "base_de_datos_electrodos")
+        if not os.path.exists(base_dir):
+            base_dir = os.path.join(script_dir, "base_de_datos_electrodos")
+            
+        meds_finales = []
+        if args.mediciones:
+            meds_finales = args.mediciones
+        elif args.fecha and os.path.exists(base_dir):
+            import deep_learning.pca_umap_clustering.generador_pca_umap as gpu
+            todas = gpu.procesar_mediciones(base_dir)
+            meds_finales = [m for m in todas if m.startswith(args.fecha) and not any(ign in m for ign in ["Reposo", "Ruido", "Desplazado"])]
+        
+        # 1. Extracción
+        if not args.solo_entrenar and not args.solo_plotear:
+            if not meds_finales:
+                print(f"[Error CLI] Debe especificar --mediciones o --fecha para extraer dataset supervisado.")
+                sys.exit(1)
+            print(f"[Agente Autoencoder Supervisado] Extrayendo dataset para {len(meds_finales)} mediciones...")
+            gpt.ejecutar_procesamiento(
+                meds_finales,
+                alpha_ruido=1.0,
+                snr_threshold=0.5,
+                outlier_contamination=0.05,
+                smooth_ms=args.smooth_ms,
+                target_length=args.target_length,
+                notch_q=30.0,
+                use_manual_exclusions=True
+            )
+            print("[Agente Autoencoder Supervisado] Extracción completada.")
+            if args.solo_extraer:
+                return
+
+        # 2. Entrenamiento
+        base_repo_dir = os.path.dirname(script_dir)
+        candidates_csv = [
+            os.path.join(base_repo_dir, "datasets_consolidados", "caracteristicas_exportadas.csv"),
+            os.path.join(base_repo_dir, "resultados", "resultados_autoencoder", "caracteristicas_exportadas.csv"),
+            os.path.join(script_dir, "caracteristicas_exportadas.csv"),
+        ]
+        csv_file = next((c for c in candidates_csv if os.path.exists(c)), None)
+        if not csv_file:
+            print("[Error CLI] No se encontró caracteristicas_exportadas.csv para entrenar.")
+            sys.exit(1)
+
+        if not args.solo_plotear:
+            print(f"[Agente Autoencoder Supervisado] Entrenando autoencoder (epochs={args.epochs}, latent_dim={args.latent_dim}, batch={args.batch_size})...")
+            ta.train_autoencoder(
+                csv_file,
+                epochs=args.epochs,
+                batch_size=args.batch_size,
+                latent_dim=args.latent_dim,
+                kernel_size=args.kernel_size,
+                force_epochs=args.force_epochs,
+                alpha=args.alpha_loss
+            )
+            print("[Agente Autoencoder Supervisado] Entrenamiento completado.")
+            if args.solo_entrenar:
+                return
+
+        # 3. Ploteo
+        res_dir = os.path.join(base_repo_dir, "resultados", "resultados_autoencoder")
+        candidates_pth = [
+            os.path.join(res_dir, f"autoencoder_emg_{args.latent_dim}d.pth"),
+            os.path.join(res_dir, "autoencoder_emg.pth"),
+        ]
+        model_path = next((p for p in candidates_pth if os.path.exists(p)), None)
+        if not model_path and os.path.exists(res_dir):
+            pths = [os.path.join(res_dir, f) for f in os.listdir(res_dir) if f.endswith(".pth")]
+            if pths:
+                pths.sort(key=os.path.getmtime, reverse=True)
+                model_path = pths[0]
+
+        if not model_path:
+            print("[Error CLI] No se encontró modelo .pth para plotear.")
+            sys.exit(1)
+
+        print(f"[Agente Autoencoder Supervisado] Ploteando espacio latente con {model_path}...")
+        pls.plot_latent_space(csv_file, model_path, latent_dim=args.latent_dim)
+        print("[Agente Autoencoder Supervisado] Ploteo finalizado con éxito.")
+        return
+
     root = tk.Tk()
     rutas = sys.argv[1:] if len(sys.argv) > 1 else None
     app = PipelineAutoencoderGUI(root, rutas_preseleccionadas=rutas)
