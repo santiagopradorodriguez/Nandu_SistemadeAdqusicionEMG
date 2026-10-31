@@ -2,7 +2,8 @@
 # Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
 # Autores: Lucas Braunstein y Santiago Prado
 # Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
-# Descripción: Prepara el entorno y dependencias para generar el ejecutable.
+# Descripción: Prepara el entorno y dependencias para generar el ejecutable v6.2
+#              (Sanitizado sin configuraciones personales ni bases de datos).
 # ==============================================================================
 
 import os
@@ -19,20 +20,35 @@ def crear_entorno_seguro():
     else:
         print(f"La carpeta ya existe: {dest_dir}")
 
-    # Ignoramos bases de datos, entornos, logs, resultados pesados y herramientas
+    # Ignoramos bases de datos, entornos, cachés locales, logs, resultados pesados y herramientas
     ignorar_carpetas = {
         'base_de_datos_electrodos', 'base_de_datos_letras', 'analisis_comparativos',
-        'analisis_de_sesiones', 'resultados', 'logs', 'venv', '__pycache__', '.git',
+        'analisis_de_sesiones', 'resultados', 'logs', 'venv', '.venv', '__pycache__', '.git',
         'EMG_Ejecutable_Build', 'herramientas_build', 'tests', 'build_linux',
-        'build_windows', 'dist', 'build', '.pytest_cache', 'codigos_de_prueba'
+        'build_windows', 'dist', 'build', '.pytest_cache', 'codigos_de_prueba',
+        'cache_datos', 'carpeta_para_vm_windows'
+    }
+
+    ignorar_archivos_exactos = {
+        'crear_entorno_ejecutable.py',
+        'argv_log.txt',
+        'multiplexer_error.log',
+        'config_local.json',
+        '_sujeto_explorer_cache.json',
+        'autoforge_daq_experimental_pc2_referencia.py',
     }
 
     def ignorar_rutas(directorio, archivos):
         ignorar = set()
         for a in archivos:
-            if a in ('__pycache__', 'resultados_pca_umap', 'resultados_umap_supervisado', 'resultados_autoencoder', '.pytest_cache', '.git', 'codigos_de_prueba', 'autoforge_daq_experimental_pc2_referencia.py'):
+            if a in (
+                '__pycache__', 'resultados_pca_umap', 'resultados_umap_supervisado',
+                'resultados_autoencoder', '.pytest_cache', '.git', 'codigos_de_prueba',
+                'autoforge_daq_experimental_pc2_referencia.py', 'config_local.json',
+                '_sujeto_explorer_cache.json', 'cache_datos'
+            ):
                 ignorar.add(a)
-            elif a.endswith(('.pyc', '.tar', '.zip', '.tmp')):
+            elif a.endswith(('.pyc', '.tar', '.zip', '.tmp', '.log')):
                 ignorar.add(a)
         return ignorar
 
@@ -47,16 +63,15 @@ def crear_entorno_seguro():
                 shutil.copytree(src_path, dest_path, ignore=ignorar_rutas)
                 print(f"[OK] Copiada carpeta: {item}")
         else:
-            # Copiamos todos los archivos fuente y recursos (excepto scripts de build o temporales)
-            if item in ["crear_entorno_ejecutable.py", "argv_log.txt", "multiplexer_error.log"] or item.endswith(('.pyc', '.tmp', '.log', '.docx', '.aux', '.out', '.toc')):
+            if item in ignorar_archivos_exactos or item.endswith(('.pyc', '.tmp', '.log', '.docx', '.aux', '.out', '.toc')):
                 continue
             if item.startswith(("temp_", "test_")):
                 continue
             shutil.copy2(src_path, dest_path)
             print(f"[OK] Copiado archivo: {item}")
 
-    print("\n[OK] Copia de seguridad y entorno de trabajo listos!")
-    print("A partir de ahora, haremos todos los cambios de código dentro de la nueva carpeta 'EMG_Ejecutable_Build'.")
+    print("\n[OK] Copia de seguridad y entorno de compilación v6.2 listos!")
+    print("El directorio 'EMG_Ejecutable_Build' está limpio de datos personales y listo para PyInstaller.")
 
 if __name__ == "__main__":
     crear_entorno_seguro()

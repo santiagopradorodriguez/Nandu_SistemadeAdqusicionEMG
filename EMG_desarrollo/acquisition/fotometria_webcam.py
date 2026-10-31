@@ -1870,7 +1870,16 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
         self._on_capture_perfil_izquierdo()
 
     def _on_confirm_session(self) -> None:
-        if "frontal_cruda" not in self.reference_images or self.calibracion_inicial_data is None:
+        tiene_puntos_marcados = bool(self._differential_pairs or self._manual_points_px)
+        electrodos_guardados = (self.calibracion_inicial_data or {}).get("electrodos", [])
+        pares_guardados = (self.calibracion_inicial_data or {}).get("pares_diferenciales", [])
+        if (
+            "frontal_cruda" not in self.reference_images
+            or self.calibracion_inicial_data is None
+            or (tiene_puntos_marcados and not electrodos_guardados and not pares_guardados)
+            or (len(self._differential_pairs) > len(pares_guardados))
+            or (len(self._manual_points_px) > len(electrodos_guardados))
+        ):
             self._on_capture_frontal()
         self.accept()
 
@@ -2238,7 +2247,7 @@ class _VozGuia(QtCore.QObject):
             self.disponible = True
 
     def decir(self, texto: str, clave: Optional[str] = None) -> None:
-        if not texto:
+        if not texto or os.environ.get("NANDU_MUTE_SPEAKING") == "1":
             return
         try:
             if self.reproductor and clave:
@@ -2496,11 +2505,23 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
             else:
                 self.nombres_musculos.append(f"Canal {self.active_channel_indices[pos]}")
 
-        # Distribucion lineal de canales: frontal marca el Canal 0 y el Canal 2;
-        # perfil izquierdo marca el Canal 1.
-        total = len(self.active_channel_indices)
-        self._canales_frontal: List[int] = [0, 2] if total >= 3 else ([0] if total >= 1 else [])
-        self._canales_perfil: List[int] = [1] if total >= 2 else []
+        # Filtrar canales que sean Micrófono para que solo se marquen electrodos EMG reales
+        emg_positions: List[int] = []
+        for pos_idx, musc_name in enumerate(self.nombres_musculos):
+            m_low = str(musc_name or "").strip().lower()
+            hw_c = self.active_channel_indices[pos_idx] if pos_idx < len(self.active_channel_indices) else pos_idx
+            if "mic" in m_low or "audio" in m_low or (hw_c == 3 and m_low in ("", "canal 3", "canal_3", "ch3", "ai3")):
+                continue
+            emg_positions.append(pos_idx)
+        if not emg_positions:
+            emg_positions = list(range(len(self.active_channel_indices)))
+        self._emg_positions: List[int] = emg_positions
+
+        # Por defecto: marcar TODOS los canales EMG en orden correlativo (0, 1, 2...) en la foto frontal
+        # para que jamás se salte ni se pierda el canal intermedio (Canal 1). Si el usuario prefiere
+        # marcar el Canal 1 en la foto de Perfil Izquierdo, también puede hacerlo en el Paso 2.
+        self._canales_frontal: List[int] = list(emg_positions)
+        self._canales_perfil: List[int] = []
 
         # Estado del asistente
         self._paso: int = self.PASO_FRONTAL
@@ -2727,6 +2748,15 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         fila_foto.addWidget(self.btn_repetir_foto)
         layout_pasos.addLayout(fila_foto)
 
+        self.chk_marcar_c1_en_perfil = QtWidgets.QCheckBox("Marcar Canal intermedio (Canal 1) en foto de Perfil Izquierdo")
+        self.chk_marcar_c1_en_perfil.setChecked(False)
+        self.chk_marcar_c1_en_perfil.setToolTip(
+            "Desmarcado (por defecto): marca TODOS los canales EMG (0, 1, 2) seguidos en la foto Frontal.\n"
+            "Marcado: marca Canal 0 y 2 en Frontal y el Canal 1 en la foto de Perfil Izquierdo."
+        )
+        self.chk_marcar_c1_en_perfil.toggled.connect(self._al_cambiar_modo_distribucion_canales)
+        layout_pasos.addWidget(self.chk_marcar_c1_en_perfil)
+
         self.btn_continuar_paso = QtWidgets.QPushButton("Continuar al Siguiente Paso")
         self.btn_continuar_paso.setStyleSheet(
             "QPushButton { background-color: #004d40; border-color: #00ffcc; color: #00ffcc; padding: 8px; }"
@@ -2933,12 +2963,15 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
                 "sub": "Clic izquierdo marca los Polos sobre la foto congelada | Clic derecho deshace | Continuar avanza al terminar",
             }
         if paso == self.PASO_PERFIL_IZQ:
+            sub_txt = (
+                ", ".join(f"Canal {self._nombre_canal(p)[0]} ({self._nombre_canal(p)[1]})" for p in self._canales_perfil)
+                if len(self._canales_perfil) > 0
+                else "Foto de referencia lateral (+45° hacia la derecha)"
+            )
             return {
-                "titulo": "Paso 2 de 4 : Foto Perfil Izquierdo",
-                "instruccion": "Gire el rostro 45 grados a la derecha hasta poner el semaforo en verde.",
-                "sub": f"Luego se marcara el Canal {self._nombre_canal(1)[0]} - {self._nombre_canal(1)[1]}"
-                       if len(self._canales_perfil) > 0
-                       else "Sin canales activos para marcar en perfil",
+                "titulo": "Paso 2 de 4 : Foto Perfil Izquierdo (Gire a la DERECHA +45°)",
+                "instruccion": "Gire la cabeza 45 grados hacia la DERECHA (Yaw positivo +25° a +65°) hasta poner el semaforo en verde.",
+                "sub": sub_txt,
             }
         if paso == self.PASO_MARCA_PERFIL:
             return {
@@ -2948,9 +2981,9 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
             }
         if paso == self.PASO_PERFIL_DER:
             return {
-                "titulo": "Paso 3 de 4 : Foto de Control Perfil Derecho",
-                "instruccion": "Gire el rostro 45 grados a la izquierda para la foto de control.",
-                "sub": "La foto de control se toma automaticamente al poner el semaforo en verde",
+                "titulo": "Paso 3 de 4 : Foto Perfil Derecho (Gire a la IZQUIERDA -45°)",
+                "instruccion": "Ahora gire la cabeza 45 grados hacia la IZQUIERDA (Yaw negativo -25° a -65°) hasta poner el semaforo en verde.",
+                "sub": "Exige orientacion opuesta al paso anterior (solo se activa al girar a la izquierda)",
             }
         return {
             "titulo": "Paso 4 de 4 : Parametros de Montaje",
@@ -3294,8 +3327,24 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
             self._decir(FRASES_VOZ_ASISTENTE[clave], clave=clave)
             self._ultima_vez_voz = time.perf_counter()
 
+    def _al_cambiar_modo_distribucion_canales(self, en_perfil: bool) -> None:
+        """Permite elegir si el Canal 1 se marca en Frontal junto a 0 y 2, o en Perfil Izquierdo."""
+        emg_pos = list(getattr(self, "_emg_positions", range(len(self.active_channel_indices))))
+        if en_perfil and len(emg_pos) >= 2:
+            c_mid = emg_pos[1]
+            self._canales_frontal = [p for p in emg_pos if p != c_mid]
+            self._canales_perfil = [c_mid]
+        else:
+            self._canales_frontal = list(emg_pos)
+            self._canales_perfil = []
+        if self._paso == self.PASO_MARCA_FRONTAL:
+            self._iniciar_marcado(self._canales_frontal)
+        elif self._paso == self.PASO_MARCA_PERFIL:
+            self._iniciar_marcado(self._canales_perfil)
+        self._refrescar_estado_ui()
+
     def _sugerencia_pose(self, pose: Dict[str, Any]) -> str:
-        """Clave del consejo comparando la pose medida con la objetivo del paso."""
+        """Clave del consejo comparando la pose medida con la objetivo del paso (con signo direccional estricto)."""
         paso = self._paso
         if paso == self.PASO_PARAMETROS:
             return "paso4"
@@ -3315,12 +3364,21 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
                 return "centro"
             if abs(yaw) > bandas["yaw"][1]:
                 return "casi_frontal"
-        elif paso in (self.PASO_PERFIL_IZQ, self.PASO_PERFIL_DER):
-            if abs(yaw) < bandas["yaw_warn"][0]:
-                return "siga_derecha" if paso == self.PASO_PERFIL_IZQ else "siga_izquierda"
-            if abs(yaw) > bandas["yaw_warn"][1]:
+        elif paso == self.PASO_PERFIL_IZQ:
+            # Perfil Izquierdo exige girar cabeza hacia la derecha (Yaw positivo +25° a +65°)
+            if yaw < 22.0:
+                return "siga_derecha"
+            if yaw > 70.0:
                 return "regrese"
-            if not self._en_rango(abs(yaw), bandas["yaw_absoluto"]):
+            if not (25.0 <= yaw <= 65.0):
+                return "casi_perfil"
+        elif paso == self.PASO_PERFIL_DER:
+            # Perfil Derecho exige girar cabeza hacia la izquierda (Yaw negativo -65° a -25°)
+            if yaw > -22.0:
+                return "siga_izquierda"
+            if yaw < -70.0:
+                return "regrese"
+            if not (-65.0 <= yaw <= -25.0):
                 return "casi_perfil"
         if not self._en_rango(pitch, bandas["pitch_warn"]):
             return "no_incline"
@@ -3332,7 +3390,7 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
             return "casi_barbilla"
         if not self._en_rango(roll, bandas["roll"]):
             return "casi_enderece"
-        return "mantenga"
+        return "mantenga" 
 
     def _guiar_en_vivo(self, pose: Dict[str, Any], verde: bool, fiduciarios: Any) -> None:
         """Consejo en pantalla en vivo; la voz solo cuando el mismo consejo se
@@ -3386,21 +3444,23 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
     # =====================================================================
 
     def _bandas_objetivo(self) -> Dict[str, Any]:
-        """Rangos del semaforo segun la pose objetivo del paso actual.
-
-        El signo del yaw depende de la convencion geometrica de la malla
-        facial, por eso los perfiles se comparan con el valor absoluto.
+        """Rangos direccionales con signo del semaforo segun la pose objetivo del paso actual:
+        - PASO_FRONTAL    : [-8°, +8°]
+        - PASO_PERFIL_IZQ : [+25°, +65°] (giro hacia la derecha)
+        - PASO_PERFIL_DER : [-65°, -25°] (giro hacia la izquierda)
         """
         paso = self._paso
-        if paso in (self.PASO_PERFIL_IZQ, self.PASO_PERFIL_DER):
+        if paso == self.PASO_PERFIL_IZQ:
             yaw_rango, yaw_rango_warn = (25.0, 65.0), (18.0, 72.0)
+        elif paso == self.PASO_PERFIL_DER:
+            yaw_rango, yaw_rango_warn = (-65.0, -25.0), (-72.0, -18.0)
         else:
             yaw_rango, yaw_rango_warn = (-8.0, 8.0), (-14.0, 14.0)
         return {
             "yaw": yaw_rango,
             "yaw_warn": yaw_rango_warn,
-            "yaw_absoluto": _rango_absoluto(yaw_rango),
-            "yaw_absoluto_warn": _rango_absoluto(yaw_rango_warn),
+            "yaw_absoluto": (25.0, 65.0) if paso in (self.PASO_PERFIL_IZQ, self.PASO_PERFIL_DER) else (0.0, 8.0),
+            "yaw_absoluto_warn": (18.0, 72.0) if paso in (self.PASO_PERFIL_IZQ, self.PASO_PERFIL_DER) else (0.0, 14.0),
             "pitch": (-10.0, 10.0),
             "pitch_warn": (-16.0, 16.0),
             "roll": (-6.0, 6.0),
@@ -3413,10 +3473,10 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         return rango[0] <= valor <= rango[1]
 
     def _yaw_ok(self, yaw: float, estricto: bool) -> bool:
-        """Compara el valor absoluto del yaw con la banda del paso actual."""
+        """Compara el yaw CON SIGNO con la banda direccional del paso actual (no admite girar al lado contrario)."""
         bandas = self._bandas_objetivo()
-        clave = "yaw_absoluto" if estricto else "yaw_absoluto_warn"
-        return self._en_rango(abs(float(yaw)), bandas[clave])
+        clave = "yaw" if estricto else "yaw_warn"
+        return self._en_rango(float(yaw), bandas[clave])
 
     def _alineacion_verde(self, pose: Dict[str, Any]) -> bool:
         bandas = self._bandas_objetivo()
@@ -3607,7 +3667,14 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         """Dibuja los pares ya marcados y el polo pendiente de completar."""
         dip_px = self._dip_px_del_paso()
         escala = self.d_ip_nominal_mm / dip_px if dip_px and dip_px > 1.0 else None
+        canales_visibles = (
+            set(self._canales_marcado_paso)
+            if (congelado and self._paso in (self.PASO_MARCA_FRONTAL, self.PASO_MARCA_PERFIL) and self._canales_marcado_paso)
+            else set(self._pares_por_canal.keys())
+        )
         for pos_canal, par in sorted(self._pares_por_canal.items()):
+            if pos_canal not in canales_visibles:
+                continue
             color = PALETA_CANALES_MONTAJE[pos_canal % len(PALETA_CANALES_MONTAJE)]
             p_pos = posicion_polo_desde_anclaje(
                 par.get("anchor_positivo"), par.get("polo_positivo"), fiduciarios
@@ -3920,21 +3987,23 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         foto_frontal = self._fotos.get("frontal")
         if foto_frontal is None:
             return
-        pares_frontales = [
-            self._pares_por_canal[pos]
-            for pos in self._canales_frontal
-            if pos in self._pares_por_canal
+        posiciones_marcadas = [
+            pos for pos in sorted(self._pares_por_canal.keys())
+            if pos in self._canales_frontal or self._fotos.get("perfil_izquierdo") is None
         ]
+        pares_frontales = [self._pares_por_canal[pos] for pos in posiciones_marcadas]
         if not pares_frontales:
             return
+        nombres_marcados = [self._nombre_canal(pos)[1] for pos in posiciones_marcadas]
+        indices_fisicos_marcados = [self._nombre_canal(pos)[0] for pos in posiciones_marcadas]
         try:
             resultado = self.agent.triangular_electrodos(
                 foto_frontal,
                 puntos_centroides_manuales=pares_frontales,
                 usar_broches_metalicos=False,
                 asignar_musculos_automatico=True,
-                nombres_canales=self.nombres_musculos,
-                indices_canales_fisicos=self.active_channel_indices,
+                nombres_canales=nombres_marcados,
+                indices_canales_fisicos=indices_fisicos_marcados,
                 d_ip_real_cm=self.d_ip_nominal_mm / 10.0,
                 escala_mm_por_px=self._escala_mm_px_frontal,
                 punto_referencia_gnd=None,
@@ -3992,10 +4061,75 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
                 "polo_negativo": self._polo_del_par(par, "anchor_negativo", "polo_negativo"),
             }
 
+        # Construir listas explícitas de electrodos y pares_diferenciales con TODOS los canales marcados
+        # (tanto frontales como de perfil izquierdo) para que nunca queden vacíos en calibracion_espacial.json
+        electrodos_lista: List[Dict[str, Any]] = []
+        pares_lista: List[Dict[str, Any]] = []
+        for pos_canal, par in sorted(self._pares_por_canal.items()):
+            fisico, nombre = self._nombre_canal(pos_canal)
+            foto_canal = (
+                NOMBRE_FOTO_FRONTAL
+                if pos_canal in self._canales_frontal
+                else NOMBRE_FOTO_PERFIL_IZQUIERDO
+            )
+            polo_pos_info = self._polo_del_par(par, "anchor_positivo", "polo_positivo")
+            polo_neg_info = self._polo_del_par(par, "anchor_negativo", "polo_negativo")
+            pos_pt = par.get("polo_positivo") or (0.0, 0.0)
+            neg_pt = par.get("polo_negativo") or (0.0, 0.0)
+            cx = round(0.5 * (float(pos_pt[0]) + float(neg_pt[0])), 2)
+            cy = round(0.5 * (float(pos_pt[1]) + float(neg_pt[1])), 2)
+            par_entry = {
+                "canal_pos": pos_canal,
+                "canal_fisico": fisico,
+                "canal": f"ai{fisico}",
+                "musculo": nombre,
+                "foto_origen": foto_canal,
+                "centroide_px": [cx, cy],
+                "polo_positivo": polo_pos_info,
+                "polo_negativo": polo_neg_info,
+                "ied_px": round(float(par["ied_px"]), 2),
+                "ied_mm": round(float(par["ied_mm"]), 2) if par.get("ied_mm") is not None else None,
+                "angulo_deg": round(float(par["angulo_deg"]), 2),
+                "diametro_gel_mm": round(gel, 2),
+            }
+            pares_lista.append(par_entry)
+            electrodos_lista.append({
+                "id_electrodo": f"Ch{pos_canal}_pos",
+                "canal_pos": pos_canal,
+                "canal_fisico": fisico,
+                "canal": f"ai{fisico}",
+                "polo": "+",
+                "musculo": nombre,
+                "foto_origen": foto_canal,
+                **polo_pos_info,
+            })
+            electrodos_lista.append({
+                "id_electrodo": f"Ch{pos_canal}_neg",
+                "canal_pos": pos_canal,
+                "canal_fisico": fisico,
+                "canal": f"ai{fisico}",
+                "polo": "-",
+                "musculo": nombre,
+                "foto_origen": foto_canal,
+                **polo_neg_info,
+            })
+
         pose_frontal = self._pose_fotos.get("frontal") or {}
+        meta_calib = dict(self._meta_calibracion_frontal) if self._meta_calibracion_frontal else {}
+        meta_calib["sujeto"] = self.sujeto
+        meta_calib["prueba"] = self.prueba
+        meta_calib["canales_activos_fisicos"] = list(self.active_channel_indices)
+        meta_calib["nombres_musculos_canales"] = list(self.nombres_musculos)
+        meta_calib["total_electrodos_detectados"] = len(electrodos_lista)
+        meta_calib["total_pares_diferenciales"] = len(pares_lista)
+        meta_calib["electrodos"] = electrodos_lista
+        meta_calib["pares_diferenciales"] = pares_lista
+        meta_calib["montaje"] = montaje
+        self._meta_calibracion_frontal = meta_calib
+
         metadata = {
             "tipo": "asistente_lineal_fotometria",
-            "version": 1,
+            "version": 2,
             "fecha_iso": datetime.now().isoformat(),
             "sujeto": self.sujeto,
             "prueba": self.prueba,
@@ -4016,6 +4150,10 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
                 NOMBRE_FOTO_PERFIL_DERECHO,
             ],
             "fotos_montaje_dir": "fotos_montaje",
+            "total_electrodos_detectados": len(electrodos_lista),
+            "total_pares_diferenciales": len(pares_lista),
+            "electrodos": electrodos_lista,
+            "pares_diferenciales": pares_lista,
             "montaje": montaje,
             "pose_fotos": self._pose_fotos,
             "pose_resumen_frontal": {
@@ -4023,9 +4161,8 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
                 "yaw_deg": pose_frontal.get("yaw_deg"),
                 "rostro_detectado": pose_frontal.get("rostro_detectado", False),
             },
+            "metadatos_calibracion_espacial": meta_calib,
         }
-        if self._meta_calibracion_frontal is not None:
-            metadata["metadatos_calibracion_espacial"] = self._meta_calibracion_frontal
         return limpiar_para_json(metadata)
 
     def _construir_fotos_con_marcas(self) -> Dict[str, np.ndarray]:
@@ -4141,6 +4278,7 @@ class WebcamPhotometryManager(QtCore.QObject):
             parent = None
         super().__init__(parent)
         self.is_enabled: bool = False
+        self.mute_speaking: bool = False
         self.record_video_clips: bool = False
         self.camera_index: int = int(camera_index)
         self.calibracion_inicial_data: Optional[Dict[str, Any]] = None
@@ -4150,6 +4288,7 @@ class WebcamPhotometryManager(QtCore.QObject):
 
         self.agent = AntigravityAgent(refine_landmarks=True)
         self.capture_thread: Optional[WebcamCaptureThread] = None
+        self._retired_threads: List[QtCore.QThread] = []
 
         self._snapshots_lock = threading.Lock()
         self._agent_lock = threading.Lock()
@@ -4211,13 +4350,23 @@ class WebcamPhotometryManager(QtCore.QObject):
         return True
 
     def stop_worker(self) -> None:
-        """Detiene de forma segura el hilo de captura de cámara web."""
+        """Detiene de forma segura el hilo de captura evitando QThread::~QThread() abort si el driver tarda en liberar."""
+        if hasattr(self, "_retired_threads") and self._retired_threads:
+            self._retired_threads = [t for t in self._retired_threads if t is not None and t.isRunning()]
         if self.capture_thread is not None:
+            th = self.capture_thread
+            self.capture_thread = None
             try:
-                self.capture_thread.stop()
+                th.stop()
             except Exception as exc:
                 sys.stderr.write(f"[FotometriaWebcam] Aviso al detener worker: {exc}\n")
-            self.capture_thread = None
+            try:
+                if th.isRunning():
+                    if not hasattr(self, "_retired_threads"):
+                        self._retired_threads = []
+                    self._retired_threads.append(th)
+            except Exception:
+                pass
 
     def _esperar_senal_camara(self, segundos: float) -> bool:
         """Espera hasta que el hilo de captura entregue un cuadro real."""
@@ -4288,9 +4437,35 @@ class WebcamPhotometryManager(QtCore.QObject):
         if result == QtWidgets.QDialog.Accepted:
             self.calibracion_inicial_data = dialog.calibracion_inicial_data
             self.reference_images = {k: v.copy() for k, v in dialog.reference_images.items()}
+            # Sincronizar también con fotometria_sesion para que guardar_fotometria_en_carpeta
+            # guarde siempre metadata_fotometria.json y las fotos de referencia con electrodos
+            fotos_dict = {
+                "frontal": self.reference_images.get("frontal_cruda") if "frontal_cruda" in self.reference_images else self.reference_images.get("frontal_triangulada"),
+                "perfil_izquierdo": self.reference_images.get("perfil_izquierdo") if "perfil_izquierdo" in self.reference_images else self.reference_images.get("perfil_45"),
+                "perfil_derecho": self.reference_images.get("perfil_derecho"),
+            }
+            fotos_marcas_dict = {
+                "frontal": self.reference_images.get("frontal_triangulada"),
+                "perfil_izquierdo": self.reference_images.get("perfil_izquierdo"),
+            }
+            meta_compat = dict(self.calibracion_inicial_data or {})
+            meta_compat.setdefault("tipo", "alignment_dialog_3d")
+            meta_compat.setdefault("fecha_iso", datetime.now().isoformat())
+            meta_compat["metadatos_calibracion_espacial"] = dict(self.calibracion_inicial_data or {})
+            self.fotometria_sesion = {
+                "fotos": {k: v for k, v in fotos_dict.items() if v is not None},
+                "fotos_con_marcas": {k: v for k, v in fotos_marcas_dict.items() if v is not None},
+                "metadata": limpiar_para_json(meta_compat),
+                "comentario": "",
+            }
             self.is_enabled = True
             return True
         return False
+
+    def set_mute_speaking(self, muted: bool) -> None:
+        """Activa o desactiva el silencio de voz (Mute Speaking) en el módulo de fotometría."""
+        self.mute_speaking = bool(muted)
+        os.environ["NANDU_MUTE_SPEAKING"] = "1" if self.mute_speaking else "0"
 
     def listar_sesiones_fotometria_previas(self) -> List[Dict[str, Any]]:
         """
@@ -4311,13 +4486,12 @@ class WebcamPhotometryManager(QtCore.QObject):
         Abre el Asistente Lineal Simple de Fotometria: guia foto a foto de
         colocacion de electrodos con guia AR de repeticion en vivo.
 
-        Retorna True solo si el usuario confirmo el montaje. Si omite o cancela
-        conscientemente, retorna False sin interrumpir el flujo del DAQ.
+        Retorna True si el usuario confirmo el montaje (o si ya habia confirmado
+        previamente el montaje en el boton FOTOMETRIA 3D y decidio usar ese).
         """
         self.start_worker(self.camera_index)
         if not self._asegurar_camara_disponible(parent_widget):
-            return False
-        self.fotometria_sesion = None
+            return bool(self.fotometria_sesion is not None and self.is_enabled)
 
         dialog = AsistenteLinealFotometriaDialog(
             capture_thread=self.capture_thread,
@@ -4332,6 +4506,32 @@ class WebcamPhotometryManager(QtCore.QObject):
         resultado = dialog.exec()
         if resultado == QtWidgets.QDialog.Accepted:
             self.fotometria_sesion = dialog.obtener_datos_sesion()
+            # Sincronizar inmediatamente calibracion_inicial_data y reference_images
+            # para que export_take_photometry NUNCA pise los electrodos marcados con una detección vacía!
+            meta_ses = (self.fotometria_sesion or {}).get("metadata", {}) or {}
+            self.calibracion_inicial_data = (
+                meta_ses.get("metadatos_calibracion_espacial") or meta_ses
+            )
+            fotos_raw = (self.fotometria_sesion or {}).get("fotos", {}) or {}
+            fotos_mk = (self.fotometria_sesion or {}).get("fotos_con_marcas", {}) or {}
+            if fotos_raw.get("frontal") is not None:
+                self.reference_images["frontal_cruda"] = fotos_raw["frontal"].copy()
+            if fotos_mk.get("frontal") is not None:
+                self.reference_images["frontal_triangulada"] = fotos_mk["frontal"].copy()
+            elif fotos_raw.get("frontal") is not None:
+                self.reference_images["frontal_triangulada"] = fotos_raw["frontal"].copy()
+            if fotos_mk.get("perfil_izquierdo") is not None:
+                self.reference_images["perfil_izquierdo"] = fotos_mk["perfil_izquierdo"].copy()
+                self.reference_images["perfil_45"] = fotos_mk["perfil_izquierdo"].copy()
+            elif fotos_raw.get("perfil_izquierdo") is not None:
+                self.reference_images["perfil_izquierdo"] = fotos_raw["perfil_izquierdo"].copy()
+                self.reference_images["perfil_45"] = fotos_raw["perfil_izquierdo"].copy()
+            if fotos_raw.get("perfil_derecho") is not None:
+                self.reference_images["perfil_derecho"] = fotos_raw["perfil_derecho"].copy()
+            self.is_enabled = True
+            return True
+        # Si el usuario ya había calibrado con FOTOMETRIA 3D antes de iniciar, conservar esos electrodos
+        if self.fotometria_sesion is not None and self.calibracion_inicial_data is not None:
             self.is_enabled = True
             return True
         return False
@@ -4394,8 +4594,7 @@ class WebcamPhotometryManager(QtCore.QObject):
                 if imagen is None or imagen.size == 0:
                     continue
                 destino = os.path.join(dir_montaje, nombre_archivo)
-                if not os.path.exists(destino):
-                    cv2.imwrite(destino, imagen)
+                cv2.imwrite(destino, imagen)
                 escritas.append(nombre_archivo)
                 imagen_marcas = fotos_con_marcas.get(clave)
                 if imagen_marcas is None or imagen_marcas.size == 0:
@@ -4403,17 +4602,32 @@ class WebcamPhotometryManager(QtCore.QObject):
                 base, ext = os.path.splitext(nombre_archivo)
                 nombre_marcas = f"{base}_marcas{ext}"
                 destino_marcas = os.path.join(dir_montaje, nombre_marcas)
-                if not os.path.exists(destino_marcas):
-                    cv2.imwrite(destino_marcas, imagen_marcas)
+                cv2.imwrite(destino_marcas, imagen_marcas)
                 marcas_escritas.append(nombre_marcas)
-            metadata.setdefault("fotos_montaje", escritas)
-            metadata.setdefault("fotos_montaje_marcas", marcas_escritas)
+            metadata["fotos_montaje"] = escritas
+            metadata["fotos_montaje_marcas"] = marcas_escritas
             metadata.setdefault(
                 "comentario_sesion", str(datos.get("comentario", "") or "")
             )
             ruta_json = os.path.join(str(output_dir), NOMBRE_METADATA_FOTOMETRIA)
             with open(ruta_json, "w", encoding="utf-8") as handle:
                 json.dump(metadata, handle, indent=2, ensure_ascii=False)
+
+            # Garantizar también fotometria/calibracion_espacial.json con la ubicación exacta de los electrodos
+            dir_fotometria = os.path.join(str(output_dir), "fotometria")
+            os.makedirs(dir_fotometria, exist_ok=True)
+            calibracion_payload = metadata.get("metadatos_calibracion_espacial") or self.calibracion_inicial_data or metadata
+            ruta_calib_json = os.path.join(dir_fotometria, "calibracion_espacial.json")
+            with open(ruta_calib_json, "w", encoding="utf-8") as handle_c:
+                json.dump(
+                    {
+                        "exito": True,
+                        "metadatos_calibracion_espacial": limpiar_para_json(calibracion_payload),
+                    },
+                    handle_c,
+                    indent=2,
+                    ensure_ascii=False,
+                )
             return True
         except Exception as exc:
             sys.stderr.write(

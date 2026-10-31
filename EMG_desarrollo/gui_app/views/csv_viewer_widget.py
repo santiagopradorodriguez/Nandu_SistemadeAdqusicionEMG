@@ -107,8 +107,9 @@ class DataLoaderThread(QThread):
                     time_col = c
                     break
             
-            # Si se seleccionó calibracion.csv y no tiene columna de tiempo pero existe grabacion.csv o calibracion_raw.csv:
-            if not time_col and os.path.basename(target_path).lower().startswith("calibracion"):
+            # Si se seleccionó un CSV auxiliar (calibracion, pulsos_metronomo, segmentos_dataset, fotometria) pero existe grabacion.csv:
+            base_lower = os.path.basename(target_path).lower()
+            if base_lower != "grabacion.csv" and (not time_col or base_lower.startswith(("calibracion", "pulsos_metronomo", "segmentos_dataset", "fotometria"))):
                 med_dir = os.path.dirname(target_path)
                 for alt_name in ("grabacion.csv", "calibracion_raw.csv"):
                     alt_path = os.path.join(med_dir, alt_name)
@@ -188,11 +189,16 @@ class DataLoaderThread(QThread):
                 for c in canales:
                     df[c] = (df[c] / ganancia) * 1e6
 
-            global_max_y = 1.0
+            global_max_y = 250.0
             if len(canales) > 0:
-                global_max_y = float(np.max(np.abs(df[canales].values)))
+                emg_cols = [c for idx_c, c in enumerate(canales) if idx_c != 3 and "mic" not in c.lower()]
+                eval_cols = emg_cols if emg_cols else canales
+                vals_abs = np.abs(df[eval_cols].values)
+                p99 = float(np.nanpercentile(vals_abs, 99.0)) if vals_abs.size > 0 else 250.0
+                # Mantener la escala inicial en el rango fisiológico 0-500 uV para que picos eléctricos no aplasten la señal
+                global_max_y = min(500.0, max(25.0, p99 * 1.15))
                 if np.isnan(global_max_y) or global_max_y == 0:
-                    global_max_y = 1.0
+                    global_max_y = 250.0
 
             self.finished_loading.emit(df, canales, time_col, global_max_y)
         except Exception as e:

@@ -61,7 +61,7 @@ class ConfiguracionDialog(QDialog):
         self.spin_noise.setStyleSheet("background-color: #222; color: #fff; padding: 4px;")
         
         self.spin_bpm = QSpinBox()
-        self.spin_bpm.setRange(30, 250)
+        self.spin_bpm.setRange(10, 240)
         self.spin_bpm.setStyleSheet("background-color: #222; color: #fff; padding: 4px;")
         
         self.spin_descanso = QDoubleSpinBox()
@@ -84,10 +84,21 @@ class ConfiguracionDialog(QDialog):
         btn_layout.addWidget(self.btn_add_chan)
         btn_layout.addWidget(self.btn_remove_chan)
         
+        self.chk_clamp_500uv = QCheckBox("Activar límite fisiológico 0–500 µV (Suprimir picos eléctricos)")
+        self.chk_clamp_500uv.setChecked(True)
+        self.spin_techo_uv = QDoubleSpinBox()
+        self.spin_techo_uv.setRange(50.0, 5000.0)
+        self.spin_techo_uv.setSingleStep(50.0)
+        self.spin_techo_uv.setValue(500.0)
+        self.spin_techo_uv.setSuffix(" µV")
+        self.spin_techo_uv.setStyleSheet("background-color: #222; color: #00ffcc; padding: 4px;")
+
         self.form_adq.addRow("Frecuencia de Muestreo (Hz):", self.spin_fs)
         self.form_adq.addRow("Segundos de Ruido Base:", self.spin_noise)
-        self.form_adq.addRow("BPM (Metrónomo):", self.spin_bpm)
+        self.form_adq.addRow("BPM (Metrónomo 10–240):", self.spin_bpm)
         self.form_adq.addRow("Tiempo de Descanso (s):", self.spin_descanso)
+        self.form_adq.addRow("Protección Anti-Picos:", self.chk_clamp_500uv)
+        self.form_adq.addRow("Techo Fisiológico Eje Y:", self.spin_techo_uv)
         self.form_adq.addRow("Canales Físicos NIDAQ:", self.list_channels)
         self.form_adq.addRow("", btn_layout)
         
@@ -165,8 +176,11 @@ class ConfiguracionDialog(QDialog):
         adq = config_mgr.get("adquisicion") or {}
         self.spin_fs.setValue(adq.get("frecuencia_muestreo", 2000.0))
         self.spin_noise.setValue(adq.get("ruido_segundos", 3.0))
-        self.spin_bpm.setValue(adq.get("bpm", 60))
+        self.spin_bpm.setValue(adq.get("bpm", 25))
         self.spin_descanso.setValue(adq.get("tiempo_descanso", 10.0))
+        vis = config_mgr.get("visualizacion") or {}
+        self.chk_clamp_500uv.setChecked(bool(vis.get("limitar_rango_500uv", adq.get("limitar_rango_500uv", True))))
+        self.spin_techo_uv.setValue(float(vis.get("techo_fisiologico_uv", 500.0)))
         
         nidaq_chans = adq.get("nidaq_channels", ["Dev1/ai0", "Dev1/ai1", "Dev1/ai2", "Dev1/ai3"])
         self.list_channels.clear()
@@ -259,6 +273,11 @@ class ConfiguracionDialog(QDialog):
         adq["ruido_segundos"] = self.spin_noise.value()
         adq["bpm"] = self.spin_bpm.value()
         adq["tiempo_descanso"] = self.spin_descanso.value()
+        adq["limitar_rango_500uv"] = self.chk_clamp_500uv.isChecked()
+        vis = config_mgr.config.get("visualizacion", {})
+        vis["limitar_rango_500uv"] = self.chk_clamp_500uv.isChecked()
+        vis["techo_fisiologico_uv"] = self.spin_techo_uv.value()
+        config_mgr.config["visualizacion"] = vis
         
         nidaq_chans = []
         for i in range(self.list_channels.count()):

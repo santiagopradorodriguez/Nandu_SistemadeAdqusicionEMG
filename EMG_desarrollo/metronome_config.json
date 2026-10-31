@@ -1,6 +1,6 @@
 {
-    "last_bpm": 40,
+    "last_bpm": 30,
     "last_beat_count": "1",
     "subdivisions": 4,
-    "notch_enabled": true
+    "notch_enabled": false
 }

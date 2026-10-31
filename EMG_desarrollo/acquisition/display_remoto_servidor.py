@@ -46,22 +46,153 @@ from urllib.parse import urlparse, parse_qs
 
 # --- Rutas del proyecto (multiplataforma) -------------------------------------
 DIR_SCRIPT = os.path.dirname(os.path.abspath(__file__))
-RUTA_CLIENTE = os.path.join(DIR_SCRIPT, "display_remoto", "cliente_estimulos.html")
+def _resolver_ruta_cliente():
+    candidatos = [
+        os.path.join(DIR_SCRIPT, "cliente_estimulos.html"),
+        os.path.join(DIR_SCRIPT, "display_remoto", "cliente_estimulos.html"),
+        os.path.join(os.path.dirname(DIR_SCRIPT), "cliente_estimulos.html"),
+        os.path.join(os.path.dirname(DIR_SCRIPT), "display_remoto", "cliente_estimulos.html"),
+    ]
+    for c in candidatos:
+        if os.path.isfile(c):
+            return c
+    return candidatos[0]
+
+RUTA_CLIENTE = _resolver_ruta_cliente()
 RUTA_PALABRAS = os.path.join(DIR_SCRIPT, "palabras.txt")
 
 # Palabras de respaldo por si palabras.txt no existe o está vacío.
 PALABRAS_RESPALDO = ["A", "E", "I", "O", "U"]
 
-# Claves válidas del estado publicado.
+# Claves válidas del estado publicado (incluye soporte v6.0 para Jitter y Secuencia Continua).
 CLAVES_ESTADO = (
     "palabra",
+    "palabra_siguiente",
     "bpm",
     "subdiv",
+    "sub_actual",
     "sesion",
     "grabando",
     "t0_epoch",
     "t0_perf_counter",
+    "count_in",
+    "pulso_actual",
+    "total_pulsos",
+    "ciclo_actual",
+    "total_ciclos",
+    "jitter_activo",
+    "tau_s",
+    "fase",
+    "instruccion_fase",
+    "subtitulo_fase",
+    "tira_secuencia",
+    "pre_cambio",
+    "flash",
 )
+
+
+
+def _ip_tailscale(default_ip=None):
+    """
+    Detecta la IP de la interfaz Tailscale (rango CGNAT 100.64.0.0/10, interfaz tailscale0).
+    Si no puede consultarla por comando, devuelve default_ip ().
+    """
+    import subprocess
+    import re
+    try:
+        res = subprocess.run(["tailscale", "ip", "-4"], capture_output=True, text=True, timeout=1.5)
+        if res.returncode == 0 and res.stdout.strip():
+            first_ip = res.stdout.strip().splitlines()[0].strip()
+            if first_ip.startswith("100."):
+                return first_ip
+    except Exception:
+        pass
+    try:
+        res = subprocess.run(["ip", "-4", "-o", "addr", "show"], capture_output=True, text=True, timeout=1.5)
+        if res.returncode == 0:
+            for line in res.stdout.splitlines():
+                if "tailscale" in line or "100." in line:
+                    m = re.search(r"inet\s+(100\.\d+\.\d+\.\d+)", line)
+                    if m:
+                        return m.group(1)
+    except Exception:
+        pass
+    return default_ip or _ip_local()
+
+
+def configurar_red_tailscale(puerto=8765, ip_pc="", ip_celu=""):
+    """
+    Verifica y habilita la comunicación directa por Tailscale entre la PC ()
+    y el celular () en el puerto indicado:
+      1. Comprueba que el socket local escuche en 0.0.0.0:<puerto> (incluyendo tailscale0).
+      2. Hace ping rápido a la IP Tailscale del celular () para confirmar túnel activo.
+      3. Verifica si UFW está activo bloqueando el puerto; si es necesario, informa o intenta
+         habilitar el tráfico desde  / tailscale0.
+    """
+    import subprocess
+    mensajes = []
+    ok_global = True
+
+    # 1. Verificar escucha local en el puerto
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(1.0)
+    try:
+        sock.connect(("127.0.0.1", int(puerto)))
+        mensajes.append(f"[OK] Servidor escuchando en 0.0.0.0:{puerto} (incluye Tailscale {ip_pc}:{puerto}).")
+    except Exception as exc:
+        ok_global = False
+        mensajes.append(f"[ERROR] El servidor aún no responde en el puerto {puerto}: {exc}")
+    finally:
+        sock.close()
+
+    # 2. Probar alcance al celular por Tailscale ()
+    if ip_celu:
+        try:
+            cmd_ping = ["ping", "-c", "1", "-W", "1", str(ip_celu)] if sys.platform != "win32" else ["ping", "-n", "1", "-w", "1000", str(ip_celu)]
+            res_p = subprocess.run(cmd_ping, capture_output=True, text=True, timeout=2.5)
+            if res_p.returncode == 0:
+                mensajes.append(f"[OK] Túnel Tailscale hacia tu celular ({ip_celu}) ACTIVO y respondiendo ping.")
+            else:
+                mensajes.append(
+                    f"[AVISO] No hubo respuesta de ping desde {ip_celu} (verifica que Tailscale esté conectado en el celular). "
+                    f"Igualmente el servidor ya escucha en http://{ip_pc}:{puerto}/"
+                )
+        except Exception:
+            pass
+
+    # 3. Instrucción / apertura de firewall local en Linux si UFW estuviera filtrando tailscale0
+    mensajes.append(
+        f"\n-> Entra desde el navegador de tu celular ({ip_celu}) a:\n"
+        f"   http://{ip_pc}:{puerto}/\n\n"
+        f"Nota: Si tienes UFW activo en Ubuntu y no carga, ejecuta una vez en terminal:\n"
+        f"   sudo ufw allow in on tailscale0 to any port {puerto} proto tcp\n"
+        f"   sudo ufw allow from {ip_celu} to any port {puerto} proto tcp"
+    )
+    return ok_global, "\n".join(mensajes)
+
+
+def configurar_adb_reverse(puerto=8765):
+    """
+    Intenta configurar un túnel por cable USB mediante Android Debug Bridge:
+      adb reverse tcp:<puerto> tcp:<puerto>
+    Ideal para sortear firewalls o aislamiento AP (Client Isolation) en redes institucionales
+    como el Departamento de Física: el celular/tablet conectado por USB abre
+    http://127.0.0.1:8765 con < 1 ms de latencia y sin depender del Wi-Fi.
+    """
+    import subprocess
+    try:
+        res = subprocess.run(
+            ["adb", "reverse", f"tcp:{int(puerto)}", f"tcp:{int(puerto)}"],
+            capture_output=True, text=True, timeout=3.0
+        )
+        if res.returncode == 0:
+            return True, f"Túnel USB activo (adb reverse tcp:{puerto} -> http://127.0.0.1:{puerto})"
+        err = (res.stderr or res.stdout or "").strip()
+        return False, f"adb reverse retornó código {res.returncode}: {err}"
+    except FileNotFoundError:
+        return False, "Ejecutable 'adb' no encontrado en PATH (usar modo 2do Monitor o Hotspot)."
+    except Exception as exc:
+        return False, f"No se pudo configurar adb reverse: {exc}"
 
 
 def _epoch_ms():
@@ -119,12 +250,27 @@ class ServidorEstimulos(threading.Thread):
         self._secuencia = 0
         self._estado = {
             "palabra": "",
+            "palabra_siguiente": "",
             "bpm": 0.0,
             "subdiv": 4,
+            "sub_actual": 1,
             "sesion": None,
             "grabando": False,
             "t0_epoch": None,
             "t0_perf_counter": None,
+            "count_in": None,
+            "pulso_actual": 0,
+            "total_pulsos": 0,
+            "ciclo_actual": 1,
+            "total_ciclos": 1,
+            "jitter_activo": False,
+            "tau_s": None,
+            "fase": "espera",
+            "instruccion_fase": "ESPERANDO INICIO DE SESIÓN...",
+            "subtitulo_fase": "Relaja el rostro y sigue las indicaciones en pantalla",
+            "tira_secuencia": [],
+            "pre_cambio": False,
+            "flash": False,
         }
 
         self._httpd = None

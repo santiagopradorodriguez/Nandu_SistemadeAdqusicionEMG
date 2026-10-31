@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Ñandú LSD — Pantalla Externa de Estímulos e Instrucciones</title>
+  <style>
+    :root {
+      --bg: #050508;
+      --accent: #00FFFF;
+      --text: #E6F7FF;
+      --warn: #FFCC00;
+      --danger: #FF3355;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: 'Courier New', Courier, monospace, sans-serif;
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 14px 18px;
+      transition: background-color 0.08s ease;
+    }
+    body.flash-active {
+      background-color: rgba(0, 255, 255, 0.22);
+    }
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border: 1.5px solid #00FFFF;
+      background-color: #090D16;
+      border-radius: 8px;
+      padding: 8px 14px;
+    }
+    .phase-badge {
+      font-size: clamp(14px, 2.5vw, 22px);
+      font-weight: 900;
+      color: #FFFF00;
+      letter-spacing: 0.5px;
+    }
+    .btn-fs {
+      background: #0d2626;
+      color: #00FFFF;
+      border: 1px solid #00FFFF;
+      border-radius: 5px;
+      padding: 6px 12px;
+      font-weight: bold;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .instruction-box {
+      text-align: center;
+      background: rgba(12, 20, 32, 0.85);
+      border: 1px solid #224455;
+      border-radius: 8px;
+      padding: 8px 12px;
+      margin-top: 6px;
+    }
+    .instruction-title {
+      font-size: clamp(15px, 2.6vw, 24px);
+      font-weight: 900;
+      color: #00FFCC;
+    }
+    .instruction-sub {
+      font-size: clamp(12px, 2vw, 17px);
+      color: #AADDFF;
+      margin-top: 3px;
+    }
+    .center-stage {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin: 8px 0;
+      border: 2px solid #00FFFF;
+      border-radius: 12px;
+      background: #060810;
+      padding: 12px;
+      position: relative;
+    }
+    .center-stage.flash-box {
+      border: 4px solid #FFFFFF;
+      background: rgba(255, 255, 255, 0.14);
+    }
+    .main-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 24px;
+    }
+    .vowel-display {
+      font-size: clamp(82px, 20vw, 185px);
+      font-weight: 900;
+      line-height: 1.0;
+      text-shadow: 0 0 24px rgba(0, 255, 255, 0.35);
+      transition: transform 0.07s ease, color 0.07s ease;
+    }
+    .vowel-display.flash-text {
+      color: #FFFFFF !important;
+      transform: scale(1.07);
+    }
+    .next-vowel {
+      font-size: clamp(18px, 3.2vw, 28px);
+      font-weight: bold;
+      color: #FFD166;
+    }
+    .seq-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      justify-content: center;
+      margin-top: 6px;
+    }
+    .seq-item {
+      padding: 3px 9px;
+      border-radius: 5px;
+      font-size: clamp(14px, 2.2vw, 20px);
+      color: #667788;
+      font-weight: bold;
+    }
+    .seq-item.active {
+      color: #050508;
+      font-weight: 900;
+      border: 2px solid #FFFFFF;
+      transform: scale(1.1);
+    }
+    .seq-item.next {
+      color: #FFFFFF;
+      border: 1.5px dashed #FFFF00;
+    }
+    .footer-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: clamp(12px, 1.8vw, 16px);
+      color: #88AAAA;
+      border-top: 1px solid #1a2a3a;
+      padding-top: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    <div class="phase-badge" id="phaseBadge">SISTEMA EN ESPERA</div>
+    <button class="btn-fs" onclick="toggleFS()">PANTALLA COMPLETA</button>
+  </div>
+
+  <div class="instruction-box">
+    <div class="instruction-title" id="instTitle">ESPERANDO INICIO DEL PROTOCOLO...</div>
+    <div class="instruction-sub" id="instSub">Relaja el rostro y evita tragar saliva durante las tomas</div>
+  </div>
+
+  <div class="center-stage" id="centerStage">
+    <div class="main-row">
+      <div id="ringContainer">
+        <svg width="92" height="92" viewBox="0 0 80 80">
+          <circle stroke="#122323" stroke-width="7" fill="transparent" r="34" cx="40" cy="40"/>
+          <circle id="ringArc" stroke="#00FFFF" stroke-width="7" stroke-dasharray="213.6" stroke-dashoffset="213.6" stroke-linecap="round" fill="transparent" r="34" cx="40" cy="40" transform="rotate(-90 40 40)"/>
+          <text id="ringText" x="40" y="47" text-anchor="middle" fill="#00FFFF" font-size="22" font-weight="bold">1</text>
+        </svg>
+      </div>
+      <div class="vowel-display" id="vowelDisplay">---</div>
+    </div>
+    <div class="next-vowel" id="nextVowel"></div>
+    <div class="seq-strip" id="seqStrip"></div>
+  </div>
+
+  <div class="footer-bar">
+    <span id="sessionInfo">SESIÓN: --</span>
+    <span id="pulseCounter">PULSO: 0 / 0 | CICLO: 0 / 0</span>
+    <span id="bpmInfo">BPM: --</span>
+  </div>
+
+  <script>
+    const VOCAL_COLORS = {
+      'A': '#FF3355',
+      'E': '#00B4D8',
+      'I': '#39FF14',
+      'O': '#C77DFF',
+      'U': '#FFD166'
+    };
+    let lastSeq = -1;
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('t') || '';
+
+    function toggleFS() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        document.exitFullscreen().catch(() => {});
+      }
+    }
+
+    function renderState(st) {
+      const palabra = (st.palabra || '').toUpperCase();
+      const sig = (st.palabra_siguiente || '').toUpperCase();
+      const col = VOCAL_COLORS[palabra] || '#00FFFF';
+      const isFlash = Boolean(st.flash);
+      const preCambio = Boolean(st.pre_cambio);
+
+      // Top badge
+      const badge = document.getElementById('phaseBadge');
+      if (st.count_in && st.count_in > 0) {
+        badge.textContent = `CUENTA REGRESIVA DEL METRÓNOMO: ${st.count_in}`;
+        badge.style.color = '#FF4400';
+      } else if (isFlash) {
+        badge.textContent = `★ ¡PRONUNCIA AHORA! — PULSO ${st.pulso_actual || 0}/${st.total_pulsos || 0} ★`;
+        badge.style.color = '#FFFFFF';
+      } else if (preCambio && sig) {
+        badge.textContent = `ATENCIÓN: PRÓXIMO PULSO CAMBIA A /${sig}/`;
+        badge.style.color = '#FFFF00';
+      } else {
+        badge.textContent = (st.fase || 'EN CURSO').toUpperCase();
+        badge.style.color = '#00FFCC';
+      }
+
+      // Instrucciones completas de la fase
+      document.getElementById('instTitle').textContent = st.instruccion_fase || 'Sigue el ritmo del metrónomo';
+      document.getElementById('instSub').textContent = st.subtitulo_fase || '';
+
+      // Vocal central
+      const vEl = document.getElementById('vowelDisplay');
+      vEl.textContent = palabra ? (palabra.length <= 3 ? `/${palabra}/` : palabra) : '---';
+      vEl.style.color = col;
+      vEl.classList.toggle('flash-text', isFlash);
+
+      const stage = document.getElementById('centerStage');
+      stage.classList.toggle('flash-box', isFlash);
+      stage.style.borderColor = isFlash ? '#FFFFFF' : (preCambio ? '#FFFF00' : col);
+      document.body.classList.toggle('flash-active', isFlash);
+
+      // Próxima vocal
+      const nextEl = document.getElementById('nextVowel');
+      nextEl.textContent = sig ? `SIGUIENTE VOCAL: /${sig}/` : '';
+
+      // Anillo radial
+      const subAct = Math.max(1, parseInt(st.sub_actual || 1));
+      const subTot = Math.max(1, parseInt(st.subdiv || 4));
+      const prog = Math.min(1.0, subAct / subTot);
+      const circ = 213.6;
+      const offset = circ * (1.0 - prog);
+      const arc = document.getElementById('ringArc');
+      const rTxt = document.getElementById('ringText');
+      arc.setAttribute('stroke-dashoffset', offset.toFixed(1));
+      arc.setAttribute('stroke', isFlash ? '#FFFFFF' : (subAct === subTot && subTot > 1 ? '#FFAA00' : '#00FFFF'));
+      rTxt.textContent = String(subAct);
+
+      // Tira de secuencia
+      const stripEl = document.getElementById('seqStrip');
+      stripEl.innerHTML = '';
+      const tira = Array.isArray(st.tira_secuencia) ? st.tira_secuencia : [];
+      tira.forEach((item) => {
+        const span = document.createElement('span');
+        const w = String(item.vocal || item).toUpperCase();
+        const wCol = VOCAL_COLORS[w] || '#00FFCC';
+        span.className = 'seq-item' + (item.activo ? ' active' : (item.siguiente ? ' next' : ''));
+        if (item.activo) {
+          span.style.backgroundColor = wCol;
+        }
+        span.textContent = `/${w}/`;
+        stripEl.appendChild(span);
+      });
+
+      // Footer
+      document.getElementById('sessionInfo').textContent = `SESIÓN: ${st.sesion || 'ACTIVA'}`;
+      document.getElementById('pulseCounter').textContent =
+        `PULSO: ${st.pulso_actual || 0} / ${st.total_pulsos || 0} | CICLO: ${st.ciclo_actual || 1} / ${st.total_ciclos || 1}`;
+      document.getElementById('bpmInfo').textContent = `${st.bpm || 30} BPM`;
+    }
+
+    async function poll() {
+      try {
+        const q = token ? `?t=${encodeURIComponent(token)}` : '';
+        const res = await fetch(`/estado${q}`, { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.secuencia !== lastSeq) {
+            lastSeq = data.secuencia;
+            renderState(data);
+          }
+        }
+      } catch (e) {}
+      setTimeout(poll, 70);
+    }
+    poll();
+  </script>
+</body>
+</html>

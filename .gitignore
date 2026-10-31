@@ -1,167 +1,39 @@
 # ==============================================================================
-# NANDU LSD - ARCHIVO DE EXCLUSION GLOBAL DE GIT (.gitignore)
+# ÑANDÚ LSD — .gitignore blindado (Datos Biomédicos, Modelos Pesados y Config Local)
 # ==============================================================================
 
-# --- DOCUMENTOS DE TESIS, CUADERNOS Y OFIMATICA PRIVADA ---
-*.docx
-*.doc
-*.pptx
-*.ppt
-*.xlsx
-*.xls
-*.odt
-documentos_tesis/
-**/documentos_tesis/
-cuaderno_tesis/
-**/cuaderno_tesis/
-
-# --- PRIVACIDAD Y DATOS BIOMETRICOS DE SUJETOS ---
-# Bases de datos de registros bioelectricos y audio
-base_de_datos_electrodos/
-**/base_de_datos_electrodos/
-base_de_datos_letras/
-**/base_de_datos_letras/
-Emg/base_de_datos_electrodos/
-Emg/base_de_datos_letras/
-EMG_desarrollo/base_de_datos_electrodos/
-EMG_desarrollo/base_de_datos_letras/
-*.wav
-
-# Fotografias de rostros y calibracion con sujetos reales
-**/fotos/*.jpeg
-**/fotos/*.jpg
-**/fotos/WhatsApp*
-**/fotos/*candela*
-**/fotos/*lucas*
-**/fotos/*petra*
-**/fotos/*sujeto*
-
-# Excepciones para diagramas anatomicos de referencia medica y circuitos
-!**/fotos/anatomia_*
-!**/documentacion_hardware/imagenes/*
-!EMG_desarrollo/fotos/anatomia_*
-!EMG_desarrollo/documentacion_hardware/imagenes/*.png
-!EMG_desarrollo/logo_nandu_lsd.png
-!EMG_desarrollo/icono.ico
-
-# --- DOCUMENTOS PDF, REPORTES Y ARTICULOS ACADEMICOS ---
-*.pdf
-reportes_experimentos/*.pdf
-reportes_experimentos/analisis_pca_generado/
-reportes_experimentos/evolucion_sesion*/
-reportes_experimentos/imagenes_*/
-reportes_experimentos/test_*.png
-reportes_experimentos/page_preview-*.png
-reportes_experimentos/debug_*.png
-EMG_desarrollo/papers/
-**/papers/
-
-# Artefactos y archivos auxiliares de LaTeX
-*.aux
-*.log
-*.out
-*.toc
-*.fls
-*.fdb_latexmk
-*.synctex.gz
-*argv_log.txt
-
-# --- ANALISIS, SESIONES Y RESULTADOS DE MEDICIONES ---
-analisis_comparativos/
-**/analisis_comparativos/
-analisis_de_sesiones/
-**/analisis_de_sesiones/
-Emg/analisis_comparativos/
-EMG_desarrollo/analisis_comparativos/
-EMG_desarrollo/analisis_de_sesiones/
-EMG_desarrollo/resultados/
-**/resultados_pca_umap/
-**/resultados_grid_search/
-**/resultados_autoencoder/
-**/resultados_umbrales/
-**/archivo_historico/
-resultados_barrido_ortogonal/
-resultados_transferencia_nuevo_sujeto/
-paquete_remoto_barrido/
-archivos_temporales/
+# 1. Configuraciones locales de cada PC (IPs de VM, últimos sujetos, rutas personales)
+config_local.json
+metronome_config.json
 cache_datos/
-**/cache_datos/
+_sujeto_explorer_cache.json
+*.log
+multiplexer_error.log
+argv_log.txt
 
-# Datos masivos, tablas y tensores de salida
-*.npz
-*.npy
-*.csv
-*.png
-*.json
-# Excepciones para archivos JSON de configuracion operativa del sistema
-!config_general.json
-!**/config_general.json
-!metronome_config.json
-!**/metronome_config.json
-!DataConfig/modelos_vision/*
-!EMG_desarrollo/DataConfig/modelos_vision/*
+# 2. Bases de datos crudas y grabaciones de sujetos (Privacidad Biomédica)
+base_de_datos_electrodos/
+base_de_datos_letras/
+analisis_comparativos/
+analisis_de_sesiones/
+resultados/
+EMG_desarrollo/base_de_datos_electrodos/
+EMG_desarrollo/resultados/
+fotos/
 
-*.pth
-*.pt
-*.onnx
-*.pkl
-*.joblib
-*.h5
-
-# Excepciones para modelos integrados con el sistema / ejecutable
-!modelos/*
-!**/modelos/*
-!EMG_desarrollo/modelos/*
-
-# --- CODIGOS Y SCRIPTS DE PRUEBA Y EXPERIMENTOS TEMPORALES ---
-codigos_de_prueba/
-**/codigos_de_prueba/
-machine_learning/
-EMG_desarrollo/temp_*.py
-temp_*.py
-**/temp_*.py
-scratch/
-**/scratch/
-
-# --- CARPETAS DE RESPALDO Y HISTORIAL ---
-respaldo_*/
-**/respaldo_*/
-nandu/
-
-# --- ENTORNO DE DESARROLLO, CACHES Y COMPILACION ---
+# 3. Entornos virtuales, compilaciones PyInstaller y carpetas temporales
 venv/
 .venv/
-.pytest_cache/
-.vscode/
+env/
 __pycache__/
-**/__pycache__/
 *.py[cod]
 *$py.class
-*.patch
-
-# Archivos comprimidos de backups
-*.rar
-*.zip
-*.tar
-*.tar.gz
-*.7z
-
-# --- DATOS DE CAMPANAS Y SALIDAS GENERADAS (viven en Google Drive, no en git) ---
-Candela_Organizado_Drive/
-**/Candela_Organizado_Drive/
-reportes_experimentos/para_subir_al_drive/
-reportes_experimentos/libro_experimentos_ia/scripts_experimentos/salida_pca_report_engine/
-
-# Entornos y artefactos de compilacion PyInstaller
-build_linux/*
-!build_linux/.gitkeep
-build_windows/*
-!build_windows/.gitkeep
-EMG_desarrollo/EMG_Ejecutable_Build/
-dist/
-**/dist/
 build/
-**/build/
-
-
-
+dist/
+build_linux/
+build_windows/
+EMG_Ejecutable_Build/
+carpeta_para_vm_windows/
+temp_*.py
+temp_*.json
+.pytest_cache/

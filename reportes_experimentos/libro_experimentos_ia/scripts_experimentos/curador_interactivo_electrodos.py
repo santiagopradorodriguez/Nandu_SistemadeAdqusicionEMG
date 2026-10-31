@@ -20,7 +20,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
 CSV_PATH = os.path.join(REPO_ROOT, "reportes_experimentos/libro_experimentos_ia/scripts_experimentos/electrodos_anotados_agente.csv")
 AUDIT_MD_PATH = os.path.join(REPO_ROOT, "reportes_experimentos/libro_experimentos_ia/scripts_experimentos/registro_auditoria_detecciones.md")
-BASE_DRIVE = os.path.join(REPO_ROOT, "Candela_Organizado_Drive")
+BASE_DRIVE = os.path.join(REPO_ROOT, "Sujeto_Organizado_Drive")
 OUT_DIR = '/home/santiago/.gemini/antigravity/brain/39ced7b1-5efb-4d1f-b72b-7de07df1fc29'
 
 sys.path.append(os.path.join(REPO_ROOT, "EMG_desarrollo", "acquisition"))
@@ -352,7 +352,7 @@ class CuradorInteractivoElectrodosDialog(QtWidgets.QDialog):
 
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Curador Interactivo de Posiciones de Electrodos - Candela")
+        self.setWindowTitle("Curador Interactivo de Posiciones de Electrodos - Sujeto")
         self.resize(1340, 870)
 
         self._csv_rows: List[Dict[str, str]] = []
@@ -364,6 +364,12 @@ class CuradorInteractivoElectrodosDialog(QtWidgets.QDialog):
         self.agente_vision = AntigravityAgent()
         self._fiduciarios_cache: Dict[str, Any] = {}
         self._scale_px_to_mm: float = 1.0
+        # Medidas biométricas reales de Sujeto (Patrón de Calibración Oficial):
+        # - Distancia inter-ocular / interpupilar frontal: 7.0 cm = 70.0 mm
+        # - Distancia labio (Cheilion) a trago/oreja (Tragus) lateral: 8.0 cm = 80.0 mm
+        self._ref_interocular_mm: float = 70.0
+        self._ref_labio_trago_mm: float = 80.0
+        self._modo_escala_biometrica: str = "Auto (Frontal 70mm / Lateral 80mm)" 
         self._atlas_configs: List[Dict[str, Any]] = []
         self._current_slide_idx: int = 0
         self._init_atlas_configs()
@@ -513,6 +519,46 @@ class CuradorInteractivoElectrodosDialog(QtWidgets.QDialog):
         self.lbl_res_info = QtWidgets.QLabel("Resolucion: --")
         self.lbl_res_info.setStyleSheet("color: #b0bec5; font-size: 11px;")
         info_layout.addWidget(self.lbl_res_info)
+
+        # Panel de Calibración Biométrica Real (Sujeto: 70.0 mm Inter-ocular / 80.0 mm Labio-Trago)
+        calib_layout = QtWidgets.QGridLayout()
+        calib_layout.setSpacing(4)
+        lbl_modo_esc = QtWidgets.QLabel("Modo Escala:")
+        lbl_modo_esc.setStyleSheet("color: #00ffcc; font-size: 11px; font-weight: bold;")
+        self.cmb_modo_escala = QtWidgets.QComboBox()
+        self.cmb_modo_escala.addItems([
+            "Auto (Frontal 70mm / Lateral 80mm)",
+            "Frontal: Inter-ocular (mm)",
+            "Lateral: Labio-Trago (mm)"
+        ])
+        self.cmb_modo_escala.currentIndexChanged.connect(self._recalcular_escala_biometrica)
+
+        lbl_io = QtWidgets.QLabel("Inter-ocular (mm):")
+        self.spin_interocular_mm = QtWidgets.QDoubleSpinBox()
+        self.spin_interocular_mm.setRange(40.0, 110.0)
+        self.spin_interocular_mm.setDecimals(1)
+        self.spin_interocular_mm.setSingleStep(0.5)
+        self.spin_interocular_mm.setValue(70.0)
+        self.spin_interocular_mm.setToolTip("Distancia real entre iris (Sujeto = 70.0 mm / 7.0 cm)")
+        self.spin_interocular_mm.valueChanged.connect(self._recalcular_escala_biometrica)
+
+        lbl_lt = QtWidgets.QLabel("Labio-Trago (mm):")
+        self.spin_labio_trago_mm = QtWidgets.QDoubleSpinBox()
+        self.spin_labio_trago_mm.setRange(45.0, 140.0)
+        self.spin_labio_trago_mm.setDecimals(1)
+        self.spin_labio_trago_mm.setSingleStep(0.5)
+        self.spin_labio_trago_mm.setValue(80.0)
+        self.spin_labio_trago_mm.setToolTip("Distancia real Comisura Labial (Cheilion) a Trago de la oreja (Sujeto = 80.0 mm / 8.0 cm)")
+        self.spin_labio_trago_mm.valueChanged.connect(self._recalcular_escala_biometrica)
+
+        calib_layout.addWidget(lbl_modo_esc, 0, 0)
+        calib_layout.addWidget(self.cmb_modo_escala, 0, 1, 1, 3)
+        calib_layout.addWidget(lbl_io, 1, 0)
+        calib_layout.addWidget(self.spin_interocular_mm, 1, 1)
+        calib_layout.addWidget(lbl_lt, 1, 2)
+        calib_layout.addWidget(self.spin_labio_trago_mm, 1, 3)
+        info_layout.addLayout(calib_layout)
+
         right_col.addWidget(info_group)
 
         # Tabla de Puntos
@@ -685,14 +731,27 @@ class CuradorInteractivoElectrodosDialog(QtWidgets.QDialog):
 
             if fid is not None and "puntos_2d_px" in fid:
                 p2d = fid["puntos_2d_px"]
-                d_ip_px = float(fid.get("distancia_interpupilar_px", 100.0))
-                self._scale_px_to_mm = 63.0 / max(d_ip_px, 10.0) if d_ip_px > 10.0 else 100.0 / float(max(self.canvas._img_h, 1))
+                # Elegir el par Tragus/Cheilion del perfil más visible en la imagen
+                trago_izq = tuple(p2d[234].astype(float))
+                trago_der = tuple(p2d[454].astype(float)) if len(p2d) > 454 else trago_izq
+                com_izq = tuple(p2d[61].astype(float))
+                com_der = tuple(p2d[291].astype(float)) if len(p2d) > 291 else com_izq
+                d_izq = math.hypot(com_izq[0] - trago_izq[0], com_izq[1] - trago_izq[1])
+                d_der = math.hypot(com_der[0] - trago_der[0], com_der[1] - trago_der[1])
+                if d_der > d_izq * 1.15:
+                    trago_sel, com_sel, d_lt_px = trago_der, com_der, d_der
+                else:
+                    trago_sel, com_sel, d_lt_px = trago_izq, com_izq, d_izq
+
                 self.canvas.fiduciarios_px = {
                     "Pronasale (Nariz)": tuple(p2d[1].astype(float)),
                     "Gnathion (Mentón)": tuple(p2d[152].astype(float)),
-                    "Tragus (Oreja)": tuple(p2d[234].astype(float)),
-                    "Cheilion (Comisura)": tuple(p2d[61].astype(float))
+                    "Tragus (Oreja)": trago_sel,
+                    "Cheilion (Comisura)": com_sel,
+                    "_d_ip_px": float(fid.get("distancia_interpupilar_px", 100.0)),
+                    "_d_lt_px": float(d_lt_px),
                 }
+                self._recalcular_escala_biometrica(update_points=False)
             else:
                 self._scale_px_to_mm = 100.0 / float(max(self.canvas._img_h, 1))
                 self.canvas.fiduciarios_px = {}
@@ -709,6 +768,43 @@ class CuradorInteractivoElectrodosDialog(QtWidgets.QDialog):
                 self.canvas._add_point(ch_cur, cw * 0.48, ch * 0.58)
 
             self.lbl_res_info.setText(f"Resolucion: {self.canvas._img_w}x{self.canvas._img_h} px | Electrodos: {len(self.canvas.points)}")
+            self._on_point_moved()
+
+    def _recalcular_escala_biometrica(self, *args, update_points: bool = True) -> None:
+        ref_io = float(self.spin_interocular_mm.value()) if hasattr(self, "spin_interocular_mm") else 70.0
+        ref_lt = float(self.spin_labio_trago_mm.value()) if hasattr(self, "spin_labio_trago_mm") else 80.0
+        self._ref_interocular_mm = ref_io
+        self._ref_labio_trago_mm = ref_lt
+        modo_idx = self.cmb_modo_escala.currentIndex() if hasattr(self, "cmb_modo_escala") else 0
+
+        fid = getattr(self.canvas, "fiduciarios_px", {}) or {}
+        d_ip_px = float(fid.get("_d_ip_px", 0.0))
+        d_lt_px = float(fid.get("_d_lt_px", 0.0))
+        foto_lower = os.path.basename(self._current_img_path or "").lower()
+        es_vista_lateral = any(k in foto_lower for k in ("lateral", "perfil", "modiolo", "cuello", "cigomatico")) or (d_lt_px > d_ip_px * 1.35)
+
+        if modo_idx == 1 and d_ip_px > 10.0:
+            self._scale_px_to_mm = ref_io / d_ip_px
+            ref_tag = f"Frontal ({ref_io:.1f} mm / {d_ip_px:.1f} px)"
+        elif modo_idx == 2 and d_lt_px > 10.0:
+            self._scale_px_to_mm = ref_lt / d_lt_px
+            ref_tag = f"Lateral Labio-Trago ({ref_lt:.1f} mm / {d_lt_px:.1f} px)"
+        else:
+            if es_vista_lateral and d_lt_px > 10.0:
+                self._scale_px_to_mm = ref_lt / d_lt_px
+                ref_tag = f"Auto-Lateral Labio-Trago ({ref_lt:.1f} mm)"
+            elif d_ip_px > 10.0:
+                self._scale_px_to_mm = ref_io / d_ip_px
+                ref_tag = f"Auto-Frontal Inter-ocular ({ref_io:.1f} mm)"
+            else:
+                self._scale_px_to_mm = 100.0 / float(max(self.canvas._img_h, 1))
+                ref_tag = "Fallback altura"
+
+        if hasattr(self, "lbl_res_info") and self.canvas._img_w > 0:
+            self.lbl_res_info.setText(
+                f"Res: {self.canvas._img_w}x{self.canvas._img_h} px | Escala: {self._scale_px_to_mm:.4f} mm/px [{ref_tag}]"
+            )
+        if update_points:
             self._on_point_moved()
 
     def _on_structure_changed(self) -> None:

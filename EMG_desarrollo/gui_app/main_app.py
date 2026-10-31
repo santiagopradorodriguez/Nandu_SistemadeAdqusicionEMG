@@ -119,6 +119,14 @@ if getattr(sys, 'frozen', False) and len(sys.argv) > 1:
                 import analysis.reproductor_canal3 as module
             elif module_name == 'analysis.segmentador_secuencias':
                 import analysis.segmentador_secuencias as module
+            elif module_name in ('analysis.extractor_pulsos_vocales', 'extractor_pulsos_vocales'):
+                import analysis.extractor_pulsos_vocales as module
+            elif module_name in ('daq_bridge_server', 'acquisition.daq_bridge_server'):
+                import daq_bridge_server as module
+            elif module_name in ('acquisition.display_remoto_servidor', 'display_remoto_servidor'):
+                import acquisition.display_remoto_servidor as module
+            elif module_name == 'utils.limpiar_repo_para_github':
+                import utils.limpiar_repo_para_github as module
             elif module_name == 'analysis.plotter_calibrado':
                 import analysis.plotter_calibrado as module
             elif module_name in ('analysis.correlaciondeseñales', 'analysis.correlaciondesenales'):
@@ -686,6 +694,9 @@ class ReaperStyleHub(QMainWindow):
 
     create_menu_button(" Utilidades", [
         ("Generador de Reportes PDF", "_internal_report"),
+        ("Extractor de Pulsos por Vocal (Secuencia -> PCA/UMAP)", "analysis/extractor_pulsos_vocales.py"),
+        ("Puente DAQ Windows (GUI 1-Clic)", "daq_bridge_server.py"),
+        ("Sanitizar Repositorio para GitHub", "utils/limpiar_repo_para_github.py"),
         ("Entrenamiento AutoForge", "acquisition/modulo_de_entrenamiento.py"),
         ("Metrónomo", "acquisition/metronomo_visual.py"),
         ("Segmentador de Secuencias Continuas", "analysis/segmentador_secuencias.py"),
@@ -879,12 +890,16 @@ class ReaperStyleHub(QMainWindow):
     
     html_intro = f"""
     <div style='padding: 20px;'>
-      <h2 style='color:#00ffff;'>Plataforma de Investigación EMG v6.1</h2>
+      <h2 style='color:#00ffff;'>Plataforma de Investigación EMG v6.2 (Edición Integral Ñandú LSD)</h2>
       <p>Bienvenido al hub centralizado para adquisición en tiempo real, curación, procesamiento DSP y análisis de Deep Learning de señales electromiográficas (sEMG).</p>
       
-      <h3 style='color:#00ffaa;'>Novedades Actualización v6.1 (Deep Learning, Topología & Arquitectura):</h3>
+      <h3 style='color:#00ffaa;'>Novedades Actualización v6.2 (Adquisición Neuro-Ergonómica, Puente DAQ & Extractor PCA/UMAP):</h3>
       <ul>
-        <li><b>Sistema de Colores y Mapeo Anatómico por Músculo:</b> Convención estandarizada fija por canal: <i>Depresor Anguli Oris</i> (violeta), <i>Mylohyoid</i> (verde), <i>Orbicularis Oris</i> (amarillo) y <i>Micrófono/Canal 3</i> (rojo permanente). Diálogo interactivo al iniciar para confirmar la topografía de electrodos.</li>
+        <li><b>Rango Fisiológico 0–500 µV y Supresión Anti-Picos en Autograbado:</b> Limitador inteligente de transitorios eléctricos (> 500 µV) con auto-escala robusta P98.5 para mantener siempre visible la actividad muscular real sin saltos molestos de escala.</li>
+        <li><b>PCA 2D en Tiempo Real Multicolor por Vocal y BPM Desbloqueado (10–240 BPM):</b> Proyección en vivo coloreada por vocal activa (<code>/A/, /E/, /I/, /O/, /U/</code>), ajuste dinámico de BPM en plena Secuencia Continua/Autograbado y pulso acústico neuro-ergonómico suave (tipo marimba/woodblock sin reflejo de sobresalto).</li>
+        <li><b>Pantalla Externa Espejada Completa y Fotometría 3D Direccional:</b> Espejado exacto de instrucciones de fase (Ruido Basal, CVM, Count-in, Descanso y tira De Bruijn) en segundo monitor y web, más triangulación de los 3 canales EMG con validación estricta de giro izquierdo (+25°..+65°) y derecho (-65°..-25°).</li>
+        <li><b>Extractor de Pulsos por Vocal (Jitter / De Bruijn &rarr; PCA/UMAP) y Gestor Zero-Lag:</b> Nuevo módulo (<code>extractor_pulsos_vocales.py</code>) que agrupa pulsos de secuencias continuas en carpetas <code>A_..., E_..., I_..., O_..., U_...</code> listas para <code>generador_pca_umap.py</code>, junto con caché instantáneo en <code>SessionExplorer</code> y GUI de 1 clic para el Puente DAQ en Windows.</li>
+        <li><b>Sistema de Colores y Mapeo Anatómico por Músculo:</b> Convención estandarizada fija por canal: <i>Depresor Anguli Oris</i> (violeta), <i>Mylohyoid</i> (verde), <i>Orbicularis Oris</i> (amarillo) y <i>Micrófono/Canal 3</i> (rojo permanente).</li>
         <li><b>Metadatos y Trazabilidad Enriquecida:</b> Registro unificado de <code>muscles_map</code>, <code>muscles</code> y <code>timestamp</code> en <code>metadata.json</code>, propagado automáticamente en recortes y segmentaciones.</li>
         <li><b>Motores Analíticos Desacoplados:</b> Nuevos motores independientes para análisis discreto (<code>discrete_motor</code>), barrido paramétrico y entrenamiento (<code>training_motor</code>), reducción dimensional PCA 2D/3D con siluetas y distancias inter-vocálicas (<code>pca_motor</code>), proyecciones UMAP supervisadas y no supervisadas (<code>umap_motor</code>) y generador automático de rankings de experimentos (<code>generar_graficos_y_ranking</code>).</li>
         <li><b>Autoencoders Convolucionales 1D (PyTorch):</b> Redes neuronales convolucionales profundas para compresión no lineal a espacios latentes 2D/3D y decodificación continua de potenciales mioeléctricos.</li>
@@ -1255,7 +1270,7 @@ class ReaperStyleHub(QMainWindow):
           if 'grabacion.csv' in candidatos:
             csv_path = os.path.join(path, 'grabacion.csv')
           else:
-            senales = [f for f in candidatos if not f.lower().startswith(('calibracion', 'estadisticas', 'features', 'resumen'))]
+            senales = [f for f in candidatos if not f.lower().startswith(('calibracion', 'estadisticas', 'features', 'resumen', 'pulsos_metronomo', 'segmentos_dataset', 'fotometria'))]
             if senales:
               csv_path = os.path.join(path, senales[0])
             elif candidatos:
@@ -1289,24 +1304,47 @@ class ReaperStyleHub(QMainWindow):
     lbl = self.analysis_panel.tab_comparativo.lbl_warning_canal
     cmb.clear()
     
+    if not hasattr(self, '_medicion_meta_cache'):
+      self._medicion_meta_cache = {}
+
     canales_totales = set()
     canales_comunes = None
     
     for path_medicion in rutas:
-      canales_actuales = set()
-      try:
-        for item in os.listdir(path_medicion):
-          channel_dir = os.path.join(path_medicion, item)
-          if os.path.isdir(channel_dir) and item.startswith("canal_"):
-            # Todos los canales van para el total (Procesamiento Individual)
-            canales_totales.add(item)
-            # Solo los procesados van para comunes (Análisis Comparativo)
-            if os.path.exists(os.path.join(channel_dir, 'analisis_results.json')):
-              canales_actuales.add(item)
-      except Exception: continue
-      
+      cached_info = self._medicion_meta_cache.get(path_medicion)
+      if cached_info is None:
+        ch_all = set()
+        ch_proc = set()
+        musc_by_ch = {}
+        try:
+          with os.scandir(path_medicion) as it:
+            for entry in it:
+              if entry.is_dir() and entry.name.startswith("canal_"):
+                ch_all.add(entry.name)
+                if os.path.exists(os.path.join(entry.path, 'analisis_results.json')):
+                  ch_proc.add(entry.name)
+          p_meta0 = os.path.join(path_medicion, "canal_0", "metadata.json")
+          if os.path.exists(p_meta0):
+            with open(p_meta0, 'r', encoding='utf-8') as fm:
+              md0 = json.load(fm)
+              m_map = md0.get('muscles_map', {})
+              for c_name in ch_all:
+                idx_s = c_name.replace('canal_', '')
+                if idx_s in m_map:
+                  musc_by_ch[c_name] = m_map[idx_s]
+                elif c_name in m_map:
+                  musc_by_ch[c_name] = m_map[c_name]
+                elif 'muscles' in md0 and idx_s.isdigit() and int(idx_s) < len(md0['muscles']):
+                  musc_by_ch[c_name] = md0['muscles'][int(idx_s)]
+        except Exception:
+          pass
+        cached_info = (ch_all, ch_proc, musc_by_ch)
+        self._medicion_meta_cache[path_medicion] = cached_info
+
+      ch_all, canales_actuales, _ = cached_info
+      canales_totales.update(ch_all)
       if canales_comunes is None:
-        canales_comunes = canales_actuales
+        canales_comunes = set(canales_actuales)
       else:
         canales_comunes.intersection_update(canales_actuales)
       
@@ -1344,6 +1382,11 @@ class ReaperStyleHub(QMainWindow):
           musc_name = None
           ch_idx_str = canal.replace('canal_', '')
           for p in rutas:
+            if hasattr(self, '_medicion_meta_cache') and p in self._medicion_meta_cache:
+              cached_m = self._medicion_meta_cache[p][2].get(canal)
+              if cached_m:
+                musc_name = cached_m
+                break
             # 1. Chequear metadata específico de canal
             p_meta = os.path.join(p, canal, "metadata.json")
             if os.path.exists(p_meta):

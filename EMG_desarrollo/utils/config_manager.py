@@ -280,7 +280,7 @@ def get_unique_channel_colors(channels_info):
 
     return result_colors
 
-# Valores por defecto para toda la aplicación
+# Valores por defecto para toda la aplicación (Protocolo v6.0)
 DEFAULT_CONFIG = {
     "estetica_global": {
         "tema_oscuro": True,
@@ -290,12 +290,61 @@ DEFAULT_CONFIG = {
     "adquisicion": {
         "frecuencia_muestreo": 2000.0,
         "ruido_segundos": 3.0,
-        "bpm": 60,
+        "bpm": 30,
+        "subdivisiones": 4,
+        "notch_50hz_activo": False,
+        "modo_prueba_activo": False,
         "tiempo_descanso": 10.0,
         "nidaq_channels": ["Dev1/ai0", "Dev1/ai1", "Dev1/ai2", "Dev1/ai3"]
     },
+    "protocolo_secuencia": {
+        "usar_secuencia_debruijn": True,
+        "repeticiones_continua_default": 25,
+        "repeticiones_discreta_default": 5,
+        "abrir_fotometria_al_iniciar": False,
+        "calibrar_cvm_por_defecto": False,
+        "cvm_modo": "guiado_sin_metronomo",
+        "cvm_duracion_contraccion_s": 2.5,
+        "cvm_duracion_descanso_s": 2.5,
+        "cvm_tomas_por_vocal": 2,
+        "cvm_vocales": ["A", "I", "U"]
+    },
+    "jitter_metronomo": {
+        "habilitado": False,
+        "porcentaje": 25.0,
+        "modo": "exponential_hazard",
+        "guardar_latencia_sincronizacion": True
+    },
+    "audio_speaking": {
+        "mute_speaking": False,
+        "modo_locucion": "fases_y_continua",
+        "adelantar_voz_subpulso": True,
+        "blanking_acustico_mic_s": 0.55
+    },
+    "medidor_pca_vivo": {
+        "habilitado": True,
+        "target_length": 20,
+        "min_pulsos_clustering": 4,
+        "algoritmo_clustering": "K-Means",
+        "mostrar_centroides": True
+    },
+    "display_remoto": {
+        "habilitado": True,
+        "modo_transmision": "tailscale_lan",
+        "puerto": 8765,
+        "token": "",
+        "tailscale_ip_pc": "auto",
+        "tailscale_ip_celu": "auto",
+        "auto_adb_reverse": True,
+        "modo_sujeto_ciego_ocultar_visor_local": False
+    },
     "analisis_extractor": {
-        "frecuencia_remuestreo": 500.0
+        "frecuencia_remuestreo": 500.0,
+        "target_length_pca": 20,
+        "soportar_secuencia_continua": True,
+        "soportar_pulsos_jitter": True,
+        "excluir_pulsos_invalidos_manuales": True,
+        "alineacion_default": "Pico Volumen Micrófono"
     },
     "colores_musculos": {},
     "canales": {
@@ -333,23 +382,39 @@ class ConfigManager:
 
     def _init(self):
         # El archivo de configuración se guardará en la raíz del proyecto
-        from .path_utils import get_project_root
-        base_dir = get_project_root()
+        try:
+            from .path_utils import get_project_root
+            base_dir = get_project_root()
+        except Exception:
+            try:
+                from utils.path_utils import get_project_root
+                base_dir = get_project_root()
+            except Exception:
+                base_dir = os.path.dirname(os.path.abspath(__file__))
         self.config_path = os.path.join(base_dir, CONFIG_FILE_NAME)
         self.config = self._load_config()
 
     def _load_config(self):
+        base_merged = DEFAULT_CONFIG.copy()
         if not os.path.exists(self.config_path):
             self._save_default_config()
-            return DEFAULT_CONFIG.copy()
-        try:
-            with open(self.config_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                # Merge con default en caso de que falten claves nuevas
-                return self._merge_dicts(DEFAULT_CONFIG.copy(), data)
-        except Exception as e:
-            print(f"Error cargando config: {e}. Usando defaults.")
-            return DEFAULT_CONFIG.copy()
+        else:
+            try:
+                with open(self.config_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    base_merged = self._merge_dicts(base_merged, data)
+            except Exception as e:
+                print(f"Error cargando config: {e}. Usando defaults.")
+        # Superponer config_local.json si existe (para IPs de Tailscale/VM específicas de cada PC sin subirlas a GitHub)
+        local_path = os.path.join(os.path.dirname(self.config_path), "config_local.json")
+        if os.path.exists(local_path):
+            try:
+                with open(local_path, 'r', encoding='utf-8') as f_loc:
+                    local_data = json.load(f_loc)
+                    base_merged = self._merge_dicts(base_merged, local_data)
+            except Exception:
+                pass
+        return base_merged
 
     def _merge_dicts(self, default_dict, user_dict):
         merged = default_dict.copy()
@@ -478,4 +543,86 @@ class ConfigManager:
                 self.config["canales"][ch_key]["activo_por_defecto"] = (hw_idx in active_set)
         if save:
             self.save_config()
+
+    def get_protocol_config(self):
+        """Devuelve la configuración de protocolo y CVM combinada con defaults v6.0."""
+        return self._merge_dicts(
+            DEFAULT_CONFIG["protocolo_secuencia"].copy(),
+            self.get("protocolo_secuencia") or {}
+        )
+
+    def get_jitter_config(self):
+        """Devuelve la configuración del modo Jitter anti-sincronización."""
+        return self._merge_dicts(
+            DEFAULT_CONFIG["jitter_metronomo"].copy(),
+            self.get("jitter_metronomo") or {}
+        )
+
+    def get_speaking_config(self):
+        """Devuelve la configuración de comandos de voz (Speaking) y blanking acústico."""
+        return self._merge_dicts(
+            DEFAULT_CONFIG["audio_speaking"].copy(),
+            self.get("audio_speaking") or {}
+        )
+
+    def get_pca_live_config(self):
+        """Devuelve la configuración del medidor PCA / Separabilidad en tiempo real."""
+        return self._merge_dicts(
+            DEFAULT_CONFIG["medidor_pca_vivo"].copy(),
+            self.get("medidor_pca_vivo") or {}
+        )
+
+    def get_remote_display_config(self):
+        """Devuelve la configuración del servidor de estímulos y pantalla externa (sujeto ciego)."""
+        return self._merge_dicts(
+            DEFAULT_CONFIG["display_remoto"].copy(),
+            self.get("display_remoto") or {}
+        )
+
+    def get_extractor_config(self):
+        """Devuelve la configuración de extracción para generador_pca_umap y analisis_trevisan."""
+        return self._merge_dicts(
+            DEFAULT_CONFIG["analisis_extractor"].copy(),
+            self.get("analisis_extractor") or {}
+        )
+
+    def get_visualization_config(self) -> dict:
+        """Retorna configuración de visualización, umbrales anti-picos y analizador espectral."""
+        vis = self.get("visualizacion") or {}
+        adq = self.get("adquisicion") or {}
+        return {
+            "limitar_rango_500uv": bool(vis.get("limitar_rango_500uv", adq.get("limitar_rango_500uv", True))),
+            "techo_fisiologico_uv": float(vis.get("techo_fisiologico_uv", 500.0)),
+            "umbral_picos_snr_uv": float(vis.get("umbral_picos_snr_uv", 200.0)),
+            "duracion_plot_s": float(vis.get("duracion_plot_s", 5.0)),
+            "mostrar_envolvente_rms": bool(vis.get("mostrar_envolvente_rms", True)),
+            "analizador_formantes_ch3": bool(vis.get("analizador_formantes_ch3", True)),
+        }
+
+    def persistir_estado_autoforge(self, estado_dict: dict) -> bool:
+        """
+        Guarda bidireccionalmente en config_local.json los parámetros personalizados
+        desde AutoForge (BPM, canales, ganancias, filtros, anti-spikes, rutas) sin
+        ensuciar config_general.json (listo para GitHub).
+        """
+        if not isinstance(estado_dict, dict):
+            return False
+        local_data = {}
+        if os.path.exists(self.local_config_path):
+            try:
+                with open(self.local_config_path, "r", encoding="utf-8") as f:
+                    loaded = json.load(f)
+                    if isinstance(loaded, dict):
+                        local_data = loaded
+            except Exception:
+                local_data = {}
+        self._deep_update(local_data, estado_dict)
+        self._deep_update(self.config_data, estado_dict)
+        try:
+            with open(self.local_config_path, "w", encoding="utf-8") as f:
+                json.dump(local_data, f, indent=4, ensure_ascii=False)
+            return True
+        except Exception as e:
+            print(f"[ConfigManager] Error guardando config_local.json: {e}")
+            return False
 

@@ -1,6 +1,7 @@
 # ============================================================================
-# NANDU LSD - Runtime hook para PyInstaller
-# Asegura que las DLL de PySide6 y shiboken6 se encuentren en Windows.
+# NANDU LSD v6.2 - Runtime hook para PyInstaller
+# Asegura que las DLL de PySide6, shiboken6 y pyzmq/libsodium se encuentren
+# tanto en Windows nativo como en VM Windows para el puente DAQ.
 # ============================================================================
 
 import os
@@ -14,6 +15,8 @@ if sys.platform.startswith("win") and getattr(sys, "frozen", False):
         _root,
         os.path.join(_root, "PySide6"),
         os.path.join(_root, "shiboken6"),
+        os.path.join(_root, "zmq"),
+        os.path.join(_root, "pyzmq.libs"),
     ):
         if os.path.isdir(_folder):
             try:
@@ -22,9 +25,6 @@ if sys.platform.startswith("win") and getattr(sys, "frozen", False):
                 pass
             os.environ["PATH"] = _folder + os.pathsep + os.environ.get("PATH", "")
 
-    # Some scientific packages bundle older MSVC runtimes.  If those are
-    # found first, shiboken6 can fail with WinError 127 even though all Qt
-    # DLLs are present.  Preload the Windows runtimes that match Python/Qt.
     _system32 = os.path.join(os.environ.get("SystemRoot", r"C:\\Windows"), "System32")
     for _runtime in ("msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll", "concrt140.dll"):
         try:
@@ -32,9 +32,6 @@ if sys.platform.startswith("win") and getattr(sys, "frozen", False):
         except OSError:
             pass
 
-    # PySide6 on Windows expects Shiboken to be loaded before the Qt
-    # extension modules.  Do this explicitly in the frozen application to
-    # avoid QtWidgets.pyd failing with WinError 127.
     try:
         import shiboken6  # noqa: F401
         from shiboken6 import Shiboken  # noqa: F401

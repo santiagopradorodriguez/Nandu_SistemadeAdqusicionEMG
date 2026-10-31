@@ -1,9 +1,39 @@
-analisis_de_sesiones/
+# ==============================================================================
+# ÑANDÚ LSD — .gitignore blindado (Datos Biomédicos, Modelos Pesados y Config Local)
+# ==============================================================================
 
-# --- Reglas de exclusión para experimentos y resultados temporales ---
-deep_learning/pca_umap_clustering/resultados_pca_umap/
-deep_learning/codigos_de_prueba/archivo_historico/
-deep_learning/codigos_de_prueba/cache_datos/*.npz
-deep_learning/resultados_grid_search/
-*.csv
-*.npz
+# 1. Configuraciones locales de cada PC (IPs de VM, últimos sujetos, rutas personales)
+config_local.json
+metronome_config.json
+cache_datos/
+_sujeto_explorer_cache.json
+*.log
+multiplexer_error.log
+argv_log.txt
+
+# 2. Bases de datos crudas y grabaciones de sujetos (Privacidad Biomédica)
+base_de_datos_electrodos/
+base_de_datos_letras/
+analisis_comparativos/
+analisis_de_sesiones/
+resultados/
+EMG_desarrollo/base_de_datos_electrodos/
+EMG_desarrollo/resultados/
+fotos/
+
+# 3. Entornos virtuales, compilaciones PyInstaller y carpetas temporales
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+build/
+dist/
+build_linux/
+build_windows/
+EMG_Ejecutable_Build/
+carpeta_para_vm_windows/
+temp_*.py
+temp_*.json
+.pytest_cache/

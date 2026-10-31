@@ -2,7 +2,9 @@
 # Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
 # Autores: Lucas Braunstein y Santiago Prado
 # Institución: Laboratorio de Sistemas Dinámicos (LSD) - FCEyN, UBA
-# Descripción: Genera el archivo spec de PyInstaller para la construcción.
+# Descripción: Genera el archivo spec de PyInstaller para la construcción v6.2
+#              (incluye Puente DAQ ZeroMQ, Extractor de Pulsos por Vocal,
+#              Display Remoto enriquecido y Sanitizador GitHub).
 # ==============================================================================
 
 import os
@@ -25,6 +27,12 @@ def generar_spec():
         ('metronome_config.json', '.'),
         ('palabras.txt', '.'),
         ('palabras.txt', 'acquisition'),
+        ('daq_bridge_server.py', '.'),
+        ('daq_bridge_client.py', '.'),
+        ('acquisition/display_remoto_servidor.py', 'acquisition'),
+        ('acquisition/cliente_estimulos.html', 'acquisition'),
+        ('analysis/extractor_pulsos_vocales.py', 'analysis'),
+        ('utils/limpiar_repo_para_github.py', 'utils'),
         ('archivos_md', 'archivos_md'),
         ('papers', 'papers'),
         ('DataConfig', 'DataConfig'),
@@ -93,6 +101,7 @@ def _safe_metadata(pkg):
         return []
 
 nidaqmx_datas, nidaqmx_binaries, nidaqmx_hiddenimports = _safe_collect('nidaqmx')
+zmq_datas, zmq_binaries, zmq_hiddenimports = _safe_collect('zmq')
 sd_datas, sd_binaries, sd_hiddenimports = _safe_collect('sounddevice')
 sf_datas, sf_binaries, sf_hiddenimports = _safe_collect('soundfile')
 umap_datas, umap_binaries, umap_hiddenimports = _safe_collect('umap')
@@ -115,12 +124,16 @@ nitypes_metadata = _safe_metadata('nitypes')
 
 block_cipher = None
 
-# Lista de módulos adicionales a empaquetar en el ejecutable principal
+# Lista de módulos adicionales a empaquetar en el ejecutable principal v6.2
 additional_modules = [
+    'daq_bridge_server',
+    'daq_bridge_client',
     'acquisition.manual_daq',
     'acquisition.autoforge_daq',
     'acquisition.autoforge_daq_experimental',
     'acquisition.autoforge_daq_decodificador',
+    'acquisition.display_remoto_servidor',
+    'display_remoto_servidor',
     'acquisition.calibracion_espacial_electrodos',
     'acquisition.fotometria_webcam',
     'EMG_desarrollo.acquisition.calibracion_espacial_electrodos',
@@ -132,6 +145,8 @@ additional_modules = [
     'acquisition.ventana_palabras',
     'analysis.analisis_por_track_integrado',
     'analysis.segmentador_secuencias',
+    'analysis.extractor_pulsos_vocales',
+    'extractor_pulsos_vocales',
     'analysis.electrode_viewer_4',
     'analysis.plotter_calibrado',
     'analysis.correlaciondeseñales',
@@ -158,6 +173,7 @@ additional_modules = [
     'utils.sound_utils',
     'utils.logger',
     'utils.limpiar_cache_analisis',
+    'utils.limpiar_repo_para_github',
     'utils.curar_dataset_exportacion',
     'utils.metadata_auditor',
     'instrucciones_uso',
@@ -172,9 +188,6 @@ additional_modules = [
     'gui_app.views.report_dialog',
     'gui_app.views.atlas_dialog',
     'gui_app.views.selector_otro_sujeto_dialog',
-    'gui_app.temp_comparativo',
-    'gui_app.temp_procesar',
-    'gui_app.temp_sesion',
     'deep_learning.realtime_decoder_engine',
     'deep_learning.pipeline_autoencoder_gui',
     'deep_learning.grid_search_autoencoder',
@@ -203,7 +216,7 @@ hidden_imports = [
     'scipy.signal', 'scipy.special', 'scipy.io.wavfile', 'scipy.ndimage',
     'matplotlib.backends.backend_tkagg', 'matplotlib.backends.backend_qt5agg',
     'matplotlib.backends.backend_qtagg',
-    'nidaqmx', 'sounddevice', 'soundfile', 'pyqtgraph', 'pandas', 'PIL',
+    'nidaqmx', 'zmq', 'sounddevice', 'soundfile', 'pyqtgraph', 'pandas', 'PIL',
     'PySide6', 'qdarkstyle', 'utils', 'acquisition', 'analysis', 'core', 'views',
     'deep_learning', 'tkinter', 'numba', 'llvmlite', 'tqdm', 'decouple', 'requests',
     'tzlocal', 'hightime', 'sklearn', 'sklearn.utils._typedefs',
@@ -213,11 +226,11 @@ hidden_imports = [
     'EMG_desarrollo.acquisition.fotometria_webcam',
     'calibracion_espacial_electrodos',
     'fotometria_webcam',
-] + additional_modules + nidaqmx_hiddenimports + sd_hiddenimports + sf_hiddenimports + umap_hiddenimports + sns_hiddenimports + tly_hiddenimports + numba_hiddenimports + pynndescent_hiddenimports + tqdm_hiddenimports + mp_hiddenimports + cv2_hiddenimports + torch_hiddenimports + mne_hiddenimports + llvmlite_hiddenimports + sklearn_hiddenimports
+] + additional_modules + nidaqmx_hiddenimports + zmq_hiddenimports + sd_hiddenimports + sf_hiddenimports + umap_hiddenimports + sns_hiddenimports + tly_hiddenimports + numba_hiddenimports + pynndescent_hiddenimports + tqdm_hiddenimports + mp_hiddenimports + cv2_hiddenimports + torch_hiddenimports + mne_hiddenimports + llvmlite_hiddenimports + sklearn_hiddenimports
 
 datas = [
         {datas_str}
-] + nidaqmx_datas + sd_datas + sf_datas + umap_datas + sns_datas + tly_datas + numba_datas + pynndescent_datas + tqdm_datas + mp_datas + mp_extra_datas + cv2_datas + torch_datas + mne_datas + llvmlite_datas + sklearn_datas + nitypes_metadata
+] + nidaqmx_datas + zmq_datas + sd_datas + sf_datas + umap_datas + sns_datas + tly_datas + numba_datas + pynndescent_datas + tqdm_datas + mp_datas + mp_extra_datas + cv2_datas + torch_datas + mne_datas + llvmlite_datas + sklearn_datas + nitypes_metadata
 
 qt_flat_binaries = []
 try:
@@ -230,13 +243,8 @@ try:
 except Exception:
     pass
 
-binaries = nidaqmx_binaries + sd_binaries + sf_binaries + umap_binaries + sns_binaries + tly_binaries + numba_binaries + pynndescent_binaries + tqdm_binaries + mp_binaries + cv2_binaries + torch_binaries + mne_binaries + llvmlite_binaries + sklearn_binaries + qt_flat_binaries
+binaries = nidaqmx_binaries + zmq_binaries + sd_binaries + sf_binaries + umap_binaries + sns_binaries + tly_binaries + numba_binaries + pynndescent_binaries + tqdm_binaries + mp_binaries + cv2_binaries + torch_binaries + mne_binaries + llvmlite_binaries + sklearn_binaries + qt_flat_binaries
 
-# Un UNICO script de entrada: el bootloader de PyInstaller NO soporta --run-script
-# (los scripts de la lista se ejecutarian EN CADENA al cerrarse cada uno).
-# Los scripts externos (autoforge_daq_experimental, manual_daq, decodificador,
-# metronomo, visores, etc.) se empaquetan como DATA y el dispatcher inyectado en
-# main_app los lanza con runpy cuando recibe '--run-script <script>'.
 a_scripts = ['gui_app/main_app.py']
 
 a = Analysis(
@@ -308,7 +316,7 @@ coll = COLLECT(
             f_base.write(spec_content)
     except Exception:
         pass
-    print(f"[OK] Archivo Multipaquete .spec generado exitosamente en: {spec_path}")
+    print(f"[OK] Archivo Multipaquete .spec v6.2 generado exitosamente en: {spec_path}")
 
 if __name__ == "__main__":
     generar_spec()

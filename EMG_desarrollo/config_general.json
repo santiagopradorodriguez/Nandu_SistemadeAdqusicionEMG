@@ -7,17 +7,73 @@
     "adquisicion": {
         "frecuencia_muestreo": 2000.0,
         "ruido_segundos": 5.0,
-        "bpm": 40,
+        "bpm": 30,
+        "subdivisiones": 4,
+        "notch_50hz_activo": false,
+        "modo_prueba_activo": false,
         "tiempo_descanso": 10.0,
         "nidaq_channels": [
             "Dev1/ai0",
             "Dev1/ai1",
             "Dev1/ai2",
             "Dev1/ai3"
+        ],
+        "pasabanda_low_hz": 20.0,
+        "pasabanda_high_hz": 500.0,
+        "limitar_rango_500uv": true
+    },
+    "protocolo_secuencia": {
+        "usar_secuencia_debruijn": true,
+        "repeticiones_continua_default": 25,
+        "repeticiones_discreta_default": 5,
+        "abrir_fotometria_al_iniciar": false,
+        "calibrar_cvm_por_defecto": false,
+        "cvm_modo": "guiado_sin_metronomo",
+        "cvm_duracion_contraccion_s": 2.5,
+        "cvm_duracion_descanso_s": 2.5,
+        "cvm_tomas_por_vocal": 2,
+        "cvm_vocales": [
+            "A",
+            "I",
+            "U"
         ]
     },
+    "jitter_metronomo": {
+        "habilitado": false,
+        "porcentaje": 25.0,
+        "modo": "exponential_hazard",
+        "guardar_latencia_sincronizacion": true
+    },
+    "audio_speaking": {
+        "mute_speaking": false,
+        "modo_locucion": "fases_y_continua",
+        "adelantar_voz_subpulso": true,
+        "blanking_acustico_mic_s": 0.55
+    },
+    "medidor_pca_vivo": {
+        "habilitado": true,
+        "target_length": 20,
+        "min_pulsos_clustering": 4,
+        "algoritmo_clustering": "K-Means",
+        "mostrar_centroides": true
+    },
+    "display_remoto": {
+        "habilitado": true,
+        "modo_transmision": "usb_adb_o_monitor2",
+        "puerto": 8765,
+        "token": "",
+        "tailscale_ip_pc": "",
+        "tailscale_ip_celu": "",
+        "auto_adb_reverse": true,
+        "modo_sujeto_ciego_ocultar_visor_local": false
+    },
     "analisis_extractor": {
-        "frecuencia_remuestreo": 500.0
+        "frecuencia_remuestreo": 500.0,
+        "target_length_pca": 20,
+        "soportar_secuencia_continua": true,
+        "soportar_pulsos_jitter": true,
+        "excluir_pulsos_invalidos_manuales": true,
+        "alineacion_default": "Pico Volumen Micrófono"
     },
     "colores_musculos": {
         "anterior belly": "#ff754b",
@@ -54,53 +110,65 @@
         "musculo 12": "#8a2be2",
         "musculo 13": "#ff7f50",
         "musculo 14": "#00e5ff",
-        "musculo 15": "#ffd600"
+        "musculo 15": "#ffd600",
+        "zygomaticus major": "#00a896",
+        "zigomatico mayor": "#00a896",
+        "cigomatico": "#00a896",
+        "canal 2": "#00a896"
     },
     "canales": {
         "Canal 0": {
             "musculo": "Anterior Belly of Digastric",
             "color_hex": "#ff754b",
             "factor_calibracion": 495.0,
+            "ganancia": 1004.0,
             "activo_por_defecto": false
         },
         "Canal 1": {
             "musculo": "Zygomaticus Major",
             "color_hex": "#00a896",
             "factor_calibracion": 495.0,
+            "ganancia": 996.0,
             "activo_por_defecto": false
         },
         "Canal 2": {
             "musculo": "Canal 2",
             "color_hex": "#00a896",
             "factor_calibracion": 495.0,
+            "ganancia": 1020.0,
             "activo_por_defecto": false
         },
         "Canal 3": {
             "musculo": "Risorio",
             "color_hex": "#00cc44",
             "factor_calibracion": 495.0,
+            "ganancia": 1.0,
             "activo_por_defecto": false
         },
         "Canal 4": {
             "musculo": "",
+            "ganancia": 1000.0,
             "factor_calibracion": 495.0,
             "color_hex": "#00a896",
             "activo_por_defecto": false
         },
         "Canal 5": {
             "musculo": "Musculo 5",
+            "ganancia": 1000.0,
             "factor_calibracion": 495.0,
             "color_hex": "#00ffcc",
             "activo_por_defecto": false
         },
         "Canal 6": {
             "musculo": "Musculo 6",
+            "ganancia": 1000.0,
             "factor_calibracion": 495.0,
             "color_hex": "#00cc44",
             "activo_por_defecto": false
         },
         "Canal 7": {
             "musculo": "Musculo 7",
+            "ganancia": 1000.0,
             "factor_calibracion": 495.0,
             "color_hex": "#a3e635",
             "activo_por_defecto": false
@@ -153,6 +221,23 @@
             "color_hex": "#ffd600",
             "activo_por_defecto": false
         }
+    },
+    "hardware": {
+        "dispositivo_daq": "Dev1",
+        "sample_rate": 2000,
+        "modo_terminal": "DIFF",
+        "zmq_bridge_activo": false,
+        "zmq_bridge_endpoint": "auto:5555"
+    },
+    "protocolo_autoforge": {
+        "modo_secuencia": "debruijn",
+        "calibrar_cvm_por_defecto": false,
+        "cvm_modo": "guiado_sin_metronomo",
+        "cvm_tomas_por_vocal": 2,
+        "cvm_duracion_contraccion_s": 2.5,
+        "cvm_duracion_descanso_s": 2.5,
+        "repeticiones_continua_default": 25,
+        "repeticiones_discreta_default": 5
     },
     "csv_viewer": {
         "notch": true,
