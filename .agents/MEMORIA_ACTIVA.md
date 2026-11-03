@@ -254,3 +254,10 @@
 - **Reglas del Proyecto:** `.agents/AGENTS.md` compactado a 5.3 KB (ahorro del 81.4% de tokens base por turno).
 - **Auditoría Local:** Script ejecutable `.agents/auditar_tokens_sesion.py` para medir consumo de tokens en conversaciones.
 
+
+---
+
+## 8. Compilación Windows v6.2 con Cámara, Tracking Facial y Display Remoto (Hito 27, 2026-11-03)
+- **Sincronización:** Ejecutado `git pull` (`1e78a01..b08e2a9`, 53 archivos actualizados), trayendo `tracking_facial.py`, `fotometria_webcam.py`, `display_remoto_servidor.py`, `cliente_estimulos.html`, `daq_bridge_server.py`/`daq_bridge_client.py`, `extractor_pulsos_vocales.py`, `exportador_ventanas_crudas.py` y `assets/voice_cues/`.
+- **Actualización de Scripts de Build:** Ampliados `crear_spec_ejecutable.py` y `aplicar_parches_ejecutable.py` para empaquetar `tracking_facial.py`, `display_remoto/`, `assets/voice_cues/` y `exportador_ventanas_crudas.py`. Reemplazado `xcopy` por `robocopy` en `build.bat` para soportar rutas largas sin truncamiento.
+- **Compilación y Verificación Empírica:** Ejecutado `build.bat` completo (23.551 archivos, 2.11 GB en `build_windows/NanduLsd/`). Verificado en vivo tanto desde código fuente (`ReaperStyleHub`) como desde el binario congelado (`build_windows/NanduLsd/NanduLsd_Core.exe` y `NanduLsd.exe`) con código de salida 0.
