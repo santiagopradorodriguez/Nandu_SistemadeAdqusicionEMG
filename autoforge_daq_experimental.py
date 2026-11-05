@@ -292,12 +292,17 @@ class VoiceCuePlayer:
     self.speech_blanking_windows = []
     self._cache = {}
     self._queue = queue.Queue()
+    _root_cand = get_project_root()
+    _curr_cand = os.path.dirname(os.path.abspath(__file__))
+    _parent_cand = os.path.dirname(_curr_cand)
     self._search_dirs = [
-      os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "voice_cues"),
-      os.path.join(get_project_root(), "assets", "voice_cues"),
-      os.path.join(get_project_root(), "voice_cues"),
-      os.path.join(get_project_root(), "assets", "sounds"),
-      os.path.join(get_project_root(), "sounds"),
+      os.path.join(_curr_cand, "assets", "voice_cues"),
+      os.path.join(_parent_cand, "assets", "voice_cues"),
+      os.path.join(_root_cand, "assets", "voice_cues"),
+      os.path.join(_root_cand, "EMG_desarrollo", "assets", "voice_cues"),
+      os.path.join(_root_cand, "voice_cues"),
+      os.path.join(_root_cand, "assets", "sounds"),
+      os.path.join(_root_cand, "sounds"),
     ]
     os.environ["NANDU_MUTE_SPEAKING"] = "0"
     self._worker = threading.Thread(target=self._run_worker, daemon=True)
@@ -489,7 +494,7 @@ class VoiceCuePlayer:
           try:
             if sys.platform == "win32":
               import winsound
-              winsound.PlaySound(wav_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+              winsound.PlaySound(wav_path, winsound.SND_FILENAME)
               reproducido = True
             elif SD_AVAILABLE and data_w is not None and sr_w > 0:
               # Usar OutputStream dedicado con cola de silencio (120 ms) en vez de sd.play() global
