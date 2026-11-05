@@ -261,3 +261,12 @@
 - **Sincronización:** Ejecutado `git pull` (`1e78a01..b08e2a9`, 53 archivos actualizados), trayendo `tracking_facial.py`, `fotometria_webcam.py`, `display_remoto_servidor.py`, `cliente_estimulos.html`, `daq_bridge_server.py`/`daq_bridge_client.py`, `extractor_pulsos_vocales.py`, `exportador_ventanas_crudas.py` y `assets/voice_cues/`.
 - **Actualización de Scripts de Build:** Ampliados `crear_spec_ejecutable.py` y `aplicar_parches_ejecutable.py` para empaquetar `tracking_facial.py`, `display_remoto/`, `assets/voice_cues/` y `exportador_ventanas_crudas.py`. Reemplazado `xcopy` por `robocopy` en `build.bat` para soportar rutas largas sin truncamiento.
 - **Compilación y Verificación Empírica:** Ejecutado `build.bat` completo (23.551 archivos, 2.11 GB en `build_windows/NanduLsd/`). Verificado en vivo tanto desde código fuente (`ReaperStyleHub`) como desde el binario congelado (`build_windows/NanduLsd/NanduLsd_Core.exe` y `NanduLsd.exe`) con código de salida 0.
+
+---
+
+## 9. Compilación Windows v6.2 Estable con Fotometría Espejo, Theme y Release en GitHub (Hito 28, 2026-11-05)
+- **Sincronización Linux:** Sincronizado repositorio con commit `69e75ef` (directiva Argon, fotometría yaw/pitch espejo, monitor de energía 2D conmutable y logo oficial del Ñandú en alta resolución).
+- **Infraestructura de Theme y Build:** Restaurado `utils/theme.py` (tokens Neon Clinical Slate y paletas Azul Cian / Rojo Neón), actualizado `crear_spec_ejecutable.py` y corregido `build.bat` para no deshabilitar DLLs de C++ requeridas por Scikit-Learn y el decodificador GMM.
+- **Compilación Completa:** PyInstaller 6.20.0 y launcher nativo C# empaquetaron 23.565 archivos (2.11 GB) en `build_windows/NanduLsd/NanduLsd.exe` y `NanduLsd_Core.exe`.
+- **Smoke Tests Congelados:** Verificación exitosa de arranque e importación en el ejecutable de `theme`, `fotometria_webcam`, `RealTimePlotter` (AutoForge experimental y estable), `extractor_pulsos_vocales` y `autoforge_daq_decodificador`.
+- **Publicación Oficial:** Generado `build_windows/NanduLsd_Windows_v6.2.zip` (912.52 MB) y subido exitosamente a GitHub Releases en el tag oficial `v6.2-estable`.
