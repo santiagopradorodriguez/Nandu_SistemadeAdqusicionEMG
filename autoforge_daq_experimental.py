@@ -40,6 +40,18 @@ import queue
 import threading
 import sys
 import os
+try:
+  from terminal_launcher import launch_in_visible_terminal, ensure_running_in_terminal, configure_live_terminal_streams
+except ImportError:
+  try:
+    from utils.terminal_launcher import launch_in_visible_terminal, ensure_running_in_terminal, configure_live_terminal_streams
+  except ImportError:
+    def configure_live_terminal_streams(*a, **kw): pass
+    def ensure_running_in_terminal(*a, **kw): pass
+    def launch_in_visible_terminal(cmd, title="Ñandú Tool", cwd=None):
+      import subprocess
+      return subprocess.Popen(cmd, cwd=cwd)
+configure_live_terminal_streams("AutoForge DAQ Experimental")
 import re
 
 # --- SPLASH SCREEN LOGIC (CARGA DE MÓDULOS PESADOS) ---
@@ -116,56 +128,90 @@ try:
 except ImportError:
   _raw_play_beep = None
 
+_BEEP_WAVE_CACHE = {}
+_ACTIVE_BEEP_REF = None
+
+
+def _synthesize_beep_wave(freq: float, duration_ms: float, sr: int = 44100) -> np.ndarray:
+  key = (int(round(float(freq))), int(round(float(duration_ms))), int(sr))
+  cached = _BEEP_WAVE_CACHE.get(key)
+  if cached is not None:
+    return cached
+  dur_s = max(0.025, min(float(duration_ms) / 1000.0, 0.25))
+  n_samples = int(sr * dur_s)
+  t = np.linspace(0.0, dur_s, n_samples, endpoint=False)
+  f_base = float(freq)
+  if f_base >= 1400:
+    f1_chime = 587.33
+    f2_chime = 880.00
+    amp = 0.32
+    tau_decay = dur_s * 0.48
+    mid = n_samples // 2
+    f_vec = np.empty(n_samples, dtype=np.float64)
+    f_vec[:mid] = f1_chime
+    f_vec[mid:] = f2_chime
+    phase = 2.0 * np.pi * np.cumsum(f_vec) / float(sr)
+    wave = np.sin(phase) + 0.30 * np.sin(2.0 * phase)
+  else:
+    if f_base >= 1100:
+      f0 = 659.25
+      amp = 0.26
+      tau_decay = dur_s * 0.42
+    elif f_base >= 750:
+      f0 = 523.25
+      amp = 0.20
+      tau_decay = dur_s * 0.38
+    else:
+      f0 = max(260.0, f_base * 0.75)
+      amp = 0.14
+      tau_decay = dur_s * 0.32
+    wave = np.sin(2.0 * np.pi * f0 * t) + 0.25 * np.sin(2.0 * np.pi * (f0 * 2.0) * t)
+  # CORRECCION ETAPA 1 - Envolvente completa sin chasquido:
+  # - Ataque con rampa cosena suave de ~4 ms (media ventana Hann).
+  attack_samples = max(1, min(int(0.004 * sr), n_samples // 2))
+  env = np.exp(-t / max(0.015, tau_decay))
+  env[:attack_samples] *= 0.5 * (1.0 - np.cos(np.pi * np.arange(attack_samples) / float(attack_samples)))
+  # - Desvanecimiento coseno de ~10 ms (media ventana Hann): elimina la
+  #   discontinuidad de alta frecuencia (click/chasquido) al fin del pulso.
+  tail_fade = max(2, min(int(0.010 * sr), n_samples))
+  env[-tail_fade:] *= 0.5 * (1.0 + np.cos(np.pi * np.arange(tail_fade) / float(tail_fade)))
+  env[-1] *= 0.0
+  # Padding de silencio al final (18 ms, dentro del rango pedido 15-20 ms) para
+  # drenar el buffer de reproduccion ALSA/PipeWire sin recorte abrupto.
+  pad_zeros = np.zeros(int(0.018 * sr), dtype=np.float32)
+  audio_out = np.concatenate(((amp * wave * env).astype(np.float32), pad_zeros))
+  _BEEP_WAVE_CACHE[key] = audio_out
+  return audio_out
+
+
+# Pre-calentar ondas estándar del metrónomo en RAM al importar
+for _f_pre, _d_pre in ((400, 35), (660, 80), (800, 100), (800, 200), (1200, 120), (1500, 140)):
+  try:
+    _synthesize_beep_wave(_f_pre, _d_pre)
+  except Exception:
+    pass
+
+
 def play_beep(freq=660, duration_ms=80, async_play=True):
-  # Generador neuro-ergonomico de pulsos acusticos suaves
-  # Evita el reflejo de sobresalto (startle reflex)
-  with _PORTAUDIO_LOCK:
-    try:
-      import sounddevice as _sd
-      sr = 44100
-      dur_s = max(0.025, min(float(duration_ms) / 1000.0, 0.25))
-      n_samples = int(sr * dur_s)
-      t = np.linspace(0.0, dur_s, n_samples, endpoint=False)
-      # Mapear frecuencias agudas clásicas (1200 Hz / 800 Hz) a tonos cálidos de percusión tonal
-      f_base = float(freq)
-      if f_base >= 1400:
-        # ACENTO DIFERENCIADO DE CAMBIO DE VOCAL / VENTANA (Doble tono ascendente Re5 -> La5)
-        f1_chime = 587.33  # Re5
-        f2_chime = 880.00  # La5 brillante pero cálido
-        amp = 0.32
-        tau_decay = dur_s * 0.48
-        mid = n_samples // 2
-        f_vec = np.empty(n_samples, dtype=np.float64)
-        f_vec[:mid] = f1_chime
-        f_vec[mid:] = f2_chime
-        phase = 2.0 * np.pi * np.cumsum(f_vec) / float(sr)
-        wave = np.sin(phase) + 0.30 * np.sin(2.0 * phase)
-      else:
-        if f_base >= 1100:
-          f0 = 659.25  # Mi5 cálido (mismo pulso de vocal)
-          amp = 0.26
-          tau_decay = dur_s * 0.42
-        elif f_base >= 750:
-          f0 = 523.25  # Do5 suave (pre-aviso / count-in)
-          amp = 0.20
-          tau_decay = dur_s * 0.38
-        else:
-          f0 = max(260.0, f_base * 0.75)  # Sub-pulso suave de aproximación (1..4)
-          amp = 0.14
-          tau_decay = dur_s * 0.32
-        # Onda fundamental + segundo armónico suave tipo marimba
-        wave = np.sin(2.0 * np.pi * f0 * t) + 0.25 * np.sin(2.0 * np.pi * (f0 * 2.0) * t)
-      # Envolvente: fade-in coseno elevado (10 ms) + decaimiento exponencial suave
-      attack_samples = max(1, min(int(0.010 * sr), n_samples // 3))
-      env = np.exp(-t / max(0.015, tau_decay))
-      env[:attack_samples] *= 0.5 * (1.0 - np.cos(np.pi * np.arange(attack_samples) / float(attack_samples)))
-      env[-min(64, n_samples):] *= np.linspace(1.0, 0.0, min(64, n_samples))
-      audio_out = (amp * wave * env).astype(np.float32)
-      _sd.play(audio_out, samplerate=sr, blocking=not async_play)
-      return
-    except Exception:
-      if _raw_play_beep is not None:
-        return _raw_play_beep(freq=min(int(freq), 880), duration_ms=min(int(duration_ms), 120), async_play=async_play)
+  global _ACTIVE_BEEP_REF
+  try:
+    import sounddevice as _sd
+    sr = 44100
+    audio_out = _synthesize_beep_wave(freq, duration_ms, sr=sr)
+    # CORRECCION ETAPA 1: mantener viva la referencia al buffer en memoria
+    # mientras el stream lo reproduce (evita liberacion por GC = click final).
+    _ACTIVE_BEEP_REF = audio_out
+    # CORRECCIÓN 04: Nunca retener _PORTAUDIO_LOCK durante blocking=True para no bloquear VoiceCuePlayer ni el metrónomo
+    with _PORTAUDIO_LOCK:
+      _sd.play(audio_out, samplerate=sr, blocking=False)
+    if not async_play:
+      # Drain/flush: la espera cubre el cuerpo del beep mas el padding final
+      # de silencio (~18 ms) y una guarda, para no cortar el drenaje del stream.
+      time.sleep(max(0.02, min(float(duration_ms) / 1000.0 + 0.036, 0.30)))
+    return
+  except Exception:
+    if _raw_play_beep is not None:
+      return _raw_play_beep(freq=min(int(freq), 880), duration_ms=min(int(duration_ms), 120), async_play=True)
 
 try:
   from display_remoto_servidor import ServidorEstimulos, _ip_local, _ip_tailscale, configurar_adb_reverse, configurar_red_tailscale
@@ -196,287 +242,30 @@ from pyqtgraph.Qt import QtWidgets, QtCore, QtGui
 from pyqtgraph import SpinBox, InfiniteLine
 
 # ==============================================================================
-# --- ESTILOS VISUALES CYBERPUNK PRO (FABFILTER / TEKTRONIX / REAPER) ---
+# --- SISTEMA DE DESIGN TOKENS Y TEMA CLINICO (theme.py) ---
 # ==============================================================================
+try:
+  from theme import (
+      T, THEME, CHANNEL_PALETTE, PLOT_ANTIALIAS,
+      build_qss, load_fonts, style_label_value, style_badge,
+      style_panel_card, style_button_variant
+  )
+except ImportError:
+  from utils.theme import (
+      T, THEME, CHANNEL_PALETTE, PLOT_ANTIALIAS,
+      build_qss, load_fonts, style_label_value, style_badge,
+      style_panel_card, style_button_variant
+  )
 
-CYBERPUNK_QSS = """
-QWidget {
-    background-color: #050508;
-    color: #00FFCC;
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 12px;
-}
-
-/* Agrupadores tipo Rack de Laboratorio */
-QGroupBox {
-    background-color: #080C14;
-    border: 1px solid #00FFFF;
-    border-radius: 6px;
-    margin-top: 10px;
-    padding-top: 10px;
-    font-weight: bold;
-    color: #00FFFF;
-}
-QGroupBox::title {
-    subcontrol-origin: margin;
-    subcontrol-position: top left;
-    left: 10px;
-    padding: 0 5px;
-    background-color: #080C14;
-    color: #00FFFF;
-}
-
-/* Etiquetas y Checkboxes */
-QLabel {
-    color: #00FFCC;
-    font-weight: bold;
-    background-color: transparent;
-}
-QCheckBox {
-    color: #00FFCC;
-    font-weight: bold;
-    spacing: 6px;
-    background-color: transparent;
-}
-QCheckBox::indicator {
-    width: 14px;
-    height: 14px;
-    border-radius: 3px;
-    border: 1px solid #00FFFF;
-    background-color: #0B0F19;
-}
-QCheckBox::indicator:hover {
-    border: 1px solid #00FFCC;
-    background-color: #112233;
-}
-QCheckBox::indicator:checked {
-    background-color: #00FFFF;
-    border: 1px solid #00FFFF;
-}
-
-/* PyQtGraph SpinBox: borde y fondo exterior compacto con separación limpia */
-SpinBox {
-    background-color: #0B0F19;
-    border: 1.5px solid #00FFFF;
-    border-radius: 4px;
-    min-height: 22px;
-    max-height: 24px;
-    padding: 0px 2px;
-    margin: 1px 0px;
-}
-SpinBox:hover {
-    border: 1.5px solid #39FF14;
-}
-SpinBox QLineEdit {
-    border: none;
-    background: transparent;
-    color: #00FFCC;
-    padding: 0px 3px;
-    font-family: 'Consolas', 'Courier New', monospace;
-    font-size: 12px;
-    font-weight: bold;
-    min-height: 18px;
-}
-SpinBox:hover QLineEdit {
-    color: #39FF14;
-}
-
-/* Campos de entrada, Combobox y LineEdit analógicos */
-QComboBox, QSpinBox, QDoubleSpinBox, QLineEdit {
-    background-color: #0B0F19;
-    color: #00FFCC;
-    border: 1.5px solid #00FFFF;
-    border-radius: 4px;
-    padding: 1px 5px;
-    margin: 1px 0px;
-    font-family: 'Consolas', 'Courier New', monospace;
-    font-size: 12px;
-    font-weight: bold;
-    min-height: 22px;
-    max-height: 24px;
-}
-QComboBox:hover, QSpinBox:hover, QDoubleSpinBox:hover, QLineEdit:hover {
-    border: 1.5px solid #39FF14;
-    color: #39FF14;
-}
-QComboBox QAbstractItemView {
-    background-color: #0B0F19;
-    color: #00FFCC;
-    border: 1px solid #00FFFF;
-    selection-background-color: #003344;
-    selection-color: #39FF14;
-}
-
-/* Botones Estándar Cyberpunk Pro */
-QPushButton {
-    background-color: #0B0F19;
-    color: #00FFCC;
-    border: 1.5px solid #00FFFF;
-    border-radius: 5px;
-    padding: 6px 14px;
-    font-weight: bold;
-    font-family: 'Courier New', Courier, monospace;
-}
-QPushButton:hover {
-    background-color: #00FFFF;
-    color: #050508;
-    border: 1.5px solid #FFFFFF;
-}
-QPushButton:pressed {
-    background-color: #0088AA;
-    color: #FFFFFF;
-}
-QPushButton:disabled {
-    background-color: #06080C;
-    color: #334455;
-    border: 1.5px solid #1A2233;
-}
-"""
-
-# Botones de Transporte y Comandos Maestros
-BTN_START_CYBER = """
-QPushButton {
-    background-color: rgba(0, 255, 128, 0.12);
-    color: #39FF14;
-    border: 2px solid #39FF14;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 900;
-    padding: 8px 16px;
-    font-family: 'Courier New', monospace;
-}
-QPushButton:hover {
-    background-color: #39FF14;
-    color: #050508;
-}
-"""
-
-BTN_STOP_CYBER = """
-QPushButton {
-    background-color: rgba(255, 0, 85, 0.15);
-    color: #FF0055;
-    border: 2px solid #FF0055;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 900;
-    padding: 8px 16px;
-    font-family: 'Courier New', monospace;
-}
-QPushButton:hover {
-    background-color: #FF0055;
-    color: #FFFFFF;
-}
-"""
-
-BTN_REC_START_CYBER = """
-QPushButton {
-    background-color: #0B0F19;
-    color: #00FFFF;
-    border: 2px solid #00FFFF;
-    border-radius: 5px;
-    font-size: 12px;
-    font-weight: 900;
-    padding: 7px 14px;
-}
-QPushButton:hover {
-    background-color: #00FFFF;
-    color: #050508;
-}
-"""
-
-BTN_REC_STOP_CYBER = """
-QPushButton {
-    background-color: #FF0055;
-    color: #FFFFFF;
-    border: 2px solid #FFAACC;
-    border-radius: 5px;
-    font-size: 12px;
-    font-weight: 900;
-    padding: 7px 14px;
-}
-QPushButton:hover {
-    background-color: #CC0044;
-}
-"""
-
-BTN_PAUSE_CYBER = """
-QPushButton {
-    background-color: rgba(255, 204, 0, 0.12);
-    color: #FFCC00;
-    border: 2px solid #FFCC00;
-    border-radius: 5px;
-    font-size: 12px;
-    font-weight: 900;
-    padding: 7px 14px;
-    font-family: 'Courier New', monospace;
-}
-QPushButton:hover {
-    background-color: rgba(255, 204, 0, 0.25);
-}
-QPushButton:checked {
-    background-color: #FFCC00;
-    color: #050508;
-    border: 2px solid #FFFFFF;
-}
-QPushButton:disabled {
-    background-color: #06080C;
-    color: #333333;
-    border: 1.5px solid #1A2233;
-}
-"""
-
-BTN_AUTOFORGE_DISC_CYBER = """
-QPushButton {
-    background-color: rgba(255, 0, 255, 0.12);
-    color: #FF00FF;
-    border: 2px solid #FF00FF;
-    border-radius: 5px;
-    font-size: 12px;
-    font-weight: 900;
-    padding: 7px 14px;
-    font-family: 'Courier New', monospace;
-}
-QPushButton:hover {
-    background-color: #FF00FF;
-    color: #050508;
-}
-"""
-
-BTN_AUTOFORGE_CONT_CYBER = """
-QPushButton {
-    background-color: rgba(170, 0, 255, 0.14);
-    color: #CC44FF;
-    border: 2px solid #AA00FF;
-    border-radius: 5px;
-    font-size: 12px;
-    font-weight: 900;
-    padding: 7px 14px;
-    font-family: 'Courier New', monospace;
-}
-QPushButton:hover {
-    background-color: #AA00FF;
-    color: #FFFFFF;
-}
-"""
-
-BTN_CYBER_TOOL = """
-QPushButton {
-    background-color: #0B0F19;
-    color: #00FFCC;
-    border: 1.5px solid #00FFFF;
-    border-radius: 5px;
-    font-size: 11px;
-    font-weight: 900;
-    padding: 7px 10px;
-    font-family: 'Courier New', monospace;
-}
-QPushButton:hover {
-    background-color: #00FFFF;
-    color: #050508;
-    border: 1.5px solid #FFFFFF;
-}
-"""
-
+CYBERPUNK_QSS = build_qss(T)
+BTN_START_CYBER = style_button_variant("success")
+BTN_STOP_CYBER = style_button_variant("danger")
+BTN_REC_START_CYBER = style_button_variant("primary")
+BTN_REC_STOP_CYBER = style_button_variant("danger")
+BTN_PAUSE_CYBER = style_button_variant("warning")
+BTN_AUTOFORGE_DISC_CYBER = style_button_variant("purple")
+BTN_AUTOFORGE_CONT_CYBER = style_button_variant("purple")
+BTN_CYBER_TOOL = style_button_variant("tool")
 
 # ==============================================================================
 # --- COMPONENTES INTEGRADOS: PRE-ROLL, TERMINAL DE DIAGNOSTICO Y MONITOR DAQ ---
@@ -610,11 +399,23 @@ class VoiceCuePlayer:
     if key in self._cache:
       return self._cache[key]
     slug = re.sub(r"[^a-z0-9_]", "_", key.lower())
-    # Si la clave es "di_a", buscar primero "di_a.wav", luego "cue_di_a.wav", y como último recurso "a.wav"
-    candidates = [f"{slug}.wav", f"vocal_{slug}.wav", f"cue_{slug}.wav"]
+    slug_u = slug.upper()
+    candidates = []
+    # Priorizar archivo limpio a.wav / A.wav antes que prefijos di_ o cue_
     if slug.startswith("di_") and len(slug) > 3:
       base_v = slug[3:]
-      candidates.extend([f"di_{base_v}.wav", f"{base_v}.wav"])
+      base_v_u = base_v.upper()
+      candidates.extend([
+        f"{base_v}.wav", f"{base_v_u}.wav",
+        f"vocal_{base_v}.wav", f"vocal_{base_v_u}.wav",
+        f"di_{base_v}.wav", f"di_{base_v_u}.wav",
+        f"cue_{base_v}.wav", f"cue_{base_v_u}.wav",
+      ])
+    candidates.extend([
+      f"{slug}.wav", f"{slug_u}.wav",
+      f"vocal_{slug}.wav", f"vocal_{slug_u}.wav",
+      f"cue_{slug}.wav", f"cue_{slug_u}.wav",
+    ])
     for d in self._search_dirs:
       if os.path.isdir(d):
         for cname in candidates:
@@ -647,20 +448,72 @@ class VoiceCuePlayer:
         except Exception:
           pass
       if wav_path and os.path.isfile(wav_path):
+        reproducido = False
+        dur_real_s = 0.65
         try:
-          if SD_AVAILABLE:
-            from scipy.io import wavfile
-            sr_w, data_w = wavfile.read(wav_path)
-            if not self.muted:
-              with _PORTAUDIO_LOCK:
-                sd.play(data_w, sr_w, blocking=False)
-            continue
-          elif sys.platform == "win32" and not self.muted:
-            import winsound
-            winsound.PlaySound(wav_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
-            continue
+          from scipy.io import wavfile
+          sr_w, data_w = wavfile.read(wav_path)
+          if sr_w > 0 and len(data_w) > 0:
+            dur_real_s = float(len(data_w)) / float(sr_w)
+            t_now_w = time.perf_counter()
+            if self.speech_blanking_windows:
+              self.speech_blanking_windows[-1] = (t_now_w - 0.02, t_now_w + dur_real_s + 0.08)
+            else:
+              self.speech_blanking_windows.append((t_now_w - 0.02, t_now_w + dur_real_s + 0.08))
         except Exception:
-          pass
+          sr_w, data_w = 0, None
+
+        # En Linux/macOS priorizar reproductor nativo independiente (pw-play / paplay / aplay)
+        # para que los beeps del metrónomo (que usan sd.play global) JAMÁS corten la cola de la vocal.
+        if not self.muted and (sys.platform.startswith("linux") or sys.platform == "darwin"):
+          import shutil
+          if not hasattr(self, "_active_subprocesses"):
+            self._active_subprocesses = []
+          self._active_subprocesses = [p for p in self._active_subprocesses if p.poll() is None]
+          for player in ("pw-play", "paplay", "aplay"):
+            if shutil.which(player):
+              try:
+                proc = subprocess.Popen(
+                  [player, wav_path],
+                  stdout=subprocess.DEVNULL,
+                  stderr=subprocess.DEVNULL,
+                  close_fds=True,
+                )
+                self._active_subprocesses.append(proc)
+                reproducido = True
+                break
+              except Exception:
+                pass
+
+        if not reproducido and not self.muted:
+          try:
+            if sys.platform == "win32":
+              import winsound
+              winsound.PlaySound(wav_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+              reproducido = True
+            elif SD_AVAILABLE and data_w is not None and sr_w > 0:
+              # Usar OutputStream dedicado con cola de silencio (120 ms) en vez de sd.play() global
+              # para que play_beep() no interrumpa la reproducción de la vocal.
+              arr_f = data_w.astype(np.float32)
+              if data_w.dtype == np.int16:
+                arr_f = arr_f / 32768.0
+              elif data_w.dtype == np.int32:
+                arr_f = arr_f / 2147483648.0
+              pad_samples = int(sr_w * 0.12)
+              if arr_f.ndim == 1:
+                arr_pad = np.concatenate([arr_f, np.zeros(pad_samples, dtype=np.float32)]).reshape(-1, 1)
+                n_ch_out = 1
+              else:
+                arr_pad = np.vstack([arr_f, np.zeros((pad_samples, arr_f.shape[1]), dtype=np.float32)])
+                n_ch_out = arr_f.shape[1]
+              with sd.OutputStream(samplerate=sr_w, channels=n_ch_out, dtype='float32') as v_stream:
+                v_stream.write(np.ascontiguousarray(arr_pad))
+              reproducido = True
+          except Exception:
+            reproducido = False
+
+        if reproducido:
+          continue
       # 2. Intentar usar helper de voz existente en utils.sound_utils si está definido
       try:
         import utils.sound_utils as _su
@@ -757,17 +610,17 @@ class DiagnosticTerminalDialog(QtWidgets.QDialog):
     super().__init__(parent)
     self.setWindowTitle("Ñandú LSD - Consola de Diagnostico y Registro de Errores")
     self.resize(900, 520)
-    self.setStyleSheet("""
-      QDialog { background-color: #050505; color: #00FF00; border: 2px solid #00FFFF; font-family: 'Courier New', monospace; }
-      QTextEdit { background-color: #080808; color: #00FF00; border: 1px solid #333333; font-family: 'Consolas', 'Courier New', monospace; font-size: 12px; }
-      QPushButton { background-color: #111111; color: #00FFFF; border: 1px solid #00FFFF; padding: 6px 14px; font-weight: bold; border-radius: 3px; }
-      QPushButton:hover { background-color: #00FFFF; color: #000000; }
+    self.setStyleSheet(f"""
+      QDialog {{ background-color: {T['bg0']}; color: {T['ok']}; border: 2px solid {T['accent']}; font-family: 'Courier New', monospace; }}
+      QTextEdit {{ background-color: #080808; color: {T['ok']}; border: 1px solid {T['line']}; font-family: 'Consolas', 'Courier New', monospace; font-size: 12px; }}
+      QPushButton {{ background-color: {T['bg1']}; color: {T['accent']}; border: 1px solid {T['accent']}; padding: 6px 14px; font-weight: bold; border-radius: 3px; }}
+      QPushButton:hover {{ background-color: {T['accent']}; color: {T['bg0']}; }}
     """)
     layout = QtWidgets.QVBoxLayout(self)
 
     hdr_layout = QtWidgets.QHBoxLayout()
     lbl_info = QtWidgets.QLabel("REGISTRO EN VIVO DE ADQUISICION, EVENTOS DAQ Y TRACEBACKS:")
-    lbl_info.setStyleSheet("color: #00FFFF; font-weight: bold; font-size: 13px;")
+    lbl_info.setStyleSheet(f"color: {T['accent']}; font-weight: bold; font-size: 13px;")
     hdr_layout.addWidget(lbl_info)
     hdr_layout.addStretch()
     layout.addLayout(hdr_layout)
@@ -778,7 +631,7 @@ class DiagnosticTerminalDialog(QtWidgets.QDialog):
 
     btn_row = QtWidgets.QHBoxLayout()
     self.btn_open_os_term = QtWidgets.QPushButton("Abrir Terminal del Sistema (Shell)")
-    self.btn_open_os_term.setStyleSheet("background-color: #1a001a; color: #FF00FF; border: 1px solid #FF00FF; padding: 6px 14px; font-weight: bold;")
+    self.btn_open_os_term.setStyleSheet(f"background-color: {T['bg2']}; color: {T['purple']}; border: 1px solid {T['purple']}; padding: 6px 14px; font-weight: bold;")
     self.btn_open_os_term.clicked.connect(self.launch_system_terminal)
 
     self.btn_copy = QtWidgets.QPushButton("Copiar Todo")
@@ -805,11 +658,11 @@ class DiagnosticTerminalDialog(QtWidgets.QDialog):
     if is_error or "ERROR" in upper or "TRACEBACK" in upper or "EXCEPTION" in upper:
       fmt.setForeground(QtGui.QColor("#FF3333"))
     elif "ADVERTENCIA" in upper or "WARN" in upper:
-      fmt.setForeground(QtGui.QColor("#FFAA00"))
+      fmt.setForeground(QtGui.QColor(T['warn']))
     elif "[SIMULADOR]" in upper or "[DEBUG" in upper or "[OK]" in upper:
-      fmt.setForeground(QtGui.QColor("#00FFFF"))
+      fmt.setForeground(QtGui.QColor(T['accent']))
     else:
-      fmt.setForeground(QtGui.QColor("#00FF00"))
+      fmt.setForeground(QtGui.QColor(T['ok']))
     cursor.insertText(text, fmt)
     self.txt_log.setTextCursor(cursor)
     self.txt_log.ensureCursorVisible()
@@ -1013,6 +866,85 @@ def calculate_rms_envelope(buffer: np.ndarray, window_size: int) -> np.ndarray:
 
 # --- NUEVO: Pre-compilar Numba para evitar lag al activarlo por primera vez ---
 _dummy = calculate_rms_envelope(np.zeros(10, dtype=np.float64), 5)
+
+
+# =============================================================================
+# NUEVO (Bug 1.4): Downsampling min-max por bloques (peak-to-peak preserving).
+# Mantiene SIEMPRE el minimo y el maximo de cada bloque temporal, evitando el
+# "peine de aliasing" de la decimacion por avance fijo (::stride) sin usar
+# bucles lentos en Python: solo NumPy vectorizado.
+# =============================================================================
+def downsample_minmax_pares(x: np.ndarray, y: np.ndarray, max_puntos: int = 3000):
+    """
+    Reduce x/y a un maximo de ~max_puntos conservando picos y valles reales.
+
+    Divide la senal en N=max_puntos//2 bloques consecutivos que cubren TODO el
+    vector temporal (incluida la cola final de la ventana), localiza el minimo
+    y el maximo de cada bloque con NumPy y los entrega ordenados temporalmente
+    (par [min, max] o [max, min] segun su orden dentro del bloque), de manera
+    que el poligono trazado jamas recorta una cresta ni deja zonas ciegas al
+    final. Es la decimacion clasica "envelope preserving" (aggressive min-max)
+    de los osciloscopios.
+
+    Args:
+      x: Vector temporal completo asociado a la senal (misma longitud que y).
+      y: Senal completa en amplitud (microvoltios o la unidad en curso).
+      max_puntos: Presupuesto aproximado de puntos de salida (~cantidad de
+        muestras visibles consideradas fluidas por pyqtgraph). Solo se activa
+        si la senal original excede este presupuesto.
+
+    Returns:
+      Tuple[np.ndarray, np.ndarray]: Par (x, y) deci. (o los originales si no
+      correspondia decimar).
+    """
+    n = min(y.size, x.size)
+    if n <= max_puntos:
+        # Poca densidad de muestras: devolver tal cual (sin decimar)
+        return np.asarray(x), np.asarray(y)
+
+    m_bloques = max(2, int(max_puntos) // 2)
+    k_max = int(np.ceil(n / m_bloques)) # ancho de bloque (13-14 muestras tipico)
+    if k_max < 2:
+        return np.asarray(x), np.asarray(y)
+
+    # Matrices alineadas por bloque: cada bloque ocupa k_max casillas y cubre
+    # TODO el vector incluida la cola final; las casillas fuera de la senal son
+    # centinelas (NaN) y no afectan al minimo/maximo del bloque.
+    m_real = int(np.ceil(n / k_max))
+    idx_global = np.arange(m_real * k_max, dtype=np.int64)
+    valido = (idx_global < n).reshape(m_real, k_max)
+    idx_clip = np.clip(idx_global, 0, n - 1)
+
+    y_tomadas = np.asarray(y, dtype=np.float64)[idx_clip].reshape(m_real, k_max)
+    x_tomadas = np.asarray(x, dtype=np.float64)[idx_clip].reshape(m_real, k_max)
+    y_tomadas[~valido] = np.nan
+    x_tomadas[~valido] = np.nan
+
+    # Minimo y maximo de cada bloque (operaciones O(N) de NumPy, sin bucles Python)
+    idx_min = np.argmin(np.where(np.isfinite(y_tomadas), y_tomadas, np.inf), axis=1)
+    idx_max = np.argmax(np.where(np.isfinite(y_tomadas), y_tomadas, -np.inf), axis=1)
+    filas = np.arange(m_real)[:, None]
+    y_min = y_tomadas[filas, idx_min[:, None]].ravel()
+    y_max = y_tomadas[filas, idx_max[:, None]].ravel()
+    x_min = x_tomadas[filas, idx_min[:, None]].ravel()
+    x_max = x_tomadas[filas, idx_max[:, None]].ravel()
+
+    # Orden temporal DENTRO de cada bloque: primero el que ocurre antes,
+    # para que el trazo continuo respete la secuencia real de la senal.
+    bloque_invertido = idx_min > idx_max
+    x_sal = np.empty(2 * m_real, dtype=np.float64)
+    y_sal = np.empty(2 * m_real, dtype=np.float64)
+    x_sal[0::2] = np.where(bloque_invertido, x_max, x_min)
+    x_sal[1::2] = np.where(bloque_invertido, x_min, x_max)
+    y_sal[0::2] = np.where(bloque_invertido, y_max, y_min)
+    y_sal[1::2] = np.where(bloque_invertido, y_min, y_max)
+    # Asegurar que el primer y el ultimo punto alcancen exactamente los bordes [-PLOT_DURATION_S, 0.0]
+    x_sal[0] = float(x[0])
+    y_sal[0] = float(y[0])
+    x_sal[-1] = float(x[n - 1])
+    y_sal[-1] = float(y[n - 1])
+    return x_sal, y_sal
+
 
 @jit(nopython=True, nogil=True)
 def moving_average(buffer: np.ndarray, window_size: int) -> np.ndarray:
@@ -1485,7 +1417,7 @@ except ImportError:
 if global_progress: global_progress.setValue(70); global_splash.showMessage("Cargando NIDAQmx...", Qt.AlignBottom | Qt.AlignCenter, QColor("white")); app.processEvents()
 
 # Configuración de PyQtGraph para MÁXIMO rendimiento
-pg.setConfigOptions(antialias=False) # Optimización
+pg.setConfigOptions(antialias=PLOT_ANTIALIAS) # Optimización
 
 # Intenta importar nidaqmx
 try:
@@ -1723,32 +1655,37 @@ def simulador_thread(chunk_samples, sample_rate, num_canales, data_queue, stop_e
   datos_archivo = None
   total_samples_archivo = 0
   
-  if "Cande" in tipo_prueba or "Archivo" in tipo_prueba:
+  # CORRECCIÓN 04 y 06: Entrega fluida a ~60 Hz (bloques de ~16 ms) y soporte directo de WAVs/CSVs de 2026-09-01
+  chunk_samples = max(16, min(int(sample_rate * 0.016), int(chunk_samples)))
+  if "Cande" in tipo_prueba or "Archivo" in tipo_prueba or "09-01" in tipo_prueba or "WAV" in tipo_prueba.upper():
     try:
       import pandas as pd
+      from scipy.io import wavfile as _wavfile
       from utils.path_utils import get_database_path, get_project_root
-      
-      db_path = get_database_path()
-      csv_path = None
 
-      if "Secuencia Continua" in tipo_prueba:
-        csv_path = os.path.join(db_path, "2026-09-01", "SecuenciaContinua_Prueba1_Candela", "grabacion.csv")
-      elif "Cande" in tipo_prueba:
-        # Medicion normal estandar de Cande (A_Prueba1_Candela: 4 canales, 12 pulsos de /a/)
-        csv_path = os.path.join(db_path, "2026-09-01", "A_Prueba1_Candela", "grabacion.csv")
-      else:
-        candidates = [
+      db_path = get_database_path()
+      folder_name = "SecuenciaContinua_Prueba1_Candela" if "Secuencia Continua" in tipo_prueba else "A_Prueba1_Candela"
+      candidate_dirs = [
+          os.path.join(db_path, "2026-09-01", folder_name),
+          os.path.join(get_project_root(), "base_de_datos_electrodos", "2026-09-01", folder_name),
+          os.path.join("/tmp/test_secuencia_sim", folder_name),
+      ]
+      med_dir = next((d for d in candidate_dirs if os.path.isdir(d)), None)
+
+      # 1. Cargar primero grabacion.csv (contiene voltios exactos de placa DAQ sin distorsión de escala)
+      csv_path = os.path.join(med_dir, "grabacion.csv") if med_dir else None
+      if not (csv_path and os.path.isfile(csv_path)):
+        for c in [
             os.path.join(db_path, "2026-09-01", "A_Prueba1_Candela", "grabacion.csv"),
+            os.path.join("/tmp/test_secuencia_sim", "A_Prueba1_Candela", "grabacion.csv"),
             os.path.join(get_project_root(), "grabacion.csv"),
-        ]
-        for c in candidates:
-          if os.path.exists(c):
+        ]:
+          if os.path.isfile(c):
             csv_path = c
             break
-
       if csv_path and os.path.exists(csv_path):
-        print(f"[SIMULADOR] Cargando medicion de prueba real: {csv_path}")
-        df = pd.read_csv(csv_path)
+        print(f"[SIMULADOR] Cargando medicion de prueba real CSV (voltaje calibrado exacto): {csv_path}")
+        df = pd.read_csv(csv_path, comment='#')
         canales_cols = [c for c in df.columns if "Canal" in c]
         if canales_cols:
           raw_all = df[canales_cols].values.T
@@ -1774,13 +1711,52 @@ def simulador_thread(chunk_samples, sample_rate, num_canales, data_queue, stop_e
               datos_archivo = np.vstack((raw_all, pad))
             else:
               datos_archivo = raw_all[:num_canales, :]
+          if np.nanmax(np.abs(datos_archivo)) > 2.5:
+            datos_archivo = (datos_archivo / 1000000.0) * 495.0
           total_samples_archivo = datos_archivo.shape[1]
           dur_s = total_samples_archivo / sample_rate
           print(f"[SIMULADOR] Medicion de prueba cargada ({total_samples_archivo} muestras, {dur_s:.1f} s, {num_canales} canales).")
-        else:
-          print("[SIMULADOR] El CSV no tiene columnas de 'Canal'. Usando Senoidal.")
-      else:
-        print(f"[SIMULADOR] Archivo no encontrado en {csv_path}. Usando Senoidal.")
+
+      # 2. Fallback a WAV por canal solo si no existe grabacion.csv
+      if datos_archivo is None and med_dir:
+        wav_channels = []
+        for ch_i in (active_channel_indices if (active_channel_indices and len(active_channel_indices) == num_canales) else range(num_canales)):
+          ch_dir = os.path.join(med_dir, f"canal_{ch_i}")
+          wav_cand = None
+          for w_name in ("grabacion.wav", " Crudo.wav", "Crudo.wav"):
+            p_w = os.path.join(ch_dir, w_name)
+            if os.path.isfile(p_w):
+              wav_cand = p_w
+              break
+          if wav_cand:
+            sr_w, data_w = _wavfile.read(wav_cand)
+            if data_w.dtype == np.int16:
+              arr_norm = data_w.astype(np.float64) / 32768.0
+            elif data_w.dtype == np.int32:
+              arr_norm = data_w.astype(np.float64) / 2147483648.0
+            else:
+              arr_norm = data_w.astype(np.float64)
+            meta_ch_p = os.path.join(ch_dir, "metadata.json")
+            max_abs_uV = None
+            if os.path.isfile(meta_ch_p):
+              try:
+                with open(meta_ch_p, "r", encoding="utf-8") as fm_c:
+                  md_c = json.load(fm_c)
+                max_abs_uV = md_c.get("max_abs_value") or md_c.get("normalization_factor")
+              except Exception:
+                pass
+            if max_abs_uV and float(max_abs_uV) > 0:
+              uV_sig = arr_norm * float(max_abs_uV)
+            else:
+              # Escala fisiológica sEMG realista (~200 uV pico) cuando el WAV int16 está normalizado sin factor
+              uV_sig = arr_norm * 200.0
+            arr_v = (uV_sig / 1000000.0) * 495.0
+            wav_channels.append(arr_v.reshape(-1))
+        if len(wav_channels) == num_canales and min(len(w) for w in wav_channels) > 0:
+          min_len = min(len(w) for w in wav_channels)
+          datos_archivo = np.vstack([w[:min_len] for w in wav_channels])
+          total_samples_archivo = datos_archivo.shape[1]
+          print(f"[SIMULADOR] Cargados {num_canales} canales WAV desde {med_dir} ({total_samples_archivo} muestras).")
     except Exception as e:
       print(f"[SIMULADOR] Error al cargar el archivo de prueba: {e}. Usando Senoidal.")
 
@@ -2134,7 +2110,7 @@ def generar_grafico_grabacion(datos_completos, sample_rate, output_dir, num_cana
   if get_unique_channel_colors:
     colores_canales = get_unique_channel_colors(ch_info_list)
   else:
-    colores_canales = ["#ff4500", "#00a896", "#ffff00", "#ff0000"]
+    colores_canales = ["#ff4500", T['accent'], T['warn'], T['err']]
 
   # 3. Procesar señales 100% crudas calibradas en microvoltios
   processed_channels = []
@@ -2163,14 +2139,7 @@ def generar_grafico_grabacion(datos_completos, sample_rate, output_dir, num_cana
     else:
       y_eval = sig
 
-    if not is_mic and len(y_eval) > 0:
-      # Suprimir picos eléctricos (> 500 uV) para que artefactos puntuales no aplasten la escala fisiológica (0-500 uV)
-      sig = np.clip(sig, -500.0, 500.0)
-      y_eval = np.clip(y_eval, -500.0, 500.0)
-      p99_abs = float(np.nanpercentile(np.abs(y_eval), 99.2))
-      max_abs = min(500.0, max(25.0, p99_abs * 1.12))
-    else:
-      max_abs = float(np.nanmax(np.abs(y_eval))) if len(y_eval) > 0 else 1.0
+    max_abs = float(np.nanmax(np.abs(y_eval))) if len(y_eval) > 0 else 1.0
     min_val = float(np.nanmin(y_eval)) if len(y_eval) > 0 else 0.0
     max_val = float(np.nanmax(y_eval)) if len(y_eval) > 0 else 1.0
 
@@ -2201,7 +2170,7 @@ def generar_grafico_grabacion(datos_completos, sample_rate, output_dir, num_cana
   # 5. Configurar figura Matplotlib thread-safe con tema oscuro puro
   ancho_fig = 20
   alto_fig = max(8.0, 3.2 * num_canales)
-  fig = Figure(figsize=(ancho_fig, alto_fig), facecolor='#000000')
+  fig = Figure(figsize=(ancho_fig, alto_fig), facecolor=T['bg0'])
   canvas = FigureCanvas(fig)
   axs = fig.subplots(num_canales, 1, sharex=True)
   if num_canales == 1:
@@ -2210,7 +2179,7 @@ def generar_grafico_grabacion(datos_completos, sample_rate, output_dir, num_cana
   # 6. Graficar canales
   for i, ch in enumerate(processed_channels):
     ax = axs[i]
-    ax.set_facecolor('#000000')
+    ax.set_facecolor(T['bg0'])
     color_hex = ch["color_hex"]
     sig = ch["sig"]
     is_mic = ch["is_mic"]
@@ -2229,8 +2198,8 @@ def generar_grafico_grabacion(datos_completos, sample_rate, output_dir, num_cana
 
     # Franja y línea indicadora de Ruido Basal
     if noise_seconds is not None and noise_seconds > 0 and noise_seconds >= t_min:
-      span_color = '#00e5ff'
-      ax.axvspan(max(0.0, t_min), min(noise_seconds, t_max), color=span_color, alpha=0.12)
+      span_color = T['accent']
+      ax.axvspan(max(0.0, t_min), min(noise_seconds, t_max), color=span_color, alpha=0.28)
       ax.axvline(x=noise_seconds, color=span_color, ls='--', lw=1.5, alpha=0.75)
       y_bounds = ax.get_ylim()
       y_text = y_bounds[1] - 0.08 * (y_bounds[1] - y_bounds[0])
@@ -2238,8 +2207,8 @@ def generar_grafico_grabacion(datos_completos, sample_rate, output_dir, num_cana
               fontsize=13, ha='center', va='top', fontweight='bold', alpha=0.9)
 
     # Guías del metrónomo (usa timestamps reales si existen; si no, grilla teórica)
-    win_color = '#ffffff'
-    beat_color = '#ffaa00'
+    win_color = T['white']
+    beat_color = T['warn']
     t_limite_ruido = float(noise_seconds) if (noise_seconds is not None and noise_seconds > 0) else 0.0
     valid_beats = sorted([float(b) for b in beat_timestamps if max(t_min, t_limite_ruido - 0.2) <= float(b) <= t_max])
     beat_windows = []
@@ -2332,7 +2301,7 @@ def generar_grafico_grabacion(datos_completos, sample_rate, output_dir, num_cana
     ax.grid(False)
     ax.tick_params(axis='both', which='major', labelsize=16, colors='white')
     for spine in ax.spines.values():
-      spine.set_color('#333333')
+      spine.set_color(T['line'])
 
   for ax in axs[:-1]:
     ax.tick_params(labelbottom=False)
@@ -2396,14 +2365,14 @@ def generar_grafico_estadisticas(stats_time, stats_snr, stats_noise_mean, stats_
     hw_idx = int(m_ai.group(1)) if m_ai else i
 
     # Subplot Izquierdo: SNR
-    axs[i, 0].plot(t_plot, snr_plot, marker='o', linestyle='-', color='#00ffcc', linewidth=1.5, markersize=3)
+    axs[i, 0].plot(t_plot, snr_plot, marker='o', linestyle='-', color=T['accent'], linewidth=1.5, markersize=3)
     axs[i, 0].set_title(f"ai{hw_idx} - {daq_ch_name}: Evolución SNR Promedio", fontsize=12, fontweight="bold")
     axs[i, 0].set_ylabel("SNR Promedio Acumulado")
     axs[i, 0].grid(True, linestyle="--", alpha=0.5)
 
     # Subplot Derecho: Ruido
-    axs[i, 1].plot(t_plot, noise_mean_plot, marker='o', linestyle='-', color='#ff754b', label='Promedio', linewidth=1.5, markersize=3)
-    axs[i, 1].plot(t_plot, noise_std_plot, marker='x', linestyle='--', color='#ffaa00', label='Desviación', linewidth=1.5, markersize=3)
+    axs[i, 1].plot(t_plot, noise_mean_plot, marker='o', linestyle='-', color=T['warn'], label='Promedio', linewidth=1.5, markersize=3)
+    axs[i, 1].plot(t_plot, noise_std_plot, marker='x', linestyle='--', color=T['warn'], label='Desviación', linewidth=1.5, markersize=3)
     axs[i, 1].set_title(f"ai{hw_idx} - {daq_ch_name}: Evolución Ruido Inter-pulso", fontsize=12, fontweight="bold")
     axs[i, 1].set_ylabel("Amplitud (µV)")
     axs[i, 1].legend()
@@ -2436,28 +2405,28 @@ class PreviewPlotDialog(QtWidgets.QDialog):
   def __init__(self, image_path, parent=None, duration_ms=5000):
     super().__init__(parent)
     self.setWindowTitle("Ñandú LSD - Vista Previa de Grabación")
-    self.setStyleSheet("""
-      QDialog {
-        background-color: #050505;
-        color: #ffffff;
-        border: 2px solid #00ffcc;
-      }
-      QLabel {
-        color: #00ffcc;
+    self.setStyleSheet(f"""
+      QDialog {{
+        background-color: {T['bg0']};
+        color: {T['white']};
+        border: 2px solid {T['accent']};
+      }}
+      QLabel {{
+        color: {T['accent']};
         font-family: 'Consolas', 'Courier New', monospace;
-      }
-      QPushButton {
-        background-color: #111111;
-        color: #00ffcc;
-        border: 1px solid #00ffcc;
+      }}
+      QPushButton {{
+        background-color: {T['bg1']};
+        color: {T['accent']};
+        border: 1px solid {T['accent']};
         padding: 6px 16px;
         border-radius: 4px;
         font-weight: bold;
-      }
-      QPushButton:hover {
-        background-color: #00ffcc;
-        color: #000000;
-      }
+      }}
+      QPushButton:hover {{
+        background-color: {T['accent']};
+        color: {T['bg0']};
+      }}
     """)
     self.setWindowFlags(self.windowFlags() | QtCore.Qt.WindowStaysOnTopHint)
     self.resize(1100, 720)
@@ -2468,11 +2437,11 @@ class PreviewPlotDialog(QtWidgets.QDialog):
     
     top_layout = QtWidgets.QHBoxLayout()
     self.lbl_info = QtWidgets.QLabel("VISTA PREVIA DE SEÑAL CRUDA (NORMALIZADA)")
-    self.lbl_info.setStyleSheet("font-size: 15px; font-weight: bold; color: #00ffcc;")
+    self.lbl_info.setStyleSheet(f"font-size: 15px; font-weight: bold; color: {T['accent']};")
     
     self.segundos_restantes = max(1, int(duration_ms / 1000))
     self.lbl_timer = QtWidgets.QLabel(f"Cerrando en {self.segundos_restantes}s...")
-    self.lbl_timer.setStyleSheet("font-size: 13px; color: #ffaa00;")
+    self.lbl_timer.setStyleSheet(f"font-size: 13px; color: {T['warn']};")
     
     btn_cerrar = QtWidgets.QPushButton("Cerrar (Esc)")
     btn_cerrar.clicked.connect(self.accept)
@@ -2486,7 +2455,7 @@ class PreviewPlotDialog(QtWidgets.QDialog):
     
     self.lbl_imagen = QtWidgets.QLabel()
     self.lbl_imagen.setAlignment(QtCore.Qt.AlignCenter)
-    self.lbl_imagen.setStyleSheet("background-color: #000000; border: 1px solid #222222;")
+    self.lbl_imagen.setStyleSheet(f"background-color: {T['bg0']}; border: 1px solid {T['line']};")
     layout.addWidget(self.lbl_imagen, stretch=1)
     
     if os.path.exists(image_path):
@@ -2763,9 +2732,18 @@ class DialogoPantallaExterna(QtWidgets.QDialog):
     rem_cfg = self.plotter.config_mgr.get_remote_display_config() if hasattr(self.plotter.config_mgr, 'get_remote_display_config') else {}
     puerto_init = int(rem_cfg.get("puerto", 8765))
     token_init = str(rem_cfg.get("token", ""))
-    # SEGURIDAD: Nunca precargar IPs privadas por defecto en los campos visibles (evita fugas en capturas y Git)
-    ts_pc_init = str(rem_cfg.get("tailscale_ip_pc", "") or "")
-    ts_celu_init = str(rem_cfg.get("tailscale_ip_celu", "") or "")
+    # CORRECCIÓN 07: Purgar cualquier IP privada residual de config_general.json y dejar los campos SIEMPRE vacíos por defecto
+    try:
+      if hasattr(self.plotter, 'config_mgr') and self.plotter.config_mgr is not None:
+        dr_sec = self.plotter.config_mgr.config.get("display_remoto")
+        if isinstance(dr_sec, dict):
+          dr_sec.pop("tailscale_ip_pc", None)
+          dr_sec.pop("tailscale_ip_celu", None)
+          self.plotter.config_mgr.save_config()
+    except Exception:
+      pass
+    ts_pc_init = ""
+    ts_celu_init = "" 
 
     # Auto-iniciar el servidor al abrir el diálogo si todavía no estaba corriendo
     srv = getattr(self.plotter, 'remote_display_server', None)
@@ -2853,11 +2831,11 @@ class DialogoPantallaExterna(QtWidgets.QDialog):
   def _refresh_status_label(self):
     srv = getattr(self.plotter, 'remote_display_server', None)
     revelar = bool(hasattr(self, 'chk_revelar_ips') and self.chk_revelar_ips.isChecked())
-    ip_ts_real = self.edit_ts_pc.text().strip() or (_ip_tailscale("") if revelar else "")
+    ip_ts_real = self.edit_ts_pc.text().strip()
     ip_ts_show = ip_ts_real if (revelar and ip_ts_real) else "<IP_TAILSCALE_PC>"
-    ip_celu_show = self.edit_ts_celu.text().strip() if revelar else "<CELU>"
+    ip_celu_show = self.edit_ts_celu.text().strip() if (revelar and self.edit_ts_celu.text().strip()) else "<CELU>"
     if srv is not None and srv.activo():
-      ip_lan_show = _ip_local() if revelar else "<IP_LAN_LOCAL>"
+      ip_lan_show = "<IP_LAN_LOCAL>"
       p = srv.puerto
       tok = f"?t={srv.token}" if srv.token else ""
       self.lbl_estado_srv.setText(
@@ -2882,11 +2860,10 @@ class DialogoPantallaExterna(QtWidgets.QDialog):
     self._refresh_status_label()
 
   def _on_tailscale_check(self):
-    ip_pc = self.edit_ts_pc.text().strip() or ""
+    ip_pc = self.edit_ts_pc.text().strip() or (_ip_tailscale("") if hasattr(self, 'chk_revelar_ips') and self.chk_revelar_ips.isChecked() else "")
     ip_celu = self.edit_ts_celu.text().strip() or ""
     puerto = self.spin_puerto.value()
-    self.plotter.config_mgr.set("display_remoto", "tailscale_ip_pc", ip_pc)
-    self.plotter.config_mgr.set("display_remoto", "tailscale_ip_celu", ip_celu)
+    # CORRECCIÓN 07: Prohibido guardar IPs privadas en config_general.json
     srv = getattr(self.plotter, 'remote_display_server', None)
     if srv is None or not srv.activo():
       self.plotter.iniciar_servidor_display_remoto(
@@ -2935,12 +2912,12 @@ class AutoForgeDialog(QtWidgets.QDialog):
     super().__init__(parent)
     self.setWindowTitle("Ñandú LSD - Configuración de Autograbado")
     self.setMinimumWidth(380)
-    self.setStyleSheet("""
-      QDialog { background-color: #0d0d0d; color: #00ffff; font-family: 'Courier New', monospace; }
-      QLabel { color: #00ffcc; font-weight: bold; }
-      QLineEdit, QSpinBox, QComboBox { background-color: #1a1a1a; color: #00ffcc; border: 1px solid #00ffcc; padding: 4px; border-radius: 3px; }
-      QGroupBox { border: 1px solid #ff00ff; border-radius: 4px; margin-top: 10px; padding-top: 10px; font-weight: bold; color: #ff00ff; }
-      QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 0 5px; }
+    self.setStyleSheet(f"""
+      QDialog {{ background-color: #0d0d0d; color: {T['accent']}; font-family: 'Courier New', monospace; }}
+      QLabel {{ color: {T['accent']}; font-weight: bold; }}
+      QLineEdit, QSpinBox, QComboBox {{ background-color: {T['bg2']}; color: {T['accent']}; border: 1px solid {T['accent']}; padding: 4px; border-radius: 3px; }}
+      QGroupBox {{ border: 1px solid {T['purple']}; border-radius: 4px; margin-top: 10px; padding-top: 10px; font-weight: bold; color: {T['purple']}; }}
+      QGroupBox::title {{ subcontrol-origin: margin; subcontrol-position: top left; padding: 0 5px; }}
     """)
     
     self.layout = QtWidgets.QFormLayout(self)
@@ -2969,7 +2946,7 @@ class AutoForgeDialog(QtWidgets.QDialog):
     self.chk_calibrar_cvm = QtWidgets.QCheckBox("Calibrar Contracción Máxima (A, I, U) [Opcional]")
     self.chk_calibrar_cvm.setChecked(bool(prot_cfg.get("calibrar_cvm_por_defecto", False)))
     self.chk_calibrar_cvm.setToolTip("Desmarcado por defecto para no fatigar al sujeto antes de la Secuencia Continua.")
-    self.chk_calibrar_cvm.setStyleSheet("color: #00ffcc; font-weight: bold;")
+    self.chk_calibrar_cvm.setStyleSheet(f"color: {T['accent']}; font-weight: bold;")
     self.cmb_cvm_modo = QtWidgets.QComboBox()
     self.cmb_cvm_modo.addItems([
       "Guiado Sostenido SIN Metrónomo (2.5s sostén + 2.5s descanso) [Recomendado]",
@@ -2985,13 +2962,13 @@ class AutoForgeDialog(QtWidgets.QDialog):
     self.chk_abrir_fotometria = QtWidgets.QCheckBox("Abrir Asistente de Cámara 3D al iniciar")
     self.chk_abrir_fotometria.setChecked(bool(prot_cfg.get("abrir_fotometria_al_iniciar", False)))
     self.chk_abrir_fotometria.setToolTip("Si está desmarcado, inicia la secuencia directamente sin sondear cámaras web (evita bloqueos si no hay webcam).")
-    self.chk_abrir_fotometria.setStyleSheet("color: #00ffff; font-weight: bold;")
+    self.chk_abrir_fotometria.setStyleSheet(f"color: {T['accent']}; font-weight: bold;")
     self.layout.addRow("Fotometría 3D:", self.chk_abrir_fotometria)
 
     self.chk_jitter = QtWidgets.QCheckBox("Activar Jitter Anti-Sincronización")
     jit_init = getattr(parent, 'chk_metro_jitter', None).isChecked() if hasattr(parent, 'chk_metro_jitter') else False
     self.chk_jitter.setChecked(jit_init)
-    self.chk_jitter.setStyleSheet("color: #ff55ff; font-weight: bold;")
+    self.chk_jitter.setStyleSheet(f"color: {T['purple']}; font-weight: bold;")
     self.spin_jitter_pct = QtWidgets.QSpinBox()
     self.spin_jitter_pct.setRange(5, 50)
     self.spin_jitter_pct.setSingleStep(5)
@@ -3007,7 +2984,7 @@ class AutoForgeDialog(QtWidgets.QDialog):
 
     self.chk_hablar_vocales = QtWidgets.QCheckBox("Pronunciar 'Di Vocal' en cada cambio (con auriculares)")
     self.chk_hablar_vocales.setChecked(False) # DESMARCADO POR DEFECTO para evitar interferencias
-    self.chk_hablar_vocales.setStyleSheet("color: #ffcc00; font-weight: bold;")
+    self.chk_hablar_vocales.setStyleSheet(f"color: {T['warn']}; font-weight: bold;")
     self.chk_hablar_vocales.setToolTip("Desmarcado por defecto. Si se activa, se recomienda usar auriculares para evitar crosstalk acústico.")
 
     self.cmb_speaking_mode = QtWidgets.QComboBox()
@@ -3020,7 +2997,7 @@ class AutoForgeDialog(QtWidgets.QDialog):
 
     self.chk_hablar_fases = QtWidgets.QCheckBox("Activar audio en fases (Ruido/Prep/Descanso)")
     self.chk_hablar_fases.setChecked(True)
-    self.chk_hablar_fases.setStyleSheet("color: #00ffcc; font-weight: bold;")
+    self.chk_hablar_fases.setStyleSheet(f"color: {T['accent']}; font-weight: bold;")
 
     self.layout.addRow("Locución Vocales:", self.chk_hablar_vocales)
     self.layout.addRow("Locución Fases:", self.chk_hablar_fases)
@@ -3031,16 +3008,16 @@ class AutoForgeDialog(QtWidgets.QDialog):
     self.words_row_layout.setSpacing(6)
 
     self.btn_edit_words = QtWidgets.QPushButton(" Editar Palabras")
-    self.btn_edit_words.setStyleSheet("background-color: #121f2d; color: #00ffff; font-weight: bold; font-family: 'Courier New'; font-size: 13px; padding: 6px; border: 1.5px solid #00ffff; border-radius: 4px;")
+    self.btn_edit_words.setStyleSheet(f"background-color: {T['bg2']}; color: {T['accent']}; font-weight: bold; font-family: 'Courier New'; font-size: 13px; padding: 6px; border: 1.5px solid {T['accent']}; border-radius: 4px;")
     self.btn_edit_words.clicked.connect(self.abrir_editor_palabras)
 
     self.btn_randomize_direct = QtWidgets.QPushButton(" Aleatorizar (A E I O U...)")
-    self.btn_randomize_direct.setStyleSheet("background-color: #2b1238; color: #ff55ff; font-weight: bold; font-family: 'Courier New'; font-size: 13px; padding: 6px; border: 1.5px solid #ff55ff; border-radius: 4px;")
+    self.btn_randomize_direct.setStyleSheet(f"background-color: {T['bg2']}; color: {T['purple']}; font-weight: bold; font-family: 'Courier New'; font-size: 13px; padding: 6px; border: 1.5px solid {T['purple']}; border-radius: 4px;")
     self.btn_randomize_direct.setToolTip("Mezcla aleatoriamente las palabras/vocales guardadas")
     self.btn_randomize_direct.clicked.connect(self.aleatorizar_palabras_directo)
 
     self.btn_debruijn_direct = QtWidgets.QPushButton(" Balancear De Bruijn")
-    self.btn_debruijn_direct.setStyleSheet("background-color: #0d2b22; color: #39ff14; font-weight: bold; font-family: 'Courier New'; font-size: 13px; padding: 6px; border: 1.5px solid #39ff14; border-radius: 4px;")
+    self.btn_debruijn_direct.setStyleSheet(f"background-color: {T['bg2']}; color: {T['ok']}; font-weight: bold; font-family: 'Courier New'; font-size: 13px; padding: 6px; border: 1.5px solid {T['ok']}; border-radius: 4px;")
     self.btn_debruijn_direct.setToolTip("Genera un bloque balanceado De Bruijn donde todas las transiciones entre vocales son equitativas")
     self.btn_debruijn_direct.clicked.connect(self.balancear_palabras_debruijn_directo)
 
@@ -3052,7 +3029,7 @@ class AutoForgeDialog(QtWidgets.QDialog):
     self.chk_debruijn = QtWidgets.QCheckBox("Balancear Transiciones De Bruijn en Todos los Ciclos")
     self.chk_debruijn.setChecked(True)
     self.chk_debruijn.setToolTip("En Secuencia Continua, permuta cada ciclo sin repetir vocal en los bordes y equilibrando todos los pares (v_i -> v_j)")
-    self.chk_debruijn.setStyleSheet("color: #39ff14; font-weight: bold;")
+    self.chk_debruijn.setStyleSheet(f"color: {T['ok']}; font-weight: bold;")
     self.layout.addRow("Secuencia IA:", self.chk_debruijn)
 
     # --- Asignación de Músculos ---
@@ -3147,12 +3124,12 @@ class AutoForgeDialog(QtWidgets.QDialog):
     dialog = QtWidgets.QDialog(self)
     dialog.setWindowTitle("Editor de Palabras y Vocales - AutoForge")
     dialog.resize(380, 480)
-    dialog.setStyleSheet("""
-      QDialog { background-color: #0b0f19; color: #00ffff; font-family: 'Courier New', monospace; }
-      QLabel { color: #00ffcc; font-weight: bold; }
-      QTextEdit { background-color: #060910; color: #00ffcc; border: 1.5px solid #00ffff; font-size: 15px; font-weight: bold; padding: 8px; border-radius: 4px; }
-      QPushButton { background-color: #111a2e; color: #00ffcc; border: 1.5px solid #00ffff; border-radius: 4px; padding: 6px 12px; font-weight: bold; }
-      QPushButton:hover { background-color: #00ffff; color: #050508; }
+    dialog.setStyleSheet(f"""
+      QDialog {{ background-color: {T['bg1']}; color: {T['accent']}; font-family: 'Courier New', monospace; }}
+      QLabel {{ color: {T['accent']}; font-weight: bold; }}
+      QTextEdit {{ background-color: #060910; color: {T['accent']}; border: 1.5px solid {T['accent']}; font-size: 15px; font-weight: bold; padding: 8px; border-radius: 4px; }}
+      QPushButton {{ background-color: #111a2e; color: {T['accent']}; border: 1.5px solid {T['accent']}; border-radius: 4px; padding: 6px 12px; font-weight: bold; }}
+      QPushButton:hover {{ background-color: {T['accent']}; color: {T['bg0']}; }}
     """)
     dialog_layout = QtWidgets.QVBoxLayout(dialog)
     dialog_layout.setContentsMargins(12, 12, 12, 12)
@@ -3171,11 +3148,11 @@ class AutoForgeDialog(QtWidgets.QDialog):
     tools_layout.setSpacing(6)
     
     btn_randomize = QtWidgets.QPushButton("Aleatorizar Lista")
-    btn_randomize.setStyleSheet("QPushButton { background-color: #2b1238; color: #ff55ff; border: 1.5px solid #ff55ff; font-weight: bold; padding: 6px; } QPushButton:hover { background-color: #ff55ff; color: #000000; }")
+    btn_randomize.setStyleSheet(f"QPushButton {{ background-color: {T['bg2']}; color: {T['purple']}; border: 1.5px solid {T['purple']}; font-weight: bold; padding: 6px; }} QPushButton:hover {{ background-color: {T['purple']}; color: {T['bg0']}; }}")
     btn_randomize.setToolTip("Mezcla aleatoriamente las palabras/vocales escritas (ej: A E I O U)")
     
     btn_load_aeiou = QtWidgets.QPushButton("Cargar A E I O U")
-    btn_load_aeiou.setStyleSheet("QPushButton { background-color: #122238; color: #00ffff; border: 1.5px solid #00ffff; font-weight: bold; padding: 6px; } QPushButton:hover { background-color: #00ffff; color: #000000; }")
+    btn_load_aeiou.setStyleSheet(f"QPushButton {{ background-color: {T['bg2']}; color: {T['accent']}; border: 1.5px solid {T['accent']}; font-weight: bold; padding: 6px; }} QPushButton:hover {{ background-color: {T['accent']}; color: {T['bg0']}; }}")
     btn_load_aeiou.setToolTip("Carga las cinco vocales canonicas en orden estandar")
     
     tools_layout.addWidget(btn_randomize)
@@ -3183,7 +3160,7 @@ class AutoForgeDialog(QtWidgets.QDialog):
     dialog_layout.addLayout(tools_layout)
     
     lbl_preview = QtWidgets.QLabel("Orden actual: --")
-    lbl_preview.setStyleSheet("color: #ffff00; font-size: 11px; font-weight: bold;")
+    lbl_preview.setStyleSheet(f"color: {T['warn']}; font-size: 11px; font-weight: bold;")
     lbl_preview.setWordWrap(True)
     dialog_layout.addWidget(lbl_preview)
     
@@ -3241,10 +3218,10 @@ class RealTimePlotter(QtWidgets.QWidget):
     super().__init__()
 
     # --- Constantes de la GUI ---
-    self.BTN_START_STYLE = "background-color: #050505; color: #00FF00; font-weight: bold; font-family: 'Courier New'; font-size: 12px; padding: 6px 12px; border: 2px solid #00FF00; border-radius: 4px; min-width: 175px;"
-    self.BTN_STOP_STYLE = "background-color: #050505; color: #FF0000; font-weight: bold; font-family: 'Courier New'; font-size: 12px; padding: 6px 12px; border: 2px solid #FF0000; border-radius: 4px; min-width: 175px;"
-    self.BTN_REC_START_STYLE = "background-color: #050505; color: #00FFFF; font-weight: bold; font-family: 'Courier New'; font-size: 12px; padding: 6px 10px; border: 2px solid #00FFFF; border-radius: 4px;"
-    self.BTN_REC_STOP_STYLE = "background-color: #FF0000; color: #000000; font-weight: bold; font-family: 'Courier New'; font-size: 12px; padding: 6px 10px; border: 2px solid #FF0000; border-radius: 4px;"
+    self.BTN_START_STYLE = f"background-color: {T['bg0']}; color: {T['ok']}; font-weight: bold; font-family: 'Courier New'; font-size: 12px; padding: 6px 12px; border: 2px solid {T['ok']}; border-radius: 4px; min-width: 175px;"
+    self.BTN_STOP_STYLE = f"background-color: {T['bg0']}; color: {T['err']}; font-weight: bold; font-family: 'Courier New'; font-size: 12px; padding: 6px 12px; border: 2px solid {T['err']}; border-radius: 4px; min-width: 175px;"
+    self.BTN_REC_START_STYLE = f"background-color: {T['bg0']}; color: {T['accent']}; font-weight: bold; font-family: 'Courier New'; font-size: 12px; padding: 6px 10px; border: 2px solid {T['accent']}; border-radius: 4px;"
+    self.BTN_REC_STOP_STYLE = f"background-color: {T['err']}; color: {T['bg0']}; font-weight: bold; font-family: 'Courier New'; font-size: 12px; padding: 6px 10px; border: 2px solid {T['err']}; border-radius: 4px;"
 
     # --- Estado interno ---
     self.preroll_buffer = PreRollRecordingBuffer(sample_rate=2000, preroll_seconds=1.0)
@@ -3402,7 +3379,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     # --- Timer para actualizar el plot ---
     self.timer = QtCore.QTimer()
     self.timer.timeout.connect(self.actualizar_plot)
-    self.timer.start(30) # Actualiza la GUI cada 30 ms
+    self.timer.start(30) # Refresco estable a ~33 FPS (igual a HEAD) sin ahogar el hilo GUI
     
     # Auto-iniciar servidor de estímulos (Tailscale :8765 / USB) en segundo plano
     try:
@@ -3464,7 +3441,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     # Nivel 1: Barra Superior de Transporte y Diagnostico en 2 filas limpias (cero botones cortados)
     self.transport_frame = QtWidgets.QFrame()
     self.transport_frame.setStyleSheet(
-      "QFrame { background-color: #080808; border: 1px solid #00FFFF; border-radius: 4px; }"
+      f"QFrame {{ background-color: #080808; border: 1px solid {T['accent']}; border-radius: 4px; }}"
     )
     self.transport_rows_layout = QtWidgets.QVBoxLayout(self.transport_frame)
     self.transport_rows_layout.setContentsMargins(8, 4, 8, 4)
@@ -3513,7 +3490,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     # Nivel 3: Barra dedicada a Tarjetas de Canal + Medidor de Ruido de Linea 50 Hz
     self.measure_widget = QtWidgets.QFrame()
     self.measure_widget.setStyleSheet(
-      "QFrame { background-color: #060606; border: 1px solid #222222; border-radius: 4px; }"
+      f"QFrame {{ background-color: #060606; border: 1px solid {T['line']}; border-radius: 4px; }}"
     )
     self.measure_layout = QtWidgets.QHBoxLayout(self.measure_widget)
     self.measure_layout.setContentsMargins(6, 3, 6, 3)
@@ -3537,10 +3514,10 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.cmb_device.currentIndexChanged.connect(self.verificar_conexion_daq)
 
     self.label_terminal_config = QtWidgets.QLabel("CONEXION DAQ:")
-    self.label_terminal_config.setStyleSheet("color: #FFFF00; font-weight: bold;")
+    self.label_terminal_config.setStyleSheet(f"color: {T['warn']}; font-weight: bold;")
     self.cmb_terminal_config = QtWidgets.QComboBox()
     self.cmb_terminal_config.setStyleSheet(
-      "background-color: #000000; color: #FFFF00; border: 1px solid #FFFF00; font-weight: bold; padding: 2px;"
+      f"background-color: {T['bg0']}; color: {T['warn']}; border: 1px solid {T['warn']}; font-weight: bold; padding: 2px;"
     )
     self.cmb_terminal_config.addItems(["RSE", "DIFF", "NRSE", "DEFAULT"])
     self.cmb_terminal_config.setCurrentText("RSE")
@@ -3579,7 +3556,7 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     self.chk_use_mic = QtWidgets.QCheckBox("Usar Microfono (PC)")
     self.chk_use_mic.setToolTip("Usa el microfono de la PC en lugar de la DAQ.")
-    self.chk_use_mic.setStyleSheet("QCheckBox { color: #00FFFF; font-weight: bold; }")
+    self.chk_use_mic.setStyleSheet(f"QCheckBox {{ color: {T['accent']}; font-weight: bold; }}")
     self.chk_use_mic.toggled.connect(self._on_modo_mic_toggled)
 
     self.cmb_fuente_prueba.setMinimumWidth(135)
@@ -3604,21 +3581,21 @@ class RealTimePlotter(QtWidgets.QWidget):
       self.channel_checkboxes[0].setChecked(True)
 
     self.btn_config_musculos_panel = QtWidgets.QPushButton("Configurar Musculos")
-    self.btn_config_musculos_panel.setStyleSheet("""
-      QPushButton {
+    self.btn_config_musculos_panel.setStyleSheet(f"""
+      QPushButton {{
         background-color: #141424;
-        color: #00ffff;
+        color: {T['accent']};
         font-weight: bold;
         font-family: 'Consolas', 'Courier New', monospace;
         padding: 4px 10px;
-        border: 1px solid #00ffff;
+        border: 1px solid {T['accent']};
         border-radius: 4px;
         font-size: 11px;
-      }
-      QPushButton:hover {
-        background-color: #00ffff;
-        color: #000000;
-      }
+      }}
+      QPushButton:hover {{
+        background-color: {T['accent']};
+        color: {T['bg0']};
+      }}
     """)
     self.btn_config_musculos_panel.setToolTip("Configurar nombres de musculos asignados a los canales (detiene la adquisicion si esta corriendo)")
     self.btn_config_musculos_panel.clicked.connect(self.abrir_dialogo_musculos)
@@ -3678,7 +3655,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.chk_zmq_bridge.setToolTip(
       "Recibe datos en tiempo real de la NI USB-6259 desde la VM con Windows vía ZeroMQ (tcp://192.168.122.x:5555)."
     )
-    self.chk_zmq_bridge.setStyleSheet("QCheckBox { color: #FFAA00; font-weight: bold; }")
+    self.chk_zmq_bridge.setStyleSheet(f"QCheckBox {{ color: {T['warn']}; font-weight: bold; }}")
     adq_cfg_init = self.config_mgr.get("adquisicion") or {}
     default_zmq_on = adq_cfg_init.get("usar_puente_zmq", (not NIDAQMX_DISPONIBLE))
     self.chk_zmq_bridge.setChecked(bool(default_zmq_on))
@@ -3690,7 +3667,7 @@ class RealTimePlotter(QtWidgets.QWidget):
       "Endpoint ZeroMQ de la VM Windows (virbr0). Usa 'auto:5555' para autodetección o '192.168.122.x:5555'."
     )
     self.edit_zmq_host.setStyleSheet(
-      "QLineEdit { background-color: #0d1117; color: #FFAA00; border: 1px solid #FFAA00; padding: 2px 6px; font-family: Consolas, monospace; font-weight: bold; }"
+      f"QLineEdit {{ background-color: {T['bg1']}; color: {T['warn']}; border: 1px solid {T['warn']}; padding: 2px 6px; font-family: Consolas, monospace; font-weight: bold; }}"
     )
     self.edit_zmq_host.editingFinished.connect(self.verificar_conexion_daq)
 
@@ -3698,8 +3675,8 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.btn_ping_zmq.setFixedWidth(85)
     self.btn_ping_zmq.setToolTip("Verifica la conexión con daq_bridge_server.py en la VM Windows")
     self.btn_ping_zmq.setStyleSheet(
-      "QPushButton { background-color: #1f1600; color: #FFAA00; border: 1px solid #FFAA00; border-radius: 3px; font-weight: bold; padding: 2px 6px; } "
-      "QPushButton:hover { background-color: #FFAA00; color: #000000; }"
+      f"QPushButton {{ background-color: #1f1600; color: {T['warn']}; border: 1px solid {T['warn']}; border-radius: 3px; font-weight: bold; padding: 2px 6px; }} "
+      f"QPushButton:hover {{ background-color: {T['warn']}; color: {T['bg0']}; }}"
     )
     self.btn_ping_zmq.clicked.connect(self.verificar_conexion_daq)
 
@@ -3773,9 +3750,15 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.chk_show_peaks.clicked.connect(self.toggle_peak_scatter)
 
     self.chk_show_detection_window = QtWidgets.QCheckBox("Ventana Deteccion")
-    self.chk_show_detection_window.setChecked(True)
-    self.chk_show_detection_window.setStyleSheet("color: #00FFFF; font-weight: bold;")
+    self.chk_show_detection_window.setChecked(False)
+    self.chk_show_detection_window.setStyleSheet(f"color: {T['accent']}; font-weight: bold;")
     self.chk_show_detection_window.clicked.connect(self.toggle_detection_window)
+
+    self.chk_pca_experimental = QtWidgets.QCheckBox("Mapa Muscular 2D (Exp.)")
+    self.chk_pca_experimental.setChecked(False)
+    self.chk_pca_experimental.setToolTip("Activa el Mapa Muscular 2D en Vivo con microvoltios reales: X = CH1 (uV), Y = CH2 (uV), Tamano del punto = CH3 (uV), color por vocal y borde blanco en el ultimo pulso.")
+    self.chk_pca_experimental.setStyleSheet(f"color: {T['purple']}; font-weight: bold;")
+    self.chk_pca_experimental.toggled.connect(self._on_toggle_pca_experimental)
 
     # Controles de Modo Jittering y Voz Guía
     self.chk_metro_jitter = QtWidgets.QCheckBox("Jitter Anti-Sync")
@@ -3793,6 +3776,10 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.chk_metro_jitter.toggled.connect(self._regenerar_jitter_schedule_en_vivo)
     self.spin_metro_jitter_pct.valueChanged.connect(self._regenerar_jitter_schedule_en_vivo)
     self.cmb_metro_jitter_mode.currentIndexChanged.connect(self._regenerar_jitter_schedule_en_vivo)
+    # NUEVO (Etapa 2): hint en vivo de cuantos +/- ms representa el % de Jitter al BPM actual
+    self.spin_metro_jitter_pct.valueChanged.connect(self._actualizar_hint_jitter_ms)
+    self.spin_bpm.valueChanged.connect(self._actualizar_hint_jitter_ms)
+    self._actualizar_hint_jitter_ms()
 
     self.chk_mute_speaking = QtWidgets.QCheckBox("Mutear Speaking")
     self.chk_mute_speaking.setChecked(False)
@@ -3849,13 +3836,13 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.chk_escala_cvm = QtWidgets.QCheckBox("Normalizar Eje Y en % CVM")
     self.chk_escala_cvm.setToolTip("Normaliza las señales EMG en porcentaje de la Contracción Voluntaria Máxima (% CVM) en tiempo real.")
     self.chk_escala_cvm.setChecked(False)
-    self.chk_escala_cvm.setStyleSheet("color: #ffcc00; font-weight: bold;")
+    self.chk_escala_cvm.setStyleSheet(f"color: {T['warn']}; font-weight: bold;")
     self.chk_escala_cvm.toggled.connect(self._on_escala_cvm_toggled)
 
     self.chk_clamp_500uv = QtWidgets.QCheckBox("Límite 0-500 µV (Anti-Picos)")
     self.chk_clamp_500uv.setToolTip("Recorta picos eléctricos (> 500 µV) en los canales EMG y mantiene el eje Y entre 0 y 500 µV para evitar saltos bruscos de escala.")
     self.chk_clamp_500uv.setChecked(True)
-    self.chk_clamp_500uv.setStyleSheet("color: #00ffcc; font-weight: bold;")
+    self.chk_clamp_500uv.setStyleSheet(f"color: {T['accent']}; font-weight: bold;")
 
   def _setup_ui_controls(self):
     """
@@ -3867,40 +3854,47 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.lbl_daq_status.setAlignment(QtCore.Qt.AlignCenter)
     self.lbl_daq_status.setMinimumWidth(190)
     self.lbl_daq_status.setStyleSheet(
-      "background-color: #111111; color: #00FFFF; border: 1px solid #00FFFF; padding: 5px 8px; font-weight: bold; border-radius: 3px;"
+      f"background-color: {T['bg1']}; color: {T['accent']}; border: 1px solid {T['accent']}; padding: 5px 8px; font-weight: bold; border-radius: 3px;"
     )
 
     self.btn_record = QtWidgets.QPushButton("Empezar a Grabar")
+    self.btn_record.setProperty("variant", "primary")
     self.btn_record.setStyleSheet(self.BTN_REC_START_STYLE)
 
     self.btn_pause = QtWidgets.QPushButton("PAUSAR")
+    self.btn_pause.setProperty("variant", "warning")
     self.btn_pause.setCheckable(True)
     self.btn_pause.setEnabled(False)
     self.btn_pause.setStyleSheet(BTN_PAUSE_CYBER)
     self.btn_pause.toggled.connect(self.on_pause_toggled)
 
     self.btn_autoforge = QtWidgets.QPushButton("AUTOGRABADO")
+    self.btn_autoforge.setProperty("variant", "purple")
     self.btn_autoforge.setStyleSheet(BTN_AUTOFORGE_DISC_CYBER)
     self.btn_autoforge.clicked.connect(self.iniciar_autoforge)
 
     self.btn_autoforge_continuo = QtWidgets.QPushButton("SECUENCIA CONTINUA")
+    self.btn_autoforge_continuo.setProperty("variant", "purple")
     self.btn_autoforge_continuo.setStyleSheet(BTN_AUTOFORGE_CONT_CYBER)
     self.btn_autoforge_continuo.clicked.connect(self.iniciar_autoforge_continuo)
 
     self.btn_config_musculos = QtWidgets.QPushButton("CONFIG MUSCULOS")
+    self.btn_config_musculos.setProperty("variant", "tool")
     self.btn_config_musculos.setStyleSheet(BTN_CYBER_TOOL)
     self.btn_config_musculos.setToolTip("Configurar asignacion de musculos por canal")
     self.btn_config_musculos.clicked.connect(self.abrir_dialogo_musculos)
 
     self.btn_notas = QtWidgets.QPushButton("NOTAS")
+    self.btn_notas.setProperty("variant", "tool")
     self.btn_notas.setStyleSheet(BTN_CYBER_TOOL)
     self.btn_notas.setToolTip("Mostrar u ocultar el panel de notas del experimento")
     self.btn_notas.clicked.connect(self.toggle_notas_panel)
 
     self.btn_fotometria = QtWidgets.QPushButton("FOTOMETRIA 3D")
+    self.btn_fotometria.setProperty("variant", "primary")
     self.btn_fotometria.setStyleSheet(
-      "QPushButton { background-color: #00332a; color: #00FFCC; border: 1.5px solid #00FFCC; padding: 7px 12px; font-weight: bold; border-radius: 4px; } "
-      "QPushButton:hover { background-color: #00FFCC; color: #050508; }"
+      f"QPushButton {{ background-color: {T['bg2']}; color: {T['accent']}; border: 1.5px solid {T['accent']}; padding: 5px 10px; font-size: 11px; font-weight: bold; border-radius: 4px; }} "
+      f"QPushButton:hover {{ background-color: {T['accent']}; color: {T['bg0']}; }}"
     )
     self.btn_fotometria.setToolTip("Abrir Asistente de Fotometria Facial 3D y Triangulacion de Electrodos")
     self.btn_fotometria.clicked.connect(self.abrir_asistente_fotometria)
@@ -3910,21 +3904,22 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.btn_mute_speaking.setChecked(False)
     self.btn_mute_speaking.setToolTip("Mutear o activar el audio de voz hablada (Speaking) en todo el sistema")
     self.btn_mute_speaking.setStyleSheet(
-      "QPushButton { background-color: #0f2419; color: #39FF14; border: 1.5px solid #39FF14; padding: 7px 10px; font-weight: bold; border-radius: 4px; } "
-      "QPushButton:checked { background-color: #3a0d16; color: #FF4455; border: 1.5px solid #FF4455; }"
+      f"QPushButton {{ background-color: {T['bg2']}; color: {T['ok']}; border: 1.5px solid {T['ok']}; padding: 7px 10px; font-weight: bold; border-radius: 4px; }} "
+      f"QPushButton:checked {{ background-color: {T['err_bg']}; color: {T['err']}; border: 1.5px solid {T['err']}; }}"
     )
     self.btn_mute_speaking.toggled.connect(self.on_mute_speaking_toggled)
 
     self.label_rec_time = QtWidgets.QLabel("SISTEMA EN ESPERA")
     self.label_rec_time.setAlignment(QtCore.Qt.AlignCenter)
-    self.label_rec_time.setStyleSheet("font-weight: bold; color: #00FFFF; font-size: 13px; background-color: #050505; border: 1px solid #222222; padding: 4px 10px; border-radius: 3px;")
+    self.label_rec_time.setStyleSheet(f"font-weight: bold; color: {T['accent']}; font-size: 13px; background-color: {T['bg0']}; border: 1px solid {T['line']}; padding: 4px 10px; border-radius: 3px;")
     self.label_rec_time.setVisible(True)
 
     # Boton de Consola / Terminal de Errores
     self.btn_terminal = QtWidgets.QPushButton("CONSOLA / LOGS (0)")
+    self.btn_terminal.setProperty("variant", "success")
     self.btn_terminal.setMinimumWidth(180)
     self.btn_terminal.setToolTip("Abre la consola integrada para inspeccionar mensajes, errores de NIDAQmx o abrir una terminal del sistema.")
-    self.btn_terminal.setStyleSheet("QPushButton { background-color: #0B0F19; color: #39FF14; border: 1.5px solid #39FF14; padding: 5px 10px; font-size: 11px; font-weight: bold; border-radius: 4px; } QPushButton:hover { background-color: #39FF14; color: #050508; }")
+    self.btn_terminal.setStyleSheet(f"QPushButton {{ background-color: {T['bg1']}; color: {T['ok']}; border: 1.5px solid {T['ok']}; padding: 5px 10px; font-size: 11px; font-weight: bold; border-radius: 4px; }} QPushButton:hover {{ background-color: {T['ok']}; color: {T['bg0']}; }}")
     self.btn_terminal.clicked.connect(self.mostrar_consola_diagnostico)
 
     self.btn_start_acq.setMinimumWidth(185)
@@ -3933,18 +3928,19 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.label_rec_time.setMinimumWidth(290)
 
     self.btn_marcar_invalido = QtWidgets.QPushButton("PULSO INVÁLIDO (Supr)")
+    self.btn_marcar_invalido.setProperty("variant", "warning")
     self.btn_marcar_invalido.setToolTip("Marca el pulso actual como inválido (tos, deglución o error del sujeto) [Atajo: Tecla Backspace / Supr]")
     self.btn_marcar_invalido.setStyleSheet(
-      "QPushButton { background-color: #2b1d00; color: #FFCC00; border: 1.5px solid #FFCC00; padding: 5px 10px; font-weight: bold; border-radius: 4px; font-size: 11px; } "
-      "QPushButton:hover { background-color: #FFCC00; color: #050508; }"
+      f"QPushButton {{ background-color: {T['bg2']}; color: {T['warn']}; border: 1.5px solid {T['warn']}; padding: 5px 10px; font-weight: bold; border-radius: 4px; font-size: 11px; }} "
+      f"QPushButton:hover {{ background-color: {T['warn']}; color: {T['bg0']}; }}"
     )
     self.btn_marcar_invalido.clicked.connect(self.marcar_pulso_actual_invalido)
 
     self.btn_pantalla_externa = QtWidgets.QPushButton("PANTALLA EXTERNA (Tailscale/USB)")
     self.btn_pantalla_externa.setToolTip("Transmitir vocales por Tailscale (), USB o 2do Monitor para Modo Sujeto Ciego")
     self.btn_pantalla_externa.setStyleSheet(
-      "QPushButton { background-color: #1a0f2e; color: #c77dff; border: 1.5px solid #c77dff; padding: 5px 10px; font-weight: bold; border-radius: 4px; font-size: 11px; } "
-      "QPushButton:hover { background-color: #c77dff; color: #050508; }"
+      f"QPushButton {{ background-color: {T['bg2']}; color: {T['purple']}; border: 1.5px solid {T['purple']}; padding: 5px 10px; font-weight: bold; border-radius: 4px; font-size: 11px; }} "
+      f"QPushButton:hover {{ background-color: {T['purple']}; color: {T['bg0']}; }}"
     )
     self.btn_pantalla_externa.clicked.connect(self.abrir_dialogo_pantalla_externa)
 
@@ -3968,7 +3964,8 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.tools_bar_layout.addWidget(self.btn_terminal)
 
     # Controles del Panel 3 (Trigger, SNR y Espectrograma)
-    self.chk_autoscroll = QtWidgets.QCheckBox("Auto-scroll (Armar Trigger)")
+    self.chk_autoscroll = QtWidgets.QCheckBox("Auto-scroll")
+    self.chk_autoscroll.setToolTip("Auto-scroll continuo y armado de Trigger")
     self.chk_autoscroll.setChecked(True)
 
     self.chk_trigger = QtWidgets.QCheckBox("Habilitar Trigger")
@@ -4008,8 +4005,8 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.trig_spec_layout.addWidget(self.chk_spectrogram_enable, 3, 0, 1, 2)
     self.trig_spec_layout.addWidget(self.label_spectrogram_chan, 3, 2)
     self.trig_spec_layout.addWidget(self.cmb_spectrogram_chan, 3, 3)
-    self.trig_spec_layout.addWidget(self.chk_escala_cvm, 4, 0, 1, 2)
-    self.trig_spec_layout.addWidget(self.chk_clamp_500uv, 4, 2, 1, 2)
+    self.chk_escala_cvm.setVisible(False)
+    self.trig_spec_layout.addWidget(self.chk_clamp_500uv, 4, 0, 1, 4)
 
     self.measure_labels = []
     self.measure_layout.addStretch(1)
@@ -4023,22 +4020,22 @@ class RealTimePlotter(QtWidgets.QWidget):
   def _setup_notas_panel(self):
     """Configura el panel Cyberpunk Pro de notas del experimento y trazabilidad."""
     self.notas_groupbox = QtWidgets.QGroupBox("Notas del Experimento y Trazabilidad")
-    self.notas_groupbox.setStyleSheet("""
-      QGroupBox {
-        border: 1.5px solid #00FFFF;
+    self.notas_groupbox.setStyleSheet(f"""
+      QGroupBox {{
+        border: 1.5px solid {T['accent']};
         border-radius: 5px;
         margin-top: 1.2ex;
         font-family: 'Courier New', monospace;
-        color: #00FFFF;
+        color: {T['accent']};
         background-color: #060911;
         font-weight: bold;
-      }
-      QGroupBox::title {
+      }}
+      QGroupBox::title {{
         subcontrol-origin: margin;
         left: 10px;
         padding: 0 4px;
-        color: #00FFFF;
-      }
+        color: {T['accent']};
+      }}
     """)
     lyt_notas = QtWidgets.QVBoxLayout(self.notas_groupbox)
     lyt_notas.setContentsMargins(8, 8, 8, 6)
@@ -4047,19 +4044,19 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.txt_notas_live = QtWidgets.QPlainTextEdit()
     self.txt_notas_live.setFixedHeight(68)
     self.txt_notas_live.setPlaceholderText("Registre anotaciones del experimento, estado de electrodos, gel o eventos...")
-    self.txt_notas_live.setStyleSheet("""
-      QPlainTextEdit {
-        background-color: #0B0F19;
-        color: #00FFCC;
-        border: 1px solid #00FFFF;
+    self.txt_notas_live.setStyleSheet(f"""
+      QPlainTextEdit {{
+        background-color: {T['bg1']};
+        color: {T['accent']};
+        border: 1px solid {T['accent']};
         border-radius: 4px;
         font-family: 'Consolas', 'Courier New', monospace;
         font-size: 12px;
         padding: 4px;
-      }
-      QPlainTextEdit:focus {
-        border: 1.5px solid #39FF14;
-      }
+      }}
+      QPlainTextEdit:focus {{
+        border: 1.5px solid {T['ok']};
+      }}
     """)
     lyt_notas.addWidget(self.txt_notas_live)
 
@@ -4067,37 +4064,37 @@ class RealTimePlotter(QtWidgets.QWidget):
     btn_bar.setContentsMargins(0, 0, 0, 0)
     btn_bar.setSpacing(6)
 
-    btn_style_tmpl = """
-      QPushButton {
-        background-color: #0B0F19;
-        color: #39FF14;
-        border: 1px solid #39FF14;
+    btn_style_tmpl = f"""
+      QPushButton {{
+        background-color: {T['bg1']};
+        color: {T['ok']};
+        border: 1px solid {T['ok']};
         border-radius: 3px;
         padding: 4px 8px;
         font-size: 11px;
         font-weight: bold;
         font-family: 'Courier New', monospace;
-      }
-      QPushButton:hover {
-        background-color: #39FF14;
-        color: #050508;
-      }
+      }}
+      QPushButton:hover {{
+        background-color: {T['ok']};
+        color: {T['bg0']};
+      }}
     """
-    btn_style_save = """
-      QPushButton {
+    btn_style_save = f"""
+      QPushButton {{
         background-color: #002B20;
-        color: #00FFCC;
-        border: 1.5px solid #00FFCC;
+        color: {T['accent']};
+        border: 1.5px solid {T['accent']};
         border-radius: 3px;
         padding: 4px 10px;
         font-size: 11px;
         font-weight: bold;
         font-family: 'Courier New', monospace;
-      }
-      QPushButton:hover {
-        background-color: #00FFCC;
-        color: #050508;
-      }
+      }}
+      QPushButton:hover {{
+        background-color: {T['accent']};
+        color: {T['bg0']};
+      }}
     """
 
     self.btn_tmpl_electrodos = QtWidgets.QPushButton("+ Electrodos")
@@ -4161,7 +4158,7 @@ class RealTimePlotter(QtWidgets.QWidget):
       self.notas_groupbox.setVisible(vis)
       if vis:
         self.btn_notas.setStyleSheet(
-          "QPushButton { background-color: #00FFFF; color: #050508; border: 1.5px solid #FFFFFF; border-radius: 5px; font-size: 11px; font-weight: 900; padding: 7px 10px; font-family: 'Courier New', monospace; }"
+          f"QPushButton {{ background-color: {T['accent']}; color: {T['bg0']}; border: 1.5px solid {T['white']}; border-radius: 5px; font-size: 11px; font-weight: 900; padding: 7px 10px; font-family: 'Courier New', monospace; }}"
         )
       else:
         self.btn_notas.setStyleSheet(BTN_CYBER_TOOL)
@@ -4652,18 +4649,19 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.plot_container_layout.setSpacing(2)
 
     self.viz_control_panel = QtWidgets.QWidget()
-    self.viz_control_panel.setStyleSheet("background-color: #050505; border: 1px solid #333333;")
+    self.viz_control_panel.setStyleSheet(f"background-color: {T['bg0']}; border: 1px solid {T['line']};")
     self.viz_control_layout = QtWidgets.QHBoxLayout(self.viz_control_panel)
     self.viz_control_layout.setContentsMargins(6, 3, 6, 3)
-    self.viz_control_layout.setSpacing(10)
+    self.viz_control_layout.setSpacing(6)
 
-    lbl_viz = QtWidgets.QLabel("Visualizacion de Canales:")
-    lbl_viz.setStyleSheet("color: #00FFFF; font-weight: bold; border: none;")
+    lbl_viz = QtWidgets.QLabel("Canales:")
+    lbl_viz.setStyleSheet(f"color: {T['accent']}; font-weight: bold; border: none;")
     self.viz_control_layout.addWidget(lbl_viz)
 
     self.btn_hide_all_viz = QtWidgets.QPushButton("Ocultar Todos")
+    self.btn_hide_all_viz.setProperty("variant", "danger")
     self.btn_hide_all_viz.setStyleSheet(
-      "background-color: #330000; color: #ff5555; border: 1px solid #ff5555; padding: 2px 8px; font-size: 11px; font-weight: bold; border-radius: 3px;"
+      f"background-color: {T['err_bg']}; color: {T['err']}; border: 1px solid {T['err']}; padding: 2px 8px; font-size: 11px; font-weight: bold; border-radius: 3px;"
     )
     self.btn_hide_all_viz.clicked.connect(self.hide_all_viz_channels)
     self.viz_control_layout.addWidget(self.btn_hide_all_viz)
@@ -4671,21 +4669,28 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.btn_toggle_multitrack = QtWidgets.QPushButton("Vista: Pistas Separadas")
     self.btn_toggle_multitrack.setCheckable(True)
     self.btn_toggle_multitrack.setStyleSheet(
-      "QPushButton { background-color: #050505; color: #00FFFF; border: 1px solid #00FFFF; padding: 2px 10px; font-size: 11px; font-weight: bold; border-radius: 3px; }"
-      "QPushButton:checked { background-color: #00FFFF; color: #000000; }"
+      f"QPushButton {{ background-color: {T['bg0']}; color: {T['accent']}; border: 1px solid {T['accent']}; padding: 2px 10px; font-size: 11px; font-weight: bold; border-radius: 3px; }}"
+      f"QPushButton:checked {{ background-color: {T['accent']}; color: {T['bg0']}; }}"
     )
     self.btn_toggle_multitrack.toggled.connect(self.toggle_multitrack_view)
     self.viz_control_layout.addWidget(self.btn_toggle_multitrack)
 
     self.viz_checkbox_layout = QtWidgets.QHBoxLayout()
-    self.viz_checkbox_layout.setSpacing(8)
+    self.viz_checkbox_layout.setSpacing(5)
     self.viz_control_layout.addLayout(self.viz_checkbox_layout)
     self.viz_control_layout.addStretch(1)
 
+    self.chk_show_grid = QtWidgets.QCheckBox("Grilla")
+    self.chk_show_grid.setChecked(True)
+    self.chk_show_grid.setStyleSheet(f"color: {T['text_dim']}; font-weight: bold;")
+    self.chk_show_grid.toggled.connect(self._on_toggle_oscilloscope_grid)
+
     self.viz_control_layout.addWidget(self.lbl_daq_status)
+    self.viz_control_layout.addWidget(self.chk_show_grid)
     self.viz_control_layout.addWidget(self.chk_show_noise)
     self.viz_control_layout.addWidget(self.chk_show_peaks)
     self.viz_control_layout.addWidget(self.chk_show_detection_window)
+    self.viz_control_layout.addWidget(self.chk_pca_experimental)
     self.viz_control_layout.addWidget(self.chk_autoscroll)
 
     self.viz_checkboxes = []
@@ -4696,32 +4701,54 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.autoforge_overlay = QtWidgets.QLabel(self.plot_widget)
     self.autoforge_overlay.setAlignment(QtCore.Qt.AlignCenter)
     self.autoforge_overlay.setStyleSheet(
-      "background-color: rgba(10, 5, 20, 185); color: #FF0055; font-family: 'Courier New', monospace; "
-      "font-size: 75px; font-weight: 900; padding: 20px; border: 4px solid #00FFFF;"
+      f"background-color: rgba(11, 15, 25, 195); color: {T['err']}; font-family: 'Courier New', monospace; "
+      f"font-size: 75px; font-weight: 900; padding: 20px; border: 4px solid {T['accent']};"
     )
     self.autoforge_overlay.hide()
     self.plot_widget.installEventFilter(self)
 
     self.plot_container_layout.addWidget(self.plot_widget, stretch=1)
-    self.plot_widget.setBackground('k')
+    # Estética "Neon Clinical Slate" (#0B0F19)
+    self.plot_widget.setBackground(T['bg0'])
 
-    self.plot = self.plot_widget.addPlot(title="Canales de Adquisicion")
-    self.plot.setLabel('bottom', 'Tiempo (s)')
-    self.plot.setLabel('left', 'Amplitud (µV)')
-    self.plot.getAxis('left').setWidth(60)
+    self.plot = self.plot_widget.addPlot(title=f"<span style='color:{T['text']}; font-size:11pt; font-weight:bold;'>Canales de Adquisición Bioeléctrica sEMG</span>")
+    axis_pen = pg.mkPen(color=T['line'], width=1.2)
+    tick_font = QtGui.QFont("Segoe UI", 9)
+    tick_font.setBold(True)
+    for ax_name in ('left', 'bottom'):
+      ax = self.plot.getAxis(ax_name)
+      ax.setPen(axis_pen)
+      ax.setTextPen(pg.mkPen(T['text_dim']))
+      ax.setStyle(tickFont=tick_font)
+    self.plot.setLabel('bottom', 'Tiempo (s)', color=T['text_dim'], **{'font-size': '10pt', 'font-weight': 'bold'})
+    self.plot.setLabel('left', 'Amplitud (µV)', color=T['text_dim'], **{'font-size': '10pt', 'font-weight': 'bold'})
+    self.plot.getAxis('left').setWidth(64)
 
     self.spectrogram_view = pg.ImageView()
     self.spectrogram_view.ui.histogram.hide()
     self.spectrogram_view.ui.roiBtn.hide()
     self.spectrogram_view.ui.menuBtn.hide()
+    try:
+      cmap_spec = pg.colormap.get("magma")
+      self.spectrogram_view.setColorMap(cmap_spec)
+    except Exception:
+      try:
+        import matplotlib.cm as _mcm
+        lut = (_mcm.get_cmap("magma")(np.linspace(0.0, 1.0, 256))[:, :3] * 255).astype(np.ubyte)
+        self.spectrogram_view.getImageItem().setLookupTable(lut)
+      except Exception:
+        pass
 
-    self.plot_widget.ci.layout.setContentsMargins(10, 10, 30, 10)
-    self.plot.addLegend()
-    self.plot.showGrid(x=True, y=True)
+    # Margen superior ampliado (18px) para que el banner superior SECUENCIA y el título jamás se pisen
+    self.plot_widget.ci.layout.setContentsMargins(12, 18, 28, 12)
+    # NUEVO (Bug 1.4): leyenda reubicada en la esquina SUPERIOR DERECHA (offset x negativo = anclaje
+    # desde la derecha) para que no tape la senal activa ni los picos de contraccion.
+    self.plot.addLegend(offset=(-12, 10), labelTextColor=T['text'], brush=pg.mkBrush(15, 23, 42, 225), pen=pg.mkPen(T['line'], width=1.2))
+    self.plot.showGrid(x=True, y=True, alpha=0.28)
     self.plot.setClipToView(True)
     self.plot.setDownsampling(auto=True, mode='peak')
     self.plot.autoBtn.setVisible(True)
-    self.plot.getViewBox().setLimits(xMin=-self.spin_plot_duration.value(), minXRange=1e-6)
+    self.plot.getViewBox().setLimits(xMin=-self.spin_plot_duration.value(), xMax=0.0, minXRange=1e-6)
 
     self.trigger_line = InfiniteLine(pos=1000.0, angle=0, movable=True, pen=pg.mkPen('r', width=2, style=QtCore.Qt.DashLine))
     self.plot.addItem(self.trigger_line)
@@ -4746,7 +4773,7 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     # Region sombreada de la ventana de deteccion fonatoria 0.5 tau
     brush_det = pg.mkBrush(0, 255, 255, 38)
-    pen_det = pg.mkPen(color='#00FFFF', width=1.5, style=QtCore.Qt.DashLine)
+    pen_det = pg.mkPen(color=T['accent'], width=1.5, style=QtCore.Qt.DashLine)
     self.detection_window_region = pg.LinearRegionItem(orientation='vertical', brush=brush_det, pen=pen_det, movable=False)
     self.detection_window_region.setZValue(-30)
     self.detection_window_region.hide()
@@ -4771,20 +4798,20 @@ class RealTimePlotter(QtWidgets.QWidget):
     min_config_h = 180 if getattr(self, 'is_compact_screen', False) else 195
     self.config_groupbox.setMinimumHeight(min_config_h)
     self.config_stack.setMinimumHeight(min_config_h)
-    self.config_stack.setMaximumHeight(220)
+    self.config_stack.setMaximumHeight(248)
     self.filter_groupbox.setMinimumHeight(min_config_h)
-    self.filter_groupbox.setMaximumHeight(220)
+    self.filter_groupbox.setMaximumHeight(248)
     self.config_stack.addWidget(self.config_groupbox)
 
     self.empty_recording_widget = QtWidgets.QWidget()
-    self.empty_recording_widget.setStyleSheet("background-color: #050505;")
+    self.empty_recording_widget.setStyleSheet(f"background-color: {T['bg0']};")
 
     self.lbl_recording_space = QtWidgets.QLabel("MODO GRABACION ACTIVO", self.empty_recording_widget)
     self.lbl_recording_space.setAlignment(QtCore.Qt.AlignCenter)
     self.lbl_recording_space.setWordWrap(True)
     self.lbl_recording_space.setStyleSheet(
-      "background-color: #050510; color: #00FFCC; font-family: 'Courier New', monospace; "
-      "border: 2px solid #00FFFF; border-radius: 6px; padding: 4px;"
+      f"background-color: #050510; color: {T['accent']}; font-family: 'Courier New', monospace; "
+      f"border: 2px solid {T['accent']}; border-radius: 6px; padding: 4px;"
     )
 
     self.empty_recording_layout = QtWidgets.QHBoxLayout(self.empty_recording_widget)
@@ -4792,65 +4819,130 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.empty_recording_layout.addWidget(self.lbl_recording_space)
     self.config_stack.addWidget(self.empty_recording_widget)
 
-    # --- NUEVO: Medidor PCA / Separabilidad en Tiempo Real (ocupa el espacio libre del deck superior) ---
-    self.pca_live_groupbox = QtWidgets.QGroupBox("PCA 2D en Vivo (Vocales)")
+    # --- Monitor Muscular 2D en Vivo por Energía (Solla-Hopfield-Mindlin) con Proyecciones Conmutables ---
+    self.pca_live_groupbox = QtWidgets.QGroupBox("Monitor Muscular 2D por Energía (Canal 1 vs Canal 2)")
     self.pca_live_groupbox.setMinimumHeight(min_config_h)
-    self.pca_live_groupbox.setMaximumHeight(220)
-    self.pca_live_groupbox.setMinimumWidth(255)
-    self.pca_live_groupbox.setStyleSheet("""
-      QGroupBox {
-        border: 1.5px solid #c77dff;
+    self.pca_live_groupbox.setMaximumHeight(254)
+    self.pca_live_groupbox.setMinimumWidth(275)
+    self.pca_live_groupbox.setStyleSheet(f"""
+      QGroupBox {{
+        border: 1.5px solid {T['purple']};
         border-radius: 6px;
         margin-top: 1.5ex;
         font-family: 'Courier New', monospace;
-        color: #c77dff;
-        background-color: #050508;
+        color: {T['purple']};
+        background-color: {T['bg0']};
         font-weight: bold;
-      }
-      QGroupBox::title {
+      }}
+      QGroupBox::title {{
         subcontrol-origin: margin;
         left: 8px;
         padding: 0 4px;
-        color: #c77dff;
-      }
+        color: {T['purple']};
+      }}
     """)
     pca_lyt = QtWidgets.QVBoxLayout(self.pca_live_groupbox)
     pca_lyt.setContentsMargins(5, 10, 5, 4)
     pca_lyt.setSpacing(2)
 
+    # Barra superior de selección rápida de proyección 2D (Combo + Botones rápidos 1v2, 1v3, 2v3)
+    self.proyeccion_mapa_2d_idx = 0  # 0: Canal 1 vs Canal 2 | 1: Canal 1 vs Canal 3 | 2: Canal 2 vs Canal 3
+    proj_bar_lyt = QtWidgets.QHBoxLayout()
+    proj_bar_lyt.setContentsMargins(0, 0, 0, 1)
+    proj_bar_lyt.setSpacing(3)
+
+    self.cmb_proyeccion_mapa_2d = QtWidgets.QComboBox()
+    self.cmb_proyeccion_mapa_2d.addItems([
+      "Canal 1 vs Canal 2",
+      "Canal 1 vs Canal 3",
+      "Canal 2 vs Canal 3",
+    ])
+    self.cmb_proyeccion_mapa_2d.setToolTip(
+      "Selecciona el plano de proyección 2D en vivo (Energía Solla-Hopfield-Mindlin en µV reales). "
+      "El tercer canal se representa en el diámetro de cada punto."
+    )
+    self.cmb_proyeccion_mapa_2d.setFixedHeight(19)
+    self.cmb_proyeccion_mapa_2d.setStyleSheet(
+      f"background-color:{T['bg1']}; color:{T['accent']}; border:1px solid {T['purple']}; "
+      f"border-radius:3px; font-size:8.8px; font-weight:bold; padding:0px 4px;"
+    )
+    self.cmb_proyeccion_mapa_2d.currentIndexChanged.connect(self._on_cambiar_proyeccion_mapa_2d)
+    proj_bar_lyt.addWidget(self.cmb_proyeccion_mapa_2d, stretch=1)
+
+    self.btns_proyeccion_mapa = []
+    for _idx_p, (_txt_p, _tip_p) in enumerate([
+      ("1v2", "Proyección Canal 1 vs Canal 2 (Tamaño = Canal 3)"),
+      ("1v3", "Proyección Canal 1 vs Canal 3 (Tamaño = Canal 2)"),
+      ("2v3", "Proyección Canal 2 vs Canal 3 (Tamaño = Canal 1)"),
+    ]):
+      _btn_p = QtWidgets.QPushButton(_txt_p)
+      _btn_p.setCheckable(True)
+      _btn_p.setChecked(_idx_p == 0)
+      _btn_p.setFixedWidth(28)
+      _btn_p.setFixedHeight(19)
+      _btn_p.setToolTip(_tip_p)
+      _btn_p.setStyleSheet(
+        f"QPushButton {{ background-color:#151926; color:#94a3b8; border:1px solid #334155; border-radius:3px; font-size:8.5px; font-weight:bold; padding:0px; }}"
+        f"QPushButton:checked {{ background-color:{T['purple']}; color:#0b0f19; border:1px solid #ffffff; }}"
+      )
+      _btn_p.clicked.connect(lambda _chk=False, i_p=_idx_p: self._on_cambiar_proyeccion_mapa_2d(i_p))
+      proj_bar_lyt.addWidget(_btn_p)
+      self.btns_proyeccion_mapa.append(_btn_p)
+
+    self.btn_reset_pca_live = QtWidgets.QPushButton("R")
+    self.btn_reset_pca_live.setFixedWidth(20)
+    self.btn_reset_pca_live.setFixedHeight(19)
+    self.btn_reset_pca_live.setToolTip("Limpiar los puntos acumulados del Monitor Muscular 2D en Vivo (µV)")
+    self.btn_reset_pca_live.setStyleSheet(f"background-color:#1a1a2e; color:{T['purple']}; border:1px solid {T['purple']}; font-size:9px; font-weight:bold; padding:0px;")
+    self.btn_reset_pca_live.clicked.connect(self.reset_medidor_pca_vivo)
+    proj_bar_lyt.addWidget(self.btn_reset_pca_live)
+    pca_lyt.addLayout(proj_bar_lyt)
+
     self.pca_live_plot = pg.PlotWidget()
-    self.pca_live_plot.setBackground('#050508')
-    self.pca_live_plot.showGrid(x=True, y=True, alpha=0.22)
+    self.pca_live_plot.setBackground(T['bg0'])
+    self.pca_live_plot.showGrid(x=True, y=True, alpha=0.25)
     self.pca_live_plot.setMouseEnabled(x=False, y=False)
     self.pca_live_plot.hideButtons()
-    self.pca_live_plot.getAxis('bottom').setStyle(showValues=False)
-    self.pca_live_plot.getAxis('left').setStyle(showValues=False)
+    for _ax_name_m2 in ('bottom', 'left'):
+      _ax_m2 = self.pca_live_plot.getAxis(_ax_name_m2)
+      _fnt_ax_m2 = QtGui.QFont("Courier New")
+      try:
+        _fnt_ax_m2.setPointSizeF(8.5)
+      except Exception:
+        pass
+      _ax_m2.setFont(_fnt_ax_m2)
+      _ax_m2.setPen(pg.mkPen('#94a3b8', width=1))
+      _ax_m2.setTextPen(pg.mkPen('#94a3b8'))
+      _ax_m2.show()
+    self.pca_live_plot.setLabel('bottom', 'CH1 (uV)', color='#94a3b8', **{'font-size': '8.5pt'})
+    self.pca_live_plot.setLabel('left', 'CH2 (uV)', color='#94a3b8', **{'font-size': '8.5pt'})
     pca_lyt.addWidget(self.pca_live_plot, stretch=1)
 
     self.lbl_pca_legend = QtWidgets.QLabel(
-      "<span style='color:#FF3355;'>●A</span> "
-      "<span style='color:#00B4D8;'>●E</span> "
-      "<span style='color:#39FF14;'>●I</span> "
-      "<span style='color:#C77DFF;'>●O</span> "
-      "<span style='color:#FFD166;'>●U</span>"
+      "<span style='color:#E63946;'>●/A/</span> "
+      "<span style='color:#1F77B4;'>●/E/</span> "
+      "<span style='color:#2CA02C;'>●/I/</span> "
+      "<span style='color:#9D4EDD;'>●/O/</span> "
+      "<span style='color:#E7A61A;'>●/U/</span>"
+      "&nbsp;|&nbsp;"
+      "<span style='color:#cbd5e1;'>X=CH1 | Y=CH2 | Tam=CH3 (µV)</span>"
     )
     self.lbl_pca_legend.setAlignment(QtCore.Qt.AlignCenter)
-    self.lbl_pca_legend.setStyleSheet("font-size: 10px; font-weight: bold; background: transparent;")
+    self.lbl_pca_legend.setStyleSheet("font-size: 8.8px; font-weight: bold; background: transparent;")
     pca_lyt.addWidget(self.lbl_pca_legend)
 
-    pca_bottom_row = QtWidgets.QHBoxLayout()
-    pca_bottom_row.setSpacing(3)
-    self.lbl_pca_live_metrics = QtWidgets.QLabel("Acc: - | Sil: - | N=0")
-    self.lbl_pca_live_metrics.setStyleSheet("color: #00ffcc; font-size: 9.5px; font-weight: bold;")
-    self.btn_reset_pca_live = QtWidgets.QPushButton("R")
-    self.btn_reset_pca_live.setFixedWidth(20)
-    self.btn_reset_pca_live.setFixedHeight(17)
-    self.btn_reset_pca_live.setToolTip("Reiniciar acumulador del medidor PCA en vivo")
-    self.btn_reset_pca_live.setStyleSheet("background-color:#1a1a2e; color:#c77dff; border:1px solid #c77dff; font-size:9px; padding:0px;")
-    self.btn_reset_pca_live.clicked.connect(self.reset_medidor_pca_vivo)
-    pca_bottom_row.addWidget(self.lbl_pca_live_metrics, stretch=1)
-    pca_bottom_row.addWidget(self.btn_reset_pca_live)
-    pca_lyt.addLayout(pca_bottom_row)
+    self.lbl_pca_live_metrics = QtWidgets.QLabel("CH1: -- µV | CH2: -- µV | CH3: -- µV [Vocal --]")
+    self.lbl_pca_live_metrics.setAlignment(QtCore.Qt.AlignCenter)
+    self.lbl_pca_live_metrics.setStyleSheet(f"color: {T['accent']}; font-size: 9.2px; font-weight: bold;")
+    pca_lyt.addWidget(self.lbl_pca_live_metrics)
+
+    self.lbl_pca_fisiologia = QtWidgets.QLabel("Energía Solla-Mindlin: esperando pulso...")
+    self.lbl_pca_fisiologia.setAlignment(QtCore.Qt.AlignCenter)
+    self.lbl_pca_fisiologia.setWordWrap(True)
+    self.lbl_pca_fisiologia.setStyleSheet(f"color: {T['text_dim']}; font-size: 8.4px; font-weight: bold; background: {T['bg1']}; border: 1px solid {T['line']}; border-radius: 3px; padding: 1px 3px;")
+    pca_lyt.addWidget(self.lbl_pca_fisiologia)
+    self.pca_uv_puntos = []  # Puntos de energía en µV reales por pulso (ch1, ch2, ch3)
+    self._dibujar_base_mapa_2d_uv()
 
     # Contenedor Superior: [Config_Stack (Hardware/Trigger o Vocal)] + [Filtros fijos] + [PCA Vivo] + [Metronomo fijo]
     self.top_deck_widget = QtWidgets.QWidget()
@@ -4861,6 +4953,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.top_deck_layout.addWidget(self.filter_groupbox, stretch=4)
     self.top_deck_layout.addWidget(self.pca_live_groupbox, stretch=2)
     self.top_deck_layout.addWidget(self.right_side_panel, stretch=1)
+    self.pca_live_groupbox.setVisible(False)
 
     self.main_layout.addWidget(self.transport_frame)    # Fila 1: Transporte + Estado DAQ + Consola
     self.main_layout.addWidget(self.top_deck_widget)    # Fila 2: 3 Paneles Config / Palabras + Metronomo
@@ -4910,6 +5003,13 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     # --- Curvas del Plot ---
     self.curvas = []
+    # NUEVO (Bugs 1.1 / 1.2 / 1.3): estado de las pistas separadas y del nucleo neon
+    self.curvas_neon_core = []            # Nucleo blanco interior por canal (capa superpuesta)
+    self.curvas_neon_core_multitrack = [] # Nucleo blanco interior por canal en cada pista separada
+    self.sub_plots = []                   # Subplots de la vista Pistas Separadas
+    self.multitrack_badges = []           # Badges flotantes con el nombre completo del musculo
+    self._estilo_neon_rms_aplicado = None # Cache del ultimo modo de estilo aplicado (envolvente/crudo)
+    self._badge_range_hook_conectado = False
     self.nombres_musculos = []
     canales_conf = self.config_mgr.get("canales") or {}
     
@@ -4929,7 +5029,7 @@ class RealTimePlotter(QtWidgets.QWidget):
       from utils.config_manager import get_unique_channel_colors
       self.colores_curvas = get_unique_channel_colors(canales_info)
     except Exception:
-      self.colores_curvas = ["#ffaa00", "#39ff14", "#ffff00", "#ff0000"] + ["#00ffcc"] * 12
+      self.colores_curvas = list(CHANNEL_PALETTE) * 2
 
     # Conectar señal de vista previa de gráfico
     self.mostrar_preview_signal.connect(self.mostrar_preview_plot)
@@ -5197,7 +5297,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     print(f"[Control Calidad] Pulso #{pulso_act} marcado manualmente como INVÁLIDO (tos / artefacto / error del sujeto).")
     if hasattr(self, 'label_rec_time'):
       self.label_rec_time.setText(f"PULSO #{pulso_act} MARCADO INVÁLIDO (EXCLUIDO DE DATASET)")
-      self.label_rec_time.setStyleSheet("font-weight: bold; color: #FFCC00; background-color: #2b1d00; border: 1px solid #FFCC00; padding: 4px 10px;")
+      self.label_rec_time.setStyleSheet(f"font-weight: bold; color: {T['warn']}; background-color: {T['bg2']}; border: 1px solid {T['warn']}; padding: 4px 10px;")
 
   def keyPressEvent(self, event):
     """Atajo en vivo: Backspace o Delete marca el pulso actual como inválido sin detener la grabación."""
@@ -5480,6 +5580,8 @@ class RealTimePlotter(QtWidgets.QWidget):
       )
     else:
       self.metro_jitter_schedule = []
+    # NUEVO (Etapa 2): refrescar el hint en +/- ms equivalente al % del Jitter al BPM actual
+    self._actualizar_hint_jitter_ms()
 
   def _on_live_bpm_or_subdiv_changed(self, value=None):
     self._regenerar_jitter_schedule_en_vivo()
@@ -5523,8 +5625,16 @@ class RealTimePlotter(QtWidgets.QWidget):
 
   def setup_gui_for_channels(self):
     """Limpia y re-crea los elementos de la GUI que dependen del número de canales."""
-    # Limpiar curvas, labels de medida y combo de trigger
+    # Limpiar curvas, núcleos neón, labels de medida y combo de trigger
     for curva in self.curvas: self.plot.removeItem(curva)
+    for c_core in getattr(self, 'curvas_neon_core', []): self.plot.removeItem(c_core)
+    # NUEVO (Bugs 1.1/1.3): quitar de self.plot el badge flotante del canal 0 (vista Pistas Separadas)
+    for b_antiguo in getattr(self, 'multitrack_badges', []):
+      try:
+        b_antiguo.hide()
+        self.plot.removeItem(b_antiguo)
+      except Exception:
+        pass
     for line in getattr(self, 'noise_lines', []): self.plot.removeItem(line)
     for line in getattr(self, 'noise_lines_neg', []): self.plot.removeItem(line)
     for reg in getattr(self, 'noise_regions', []): self.plot.removeItem(reg)
@@ -5532,6 +5642,10 @@ class RealTimePlotter(QtWidgets.QWidget):
     for scatter in getattr(self, 'peak_scatters', []): self.plot.removeItem(scatter)
     for label in self.measure_labels: label.deleteLater()
     self.curvas.clear()
+    self.curvas_neon_core = []
+    self.curvas_neon_core_multitrack = []
+    self.multitrack_badges = []
+    self._estilo_neon_rms_aplicado = None
     self.noise_lines.clear()
     self.noise_lines_neg.clear()
     self.noise_regions.clear()
@@ -5563,8 +5677,9 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.viz_checkboxes.clear()
       
     plot_dur_safe = float(self.PLOT_DURATION_S) if getattr(self, 'PLOT_DURATION_S', 0) > 0 else float(self.spin_plot_duration.value() if hasattr(self, 'spin_plot_duration') else 10.0)
-    self.plot.getViewBox().setLimits(xMin=-plot_dur_safe) # Actualizar límite de zoom
-    self.plot.addLegend()
+    self.plot.getViewBox().setLimits(xMin=-plot_dur_safe, xMax=0.0) # Actualizar límite de zoom (tope en t=0 para que el presente quede siempre al borde derecho)
+    # NUEVO (Bug 1.4): re-crear la leyenda con el mismo estilo y en la esquina superior derecha
+    self.plot.addLegend(offset=(-12, 10), labelTextColor=T['text'], brush=pg.mkBrush(15, 23, 42, 225), pen=pg.mkPen(T['line'], width=1.2))
     
     # Re-crear elementos
     # Limpiar el layout de mediciones antes de añadir nuevos elementos
@@ -5594,9 +5709,23 @@ class RealTimePlotter(QtWidgets.QWidget):
       color = self.colores_curvas[i % len(self.colores_curvas)]
       musculo = self.nombres_musculos[i] if (hasattr(self, 'nombres_musculos') and i < len(self.nombres_musculos)) else f"Canal {hw_idx}"
       curva_nombre = f"ai{hw_idx} - {musculo}"
-      curva_item = self.plot.plot(pen=color, name=curva_nombre)
-      curva_item.setZValue(10) # Señales siempre en primer plano sobre el sombreado
+      qcol_chan = pg.mkColor(color)
+      # Registro limpio en la leyenda sin duplicados ni triangulito rayado (la curva se plotea sin name)
+      curva_item = self.plot.plot(pen=pg.mkPen(qcol_chan, width=1.15))
+      curva_item.setClipToView(True)
+      curva_item.setZValue(10 + i)
       self.curvas.append(curva_item)
+
+      if hasattr(self.plot, 'legend') and self.plot.legend is not None:
+        proxy_legend = pg.PlotDataItem(pen=pg.mkPen(qcol_chan, width=3.2))
+        self.plot.legend.addItem(proxy_legend, curva_nombre)
+
+      # NUEVO (Bug 1.3): nucleo luminoso interior de la envolvente (Neon Clinical Slate), sin name ni presencia en la leyenda
+      curva_nucleo = self.plot.plot(pen=pg.mkPen(255, 255, 255, 150, width=0.75))
+      curva_nucleo.setClipToView(True)
+      curva_nucleo.setZValue(10 + i + 0.5)
+      curva_nucleo.hide()
+      self.curvas_neon_core.append(curva_nucleo)
       
       # --- NUEVO: Checkbox de visualización ---
       chk_viz = QtWidgets.QCheckBox(curva_nombre)
@@ -5607,14 +5736,30 @@ class RealTimePlotter(QtWidgets.QWidget):
         if not getattr(self, 'is_multitrack_view', False):
           if idx < len(self.curvas):
             self.curvas[idx].setVisible(state)
+          if hasattr(self, 'curvas_neon_core') and idx < len(self.curvas_neon_core):
+            self.curvas_neon_core[idx].setVisible(state)
         else:
           if idx == 0 and len(self.curvas) > 0:
             self.curvas[0].setVisible(state)
+            if hasattr(self, 'curvas_neon_core') and len(self.curvas_neon_core) > 0:
+              self.curvas_neon_core[0].setVisible(state)
+            # NUEVO (Bug 1.1): el badge del canal 0 sigue la visibilidad del canal
+            badges_actuales = getattr(self, 'multitrack_badges', [])
+            if 0 < len(badges_actuales) and badges_actuales[0] is not None:
+              badges_actuales[0].setVisible(state)
           elif idx > 0:
             sub_idx = idx - 1
             multitrack_curvas = getattr(self, 'curvas_multitrack', [])
             if sub_idx < len(multitrack_curvas):
               multitrack_curvas[sub_idx].setVisible(state)
+            # NUEVO (Bug 1.3): nucleo blanco de la pista separada sigue la visibilidad
+            nucleos_mt = getattr(self, 'curvas_neon_core_multitrack', [])
+            if sub_idx < len(nucleos_mt):
+              nucleos_mt[sub_idx].setVisible(state)
+            # NUEVO (Bug 1.1): badge de la pista separada sigue la visibilidad
+            badges_mt = getattr(self, 'multitrack_badges', [])
+            if idx < len(badges_mt) and badges_mt[idx] is not None:
+              badges_mt[idx].setVisible(state)
           
       chk_viz.toggled.connect(toggle_viz)
       self.viz_checkbox_layout.addWidget(chk_viz)
@@ -5664,7 +5809,7 @@ class RealTimePlotter(QtWidgets.QWidget):
 
       # --- NUEVO: Crear un QFrame para cada medición ---
       measurement_frame = QtWidgets.QFrame()
-      measurement_frame.setStyleSheet("background-color: #050505; border: 2px solid #00FFFF; border-radius: 5px;")
+      measurement_frame.setStyleSheet(f"background-color: {T['bg0']}; border: 2px solid {T['accent']}; border-radius: 5px;")
       measurement_frame.setMinimumWidth(100)
       
       frame_layout = QtWidgets.QVBoxLayout(measurement_frame)
@@ -5687,11 +5832,11 @@ class RealTimePlotter(QtWidgets.QWidget):
       
       # --- NUEVO: Recuadro destacado con color para Ruido de Línea 50 Hz ---
       frame_50hz = QtWidgets.QFrame()
-      frame_50hz.setStyleSheet("background-color: #111111; border: 1.5px solid #555555; border-radius: 3px; padding: 2px;")
+      frame_50hz.setStyleSheet(f"background-color: {T['bg1']}; border: 1.5px solid {T['text_dim']}; border-radius: 3px; padding: 2px;")
       layout_50hz = QtWidgets.QVBoxLayout(frame_50hz)
       layout_50hz.setContentsMargins(3, 2, 3, 2)
       label_50hz = QtWidgets.QLabel("Ruido 50 Hz: -- µV")
-      label_50hz.setStyleSheet("color: #AAAAAA; font-size: 11px; font-weight: bold;")
+      label_50hz.setStyleSheet(f"color: {T['text_dim']}; font-size: 11px; font-weight: bold;")
       label_50hz.setWordWrap(True)
       layout_50hz.addWidget(label_50hz)
       
@@ -5771,13 +5916,17 @@ class RealTimePlotter(QtWidgets.QWidget):
     is_rms = hasattr(self, 'chk_rms_env') and self.chk_rms_env.isChecked()
     for reg in getattr(self, 'noise_regions', []): reg.setVisible(show)
     for reg in getattr(self, 'dynamic_noise_regions', []): reg.setVisible(show)
-    for line in getattr(self, 'noise_lines', []): line.setVisible(show)
-    for line in getattr(self, 'noise_lines_neg', []): line.setVisible(show if not is_rms else False)
+    for line in getattr(self, 'noise_lines', []): line.setVisible(False)
+    for line in getattr(self, 'noise_lines_neg', []): line.setVisible(False)
     for lbl in getattr(self, 'noise_status_labels', []): lbl.setVisible(show)
 
   def toggle_peak_scatter(self):
     show = self.chk_show_peaks.isChecked()
     for scatter in getattr(self, 'peak_scatters', []): scatter.setVisible(show)
+
+  def _on_toggle_pca_experimental(self, checked=False):
+    if hasattr(self, 'pca_live_groupbox') and self.pca_live_groupbox is not None:
+      self.pca_live_groupbox.setVisible(bool(checked))
 
   def toggle_detection_window(self):
     show = self.chk_show_detection_window.isChecked()
@@ -5833,28 +5982,19 @@ class RealTimePlotter(QtWidgets.QWidget):
     w_end = t_anchor + 0.40 * tau
 
     plot_dur = float(self.PLOT_DURATION_S) if getattr(self, 'PLOT_DURATION_S', 0) > 0 else 30.0
-    if w_end < -plot_dur or w_start > 0.5:
+    # Ocultar la ventana cuando ya se procesó el pulso y viajó hacia el pasado
+    # (se muestra solo mientras el pulso recién detectado cruza el centro de la pantalla;
+    # una vez que w_end cruza hacia la izquierda más allá de -0.4s, desaparece para esperar la próxima)
+    if w_end < -0.4 or w_end < -plot_dur or w_start > 0.5:
       self.detection_window_region.hide()
       self.detection_window_label.hide()
       return
 
     self.detection_window_region.setRegion([w_start, w_end])
     self.detection_window_region.show()
-
-    method_tag = "GATE" if ev.get('method') == 'GATE_DOBLE' else "MIC"
-    vocal = ev.get('vocal', '')
-    vocal_tag = f" [/{vocal}/]" if vocal else ""
-    sup = ev.get('supremo_uV', 0.0)
-    sep = ev.get('separability_pct', 0.0)
-
-    vb = self.plot.getViewBox()
-    view_range_y = vb.viewRange()[1]
-    y_pos = view_range_y[1] * 0.88 if view_range_y[1] > 0 else 0.0
-
-    label_text = f"Ventana 0.5τ: {method_tag}{vocal_tag} | Sup: {sup:.0f}µV | Sep: {sep:.0f}%"
-    self.detection_window_label.setText(label_text)
-    self.detection_window_label.setPos((w_start + w_end) / 2.0, y_pos)
-    self.detection_window_label.show()
+    # Sin textos superpuestos en la ventana de gate
+    self.detection_window_label.setText("")
+    self.detection_window_label.hide()
 
   def _reubicar_metronomo_dinamico(self, index):
     pass
@@ -5865,22 +6005,22 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.right_side_layout.setContentsMargins(0, 0, 0, 0)
     
     self.metronome_container = QtWidgets.QGroupBox("Metrónomo")
-    self.metronome_container.setStyleSheet("""
-      QGroupBox {
-          border: 2px solid #00FFFF;
+    self.metronome_container.setStyleSheet(f"""
+      QGroupBox {{
+          border: 2px solid {T['accent']};
           border-radius: 6px;
           margin-top: 1.5ex;
           font-family: 'Courier New', monospace;
-          color: #00FFFF;
-          background-color: #050505;
-      }
-      QGroupBox::title {
+          color: {T['accent']};
+          background-color: {T['bg0']};
+      }}
+      QGroupBox::title {{
           subcontrol-origin: margin;
           left: 10px;
           padding: 0 3px 0 3px;
-          color: #00FFFF;
+          color: {T['accent']};
           font-weight: bold;
-      }
+      }}
     """)
     self.right_side_panel.setMinimumWidth(195)
     self.metronome_container.setMinimumWidth(190)
@@ -5890,17 +6030,17 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     self.metro_pulse_frame = QtWidgets.QFrame()
     self.metro_pulse_frame.setFixedHeight(34)
-    self.metro_pulse_frame.setStyleSheet("background-color: #111111; border: 2px solid #00FFFF;")
+    self.metro_pulse_frame.setStyleSheet(f"background-color: {T['bg1']}; border: 2px solid {T['accent']};")
     metro_layout.addWidget(self.metro_pulse_frame)
 
     self.metro_lbl_title = QtWidgets.QLabel("PULSO")
     self.metro_lbl_title.setAlignment(QtCore.Qt.AlignCenter)
-    self.metro_lbl_title.setStyleSheet("font-size: 12px; color: #00FFFF; font-family: 'Courier New', monospace; font-weight: bold;")
+    self.metro_lbl_title.setStyleSheet(f"font-size: 12px; color: {T['accent']}; font-family: 'Courier New', monospace; font-weight: bold;")
     metro_layout.addWidget(self.metro_lbl_title)
 
     self.metro_lbl_count = QtWidgets.QLabel("0")
     self.metro_lbl_count.setAlignment(QtCore.Qt.AlignCenter)
-    self.metro_lbl_count.setStyleSheet("font-size: 28px; color: #00FFFF; font-weight: bold; font-family: 'Courier New', monospace;")
+    self.metro_lbl_count.setStyleSheet(f"font-size: 28px; color: {T['accent']}; font-weight: bold; font-family: 'Courier New', monospace;")
     metro_layout.addWidget(self.metro_lbl_count)
 
     self.right_side_layout.addWidget(self.metronome_container)
@@ -5908,16 +6048,16 @@ class RealTimePlotter(QtWidgets.QWidget):
     # --- Semáforo de Fatiga Mioeléctrica (MDF) ubicado debajo del Metrónomo a la derecha ---
     self.frame_fatiga = QtWidgets.QFrame()
     self.frame_fatiga.setMinimumWidth(190)
-    self.frame_fatiga.setStyleSheet("background-color: #0b1a14; border: 1.5px solid #39ff14; border-radius: 5px; padding: 2px 4px;")
+    self.frame_fatiga.setStyleSheet(f"background-color: #0b1a14; border: 1.5px solid {T['ok']}; border-radius: 5px; padding: 2px 4px;")
     lyt_fat = QtWidgets.QHBoxLayout(self.frame_fatiga)
     lyt_fat.setContentsMargins(4, 3, 4, 3)
     lyt_fat.setSpacing(4)
     self.lbl_fatiga_dot = QtWidgets.QLabel("●")
-    self.lbl_fatiga_dot.setStyleSheet("color: #39ff14; font-size: 13px; font-weight: bold;")
+    self.lbl_fatiga_dot.setStyleSheet(f"color: {T['ok']}; font-size: 13px; font-weight: bold;")
     self.lbl_fatiga_text = QtWidgets.QLabel("FATIGA: ESTABLE\nMDF 100%")
     self.lbl_fatiga_text.setWordWrap(True)
     self.lbl_fatiga_text.setAlignment(QtCore.Qt.AlignCenter)
-    self.lbl_fatiga_text.setStyleSheet("color: #39ff14; font-size: 10px; font-weight: bold; font-family: 'Courier New', monospace; padding: 1px;")
+    self.lbl_fatiga_text.setStyleSheet(f"color: {T['ok']}; font-size: 10px; font-weight: bold; font-family: 'Courier New', monospace; padding: 1px;")
     lyt_fat.addWidget(self.lbl_fatiga_dot)
     lyt_fat.addWidget(self.lbl_fatiga_text, stretch=1)
     self.right_side_layout.addWidget(self.frame_fatiga)
@@ -5934,9 +6074,19 @@ class RealTimePlotter(QtWidgets.QWidget):
     def beep_worker():
         while True:
             item = self.beep_queue.get()
-            if item is None: break
+            if item is None:
+                break
+            # Si hay beeps viejos encolados por jitter del SO, saltar al más reciente para mantener fase exacta
+            while not self.beep_queue.empty():
+                try:
+                    nxt = self.beep_queue.get_nowait()
+                    if nxt is None:
+                        return
+                    item = nxt
+                except Exception:
+                    break
             freq, duration = item
-            play_beep(freq, duration, async_play=False)
+            play_beep(freq, duration, async_play=True)
     self.beep_thread = threading.Thread(target=beep_worker, daemon=True)
     self.beep_thread.start()
 
@@ -5964,9 +6114,9 @@ class RealTimePlotter(QtWidgets.QWidget):
     self._paused_metro_remaining_ms = 0
     self._on_count_in_finished_cb = None
     
-    self.COLOR_IDLE = "#111111"
-    self.COLOR_BEAT = "#00FFFF"
-    self.COLOR_PREP = "#FF0000"
+    self.COLOR_IDLE = T['bg1']
+    self.COLOR_BEAT = T['accent']
+    self.COLOR_PREP = T['err']
 
     self.metronome_container.setVisible(self.chk_use_metronome.isChecked())
     self.chk_use_metronome.toggled.connect(self._on_metronome_toggled)
@@ -6024,21 +6174,21 @@ class RealTimePlotter(QtWidgets.QWidget):
     self._metro_next_perf = None
     self._paused_metro_remaining_ms = 0
     self._on_count_in_finished_cb = None
-    self.metro_pulse_frame.setStyleSheet(f"background-color: {self.COLOR_IDLE}; border: 2px solid #00FFFF;")
+    self.metro_pulse_frame.setStyleSheet(f"background-color: {self.COLOR_IDLE}; border: 2px solid {T['accent']};")
     self.metro_lbl_count.setText("0")
     self.metro_lbl_title.setText("PULSO")
-    self.metro_lbl_title.setStyleSheet("font-size: 16px; color: #00FFFF;")
-    self.metro_lbl_count.setStyleSheet("font-size: 28px; color: #00FFFF; font-weight: bold;")
+    self.metro_lbl_title.setStyleSheet(f"font-size: 16px; color: {T['accent']};")
+    self.metro_lbl_count.setStyleSheet(f"font-size: 28px; color: {T['accent']}; font-weight: bold;")
     self.save_metronome_config()
 
   def reset_metro_color(self):
-    self.metro_pulse_frame.setStyleSheet(f"background-color: {self.COLOR_IDLE}; border: 2px solid #00FFFF;")
+    self.metro_pulse_frame.setStyleSheet(f"background-color: {self.COLOR_IDLE}; border: 2px solid {T['accent']};")
 
   def _construir_tira_secuencia_html(self, words_list, active_idx):
     """Construye la barra horizontal de vocales resaltando la vocal actual y la siguiente."""
     if not words_list:
       return ""
-    vocal_colores = {'A': '#FF3355', 'E': '#00B4D8', 'I': '#39FF14', 'O': '#C77DFF', 'U': '#FFD166'}
+    vocal_colores = {'A': T['err'], 'E': '#00B4D8', 'I': T['ok'], 'O': T['purple'], 'U': T['warn']}
     items_html = []
     n_w = len(words_list)
     # Si la lista es muy larga (>8), mostrar ventana alrededor de active_idx
@@ -6048,14 +6198,14 @@ class RealTimePlotter(QtWidgets.QWidget):
       indices = [(active_idx + offset) % n_w for offset in range(-1, 6)]
     for i_w in indices:
       w_txt = str(words_list[i_w]).upper()
-      c_w = vocal_colores.get(w_txt, '#00FFCC')
+      c_w = vocal_colores.get(w_txt, T['accent'])
       if i_w == (active_idx % n_w):
         items_html.append(
-          f"<span style='background-color:{c_w}; color:#050508; font-weight:900; font-size:18px; padding:2px 8px; border-radius:4px; border:2px solid #FFFFFF;'>/{w_txt}/</span>"
+          f"<span style='background-color:{c_w}; color:{T['bg0']}; font-weight:900; font-size:18px; padding:2px 8px; border-radius:4px; border:2px solid {T['white']};'>/{w_txt}/</span>"
         )
       elif i_w == ((active_idx + 1) % n_w):
         items_html.append(
-          f"<span style='color:#FFFFFF; font-weight:bold; font-size:16px; border:1px dashed {c_w}; padding:1px 6px; border-radius:3px;'>/{w_txt}/</span>"
+          f"<span style='color:{T['white']}; font-weight:bold; font-size:16px; border:1px dashed {c_w}; padding:1px 6px; border-radius:3px;'>/{w_txt}/</span>"
         )
       else:
         items_html.append(
@@ -6075,11 +6225,11 @@ class RealTimePlotter(QtWidgets.QWidget):
       return
     p_act = str(palabra_actual or "").upper()
     p_sig = str(palabra_siguiente or "").upper()
-    vocal_colores = {'A': '#FF3355', 'E': '#00B4D8', 'I': '#39FF14', 'O': '#C77DFF', 'U': '#FFD166'}
+    vocal_colores = {'A': T['err'], 'E': '#00B4D8', 'I': T['ok'], 'O': T['purple'], 'U': T['warn']}
     vocal_rgb = {'A': '255, 51, 85', 'E': '0, 180, 216', 'I': '57, 255, 20', 'O': '199, 125, 255', 'U': '255, 209, 102'}
-    v_col = vocal_colores.get(p_act, '#00FFCC')
+    v_col = vocal_colores.get(p_act, T['accent'])
     v_rgb = vocal_rgb.get(p_act, '0, 255, 204')
-    sig_col = vocal_colores.get(p_sig, '#FFFF00')
+    sig_col = vocal_colores.get(p_sig, T['warn'])
 
     words = getattr(self, 'autoforge_words', []) or [p_act]
     if getattr(self, 'is_autoforge_continuo', False):
@@ -6092,33 +6242,33 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     if flash:
       self.lbl_recording_space.setStyleSheet(
-        f"background-color: rgba({v_rgb}, 0.38); color: #FFFFFF; font-family: 'Courier New', monospace; "
-        f"border: 4px solid #FFFFFF; border-radius: 8px; padding: 4px;"
+        f"background-color: rgba({v_rgb}, 0.38); color: {T['white']}; font-family: 'Courier New', monospace; "
+        f"border: 4px solid {T['white']}; border-radius: 8px; padding: 4px;"
       )
-      badge_top = f"<span style='background-color:#FFFFFF; color:#050508; font-size:15px; font-weight:900; padding:1px 10px; border-radius:3px;'>&#9733; ¡PRONUNCIA AHORA! &mdash; PULSO {pulso_actual}/{total_pulsos} &#9733;</span>"
-      letra_style = f"font-size: 76px; font-weight: 900; color: #FFFFFF;"
+      badge_top = f"<span style='background-color:{T['white']}; color:{T['bg0']}; font-size:15px; font-weight:900; padding:1px 10px; border-radius:3px;'>&#9733; ¡PRONUNCIA AHORA! &mdash; PULSO {pulso_actual}/{total_pulsos} &#9733;</span>"
+      letra_style = f"font-size: 76px; font-weight: 900; color: {T['white']};"
     else:
-      b_col = "#FFFF00" if pre_cambio else v_col
+      b_col = T['warn'] if pre_cambio else v_col
       self.lbl_recording_space.setStyleSheet(
         f"background-color: #050510; color: {v_col}; font-family: 'Courier New', monospace; "
         f"border: 2px solid {b_col}; border-radius: 6px; padding: 4px;"
       )
       if pre_cambio and p_sig:
-        badge_top = f"<span style='color:#FFFF00; font-size:14px; font-weight:bold;'>ATENCIÓN: PRÓXIMO PULSO CAMBIA A /{p_sig}/ &mdash; PULSO {pulso_actual}/{total_pulsos}</span>"
+        badge_top = f"<span style='color:{T['warn']}; font-size:14px; font-weight:bold;'>ATENCIÓN: PRÓXIMO PULSO CAMBIA A /{p_sig}/ &mdash; PULSO {pulso_actual}/{total_pulsos}</span>"
       else:
-        badge_top = f"<span style='color:#AAAAAA; font-size:14px; font-weight:bold;'>MANTÉN LA VOCAL &mdash; PULSO {pulso_actual}/{total_pulsos} (CICLO {ciclo_actual}/{total_ciclos})</span>"
+        badge_top = f"<span style='color:{T['text_dim']}; font-size:14px; font-weight:bold;'>MANTÉN LA VOCAL &mdash; PULSO {pulso_actual}/{total_pulsos} (CICLO {ciclo_actual}/{total_ciclos})</span>"
       letra_style = f"font-size: 68px; font-weight: 900; color: {v_col};"
 
     sig_html = (
-      f"&nbsp;&nbsp;|&nbsp;&nbsp;<span style='color:#CCCCCC; font-size:14px;'>SIGUIENTE: <b style='color:{sig_col}; font-size:18px;'>/{p_sig}/</b></span>"
+      f"&nbsp;&nbsp;|&nbsp;&nbsp;<span style='color:{T['text']}; font-size:14px;'>SIGUIENTE: <b style='color:{sig_col}; font-size:18px;'>/{p_sig}/</b></span>"
       if p_sig else ""
     )
 
     if getattr(self, 'blind_subject_hide_local_vowel', False):
       html = (
         f"<div align='center' style='line-height:1.25;'>"
-        f"<span style='color:#c77dff; font-size:16px; font-weight:bold;'>[MODO SUJETO CIEGO ACTIVO EN PANTALLA EXTERNA]</span><br>"
-        f"<span style='color:#00ffcc; font-size:15px;'>Pulso {pulso_actual}/{total_pulsos} (Ciclo {ciclo_actual}/{total_ciclos}) — Vocal oculta en monitor local</span>"
+        f"<span style='color:{T['purple']}; font-size:16px; font-weight:bold;'>[MODO SUJETO CIEGO ACTIVO EN PANTALLA EXTERNA]</span><br>"
+        f"<span style='color:{T['accent']}; font-size:15px;'>Pulso {pulso_actual}/{total_pulsos} (Ciclo {ciclo_actual}/{total_ciclos}) — Vocal oculta en monitor local</span>"
         f"</div>"
       )
     else:
@@ -6128,7 +6278,7 @@ class RealTimePlotter(QtWidgets.QWidget):
       prog_compas = max(0.0, min(1.0, (sub_p + 1) / float(n_sub)))
       circ = 188.5
       offset_circ = circ * (1.0 - prog_compas)
-      ring_col = "#FFFFFF" if flash else "#00FFFF"
+      ring_col = T['white'] if flash else T['accent']
       ring_svg = (
         f"<svg width='64' height='64' viewBox='0 0 70 70' style='vertical-align:middle; margin-right:12px;'>"
         f"<circle stroke='#122323' stroke-width='6' fill='transparent' r='30' cx='35' cy='35'/>"
@@ -6233,10 +6383,10 @@ class RealTimePlotter(QtWidgets.QWidget):
         if self.metro_count_in_remaining > 1:
             cnt_val = self.metro_count_in_remaining - 1
             self.metro_lbl_title.setText("INICIANDO")
-            self.metro_lbl_title.setStyleSheet("font-size: 16px; color: #FF0000; font-weight: bold;")
-            self.metro_lbl_count.setStyleSheet("font-size: 28px; color: #FF0000; font-weight: bold;")
+            self.metro_lbl_title.setStyleSheet(f"font-size: 16px; color: {T['err']}; font-weight: bold;")
+            self.metro_lbl_count.setStyleSheet(f"font-size: 28px; color: {T['err']}; font-weight: bold;")
             self.metro_lbl_count.setText(str(cnt_val))
-            self.metro_pulse_frame.setStyleSheet(f"background-color: {self.COLOR_PREP}; border: 2px solid #FF0000;")
+            self.metro_pulse_frame.setStyleSheet(f"background-color: {self.COLOR_PREP}; border: 2px solid {T['err']};")
             if hasattr(self, 'countdown_text') and self.countdown_text.isVisible():
                 self.countdown_text.setText(f"PREPÁRATE...\n{cnt_val}")
             # Mostrar también en el visor superior la cuenta regresiva y la primera vocal que viene
@@ -6246,13 +6396,13 @@ class RealTimePlotter(QtWidgets.QWidget):
                 primera_v = words[w_idx_prep % len(words)].upper()
                 tira_prep = self._construir_tira_secuencia_html(words, w_idx_prep)
                 self.lbl_recording_space.setStyleSheet(
-                  "background-color: #1A0808; color: #FFCC00; font-family: 'Courier New', monospace; "
+                  f"background-color: #1A0808; color: {T['warn']}; font-family: 'Courier New', monospace; "
                   "border: 3px solid #FF4400; border-radius: 6px; padding: 4px;"
                 )
                 self.lbl_recording_space.setText(
                   f"<div align='center' style='line-height:1.1;'>"
-                  f"<span style='color:#FF8800; font-size:16px; font-weight:900;'>CUENTA REGRESIVA DEL METRÓNOMO: {cnt_val}</span><br>"
-                  f"<span style='color:#FFFFFF; font-size:48px; font-weight:900;'>PREPÁRATE PARA: /{primera_v}/</span><br>"
+                  f"<span style='color:{T['warn']}; font-size:16px; font-weight:900;'>CUENTA REGRESIVA DEL METRÓNOMO: {cnt_val}</span><br>"
+                  f"<span style='color:{T['white']}; font-size:48px; font-weight:900;'>PREPÁRATE PARA: /{primera_v}/</span><br>"
                   f"<span>{tira_prep}</span>"
                   f"</div>"
                 )
@@ -6346,15 +6496,15 @@ class RealTimePlotter(QtWidgets.QWidget):
                     palabra_actual = words[w_idx].upper() if words and w_idx < len(words) else ""
                 
                 self.metro_lbl_title.setText(f"VOCAL /{palabra_actual}/ (P{self.metro_beat_count})")
-                self.metro_lbl_title.setStyleSheet("font-size: 15px; color: #00FFCC; font-weight: bold;")
+                self.metro_lbl_title.setStyleSheet(f"font-size: 15px; color: {T['accent']}; font-weight: bold;")
             else:
                 self.metro_lbl_title.setText(f"PULSO {self.metro_beat_count}")
-                self.metro_lbl_title.setStyleSheet("font-size: 16px; color: #00FFFF;")
+                self.metro_lbl_title.setStyleSheet(f"font-size: 16px; color: {T['accent']};")
             
             display_num = "1" if num_subdivs > 1 else str(self.metro_beat_count)
-            self.metro_lbl_count.setStyleSheet("font-size: 28px; color: #00FFFF; font-weight: bold;")
+            self.metro_lbl_count.setStyleSheet(f"font-size: 28px; color: {T['accent']}; font-weight: bold;")
             self.metro_lbl_count.setText(display_num)
-            self.metro_pulse_frame.setStyleSheet(f"background-color: {self.COLOR_BEAT}; border: 2px solid #00FFFF;")
+            self.metro_pulse_frame.setStyleSheet(f"background-color: {self.COLOR_BEAT}; border: 2px solid {T['accent']};")
 
             # Hook fotometria: captura segura sincronizada con pulso de metronomo
             if getattr(self, 'is_recording', False):
@@ -6382,13 +6532,13 @@ class RealTimePlotter(QtWidgets.QWidget):
                     
                     self.autoforge_overlay.setText(
                         f"<div align='center'>"
-                        f"<span style='color:#FFCC00; font-size:32px; font-weight:bold;'>CONTRACCIÓN MUSCULAR MÁXIMA</span><br>"
-                        f"<span style='color:#CCCCCC; font-size:18px;'>Toma {self.cvm_step_idx+1}/9</span><br><br>"
-                        f"<span style='color:#FFFF00; font-size:40px; font-weight:bold;'>PREPÁRATE PARA /{vocal}/</span><br>"
+                        f"<span style='color:{T['warn']}; font-size:32px; font-weight:bold;'>CONTRACCIÓN MUSCULAR MÁXIMA</span><br>"
+                        f"<span style='color:{T['text']}; font-size:18px;'>Toma {self.cvm_step_idx+1}/9</span><br><br>"
+                        f"<span style='color:{T['warn']}; font-size:40px; font-weight:bold;'>PREPÁRATE PARA /{vocal}/</span><br>"
                         f"<span style='font-size:22px; color:#AAFFAA; font-weight:bold;'>{desc}</span>"
                         f"</div>"
                     )
-                    self.lbl_recording_space.setText(f"<div align='center'><span style='color:#FFFF00; font-size:40px; font-weight:bold;'>PREPÁRATE: /{vocal}/</span></div>")
+                    self.lbl_recording_space.setText(f"<div align='center'><span style='color:{T['warn']}; font-size:40px; font-weight:bold;'>PREPÁRATE: /{vocal}/</span></div>")
                     self.autoforge_overlay.show()
                     # En CVM sólo anunciar en la preparación de la Toma 1 de cada vocal nueva (evita repetir "A, A, A")
                     if int(toma) == 1 and hasattr(self, 'voice_cue_player'):
@@ -6398,11 +6548,11 @@ class RealTimePlotter(QtWidgets.QWidget):
                     vocal, toma = self.cvm_sequence[self.cvm_step_idx]
                     self.autoforge_overlay.setText(
                         f"<div align='center'>"
-                        f"<span style='color:#FF0000; font-size:32px; font-weight:bold;'>¡CONTRAE AHORA!</span><br>"
-                        f"<span style='color:#00FFFF; font-size:90px; font-weight:bold;'>/{vocal}/</span><br>"
+                        f"<span style='color:{T['err']}; font-size:32px; font-weight:bold;'>¡CONTRAE AHORA!</span><br>"
+                        f"<span style='color:{T['accent']}; font-size:90px; font-weight:bold;'>/{vocal}/</span><br>"
                         f"</div>"
                     )
-                    self.lbl_recording_space.setText(f"<div align='center'><span style='color:#FFFFFF; background-color:#FF0055; font-size:70px; font-weight:bold; padding:4px 20px; border:3px solid #FFFFFF;'>/{vocal}/</span></div>")
+                    self.lbl_recording_space.setText(f"<div align='center'><span style='color:{T['white']}; background-color:{T['err']}; font-size:70px; font-weight:bold; padding:4px 20px; border:3px solid {T['white']};'>/{vocal}/</span></div>")
                     self.autoforge_overlay.show()
                     
                     self.cvm_current_take_chunks = []
@@ -6467,15 +6617,15 @@ class RealTimePlotter(QtWidgets.QWidget):
         es_ultimo_sub = (sub_num == num_subdivs)
 
         if self.metro_count_in_remaining > 0:
-            self.metro_pulse_frame.setStyleSheet("background-color: #660000; border: 2px solid #FF0000;")
+            self.metro_pulse_frame.setStyleSheet(f"background-color: #660000; border: 2px solid {T['err']};")
             self.beep_queue.put((freq_sub, dur_sub))
         else:
             if es_ultimo_sub:
                 # Último sub-pulso antes del golpe principal: color ámbar de pre-aviso
-                self.metro_pulse_frame.setStyleSheet("background-color: #FFAA00; border: 2px solid #FFFF00;")
-                self.metro_lbl_count.setStyleSheet("font-size: 28px; color: #FFCC00; font-weight: bold;")
+                self.metro_pulse_frame.setStyleSheet(f"background-color: {T['warn']}; border: 2px solid {T['warn']};")
+                self.metro_lbl_count.setStyleSheet(f"font-size: 28px; color: {T['warn']}; font-weight: bold;")
             else:
-                self.metro_pulse_frame.setStyleSheet("background-color: #006677; border: 2px solid #00FFFF;")
+                self.metro_pulse_frame.setStyleSheet(f"background-color: #006677; border: 2px solid {T['accent']};")
                 self.metro_lbl_count.setStyleSheet("font-size: 28px; color: #00AAAA; font-weight: bold;")
             self.metro_lbl_count.setText(str(sub_num))
             self.beep_queue.put((freq_sub, dur_sub))
@@ -6854,7 +7004,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.plot.setXRange(-2.0, 0.0, padding=0)
     
     # 3. Feedback visual
-    self.plot_widget.setBackground('#400000') # Rojo oscuro
+    self.plot_widget.setBackground(T['bg0']) # Rojo oscuro
 
   # --- FUNCIONES MODIFICADAS ---
   
@@ -6862,6 +7012,8 @@ class RealTimePlotter(QtWidgets.QWidget):
     """
     Restaura el fondo a negro ('k') en lugar de 'None'.
     """
+    plot_dur_safe = float(self.PLOT_DURATION_S) if getattr(self, 'PLOT_DURATION_S', 0) > 0 else float(self.spin_plot_duration.value() if hasattr(self, 'spin_plot_duration') else 10.0)
+    self.plot.getViewBox().setLimits(xMin=-plot_dur_safe, xMax=0.0)
     if self.chk_autoscroll.isChecked():
       # MODO ROLL (Armado)
       self.plot.setMouseEnabled(x=False, y=True) # Solo zoom Y
@@ -6872,16 +7024,18 @@ class RealTimePlotter(QtWidgets.QWidget):
         sp.setMouseEnabled(x=False, y=True)
         sp.getViewBox().disableAutoRange(pg.ViewBox.XAxis)
         sp.getViewBox().disableAutoRange(pg.ViewBox.YAxis)
-      self.plot_widget.setBackground('k') # Color de fondo negro
+        sp.getViewBox().setLimits(xMin=-plot_dur_safe, xMax=0.0)
+      self.plot_widget.setBackground(T['bg0']) # Fondo Neon Clinical Slate
     else:
       # MODO ANÁLISIS (Congelado)
       self.plot.setMouseEnabled(x=True, y=True) # Zoom X e Y
-      self.plot.getViewBox().enableAutoRange(pg.ViewBox.XAxis)
-      self.plot.getViewBox().enableAutoRange(axis=pg.ViewBox.YAxis) # Auto-escala todo al congelar
+      self.plot.getViewBox().disableAutoRange(pg.ViewBox.XAxis)
+      self.plot.getViewBox().disableAutoRange(pg.ViewBox.YAxis)
       for sp in getattr(self, 'sub_plots', []):
         sp.setMouseEnabled(x=True, y=True)
-        sp.getViewBox().enableAutoRange(pg.ViewBox.XAxis)
-        sp.getViewBox().enableAutoRange(axis=pg.ViewBox.YAxis)
+        sp.getViewBox().disableAutoRange(pg.ViewBox.XAxis)
+        sp.getViewBox().disableAutoRange(pg.ViewBox.YAxis)
+        sp.getViewBox().setLimits(xMin=-plot_dur_safe, xMax=0.0)
 
   def on_record_click(self):
     """
@@ -6911,12 +7065,13 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.btn_record.setText("■ DETENER Y GUARDAR (Manual)")
         self.btn_record.setStyleSheet(self.BTN_REC_STOP_STYLE)
 
-      # --- Resetear el zoom en Y a rango base calibrado (500 µV) ---
+      # --- Resetear el zoom en Y a rango base calibrado (60 µV para envolvente, 500 µV para cruda) ---
       if hasattr(self, 'chk_rms_env') and self.chk_rms_env.isChecked():
-        self.plot.setYRange(0.0, 500.0, padding=0)
+        self.plot.setYRange(0.0, 60.0, padding=0)
+        self._held_plot_ymax = 60.0
       else:
         self.plot.setYRange(-500.0, 500.0, padding=0)
-      self._held_plot_ymax = 500.0
+        self._held_plot_ymax = 500.0
 
       self.counting_started = False
       # Homologado con manual_daq.py: vaciar buffers previos para que la toma manual empiece en t=0.0s exacto
@@ -7199,6 +7354,12 @@ class RealTimePlotter(QtWidgets.QWidget):
     except Exception as e:
       print(f"[Aviso] No se pudieron persistir notas: {e}")
 
+    # 6. Generar automaticamente resumen_rapido_toma.txt (uV reales, ratios y separabilidad)
+    try:
+      self._escribir_resumen_rapido_toma_txt(output_dir, metadata=metadata, modo="Grabacion Manual")
+    except Exception as exc_res:
+      print(f"[Resumen Rapido] Error al guardar resumen en Grabacion Manual: {exc_res}")
+
     print("--- EXPORTACIÓN FINALIZADA ---")
 
   def on_pause_toggled(self, paused: bool):
@@ -7219,8 +7380,8 @@ class RealTimePlotter(QtWidgets.QWidget):
         self._saved_overlay_html = self.autoforge_overlay.text()
         self._saved_overlay_vis = self.autoforge_overlay.isVisible()
         self.autoforge_overlay.setText(
-          "<div align='center' style='color:#FFCC00;'>EN PAUSA<br>"
-          "<span style='font-size:24px; color:#00FFFF;'>Presiona REANUDAR para continuar</span></div>"
+          f"<div align='center' style='color:{T['warn']};'>EN PAUSA<br>"
+          f"<span style='font-size:24px; color:{T['accent']};'>Presiona REANUDAR para continuar</span></div>"
         )
         self.autoforge_overlay.show()
     else:
@@ -7371,10 +7532,10 @@ class RealTimePlotter(QtWidgets.QWidget):
       
       # 5. Actualizar el buffer de ploteo
       if total_muestras_leidas >= self.PLOT_SAMPLES:
-        # Si llegan más datos que el tamaño del buffer, tomar solo los más recientes
         self.plot_buffer_datos[:, :] = processed_data[:, -self.PLOT_SAMPLES:]
       else:
-        self.plot_buffer_datos = np.roll(self.plot_buffer_datos, -total_muestras_leidas, axis=1)
+        # CORRECCIÓN 04: Desplazamiento in-place C-contiguo sin realocar memoria (reemplaza np.roll)
+        self.plot_buffer_datos[:, :-total_muestras_leidas] = self.plot_buffer_datos[:, total_muestras_leidas:]
         self.plot_buffer_datos[:, -total_muestras_leidas:] = processed_data
       self.total_muestras_procesadas = getattr(self, 'total_muestras_procesadas', 0) + total_muestras_leidas
 
@@ -7476,14 +7637,14 @@ class RealTimePlotter(QtWidgets.QWidget):
                     self.noise_regions[i].setRegion([0.0, self.noise_levels[i]])
                   else:
                     self.noise_lines_neg[i].setPos(-self.noise_levels[i])
-                    self.noise_lines_neg[i].setVisible(show_noise)
+                    self.noise_lines_neg[i].setVisible(False)
                     self.noise_regions[i].setRegion([-self.noise_levels[i], self.noise_levels[i]])
-                  self.noise_lines[i].setVisible(show_noise)
+                  self.noise_lines[i].setVisible(False)
                   self.noise_regions[i].setVisible(show_noise)
                   
                   if hasattr(self, 'noise_status_labels'):
                     self.noise_status_labels[i].setText(f"Ruido Base: x̄={self.initial_noise_mean[i]:.1f}µV, σ={self.initial_noise_std[i]:.1f}µV")
-                    self.noise_status_labels[i].setStyleSheet("color: #00FFFF; font-size: 11px; font-weight: bold; background-color: #111111; border: 1px solid #00FFFF;")
+                    self.noise_status_labels[i].setStyleSheet(f"color: {T['accent']}; font-size: 11px; font-weight: bold; background-color: {T['bg1']}; border: 1px solid {T['accent']};")
               
               if self.NUM_CANALES > 0:
                 ruido_maximo_std = max(getattr(self, 'initial_noise_std', [0]))
@@ -7493,110 +7654,132 @@ class RealTimePlotter(QtWidgets.QWidget):
               self.noise_initialized = True
               self.noise_calculated = True
 
-      # 6. Actualizar la GUI
+      # 6. Actualizar la GUI (Optimización 60 FPS: actualización incremental de RMS + decimación directa por stride)
       is_rms = hasattr(self, 'chk_rms_env') and self.chk_rms_env.isChecked()
-      
-      # --- NUEVO: Envolvente RMS Numba (Rendimiento Extremo) ---
-      # Siempre se calcula para asegurar cálculos de SNR robustos
+
+      # NUEVO (Bugs 1.3/1.4): al alternar Envolvente/Senal cruda se conmuta el doble
+      # trazo coaxial (vaina de color + relleno + nucleo blanco) o el trazo fino
+      # de la senal cruda (width=1.15, sin relleno y sin nucleo). Solo al cambiar.
+      if getattr(self, '_estilo_neon_rms_aplicado', None) != is_rms:
+        self._estilo_neon_rms_aplicado = is_rms
+        try:
+          self._aplicar_estilo_trazos_segun_modo(is_rms)
+        except Exception:
+          pass
+
       window_size_ms = self.spin_rms_window.value()
-      window_size = int((window_size_ms / 1000.0) * self.SAMPLE_RATE)
-      if window_size < 1: window_size = 1
-      for i in range(self.NUM_CANALES):
-        self.env_buffer_datos[i, :] = calculate_rms_envelope(self.plot_buffer_datos[i, :], window_size)
-          
+      window_size = max(1, int((window_size_ms / 1000.0) * self.SAMPLE_RATE))
+
+      # Actualización incremental O(N_new) del buffer de envolvente RMS en vez de recalcular todo el histórico
+      if total_muestras_leidas >= self.PLOT_SAMPLES:
+        for i in range(self.NUM_CANALES):
+          self.env_buffer_datos[i, :] = calculate_rms_envelope(self.plot_buffer_datos[i, :], window_size)
+      else:
+        # CORRECCIÓN 04: Desplazamiento in-place sin np.roll
+        self.env_buffer_datos[:, :-total_muestras_leidas] = self.env_buffer_datos[:, total_muestras_leidas:]
+        tail_len = min(self.PLOT_SAMPLES, total_muestras_leidas + window_size)
+        for i in range(self.NUM_CANALES):
+          rms_tail = calculate_rms_envelope(self.plot_buffer_datos[i, -tail_len:], window_size)
+          self.env_buffer_datos[i, -total_muestras_leidas:] = rms_tail[-total_muestras_leidas:]
+
       escala_cvm_activa = bool(getattr(self, 'chk_escala_cvm', None) and self.chk_escala_cvm.isChecked())
+
       for i in range(self.NUM_CANALES):
         try:
-          if is_rms:
-            valid_data = np.nan_to_num(self.env_buffer_datos[i]).copy()
-          else:
-            valid_data = np.nan_to_num(self.plot_buffer_datos[i]).copy()
+          src_arr = np.nan_to_num(self.env_buffer_datos[i] if is_rms else self.plot_buffer_datos[i])
+          x_enviar, y_enviar = decimate_min_max(self.plot_vector_tiempo, src_arr, max_points=3000)
 
-          # Escalado en tiempo real en % CVM para canales EMG
           if escala_cvm_activa and not self._is_mic_channel(i):
             ref_cvm = 500.0
             if hasattr(self, 'cvm_env_p95_per_channel') and i < len(self.cvm_env_p95_per_channel) and self.cvm_env_p95_per_channel[i] > 10.0:
               ref_cvm = float(self.cvm_env_p95_per_channel[i])
             elif getattr(self, 'supremo_global_p95_uV', 0.0) > 10.0:
               ref_cvm = float(self.supremo_global_p95_uV)
-            valid_data = (valid_data / (ref_cvm + 1e-6)) * 100.0
-
-          x_dec, y_dec = decimate_min_max(self.plot_vector_tiempo, valid_data, max_points=3000)
+            y_enviar = (y_enviar / (ref_cvm + 1e-6)) * 100.0
 
           if not getattr(self, 'is_multitrack_view', False):
-            if i < len(self.curvas) and self.curvas[i].scene() is not None:
-              self.curvas[i].setData(x_dec, y_dec)
+            if i < len(self.curvas) and self.curvas[i].isVisible():
+              self.curvas[i].setData(x_enviar, y_enviar)
           else:
             if i == 0:
-              if len(self.curvas) > 0 and self.curvas[0].scene() is not None:
-                self.curvas[0].setData(x_dec, y_dec)
+              if len(self.curvas) > 0 and self.curvas[0].isVisible():
+                self.curvas[0].setData(x_enviar, y_enviar)
             else:
               sub_idx = i - 1
               multitrack_curvas = getattr(self, 'curvas_multitrack', [])
-              if sub_idx < len(multitrack_curvas) and multitrack_curvas[sub_idx].scene() is not None:
-                multitrack_curvas[sub_idx].setData(x_dec, y_dec)
+              if sub_idx < len(multitrack_curvas) and multitrack_curvas[sub_idx].isVisible():
+                multitrack_curvas[sub_idx].setData(x_enviar, y_enviar)
         except Exception:
-          pass # Evita que se congele toda la GUI si hay un error matematico o de transicion de vista
-      
+          pass
+
+      now_perf_ui = time.perf_counter()
       if self.chk_autoscroll.isChecked():
-        self.plot.setXRange(-self.PLOT_DURATION_S, 0, padding=0)
-        
-        # --- Auto-Escala Dinámica Estable con Peak-Hold, Hold Timer e Histéresis ---
-        if self.NUM_CANALES > 0 and self.plot_buffer_datos.size > 0:
-          # Evaluar ventana reciente (~2.5s o 2 ciclos de metrónomo) para adaptarse rápido a nuevas vocales
-          bpm = max(1, self.spin_bpm.value())
-          eval_seconds = min(self.PLOT_DURATION_S, max(2.0, (60.0 / bpm) * 2.0))
-          eval_samples = min(self.PLOT_SAMPLES, int(eval_seconds * self.SAMPLE_RATE))
-          
-          emg_idxs = [ch_i for ch_i in range(self.NUM_CANALES) if not self._is_mic_channel(ch_i)]
-          if not emg_idxs:
-            emg_idxs = list(range(self.NUM_CANALES))
-          clamp_500 = bool(getattr(self, "chk_clamp_500uv", None) and self.chk_clamp_500uv.isChecked())
-          if is_rms:
-            sub_buf = self.env_buffer_datos[emg_idxs, -eval_samples:]
-            recent_max = float(np.percentile(sub_buf, 98.5)) if sub_buf.size > 0 else 50.0
-          else:
-            sub_buf = np.abs(self.plot_buffer_datos[emg_idxs, -eval_samples:])
-            recent_max = float(np.percentile(sub_buf, 98.5)) if sub_buf.size > 0 else 50.0
+        dur_sync = max(0.1, float(self.PLOT_DURATION_S))
+        self.plot.setXRange(-dur_sync, 0, padding=0)
+        for sp_sync in getattr(self, 'sub_plots', []):
+          try:
+            sp_sync.setXRange(-dur_sync, 0, padding=0)
+          except Exception:
+            pass
 
-          min_floor = 25.0 # Piso mínimo seguro en microvoltios
-          max_ceiling = 500.0 if clamp_500 else 5000.0
-          if clamp_500:
-            recent_max = min(recent_max, 500.0)
-          target_max = min(max_ceiling, max(min_floor, recent_max * 1.20))
-
-          now_perf = time.perf_counter()
-          current_held = getattr(self, '_held_plot_ymax', min_floor)
-          last_peak_time = getattr(self, '_held_plot_last_peak_time', 0.0)
-
+      # Auto-Escala Calibrada (solo activa cuando Auto-scroll está habilitado; si está desmarcado, el usuario tiene control manual de zoom/scroll en Y y X)
+      if self.chk_autoscroll.isChecked() and self.NUM_CANALES > 0 and self.plot_buffer_datos.size > 0:
+        vis_idxs = [
+          ch_i for ch_i in range(self.NUM_CANALES)
+          if (ch_i >= len(getattr(self, 'viz_checkboxes', [])) or self.viz_checkboxes[ch_i].isChecked())
+        ] or list(range(self.NUM_CANALES))
+        clamp_500 = bool(getattr(self, "chk_clamp_500uv", None) and self.chk_clamp_500uv.isChecked())
+        if is_rms:
+          current_max = float(np.nanmax(self.env_buffer_datos[vis_idxs, :])) if self.env_buffer_datos.size > 0 else 60.0
+          max_ceil = 500.0 if clamp_500 else 700.0
+          target_max = min(max_ceil, max(60.0, current_max * 1.18))
+          current_held = getattr(self, '_held_plot_ymax', target_max)
           if target_max >= current_held:
-            # Subida inmediata ante contracción
             current_held = target_max
-            self._held_plot_last_peak_time = now_perf
           else:
-            # Sostener el pico durante al menos 2.0s antes de decaer suavemente (0.992 por frame)
-            if now_perf - last_peak_time > 2.0:
-              current_held = max(target_max, current_held * 0.992)
-          
-          current_held = max(min_floor, current_held)
+            current_held = max(target_max, current_held * 0.985)
+          current_held = min(max_ceil, max(60.0, current_held))
           self._held_plot_ymax = current_held
-
-          # Aplicar rango al gráfico con histéresis del 6% para eliminar parpadeo y vibración de pantalla
           view_range = self.plot.getViewBox().viewRange()[1]
-          delta_ratio = abs(view_range[1] - current_held) / max(1.0, current_held)
-          if is_rms:
-            if delta_ratio > 0.06 or view_range[0] < -2.0 or view_range[0] > 1.0:
-              self.plot.setYRange(0.0, current_held, padding=0.02)
+          if abs(view_range[1] - current_held) > 1.5 or view_range[0] < -2.0 or view_range[0] > 0.5:
+            self.plot.setYRange(0.0, round(current_held, 1), padding=0)
+            for sp in getattr(self, 'sub_plots', []):
+              try:
+                sp.setYRange(0.0, round(current_held, 1), padding=0)
+              except Exception:
+                pass
+        else:
+          current_max = float(np.nanmax(np.abs(self.plot_buffer_datos[vis_idxs, :]))) if self.plot_buffer_datos.size > 0 else 250.0
+          max_ceil = 500.0 if clamp_500 else 700.0
+          target_max = min(max_ceil, max(100.0, current_max * 1.18))
+          current_held = getattr(self, '_held_plot_ymax', target_max)
+          if target_max >= current_held:
+            current_held = target_max
           else:
-            if delta_ratio > 0.06 or abs(view_range[0] + current_held) > 1.0:
-              self.plot.setYRange(-current_held, current_held, padding=0.02)
+            current_held = max(target_max, current_held * 0.99)
+          current_held = min(max_ceil, max(100.0, current_held))
+          self._held_plot_ymax = current_held
+          view_range = self.plot.getViewBox().viewRange()[1]
+          if abs(view_range[1] - current_held) > 2.0 or abs(view_range[0] + current_held) > 2.0:
+            self.plot.setYRange(-round(current_held, 1), round(current_held, 1), padding=0)
+            for sp in getattr(self, 'sub_plots', []):
+              try:
+                sp.setYRange(-round(current_held, 1), round(current_held, 1), padding=0)
+              except Exception:
+                pass
       self.check_for_trigger(processed_data, total_muestras_leidas)
-      # --- NUEVO: Pasar env_buffer_datos a las mediciones para que el pico visual se evalúe sobre la envolvente RMS ---
-      self.actualizar_mediciones(processed_data, self.env_buffer_datos)
-      self.actualizar_espectrograma(processed_data)
-      if hasattr(self, 'pulse_detector') and self.pulse_detector is not None:
-        self.pulse_detector.process()
-      self._actualizar_posicion_ventana_deteccion()
+      # CORRECCIÓN 04: Desacoplar cálculos auxiliares de etiquetas/espectrograma/detector a ~5 Hz (cada 200 ms)
+      # y solo correr pulse_detector / PCA si están habilitados explícitamente para eliminar micro-lags de CPU.
+      if (now_perf_ui - getattr(self, '_last_aux_dsp_ui_t', 0.0)) >= 0.20:
+        self._last_aux_dsp_ui_t = now_perf_ui
+        self.actualizar_mediciones(processed_data, self.env_buffer_datos)
+        self.actualizar_espectrograma(processed_data)
+        pca_exp_on = bool(getattr(self, 'chk_pca_experimental', None) and self.chk_pca_experimental.isChecked())
+        det_win_on = bool(getattr(self, 'chk_show_detection_window', None) and self.chk_show_detection_window.isChecked())
+        if (pca_exp_on or det_win_on) and hasattr(self, 'pulse_detector') and self.pulse_detector is not None:
+          self.pulse_detector.process()
+        if det_win_on:
+          self._actualizar_posicion_ventana_deteccion()
 
       # --- Actualiza el cronómetro (esto se ejecuta siempre) ---
       if self.is_recording and self.recording_start_time is not None:
@@ -7604,26 +7787,26 @@ class RealTimePlotter(QtWidgets.QWidget):
         if getattr(self, 'is_autoforge_running', False):
           # En AutoForge, ponemos textos personalizados
           tr_str = getattr(self, 'tiempo_restante_str', '00:00')
-          cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;Resta: {tr_str}&nbsp;</span>"
+          cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:{T['accent']}; color:white;'>&nbsp;Resta: {tr_str}&nbsp;</span>"
           if not getattr(self, 'noise_calculated', False):
             self.label_rec_time.setText(f"GRABANDO RUIDO... {elapsed_time:.1f} s{cuadro_azul}")
-            self.label_rec_time.setStyleSheet("font-weight: bold; color: #FFFF00;") # Amarillo neón
+            self.label_rec_time.setStyleSheet(f"font-weight: bold; color: {T['warn']};") # Amarillo neón
           else:
             if getattr(self, 'is_autoforge_continuo', False):
               pulso_num = max(1, getattr(self, 'metro_beat_count', 1))
               palabra_cur = self.autoforge_words[(pulso_num - 1) % len(self.autoforge_words)].upper() if len(self.autoforge_words) > 0 else ""
               self.label_rec_time.setText(f"SECUENCIA: /{palabra_cur}/ (Pulso {pulso_num}) | {elapsed_time:.1f} s{cuadro_azul}")
-              self.label_rec_time.setStyleSheet("font-weight: bold; color: #00FFCC; font-size: 15px;")
+              self.label_rec_time.setStyleSheet(f"font-weight: bold; color: {T['accent']}; font-size: 15px;")
               if hasattr(self, 'countdown_text'):
                 self.countdown_text.hide()
             else:
               palabra = self.autoforge_words[self.autoforge_word_idx].upper() if hasattr(self, 'autoforge_words') and self.autoforge_word_idx < len(self.autoforge_words) else ""
               pulso_num = getattr(self, 'metro_beat_count', 0)
               self.label_rec_time.setText(f"GRABANDO VOCAL: /{palabra}/ (Pulso {pulso_num}) | {elapsed_time:.1f} s{cuadro_azul}")
-              self.label_rec_time.setStyleSheet("font-weight: bold; color: #00FFCC; font-size: 15px;")
+              self.label_rec_time.setStyleSheet(f"font-weight: bold; color: {T['accent']}; font-size: 15px;")
               if palabra:
                 vocal_colores = {'A': '#E63946', 'E': '#1F77B4', 'I': '#2CA02C', 'O': '#9D4EDD', 'U': '#E7A61A'}
-                v_col = vocal_colores.get(palabra, '#00FFCC')
+                v_col = vocal_colores.get(palabra, T['accent'])
                 self.lbl_recording_space.setText(f"<div align='center' style='font-size: 70px; font-weight: 900; color: {v_col};'>/{palabra}/</div>")
               if hasattr(self, 'countdown_text'):
                 self.countdown_text.hide()
@@ -7643,17 +7826,17 @@ class RealTimePlotter(QtWidgets.QWidget):
               if countdown < 1: countdown = 1
               
               tr_str = f"{time_remaining:.1f}s"
-              cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white; font-size: 20px;'>&nbsp;Resta: {tr_str}&nbsp;</span>"
+              cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:{T['accent']}; color:white; font-size: 20px;'>&nbsp;Resta: {tr_str}&nbsp;</span>"
               
               time_str = f"PREPÁRATE... {countdown}{cuadro_azul}"
-              self.label_rec_time.setStyleSheet("font-weight: bold; color: #FF8800; font-size: 30px;") # Naranja gigante
+              self.label_rec_time.setStyleSheet(f"font-weight: bold; color: {T['warn']}; font-size: 30px;") # Naranja gigante
             else:
               signal_time = elapsed_time - noise_dur
               minutes = int(signal_time // 60)
               seconds = int(signal_time % 60)
               tenths = int((signal_time % 1) * 10)
               time_str = f"GRABANDO SEÑAL: {minutes:02d}:{seconds:02d}.{tenths}"
-              self.label_rec_time.setStyleSheet("font-weight: bold; color: #FF00FF;") # Magenta neón
+              self.label_rec_time.setStyleSheet(f"font-weight: bold; color: {T['purple']};") # Magenta neón
               
               # --- NUEVO: Iniciar el conteo del metrónomo justo aquí ---
               if not getattr(self, 'counting_started', False):
@@ -7663,23 +7846,23 @@ class RealTimePlotter(QtWidgets.QWidget):
             if not getattr(self, 'noise_calculated', False) and elapsed_time < noise_dur:
               time_remaining = noise_dur - elapsed_time
               tr_str = f"{time_remaining:.1f}s"
-              cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white; font-size: 20px;'>&nbsp;Resta: {tr_str}&nbsp;</span>"
+              cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:{T['accent']}; color:white; font-size: 20px;'>&nbsp;Resta: {tr_str}&nbsp;</span>"
               
               if time_remaining <= 3.0:
                 import math
                 countdown = int(math.ceil(time_remaining))
                 time_str = f"PREPÁRATE... {countdown}{cuadro_azul}"
-                self.label_rec_time.setStyleSheet("font-weight: bold; color: #FF8800; font-size: 30px;") # Naranja gigante
+                self.label_rec_time.setStyleSheet(f"font-weight: bold; color: {T['warn']}; font-size: 30px;") # Naranja gigante
               else:
                 time_str = f"GRABANDO RUIDO ({elapsed_time:.1f}s / {noise_dur:.1f}s){cuadro_azul}"
-                self.label_rec_time.setStyleSheet("font-weight: bold; color: #FFFF00;") # Amarillo neón
+                self.label_rec_time.setStyleSheet(f"font-weight: bold; color: {T['warn']};") # Amarillo neón
             else:
               signal_time = elapsed_time - noise_dur
               minutes = int(signal_time // 60)
               seconds = int(signal_time % 60)
               tenths = int((signal_time % 1) * 10)
               time_str = f"GRABANDO SEÑAL: {minutes:02d}:{seconds:02d}.{tenths}"
-              self.label_rec_time.setStyleSheet("font-weight: bold; color: #FF00FF;") # Magenta neón
+              self.label_rec_time.setStyleSheet(f"font-weight: bold; color: {T['purple']};") # Magenta neón
 
           self.label_rec_time.setText(time_str)
           
@@ -7761,8 +7944,8 @@ class RealTimePlotter(QtWidgets.QWidget):
                       ratio = 1.0
                     
                     if hasattr(self, 'noise_status_labels'):
-                      bg_color = "#000000"
-                      fg_color = "#00FF00" if ratio <= 1.20 else "#FF0000" 
+                      bg_color = T['bg0']
+                      fg_color = T['ok'] if ratio <= 1.20 else T['err'] 
                       text = f"Inter-pulso: x̄={curr_mean:.1f}µV (Base={init_mean:.1f}µV) | {ratio*100:.0f}%"
                       self.noise_status_labels[i].setText(text)
                       self.noise_status_labels[i].setStyleSheet(f"color: {fg_color}; background-color: {bg_color}; border: 1px solid {fg_color}; border-radius: 3px; padding: 2px; font-weight: bold; font-size: 11px;")
@@ -8021,7 +8204,7 @@ class RealTimePlotter(QtWidgets.QWidget):
       self.lbl_recording_space.setText("")
     if hasattr(self, 'label_rec_time'):
       self.label_rec_time.setText("LISTO")
-      self.label_rec_time.setStyleSheet("font-weight: bold; color: #00FFCC;")
+      self.label_rec_time.setStyleSheet(f"font-weight: bold; color: {T['accent']};")
 
     # Limpiar buffers de grabacion en curso
     self.current_recording = []
@@ -8305,7 +8488,7 @@ class RealTimePlotter(QtWidgets.QWidget):
             import subprocess
             mod_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "modulo_de_entrenamiento.py")
             if os.path.exists(mod_path):
-                subprocess.Popen([sys.executable, mod_path])
+                launch_in_visible_terminal([sys.executable, "-u", mod_path], title="Ñandú - Módulo de Entrenamiento")
             return # Cancelar este inicio para que el usuario pueda entrenar
 
         if not self.is_acquiring:
@@ -8323,7 +8506,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.btn_record.setEnabled(False)
         self.btn_autoforge_continuo.setEnabled(False)
         self.btn_autoforge.setText("DETENER AUTOGRABADO")
-        self.btn_autoforge.setStyleSheet("background-color: #555555; color: white; font-weight: bold; font-family: 'Courier New'; font-size: 14px; padding: 8px; border: 2px solid #ffffff; border-radius: 4px;")
+        self.btn_autoforge.setStyleSheet(f"background-color: {T['text_dim']}; color: white; font-weight: bold; font-family: 'Courier New'; font-size: 14px; padding: 8px; border: 2px solid {T['white']}; border-radius: 4px;")
         
         self.showMaximized() # Auto-maximizar al iniciar AutoForge
         
@@ -8475,7 +8658,7 @@ class RealTimePlotter(QtWidgets.QWidget):
             import subprocess
             mod_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "modulo_de_entrenamiento.py")
             if os.path.exists(mod_path):
-                subprocess.Popen([sys.executable, mod_path])
+                launch_in_visible_terminal([sys.executable, "-u", mod_path], title="Ñandú - Módulo de Entrenamiento")
             return # Cancelar este inicio para que el usuario pueda entrenar
 
         if not self.is_acquiring:
@@ -8496,7 +8679,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.btn_record.setEnabled(False)
         self.btn_autoforge.setEnabled(False)
         self.btn_autoforge_continuo.setText("DETENER SEC. CONTINUA")
-        self.btn_autoforge_continuo.setStyleSheet("background-color: #555555; color: white; font-weight: bold; font-family: 'Courier New'; font-size: 14px; padding: 8px; border: 2px solid #ffffff; border-radius: 4px;")
+        self.btn_autoforge_continuo.setStyleSheet(f"background-color: {T['text_dim']}; color: white; font-weight: bold; font-family: 'Courier New'; font-size: 14px; padding: 8px; border: 2px solid {T['white']}; border-radius: 4px;")
         
         self.showMaximized() # Auto-maximizar al iniciar AutoForge
         
@@ -8536,7 +8719,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.autoforge_estado_actual_str = f"Secuencia: {total_pulsos} pulsos"
     
     tr_str = getattr(self, 'tiempo_restante_str', '00:00')
-    cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;Resta: {tr_str}&nbsp;</span>"
+    cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:{T['accent']}; color:white;'>&nbsp;Resta: {tr_str}&nbsp;</span>"
     self.label_rec_time.setText(f"{self.autoforge_estado_actual_str}{cuadro_azul}")
     
     self.autoforge_overlay.setText("<div align='center'>HAZ SILENCIO<br>PREPARANDO ENTORNO...</div>")
@@ -8548,7 +8731,7 @@ class RealTimePlotter(QtWidgets.QWidget):
       word_script_path = 'ventana_palabras.py'
     else:
       word_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'ventana_palabras.py')
-    texto_ventana = "<div align='center' style='font-size: 50px; font-weight: 900; color: #00FFCC;'>PREPARANDO ENTORNO...</div>"
+    texto_ventana = f"<div align='center' style='font-size: 50px; font-weight: 900; color: {T['accent']};'>PREPARANDO ENTORNO...</div>"
     self.lbl_recording_space.setText(texto_ventana)
     self.word_window_process = None # Mantener variable para no romper nada
     
@@ -8563,16 +8746,16 @@ class RealTimePlotter(QtWidgets.QWidget):
         
         val_50 = self.line_noise_50hz_uV[i]
         if val_50 < 15.0:
-          color_txt = "#00FFCC"
+          color_txt = T['accent']
           color_bg = "#002211"
           estado_str = "ÓPTIMO"
         elif val_50 < 40.0:
-          color_txt = "#FFFF00"
+          color_txt = T['warn']
           color_bg = "#222200"
           estado_str = "MODERADO"
         else:
           color_txt = "#FF3300"
-          color_bg = "#330000"
+          color_bg = T['err_bg']
           estado_str = "ALTO"
           
         if hasattr(self, 'line_noise_status_labels') and i < len(self.line_noise_status_labels):
@@ -8653,12 +8836,12 @@ class RealTimePlotter(QtWidgets.QWidget):
       self._cvm_rest_ms = int(float(prot_cfg.get("cvm_duracion_descanso_s", 2.5)) * 1000)
       self.cvm_sequence = [(v, t) for v in ('A', 'I', 'U') for t in range(1, n_tomas + 1)]
       self.label_rec_time.setText(f"CVM GUIADA SIN METRÓNOMO ({n_tomas} SOSTENES DE {self._cvm_hold_ms/1000:.1f}s POR VOCAL: A, I, U)...")
-      self.label_rec_time.setStyleSheet("font-weight: bold; color: #FFCC00;")
+      self.label_rec_time.setStyleSheet(f"font-weight: bold; color: {T['warn']};")
       self.autoforge_overlay.setText(
         "<div align='center'>"
-        "<span style='color:#FFCC00; font-size:34px; font-weight:bold;'>CALIBRACIÓN CVM GUIADA (SIN METRÓNOMO)</span><br><br>"
-        "<span style='color:#FFFFFF; font-size:22px;'>Mantén cada gesto articulatorio (A, I, U) de forma continua durante 2.5 s.</span><br>"
-        "<span style='color:#00FFCC; font-size:18px;'>Sin pulsos rápidos para medir el plateau real P95 y evitar fatiga prematura.</span>"
+        f"<span style='color:{T['warn']}; font-size:34px; font-weight:bold;'>CALIBRACIÓN CVM GUIADA (SIN METRÓNOMO)</span><br><br>"
+        f"<span style='color:{T['white']}; font-size:22px;'>Mantén cada gesto articulatorio (A, I, U) de forma continua durante 2.5 s.</span><br>"
+        f"<span style='color:{T['accent']}; font-size:18px;'>Sin pulsos rápidos para medir el plateau real P95 y evitar fatiga prematura.</span>"
         "</div>"
       )
       self.autoforge_overlay.show()
@@ -8670,12 +8853,12 @@ class RealTimePlotter(QtWidgets.QWidget):
           ('U', 1), ('U', 2), ('U', 3)
       ]
       self.label_rec_time.setText("CONTRACCIÓN MUSCULAR MÁXIMA - 3 TOMAS POR VOCAL EXTREMA: A, I, U...")
-      self.label_rec_time.setStyleSheet("font-weight: bold; color: #FFCC00;")
+      self.label_rec_time.setStyleSheet(f"font-weight: bold; color: {T['warn']};")
       self.autoforge_overlay.setText(
           "<div align='center'>"
-          "<span style='color:#FFCC00; font-size:36px; font-weight:bold;'>CONTRACCIÓN MUSCULAR MÁXIMA</span><br><br>"
-          "<span style='color:#FFFFFF; font-size:24px;'>Iniciando protocolo de calibración al ritmo del metrónomo.</span><br>"
-          "<span style='color:#00FFCC; font-size:20px;'>Sigue las instrucciones en pantalla : Vocales A, I, U.</span>"
+          f"<span style='color:{T['warn']}; font-size:36px; font-weight:bold;'>CONTRACCIÓN MUSCULAR MÁXIMA</span><br><br>"
+          f"<span style='color:{T['white']}; font-size:24px;'>Iniciando protocolo de calibración al ritmo del metrónomo.</span><br>"
+          f"<span style='color:{T['accent']}; font-size:20px;'>Sigue las instrucciones en pantalla : Vocales A, I, U.</span>"
           "</div>"
       )
       self.autoforge_overlay.show()
@@ -8698,13 +8881,13 @@ class RealTimePlotter(QtWidgets.QWidget):
     desc = instrucciones.get(vocal, "")
     self.autoforge_overlay.setText(
       f"<div align='center'>"
-      f"<span style='color:#FFCC00; font-size:28px; font-weight:bold;'>CVM GUIADA SIN METRÓNOMO — Toma {self.cvm_step_idx+1}/{total_t}</span><br><br>"
-      f"<span style='color:#FFFF00; font-size:38px; font-weight:bold;'>DESCANSANDO — PREPÁRATE PARA /{vocal}/</span><br>"
+      f"<span style='color:{T['warn']}; font-size:28px; font-weight:bold;'>CVM GUIADA SIN METRÓNOMO — Toma {self.cvm_step_idx+1}/{total_t}</span><br><br>"
+      f"<span style='color:{T['warn']}; font-size:38px; font-weight:bold;'>DESCANSANDO — PREPÁRATE PARA /{vocal}/</span><br>"
       f"<span style='font-size:20px; color:#AAFFAA; font-weight:bold;'>{desc}</span>"
       f"</div>"
     )
     self.lbl_recording_space.setText(
-      f"<div align='center'><span style='color:#FFFF00; font-size:36px; font-weight:bold;'>PREPÁRATE PARA SOSTENER: /{vocal}/ (Toma {self.cvm_step_idx+1}/{total_t})</span></div>"
+      f"<div align='center'><span style='color:{T['warn']}; font-size:36px; font-weight:bold;'>PREPÁRATE PARA SOSTENER: /{vocal}/ (Toma {self.cvm_step_idx+1}/{total_t})</span></div>"
     )
     self._publicar_estado_display_remoto(palabra=f"PREP /{vocal}/", pulso_actual=self.cvm_step_idx+1, total_pulsos=total_t, grabando=False)
     if int(toma) == 1 and hasattr(self, 'voice_cue_player'):
@@ -8722,14 +8905,14 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.beep_queue.put((880, 160))
     self.autoforge_overlay.setText(
       f"<div align='center'>"
-      f"<span style='color:#FF3355; font-size:34px; font-weight:900;'>¡SOSTÉN LA CONTRACCIÓN AHORA! ({hold_s:.1f} s)</span><br>"
-      f"<span style='color:#00FFFF; font-size:88px; font-weight:900;'>/{vocal}/</span><br>"
-      f"<span style='color:#FFFFFF; font-size:18px;'>Toma {self.cvm_step_idx+1}/{total_t} — Mantén fuerza constante sin cortar</span>"
+      f"<span style='color:{T['err']}; font-size:34px; font-weight:900;'>¡SOSTÉN LA CONTRACCIÓN AHORA! ({hold_s:.1f} s)</span><br>"
+      f"<span style='color:{T['accent']}; font-size:88px; font-weight:900;'>/{vocal}/</span><br>"
+      f"<span style='color:{T['white']}; font-size:18px;'>Toma {self.cvm_step_idx+1}/{total_t} — Mantén fuerza constante sin cortar</span>"
       f"</div>"
     )
     self.lbl_recording_space.setText(
-      f"<div align='center'><span style='color:#FF3355; font-size:28px; font-weight:bold;'>¡SOSTÉN ({hold_s:.1f}s)!</span><br>"
-      f"<span style='color:#00FFFF; font-size:76px; font-weight:900;'>/{vocal}/</span></div>"
+      f"<div align='center'><span style='color:{T['err']}; font-size:28px; font-weight:bold;'>¡SOSTÉN ({hold_s:.1f}s)!</span><br>"
+      f"<span style='color:{T['accent']}; font-size:76px; font-weight:900;'>/{vocal}/</span></div>"
     )
     self._publicar_estado_display_remoto(palabra=vocal, pulso_actual=self.cvm_step_idx+1, total_pulsos=total_t, flash=True, grabando=True)
     self._safe_autoforge_single_shot(int(getattr(self, '_cvm_hold_ms', 2500)), self._cvm_guiado_fin_sosten)
@@ -8833,8 +9016,8 @@ class RealTimePlotter(QtWidgets.QWidget):
     
     self.autoforge_overlay.setText(
         f"<div align='center'>"
-        f"<span style='color:#FFCC00; font-size:32px; font-weight:bold;'>¡CONTRACCIÓN MUSCULAR MÁXIMA COMPLETADA!</span><br><br>"
-        f"<span style='font-size:22px; color:#00FFCC;'>Supremo Global - Pico: {self.supremo_global_uV:.1f} µV</span><br>"
+        f"<span style='color:{T['warn']}; font-size:32px; font-weight:bold;'>¡CONTRACCIÓN MUSCULAR MÁXIMA COMPLETADA!</span><br><br>"
+        f"<span style='font-size:22px; color:{T['accent']};'>Supremo Global - Pico: {self.supremo_global_uV:.1f} µV</span><br>"
         f"<span style='font-size:18px; color:#AAFFAA;'>Supremo Global - P95 Robusto: {self.supremo_global_p95_uV:.1f} µV</span>"
         f"</div>"
     )
@@ -8931,7 +9114,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     self._post_final_noise_target_method = target_post_noise
     self.is_recording = False
     self.label_rec_time.setText("GRABANDO RUIDO FINAL...")
-    self.lbl_recording_space.setText("<div align='center' style='font-size: 50px; font-weight: 900; color: #FFFF00;'>GRABANDO RUIDO FINAL...</div>")
+    self.lbl_recording_space.setText(f"<div align='center' style='font-size: 50px; font-weight: 900; color: {T['warn']};'>GRABANDO RUIDO FINAL...</div>")
     
     self.autoforge_overlay.setText("<div align='center'>HAZ SILENCIO<br>GRABANDO RUIDO FINAL (5s)...</div>")
     self.autoforge_overlay.show()
@@ -9015,13 +9198,13 @@ class RealTimePlotter(QtWidgets.QWidget):
     primera_v = self.autoforge_words[0].upper() if getattr(self, 'autoforge_words', None) else "A"
     tira_init = self._construir_tira_secuencia_html(getattr(self, 'autoforge_words', ["A"]), 0)
     self.lbl_recording_space.setStyleSheet(
-      "background-color: #141405; color: #FFFF00; font-family: 'Courier New', monospace; "
-      "border: 2px solid #FFFF00; border-radius: 6px; padding: 4px;"
+      f"background-color: #141405; color: {T['warn']}; font-family: 'Courier New', monospace; "
+      f"border: 2px solid {T['warn']}; border-radius: 6px; padding: 4px;"
     )
     self.lbl_recording_space.setText(
       f"<div align='center' style='line-height:1.15;'>"
-      f"<span style='font-size:28px; font-weight:900; color:#FFFF00;'>HAZ SILENCIO &mdash; GRABANDO RUIDO BASAL</span><br>"
-      f"<span style='font-size:16px; color:#00FFCC;'>Relaja el rostro. Al terminar comenzará la secuencia con /{primera_v}/:</span><br>"
+      f"<span style='font-size:28px; font-weight:900; color:{T['warn']};'>HAZ SILENCIO &mdash; GRABANDO RUIDO BASAL</span><br>"
+      f"<span style='font-size:16px; color:{T['accent']};'>Relaja el rostro. Al terminar comenzará la secuencia con /{primera_v}/:</span><br>"
       f"<span>{tira_init}</span>"
       f"</div>"
     )
@@ -9052,12 +9235,13 @@ class RealTimePlotter(QtWidgets.QWidget):
     # Hook fotometria: captura segura de ruido basal continuo
     self._safe_photometry_snapshot(fase="ruido_basal", palabra="ruido_inicial", pulso=0)
     
-    # --- Resetear escala Y a rango base calibrado (500 µV) ---
+    # --- Resetear escala Y a rango base calibrado (60 µV para envolvente, 500 µV para cruda) ---
     if hasattr(self, 'chk_rms_env') and self.chk_rms_env.isChecked():
-      self.plot.setYRange(0.0, 500.0, padding=0)
+      self.plot.setYRange(0.0, 60.0, padding=0)
+      self._held_plot_ymax = 60.0
     else:
       self.plot.setYRange(-500.0, 500.0, padding=0)
-    self._held_plot_ymax = 500.0
+      self._held_plot_ymax = 500.0
     
     noise_dur = self.spin_noise_duration.value()
     self._schedule_phase(int(noise_dur * 1000), self.estado_mostrar_preparate_continuo)
@@ -9069,9 +9253,9 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.autoforge_estado_actual_str = "ESCUCHA EL METRÓNOMO..."
     
     tr_str = getattr(self, 'tiempo_restante_str', '00:00')
-    cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;Resta: {tr_str}&nbsp;</span>"
+    cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:{T['accent']}; color:white;'>&nbsp;Resta: {tr_str}&nbsp;</span>"
     self.label_rec_time.setText(f"{self.autoforge_estado_actual_str}{cuadro_azul}")
-    self.label_rec_time.setStyleSheet("font-weight: bold; color: #FF8800;")
+    self.label_rec_time.setStyleSheet(f"font-weight: bold; color: {T['warn']};")
     
     if not getattr(self, 'noise_calculated', False):
       import numpy as np
@@ -9095,14 +9279,14 @@ class RealTimePlotter(QtWidgets.QWidget):
             self.noise_regions[i].setRegion([0.0, self.noise_levels[i]])
           else:
             self.noise_lines_neg[i].setPos(-self.noise_levels[i])
-            self.noise_lines_neg[i].setVisible(show_noise)
+            self.noise_lines_neg[i].setVisible(False)
             self.noise_regions[i].setRegion([-self.noise_levels[i], self.noise_levels[i]])
-          self.noise_lines[i].setVisible(show_noise)
+          self.noise_lines[i].setVisible(False)
           self.noise_regions[i].setVisible(show_noise)
           
           if hasattr(self, 'noise_status_labels'):
             self.noise_status_labels[i].setText(f"Ruido Base: x̄={self.initial_noise_mean[i]:.1f}µV, s={self.initial_noise_std[i]:.1f}µV")
-            self.noise_status_labels[i].setStyleSheet("color: #00FFFF; font-size: 11px; font-weight: bold; background-color: #111111; border: 1px solid #00FFFF;")
+            self.noise_status_labels[i].setStyleSheet(f"color: {T['accent']}; font-size: 11px; font-weight: bold; background-color: {T['bg1']}; border: 1px solid {T['accent']};")
       
       if self.NUM_CANALES > 0:
         ruido_maximo_std = max(getattr(self, 'initial_noise_std', [0]))
@@ -9408,6 +9592,12 @@ class RealTimePlotter(QtWidgets.QWidget):
       try:
         self.persistir_notas_experimento(str(base_dir), metadata_base=metadata)
       except Exception: pass
+
+      # 7. Generar automaticamente resumen_rapido_toma.txt (uV reales, ratios y separabilidad)
+      try:
+        self._escribir_resumen_rapido_toma_txt(str(base_dir), metadata=metadata, modo="Secuencia Continua")
+      except Exception as exc_res:
+        print(f"[Resumen Rapido] Error al guardar resumen en Secuencia Continua: {exc_res}")
       
     threading.Thread(target=guardar_async, daemon=True).start()
     
@@ -9499,9 +9689,9 @@ class RealTimePlotter(QtWidgets.QWidget):
     if hasattr(self, 'lbl_recording_space'):
       self.lbl_recording_space.setText(
         f"<div align='center'>"
-        f"<span style='font-size: 24px; color: #00FFCC; font-weight: bold;'>¡SESION COMPLETADA!</span><br>"
-        f"<span style='font-size: 16px; color: #FFFF00;'>Orden registrado:</span><br>"
-        f"<span style='font-size: 32px; font-weight: 900; color: #FFFFFF;'>{orden_flechas}</span>"
+        f"<span style='font-size: 24px; color: {T['accent']}; font-weight: bold;'>¡SESION COMPLETADA!</span><br>"
+        f"<span style='font-size: 16px; color: {T['warn']};'>Orden registrado:</span><br>"
+        f"<span style='font-size: 32px; font-weight: 900; color: {T['white']};'>{orden_flechas}</span>"
         f"</div>"
       )
 
@@ -9566,7 +9756,7 @@ class RealTimePlotter(QtWidgets.QWidget):
       # Actualizamos el label si no está grabando ruido/palabra, o si está en un descanso
       if not getattr(self, 'is_recording', False) and getattr(self, 'is_autoforge_running', False):
         if hasattr(self, 'autoforge_estado_actual_str'):
-          cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;Resta: {self.tiempo_restante_str}&nbsp;</span>"
+          cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:{T['accent']}; color:white;'>&nbsp;Resta: {self.tiempo_restante_str}&nbsp;</span>"
           self.label_rec_time.setText(f"{self.autoforge_estado_actual_str}{cuadro_azul}")
     else:
       self.tiempo_restante_str = "00:00"
@@ -9626,17 +9816,17 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.autoforge_estado_actual_str = f"Set: {palabra_num}/{total_palabras}"
     
     tr_str = getattr(self, 'tiempo_restante_str', '00:00')
-    cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;Resta: {tr_str}&nbsp;</span>"
+    cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:{T['accent']}; color:white;'>&nbsp;Resta: {tr_str}&nbsp;</span>"
     self.label_rec_time.setText(f"{self.autoforge_estado_actual_str}{cuadro_azul}")
     
     self.autoforge_overlay.setText("<div align='center'>HAZ SILENCIO<br>PREPARANDO ENTORNO...</div>")
     self.autoforge_overlay.show()
     
     vocal_colores = {'A': '#E63946', 'E': '#1F77B4', 'I': '#2CA02C', 'O': '#9D4EDD', 'U': '#E7A61A'}
-    v_col = vocal_colores.get(palabra.upper(), '#00FFCC')
+    v_col = vocal_colores.get(palabra.upper(), T['accent'])
     texto_ventana = (
       f"<div align='center'>"
-      f"<span style='font-size: 24px; color: #888888; font-weight: bold;'>SIGUIENTE VOCAL:</span><br>"
+      f"<span style='font-size: 24px; color: {T['text_dim']}; font-weight: bold;'>SIGUIENTE VOCAL:</span><br>"
       f"<span style='font-size: 75px; font-weight: 900; color: {v_col};'>/{palabra.upper()}/</span>"
       f"</div>"
     )
@@ -9659,13 +9849,13 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.label_rec_time.setVisible(True) 
     palabra_next = self.autoforge_words[self.autoforge_word_idx].upper() if (getattr(self, 'autoforge_words', None) and self.autoforge_word_idx < len(self.autoforge_words)) else "A"
     self.lbl_recording_space.setStyleSheet(
-      "background-color: #141405; color: #FFFF00; font-family: 'Courier New', monospace; "
-      "border: 2px solid #FFFF00; border-radius: 6px; padding: 4px;"
+      f"background-color: #141405; color: {T['warn']}; font-family: 'Courier New', monospace; "
+      f"border: 2px solid {T['warn']}; border-radius: 6px; padding: 4px;"
     )
     self.lbl_recording_space.setText(
       f"<div align='center' style='line-height:1.15;'>"
-      f"<span style='font-size:28px; font-weight:900; color:#FFFF00;'>HAZ SILENCIO &mdash; GRABANDO RUIDO BASAL</span><br>"
-      f"<span style='font-size:18px; color:#00FFCC;'>Relaja el rostro. Siguiente vocal a pronunciar: <b>/{palabra_next}/</b></span>"
+      f"<span style='font-size:28px; font-weight:900; color:{T['warn']};'>HAZ SILENCIO &mdash; GRABANDO RUIDO BASAL</span><br>"
+      f"<span style='font-size:18px; color:{T['accent']};'>Relaja el rostro. Siguiente vocal a pronunciar: <b>/{palabra_next}/</b></span>"
       f"</div>"
     )
     if hasattr(self, 'voice_cue_player'):
@@ -9698,12 +9888,13 @@ class RealTimePlotter(QtWidgets.QWidget):
     # Hook fotometria: captura segura de ruido basal
     self._safe_photometry_snapshot(fase="ruido_basal", palabra="ruido_inicial", pulso=0)
     
-    # --- Resetear escala Y a rango base calibrado (500 µV) ---
+    # --- Resetear escala Y a rango base calibrado (60 µV para envolvente, 500 µV para cruda) ---
     if hasattr(self, 'chk_rms_env') and self.chk_rms_env.isChecked():
-      self.plot.setYRange(0.0, 500.0, padding=0)
+      self.plot.setYRange(0.0, 60.0, padding=0)
+      self._held_plot_ymax = 60.0
     else:
       self.plot.setYRange(-500.0, 500.0, padding=0)
-    self._held_plot_ymax = 500.0
+      self._held_plot_ymax = 500.0
     
     # Programar la aparición de la ventana "Preparate" y el metrónomo CUANDO TERMINE EL RUIDO
     noise_dur = self.spin_noise_duration.value()
@@ -9723,9 +9914,9 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.autoforge_estado_actual_str = "ESCUCHA EL METRÓNOMO..."
     
     tr_str = getattr(self, 'tiempo_restante_str', '00:00')
-    cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:#0055FF; color:white;'>&nbsp;Resta: {tr_str}&nbsp;</span>"
+    cuadro_azul = f"&nbsp;&nbsp;<span style='background-color:{T['accent']}; color:white;'>&nbsp;Resta: {tr_str}&nbsp;</span>"
     self.label_rec_time.setText(f"{self.autoforge_estado_actual_str}{cuadro_azul}")
-    self.label_rec_time.setStyleSheet("font-weight: bold; color: #FF8800;") # Naranja
+    self.label_rec_time.setStyleSheet(f"font-weight: bold; color: {T['warn']};") # Naranja
     
     # --- NUEVO: Forzamos el cálculo matemático del ruido aquí para evitar desincronizaciones de UI ---
     if not getattr(self, 'noise_calculated', False):
@@ -9750,14 +9941,14 @@ class RealTimePlotter(QtWidgets.QWidget):
             self.noise_regions[i].setRegion([0.0, self.noise_levels[i]])
           else:
             self.noise_lines_neg[i].setPos(-self.noise_levels[i])
-            self.noise_lines_neg[i].setVisible(show_noise)
+            self.noise_lines_neg[i].setVisible(False)
             self.noise_regions[i].setRegion([-self.noise_levels[i], self.noise_levels[i]])
-          self.noise_lines[i].setVisible(show_noise)
+          self.noise_lines[i].setVisible(False)
           self.noise_regions[i].setVisible(show_noise)
           
           if hasattr(self, 'noise_status_labels'):
             self.noise_status_labels[i].setText(f"Ruido Base: x̄={self.initial_noise_mean[i]:.1f}µV, s={self.initial_noise_std[i]:.1f}µV")
-            self.noise_status_labels[i].setStyleSheet("color: #00FFFF; font-size: 11px; font-weight: bold; background-color: #111111; border: 1px solid #00FFFF;")
+            self.noise_status_labels[i].setStyleSheet(f"color: {T['accent']}; font-size: 11px; font-weight: bold; background-color: {T['bg1']}; border: 1px solid {T['accent']};")
       
       # --- NUEVO: Auto-ajuste del umbral de SNR ---
       if self.NUM_CANALES > 0:
@@ -9780,10 +9971,10 @@ class RealTimePlotter(QtWidgets.QWidget):
     
     palabra = self.autoforge_words[self.autoforge_word_idx]
     vocal_colores = {'A': '#E63946', 'E': '#1F77B4', 'I': '#2CA02C', 'O': '#9D4EDD', 'U': '#E7A61A'}
-    v_col = vocal_colores.get(palabra.upper(), '#00FFCC')
+    v_col = vocal_colores.get(palabra.upper(), T['accent'])
     texto_ventana = (
       f"<div align='center'>"
-      f"<span style='font-size: 24px; color: #FFCC00; font-weight: bold;'>PREPÁRATE:</span><br>"
+      f"<span style='font-size: 24px; color: {T['warn']}; font-weight: bold;'>PREPÁRATE:</span><br>"
       f"<span style='font-size: 75px; font-weight: 900; color: {v_col};'>/{palabra.upper()}/</span>"
       f"</div>"
     )
@@ -9825,12 +10016,12 @@ class RealTimePlotter(QtWidgets.QWidget):
     
     # Mostrar la vocal en grande en lbl_recording_space y en el titulo del metronomo
     vocal_colores = {'A': '#E63946', 'E': '#1F77B4', 'I': '#2CA02C', 'O': '#9D4EDD', 'U': '#E7A61A'}
-    v_col = vocal_colores.get(palabra, '#00FFCC')
+    v_col = vocal_colores.get(palabra, T['accent'])
     self.lbl_recording_space.setText(f"<div align='center' style='font-size: 85px; font-weight: 900; color: {v_col};'>/{palabra}/</div>")
     if hasattr(self, 'countdown_text'):
         self.countdown_text.hide()
     self.metro_lbl_title.setText(f"VOCAL /{palabra}/ (P1)")
-    self.metro_lbl_title.setStyleSheet("font-size: 15px; color: #00FFCC; font-weight: bold;")
+    self.metro_lbl_title.setStyleSheet(f"font-size: 15px; color: {T['accent']}; font-weight: bold;")
     
     # --- REACTIVAMOS LA GRABACIÓN: AQUÍ EMPIEZA LA PALABRA REAL ---
     import time
@@ -9899,7 +10090,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.autoforge_estado_actual_str = "DESCANSO 5s (GUARDANDO)"
     self.autoforge_overlay.setText("<div align='center'>DESCANSO 5s<br>GUARDANDO DATOS...</div>")
     self.autoforge_overlay.show()
-    self.lbl_recording_space.setText("<div align='center' style='color:#888888; font-size:55px; font-weight:bold;'>DESCANSO</div>")
+    self.lbl_recording_space.setText(f"<div align='center' style='color:{T['text_dim']}; font-size:55px; font-weight:bold;'>DESCANSO</div>")
     if hasattr(self, 'voice_cue_player'):
       self.voice_cue_player.say("descanso", "Descanso", fase="descanso_entre_tomas")
     
@@ -10131,6 +10322,12 @@ class RealTimePlotter(QtWidgets.QWidget):
       try:
         self.persistir_notas_experimento(str(base_dir), metadata_base=metadata)
       except Exception: pass
+
+      # 7. Generar automaticamente resumen_rapido_toma.txt (uV reales, ratios y separabilidad)
+      try:
+        self._escribir_resumen_rapido_toma_txt(str(base_dir), metadata=metadata, modo="Autograbado Discreto")
+      except Exception as exc_res:
+        print(f"[Resumen Rapido] Error al guardar resumen en Autograbado: {exc_res}")
       
     threading.Thread(target=guardar_async, daemon=True).start()
     
@@ -10151,7 +10348,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     # Ocultar el overlay oscuro para que la señal se vea limpia y sin sombra
     self.autoforge_overlay.hide()
     self.lbl_recording_space.setText(
-      "<div align='center' style='color:#00FF00; font-size:32px; font-weight:bold;'>"
+      f"<div align='center' style='color:{T['ok']}; font-size:32px; font-weight:bold;'>"
       "VERIFICACIÓN MUSCULAR<br>"
       "<span style='font-size:20px; color:#88FF88;'>Activa tus músculos para probar la señal</span>"
       "</div>"
@@ -10194,13 +10391,13 @@ class RealTimePlotter(QtWidgets.QWidget):
       self._error_count = getattr(self, '_error_count', 0) + 1
       if hasattr(self, 'btn_terminal'):
         self.btn_terminal.setText(f"CONSOLA / ERRORES ({self._error_count})")
-        self.btn_terminal.setStyleSheet("QPushButton { background-color: #0B0F19; color: #39FF14; border: 1.5px solid #39FF14; padding: 7px 12px; font-weight: bold; border-radius: 4px; } QPushButton:hover { background-color: #39FF14; color: #050508; }")
+        self.btn_terminal.setStyleSheet(f"QPushButton {{ background-color: {T['bg1']}; color: {T['ok']}; border: 1.5px solid {T['ok']}; padding: 5px 10px; font-size: 11px; font-weight: bold; border-radius: 4px; }} QPushButton:hover {{ background-color: {T['ok']}; color: {T['bg0']}; }}")
 
   def mostrar_consola_diagnostico(self):
     self._error_count = 0
     if hasattr(self, 'btn_terminal'):
       self.btn_terminal.setText("CONSOLA / LOGS (0)")
-      self.btn_terminal.setStyleSheet("QPushButton { background-color: #0B0F19; color: #39FF14; border: 1.5px solid #39FF14; padding: 7px 12px; font-weight: bold; border-radius: 4px; } QPushButton:hover { background-color: #39FF14; color: #050508; }")
+      self.btn_terminal.setStyleSheet(f"QPushButton {{ background-color: {T['bg1']}; color: {T['ok']}; border: 1.5px solid {T['ok']}; padding: 5px 10px; font-size: 11px; font-weight: bold; border-radius: 4px; }} QPushButton:hover {{ background-color: {T['ok']}; color: {T['bg0']}; }}")
     self.terminal_dialog.show()
     self.terminal_dialog.raise_()
     self.terminal_dialog.activateWindow()
@@ -10212,13 +10409,13 @@ class RealTimePlotter(QtWidgets.QWidget):
     if getattr(self, 'chk_use_mic', None) and self.chk_use_mic.isChecked():
       self.lbl_daq_status.setText("FUENTE: MICROFONO PC")
       self.lbl_daq_status.setStyleSheet(
-        "background-color: #001a22; color: #00FFFF; border: 1.5px solid #00FFFF; padding: 5px 8px; font-weight: bold; border-radius: 3px;"
+        f"background-color: #001a22; color: {T['accent']}; border: 1.5px solid {T['accent']}; padding: 5px 8px; font-weight: bold; border-radius: 3px;"
       )
       return
     if getattr(self, 'chk_modo_prueba', None) and self.chk_modo_prueba.isChecked():
       self.lbl_daq_status.setText("FUENTE: SIMULADOR ACTIVO")
       self.lbl_daq_status.setStyleSheet(
-        "background-color: #1a001a; color: #FF00FF; border: 1.5px solid #FF00FF; padding: 5px 8px; font-weight: bold; border-radius: 3px;"
+        f"background-color: {T['bg2']}; color: {T['purple']}; border: 1.5px solid {T['purple']}; padding: 5px 8px; font-weight: bold; border-radius: 3px;"
       )
       return
     if getattr(self, 'chk_zmq_bridge', None) and self.chk_zmq_bridge.isChecked():
@@ -10234,17 +10431,17 @@ class RealTimePlotter(QtWidgets.QWidget):
           mode_rem = ping.get("terminal_config", "DIFF")
           self.lbl_daq_status.setText(f"PUENTE VM: {dev_rem} CONECTADO ({host}:{port} | {mode_rem})")
           self.lbl_daq_status.setStyleSheet(
-            "background-color: #00220a; color: #00FF00; border: 1.5px solid #00FF00; padding: 4px 8px; font-weight: bold; border-radius: 3px;"
+            f"background-color: #00220a; color: {T['ok']}; border: 1.5px solid {T['ok']}; padding: 4px 8px; font-weight: bold; border-radius: 3px;"
           )
         else:
           self.lbl_daq_status.setText(f"PUENTE VM ZMQ: LISTO ({host}:{port})")
           self.lbl_daq_status.setStyleSheet(
-            "background-color: #241800; color: #FFAA00; border: 1.5px solid #FFAA00; padding: 4px 8px; font-weight: bold; border-radius: 3px;"
+            f"background-color: #241800; color: {T['warn']}; border: 1.5px solid {T['warn']}; padding: 4px 8px; font-weight: bold; border-radius: 3px;"
           )
       except Exception:
         self.lbl_daq_status.setText(f"PUENTE VM ZMQ: ACTIVO ({ep_str})")
         self.lbl_daq_status.setStyleSheet(
-          "background-color: #241800; color: #FFAA00; border: 1.5px solid #FFAA00; padding: 4px 8px; font-weight: bold; border-radius: 3px;"
+          f"background-color: #241800; color: {T['warn']}; border: 1.5px solid {T['warn']}; padding: 4px 8px; font-weight: bold; border-radius: 3px;"
         )
       return
 
@@ -10252,7 +10449,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     if not NIDAQMX_DISPONIBLE:
       self.lbl_daq_status.setText(f"DAQ: SIN DRIVER NIDAQMX")
       self.lbl_daq_status.setStyleSheet(
-        "background-color: #2a0000; color: #FF4444; border: 1.5px solid #FF0000; padding: 5px 8px; font-weight: bold; border-radius: 3px;"
+        f"background-color: #2a0000; color: #FF4444; border: 1.5px solid {T['err']}; padding: 5px 8px; font-weight: bold; border-radius: 3px;"
       )
       return
 
@@ -10266,7 +10463,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         status_txt = f"DAQ: {dev_target} CONECTADO [{prod_type}]"
         self.lbl_daq_status.setText(status_txt)
         self.lbl_daq_status.setStyleSheet(
-          "background-color: #00220a; color: #00FF00; border: 1.5px solid #00FF00; padding: 4px 8px; font-weight: bold; border-radius: 3px;"
+          f"background-color: #00220a; color: {T['ok']}; border: 1.5px solid {T['ok']}; padding: 4px 8px; font-weight: bold; border-radius: 3px;"
         )
         if getattr(self, '_last_daq_status', None) != status_txt:
           print(f"[DAQ CHECK] Dispositivo fisico detectado: {dev_target} ({prod_type})")
@@ -10300,7 +10497,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     if n_new >= win_50hz:
       self._raw_50hz_buffer[:, :] = raw_uV_chunk[:, -win_50hz:]
     else:
-      self._raw_50hz_buffer = np.roll(self._raw_50hz_buffer, -n_new, axis=1)
+      self._raw_50hz_buffer[:, :-n_new] = self._raw_50hz_buffer[:, n_new:]
       self._raw_50hz_buffer[:, -n_new:] = raw_uV_chunk
 
     now_t = time.perf_counter()
@@ -10311,11 +10508,11 @@ class RealTimePlotter(QtWidgets.QWidget):
     for i in range(self.NUM_CANALES):
       val_50 = calcular_ruido_linea_50hz(self._raw_50hz_buffer[i], self.SAMPLE_RATE)
       if val_50 < 15.0:
-        color_txt, color_bg, estado_str = "#00FFCC", "#002211", "OPTIMO"
+        color_txt, color_bg, estado_str = T['accent'], "#002211", "OPTIMO"
       elif val_50 < 40.0:
-        color_txt, color_bg, estado_str = "#FFFF00", "#222200", "MODERADO"
+        color_txt, color_bg, estado_str = T['warn'], "#222200", "MODERADO"
       else:
-        color_txt, color_bg, estado_str = "#FF3300", "#330000", "ALTO"
+        color_txt, color_bg, estado_str = "#FF3300", T['err_bg'], "ALTO"
 
       musculo = self.nombres_musculos[i % len(self.nombres_musculos)]
       if hasattr(self, 'line_noise_status_labels') and i < len(self.line_noise_status_labels):
@@ -10344,6 +10541,119 @@ class RealTimePlotter(QtWidgets.QWidget):
     if callable(cb) and getattr(self, 'is_autoforge_running', False):
       cb()
 
+  def _on_toggle_oscilloscope_grid(self, checked: bool):
+    show_g = bool(checked)
+    self.plot.showGrid(x=show_g, y=show_g, alpha=0.28 if show_g else 0.0)
+    for sp in getattr(self, 'sub_plots', []):
+      try:
+        sp.showGrid(x=show_g, y=show_g, alpha=0.28 if show_g else 0.0)
+      except Exception:
+        pass
+
+  # =============================================================================
+  # NUEVO: Ayudantes del osciloscopio (Bugs 1.1, 1.2, 1.3 y 1.4)
+  # =============================================================================
+  def _crear_badge_pista(self, plot_objetivo, hw_idx: int, musc_name: str, color_hex):
+    """Crea el badge horizontal con el nombre completo del musculo de una pista.
+
+    Bug 1.1: el nombre largo nunca mas vive en el eje Y (que desborda verticalmente
+    y se solapa entre pistas); vive como texto horizontal limpio anclado en la
+    esquina superior izquierda DENTRO del ViewBox de la pista.
+    """
+    color_seguro = color_hex if (isinstance(color_hex, str) and color_hex.startswith('#')) else T['white']
+    badge = pg.TextItem(anchor=(0, 0), fill=pg.mkBrush(11, 15, 25, 205), border=pg.mkPen(None))
+    badge.setHtml(
+      "<span style=\"color:" + pg.mkColor(color_seguro).name() +
+      "; font-family:'Segoe UI','DejaVu Sans',monospace; font-size:8.5pt; font-weight:bold;\">" +
+      "ai" + str(int(hw_idx)) + " - " + musc_name + "</span>"
+    )
+    badge.setZValue(80)
+    badge.hide() # se muestra _posicionar_badges_multitrack al ubicarlo sobre el rango visible
+    plot_objetivo.addItem(badge)
+    return badge
+
+  def _posicionar_badges_multitrack(self, *args):
+    """Ubica cada badge en la esquina superior izquierda del ViewBox de su pista.
+
+    Bug 1.1: anclado a datos (x izquierda, y tope) y re-disparado por
+    sigRangeChanged para seguir la escala viva del osciloscopio sin tapar senal.
+    """
+    badges = getattr(self, 'multitrack_badges', [])
+    if not badges:
+      return
+    plots_objetivo = [getattr(self, 'plot', None)]
+    plots_objetivo.extend(getattr(self, 'sub_plots', []))
+    for i, badge in enumerate(badges):
+      if badge is None:
+        continue
+      plot_ref = plots_objetivo[i] if i < len(plots_objetivo) else None
+      if plot_ref is None:
+        continue
+      try:
+        vb = plot_ref.getViewBox()
+        if vb is None:
+          continue
+        rango = vb.viewRange()
+        badge.setPos(float(rango[0][0]), float(rango[1][1]))
+        # respeta el checkbox de visualizacion del canal correspondiente
+        chk_ok = True
+        chk_list = getattr(self, 'viz_checkboxes', [])
+        if i < len(chk_list):
+          chk_ok = bool(chk_list[i].isChecked())
+        badge.show() if chk_ok else badge.hide()
+      except Exception:
+        continue
+
+  def _aplicar_estilo_trazos_segun_modo(self, es_envolvente: bool):
+    """Conmuta la estetica de los trazos del osciloscopio (Neon Clinical Slate vs Clásico)."""
+    estilo_trazo = "neon_slate"
+    if hasattr(self, 'config_mgr') and self.config_mgr:
+      estilo_trazo = self.config_mgr.get("estetica_global", "estilo_trazo_envolvente") or "neon_slate"
+    
+    if hasattr(self, 'plot_widget'):
+      self.plot_widget.setBackground(T['bg1'] if estilo_trazo == 'neon_slate' else T['bg0'])
+
+    capas = [
+      (getattr(self, 'curvas', []), getattr(self, 'curvas_neon_core', []), 0),
+      (getattr(self, 'curvas_multitrack', []), getattr(self, 'curvas_neon_core_multitrack', []), 1),
+    ]
+    for curvas_capa, nucleos_capa, ch_offset in capas:
+      for i, curva in enumerate(curvas_capa):
+        try:
+          ch_idx = i + ch_offset
+          if hasattr(self, 'colores_curvas') and self.colores_curvas:
+            color = self.colores_curvas[ch_idx % len(self.colores_curvas)]
+            qcol = pg.mkColor(color)
+          else:
+            qcol = pg.mkColor(CHANNEL_PALETTE[ch_idx % len(CHANNEL_PALETTE)])
+          if es_envolvente:
+            if estilo_trazo == "clasico":
+              curva.setPen(pg.mkPen(qcol.red(), qcol.green(), qcol.blue(), 255, width=2.0))
+              try:
+                curva.setFillLevel(None)
+                curva.setFillBrush(None)
+              except Exception:
+                pass
+            else:
+              # Trazo limpio de 1 sola curva sin relleno poligonal para máxima fluidez en tiempo real
+              curva.setPen(pg.mkPen(qcol.red(), qcol.green(), qcol.blue(), 255, width=2.0))
+              try:
+                curva.setFillLevel(None)
+                curva.setFillBrush(None)
+              except Exception:
+                pass
+          else:
+            curva.setPen(pg.mkPen(qcol.red(), qcol.green(), qcol.blue(), 255, width=1.2))
+            try:
+              curva.setFillLevel(None)
+              curva.setFillBrush(None)
+            except Exception:
+              pass
+          if nucleos_capa and i < len(nucleos_capa):
+            nucleos_capa[i].setVisible(False)
+        except Exception:
+          continue
+
   def toggle_multitrack_view(self, multitrack: bool):
     self.is_multitrack_view = multitrack
     if hasattr(self, 'btn_toggle_multitrack'):
@@ -10354,29 +10664,92 @@ class RealTimePlotter(QtWidgets.QWidget):
     # 1. Limpiar sub_plots anteriores del layout de forma segura
     for sp in getattr(self, 'sub_plots', []):
       try:
+        # NUEVO: desactivar las senales del plot cerrado para que sus slots
+        # perezosos (updateButtons -> autoBtn None) no se disparen tras el close.
+        sp.vb.sigStateChanged.disconnect()
+      except Exception:
+        pass
+      try:
+        sp.vb.sigRangeChanged.disconnect()
+      except Exception:
+        pass
+      try:
         self.plot_widget.removeItem(sp)
         sp.close()
       except Exception:
         pass
     self.sub_plots = []
     self.curvas_multitrack = []
+    # NUEVO (Bug 1.3): los nucleos blancos de las pistas anteriores desaparecen con el subplot
+    self.curvas_neon_core_multitrack = []
+    # NUEVO (Bug 1.1): retirar los badges flotantes de las pistas anteriores
+    for b_antiguo in getattr(self, 'multitrack_badges', []):
+      try:
+        b_antiguo.hide()
+      except Exception:
+        pass
+    self.multitrack_badges = []
 
     # 2. Modo Superpuesto: reactivar todas las curvas originales en self.plot
     if not multitrack:
       self.plot.showAxis('bottom')
       self.plot.setLabel('bottom', 'Tiempo (s)')
-      self.plot.setLabel('left', 'Voltaje (µV)')
+      self.plot.setLabel('left', 'Amplitud (µV)')
+      # NUEVO (Bug 1.1): restaurar ancho del eje izquierdo y leyenda del modo superpuesto
+      try:
+        self.plot.getAxis('left').setWidth(64)
+      except Exception:
+        pass
+      legend_superpuesta = getattr(self.plot, 'legend', None)
+      if legend_superpuesta is not None:
+        try:
+          legend_superpuesta.setOffset((-12, 10)) # esquina superior derecha (Bug 1.4)
+          legend_superpuesta.show()
+        except Exception:
+          pass
       for i, c in enumerate(self.curvas):
         if i < len(self.viz_checkboxes):
           c.setVisible(self.viz_checkboxes[i].isChecked())
         else:
           c.setVisible(True)
+      # NUEVO (Bug 1.3): visibilidad de los nucleos blancos acorde a cada canal visible
+      for i, nucleo_sp in enumerate(getattr(self, 'curvas_neon_core', [])):
+        if i < len(self.curvas):
+          nucleo_sp.setVisible(self.curvas[i].isVisible())
+      # NUEVO (Bug 1.2): al alternar vista, todos vuelven a compartir el mismo
+      # rango temporal relativo [-window_sec, 0] exacto.
+      try:
+        dur_vista = max(0.1, float(self.PLOT_DURATION_S))
+        self.plot.setXRange(-dur_vista, 0, padding=0)
+        for sp_x in getattr(self, 'sub_plots', []):
+          sp_x.setXRange(-dur_vista, 0, padding=0)
+      except Exception:
+        pass
+      # NUEVO (Bugs 1.3/1.4): re-aplicar el estilo de trazos del modo vigente
+      try:
+        self._aplicar_estilo_trazos_segun_modo(getattr(self, '_estilo_neon_rms_aplicado', False))
+      except Exception:
+        pass
 
     # 3. Modo Pistas Separadas (Multitrack): Canal 0 en self.plot, canales 1..N en sub_plots dedicados
     else:
       self.plot.hideAxis('bottom')
-      musc_0 = self.nombres_musculos[0 % len(self.nombres_musculos)] if self.nombres_musculos else "Canal 0"
-      self.plot.setLabel('left', f"{musc_0} (µV)")
+      # NUEVO (Bug 1.1): etiqueta CORTA del eje izquierdo ('uV') que jamas desborde
+      # verticalmente, con ancho fijo limpio; el nombre completo del musculo va en
+      # un badge horizontal dentro de la pista (sin solapamiento entre pistas).
+      self.plot.setLabel('left', 'uV', color=T['text_dim'])
+      try:
+        self.plot.getAxis('left').setWidth(48)
+      except Exception:
+        pass
+      # NUEVO (Bug 1.4): en pistas separadas la leyenda duplica lo que dicen los
+      # badges y tapa la senal: se oculta y los badges toman el relevo.
+      legend_multitrack = getattr(self.plot, 'legend', None)
+      if legend_multitrack is not None:
+        try:
+          legend_multitrack.hide()
+        except Exception:
+          pass
       if 0 < len(self.viz_checkboxes):
         self.curvas[0].setVisible(self.viz_checkboxes[0].isChecked())
       else:
@@ -10385,30 +10758,158 @@ class RealTimePlotter(QtWidgets.QWidget):
       # Ocultar canales 1..N en self.plot sin sacarlos de su ViewBox
       for i in range(1, len(self.curvas)):
         self.curvas[i].setVisible(False)
+      # NUEVO (Bug 1.3): ocultar tambien los nucleos blancos de los canales 1..N
+      for i in range(1, len(getattr(self, 'curvas_neon_core', []))):
+        try:
+          self.curvas_neon_core[i].setVisible(False)
+        except Exception:
+          pass
+      # NUEVO (Bug 1.1): badge horizontal con el nombre completo del canal 0
+      try:
+        hw_0 = self.active_channel_indices[0] if (hasattr(self, 'active_channel_indices') and self.active_channel_indices and len(self.active_channel_indices) > 0) else 0
+        musc_0 = self.nombres_musculos[0 % len(self.nombres_musculos)] if self.nombres_musculos else "Canal 0"
+        color_0 = self.colores_curvas[0 % len(self.colores_curvas)] if hasattr(self, 'colores_curvas') and self.colores_curvas else T['white']
+        self.multitrack_badges.append(self._crear_badge_pista(self.plot, hw_0, musc_0, color_0))
+      except Exception:
+        self.multitrack_badges.append(None)
 
+      plot_dur_safe = float(self.PLOT_DURATION_S) if getattr(self, 'PLOT_DURATION_S', 0) > 0 else float(self.spin_plot_duration.value() if hasattr(self, 'spin_plot_duration') else 10.0)
       # Crear un sub_plot nativo con su propia curva dedicada para cada canal 1..N
       for i in range(1, self.NUM_CANALES):
         sp = self.plot_widget.addPlot(row=i, col=0)
-        sp.showGrid(x=True, y=True)
-        sp.getAxis('left').setWidth(60)
+        sp.showGrid(x=True, y=True, alpha=0.28)
+        # NUEVO (Bug 1.1): ancho fijo 48 y etiqueta corta 'uV' (eje que no se solapa nunca)
+        sp.getAxis('left').setWidth(48)
+        sp.setLabel('left', 'uV', color=T['text_dim'])
         musc_name = self.nombres_musculos[i % len(self.nombres_musculos)] if self.nombres_musculos else f"Canal {i}"
-        sp.setLabel('left', f"{musc_name} (µV)")
+        # Vinculación de ejes con self.plot
         sp.setXLink(self.plot)
         sp.setYLink(self.plot)
         sp.setMouseEnabled(x=False, y=True)
         sp.getViewBox().disableAutoRange(pg.ViewBox.XAxis)
         sp.getViewBox().disableAutoRange(pg.ViewBox.YAxis)
+        sp.getViewBox().setLimits(xMin=-plot_dur_safe, xMax=0.0)
         if i < self.NUM_CANALES - 1:
           sp.hideAxis('bottom')
         else:
           sp.setLabel('bottom', 'Tiempo (s)')
         
-        pen_color = self.colores_curvas[i % len(self.colores_curvas)] if hasattr(self, 'colores_curvas') else pg.intColor(i)
-        sub_c = sp.plot(pen=pen_color, name=musc_name)
+        pen_color = self.colores_curvas[i % len(self.colores_curvas)] if hasattr(self, 'colores_curvas') and self.colores_curvas else pg.intColor(i)
+        # NUEVO (Bug 1.4): trazo crudo width=1.15, igual que la capa superpuesta
+        sub_c = sp.plot(pen=pg.mkPen(pg.mkColor(pen_color) if isinstance(pen_color, str) else pen_color, width=1.15), name=musc_name)
+        sub_c.setClipToView(True)
+        sub_c.setZValue(10 + i)
         if i < len(self.viz_checkboxes):
           sub_c.setVisible(self.viz_checkboxes[i].isChecked())
+        else:
+          sub_c.setVisible(True)
         self.curvas_multitrack.append(sub_c)
+
+        # NUEVO (Bug 1.3): nucleo blanco interior de la envolvente para esta pista separada
+        nucleo_mt = sp.plot(pen=pg.mkPen(255, 255, 255, 240, width=1.0))
+        nucleo_mt.setClipToView(True)
+        nucleo_mt.setZValue(10 + i + 0.5)
+        nucleo_mt.setVisible(False)
+        self.curvas_neon_core_multitrack.append(nucleo_mt)
+
+        # NUEVO (Bug 1.1): badge horizontal con el nombre completo del musculo
+        try:
+          hw_i = self.active_channel_indices[i] if (hasattr(self, 'active_channel_indices') and self.active_channel_indices and i < len(self.active_channel_indices)) else i
+          self.multitrack_badges.append(self._crear_badge_pista(sp, hw_i, musc_name, pen_color))
+        except Exception:
+          self.multitrack_badges.append(None)
         self.sub_plots.append(sp)
+
+      # Al conmutar a pistas separadas, asegurar que todas compartan exactamente el rango X y no se desfasen
+      try:
+        dur_vista_mt = max(0.1, float(self.PLOT_DURATION_S))
+        self.plot.setXRange(-dur_vista_mt, 0, padding=0)
+        for sp_x in self.sub_plots:
+          sp_x.setXRange(-dur_vista_mt, 0, padding=0)
+      except Exception:
+        pass
+      # NUEVO (Bug 1.3): aplicar la estetica neon vigente a las pistas recien creadas
+      try:
+        self._aplicar_estilo_trazos_segun_modo(getattr(self, '_estilo_neon_rms_aplicado', False))
+      except Exception:
+        pass
+      # NUEVO (Bugs 1.1/1.2): seguir los cambios de rango del osciloscopio para
+      # mantener los badges pegados a la esquina superior izquierda de cada pista.
+      if not getattr(self, '_badge_range_hook_conectado', False):
+        try:
+          self.plot.getViewBox().sigRangeChanged.connect(self._posicionar_badges_multitrack)
+          self._badge_range_hook_conectado = True
+        except Exception:
+          pass
+      for sp_ref in self.sub_plots:
+        try:
+          sp_ref.getViewBox().sigRangeChanged.connect(self._posicionar_badges_multitrack)
+        except Exception:
+          pass
+      # NUEVO (Bug 1.1): primera posicion de los badges sobre la escala actual
+      try:
+        self._posicionar_badges_multitrack()
+      except Exception:
+        pass
+      # NUEVO (Bug 1.2): al entrar en pistas separadas, alimentar de inmediato
+      # todas las sub-curvas con el MISMO buffer ya vigente y el mismo vector
+      # temporal relativo [-window_sec, 0], para que ninguna pista arranque
+      # vacia ni con otra escala X hasta recibir el proximo chunk.
+      try:
+        self._alimentar_pistas_desde_buffers()
+      except Exception:
+        pass
+
+  def _alimentar_pistas_desde_buffers(self):
+    """Repinta todas las pistas del osciloscopio con los buffers vigentes.
+
+    Bug 1.2: al alternar de vista, cada pista separada recibe exactamente el
+    mismo vector temporal relativo [-PLOT_DURATION_S, 0] que la pista principal.
+    """
+    if not hasattr(self, 'env_buffer_datos') or self.env_buffer_datos is None:
+      return
+    if getattr(self, 'plot_vector_tiempo', None) is None or len(self.plot_vector_tiempo) == 0:
+      return
+    if not getattr(self, 'is_multitrack_view', False):
+      return
+    es_rms_vigente = hasattr(self, 'chk_rms_env') and self.chk_rms_env.isChecked()
+
+    def fuente(k):
+      src_k = self.env_buffer_datos[k] if es_rms_vigente else self.plot_buffer_datos[k]
+      if es_rms_vigente:
+        n_v = len(self.plot_vector_tiempo)
+        paso_env = max(1, n_v // 1800)
+        idx_e = np.arange(0, n_v, paso_env, dtype=np.int64)
+        if len(idx_e) > 0 and idx_e[-1] != n_v - 1:
+          idx_e = np.append(idx_e, n_v - 1)
+        return (self.plot_vector_tiempo[idx_e], src_k[idx_e], True)
+      if getattr(src_k, 'size', 0) > 3000:
+        return downsample_minmax_pares(self.plot_vector_tiempo, src_k, 3000)
+      return (self.plot_vector_tiempo, src_k, False)
+
+    n_canales_seguro = min(getattr(self, 'NUM_CANALES', 0), self.env_buffer_datos.shape[0])
+    # Canal 0: curva principal
+    try:
+      if len(self.curvas) > 0:
+        xs0, ys0, _ = fuente(0)
+        self.curvas[0].setData(xs0, ys0, connect='all', skipFiniteCheck=True)
+      if len(self.curvas_neon_core) > 0 and self.curvas_neon_core[0].isVisible():
+        xs0n, ys0n, _ = fuente(0)
+        self.curvas_neon_core[0].setData(xs0n, ys0n, connect='all', skipFiniteCheck=True)
+    except Exception:
+      pass
+    # Canales 1..N: pistas separadas
+    for j in range(1, n_canales_seguro):
+      try:
+        idx_sub = j - 1
+        xs_j, ys_j, _e = fuente(j)
+        if idx_sub < len(self.curvas_multitrack):
+          self.curvas_multitrack[idx_sub].setData(xs_j, ys_j, connect='all', skipFiniteCheck=True)
+        nucleos_mt = getattr(self, 'curvas_neon_core_multitrack', [])
+        if idx_sub < len(nucleos_mt) and nucleos_mt[idx_sub].isVisible():
+          nucleos_mt[idx_sub].setData(xs_j, ys_j, connect='all', skipFiniteCheck=True)
+      except Exception:
+        continue
 
   def closeEvent(self, event):
     if hasattr(self, '_stdout_tee'): sys.stdout = self._stdout_tee._orig
@@ -10512,7 +11013,9 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     print(f"[PULSO {method_tag} 0.5τ] #{pulse_event['pulse_num']}{vocal_tag} | {p_str} | Supremo: {supremo:.1f} µV | Sep: {sep:.1f}%{sync_str} | {atractor}")
     try:
-      self._actualizar_medidor_pca_vivo(pulse_event)
+      self._registrar_uv_pulso(pulse_event)
+      if getattr(self, 'chk_pca_experimental', None) and self.chk_pca_experimental.isChecked():
+        self._actualizar_medidor_pca_vivo(pulse_event)
       emg_raw = pulse_event.get('emg_raw_win')
       fs = float(getattr(self, 'SAMPLE_RATE', 2000.0) or 2000.0)
       if emg_raw is not None:
@@ -10526,7 +11029,7 @@ class RealTimePlotter(QtWidgets.QWidget):
   def _on_escala_cvm_toggled(self, checked):
     """Actualiza la etiqueta del eje Y entre microvoltios y % CVM."""
     if checked:
-      self.plot.setLabel('left', 'Amplitud [% CVM]', color='#FFCC00')
+      self.plot.setLabel('left', 'Amplitud [% CVM]', color=T['warn'])
       is_rms = hasattr(self, 'chk_rms_env') and self.chk_rms_env.isChecked()
       if is_rms:
         self.plot.setYRange(0.0, 120.0, padding=0.05)
@@ -10534,7 +11037,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.plot.setYRange(-120.0, 120.0, padding=0.05)
       print("[Escala] Visualización en % CVM activada (normalizada por contracción máxima).")
     else:
-      self.plot.setLabel('left', 'Amplitud [µV]', color='#00FFFF')
+      self.plot.setLabel('left', 'Amplitud (µV)', color=T['text_dim'])
       is_rms = hasattr(self, 'chk_rms_env') and self.chk_rms_env.isChecked()
       if is_rms:
         self.plot.setYRange(0.0, 500.0, padding=0.05)
@@ -10568,9 +11071,9 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     n_hist = len(self.live_fatiga_mdf_history)
     if n_hist < 4:
-      self.lbl_fatiga_dot.setStyleSheet("color: #39ff14; font-size: 15px; font-weight: bold;")
-      self.lbl_fatiga_text.setStyleSheet("color: #39ff14; font-size: 11px; font-weight: bold; font-family: 'Courier New', monospace;")
-      self.frame_fatiga.setStyleSheet("background-color: #0b1a14; border: 1.5px solid #39ff14; border-radius: 4px;")
+      self.lbl_fatiga_dot.setStyleSheet(f"color: {T['ok']}; font-size: 15px; font-weight: bold;")
+      self.lbl_fatiga_text.setStyleSheet(f"color: {T['ok']}; font-size: 11px; font-weight: bold; font-family: 'Courier New', monospace;")
+      self.frame_fatiga.setStyleSheet(f"background-color: #0b1a14; border: 1.5px solid {T['ok']}; border-radius: 4px;")
       self.lbl_fatiga_text.setText(f"MDF BASAL ({mean_mdf:.1f} Hz)")
       return
 
@@ -10582,21 +11085,21 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     if delta_pct <= -15.0:
       # Fatiga Severa (caída > 15% de la frecuencia mediana)
-      self.lbl_fatiga_dot.setStyleSheet("color: #ff3355; font-size: 13px; font-weight: bold;")
-      self.lbl_fatiga_text.setStyleSheet("color: #ff3355; font-size: 10px; font-weight: bold; font-family: 'Courier New', monospace;")
-      self.frame_fatiga.setStyleSheet("background-color: #240a10; border: 1.5px solid #ff3355; border-radius: 4px; padding: 2px 4px;")
+      self.lbl_fatiga_dot.setStyleSheet(f"color: {T['err']}; font-size: 13px; font-weight: bold;")
+      self.lbl_fatiga_text.setStyleSheet(f"color: {T['err']}; font-size: 10px; font-weight: bold; font-family: 'Courier New', monospace;")
+      self.frame_fatiga.setStyleSheet(f"background-color: #240a10; border: 1.5px solid {T['err']}; border-radius: 4px; padding: 2px 4px;")
       self.lbl_fatiga_text.setText(f"ALERTA FATIGA ({delta_pct:.0f}%)\nMDF: {curr_mdf:.1f} Hz")
     elif delta_pct <= -8.0:
       # Fatiga Moderada
-      self.lbl_fatiga_dot.setStyleSheet("color: #ffcc00; font-size: 13px; font-weight: bold;")
-      self.lbl_fatiga_text.setStyleSheet("color: #ffcc00; font-size: 10px; font-weight: bold; font-family: 'Courier New', monospace;")
-      self.frame_fatiga.setStyleSheet("background-color: #241d08; border: 1.5px solid #ffcc00; border-radius: 4px; padding: 2px 4px;")
+      self.lbl_fatiga_dot.setStyleSheet(f"color: {T['warn']}; font-size: 13px; font-weight: bold;")
+      self.lbl_fatiga_text.setStyleSheet(f"color: {T['warn']}; font-size: 10px; font-weight: bold; font-family: 'Courier New', monospace;")
+      self.frame_fatiga.setStyleSheet(f"background-color: #241d08; border: 1.5px solid {T['warn']}; border-radius: 4px; padding: 2px 4px;")
       self.lbl_fatiga_text.setText(f"FATIGA MOD. ({delta_pct:.0f}%)\nMDF: {curr_mdf:.1f} Hz")
     else:
       # Estable
-      self.lbl_fatiga_dot.setStyleSheet("color: #39ff14; font-size: 13px; font-weight: bold;")
-      self.lbl_fatiga_text.setStyleSheet("color: #39ff14; font-size: 10px; font-weight: bold; font-family: 'Courier New', monospace;")
-      self.frame_fatiga.setStyleSheet("background-color: #0b1a14; border: 1.5px solid #39ff14; border-radius: 4px; padding: 2px 4px;")
+      self.lbl_fatiga_dot.setStyleSheet(f"color: {T['ok']}; font-size: 13px; font-weight: bold;")
+      self.lbl_fatiga_text.setStyleSheet(f"color: {T['ok']}; font-size: 10px; font-weight: bold; font-family: 'Courier New', monospace;")
+      self.frame_fatiga.setStyleSheet(f"background-color: #0b1a14; border: 1.5px solid {T['ok']}; border-radius: 4px; padding: 2px 4px;")
       self.lbl_fatiga_text.setText(f"ESTABLE ({ratio_pct:.0f}% MDF)\n{curr_mdf:.1f} Hz")
 
   def _preguntar_lanzar_pca(self, modo="Secuencia Continua"):
@@ -10646,155 +11149,730 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     try:
       cmd = [sys.executable, script_path, "--fecha", fecha_str, "--mediciones", rel_path]
-      subprocess.Popen(cmd)
+      launch_in_visible_terminal(cmd, title="Ñandú - Generador PCA/UMAP")
       print(f"[PCA] Lanzado Generador PCA/UMAP: {' '.join(cmd)}")
     except Exception as exc:
       print(f"[PCA] Error al lanzar generador PCA: {exc}")
 
   # ==============================================================================
-  # --- MEDIDOR PCA / SEPARABILIDAD EN TIEMPO REAL Y PANTALLA EXTERNA ---
+  # --- SIMPLEX TERNARIO BICOMPARTIMENTAL EN TIEMPO REAL (p_pre ● → p_post ▲) ---
   # ==============================================================================
-  def reset_medidor_pca_vivo(self):
-    """Limpia los vectores acumulados del medidor PCA en tiempo real."""
-    self.live_pca_features = []
-    self.live_pca_labels = []
-    if hasattr(self, 'pca_live_plot') and self.pca_live_plot is not None:
-      self.pca_live_plot.clear()
-    if hasattr(self, 'lbl_pca_live_metrics') and self.lbl_pca_live_metrics is not None:
-      self.lbl_pca_live_metrics.setText("Acc: --% | Sil: -- | N=0")
-
-  def _actualizar_medidor_pca_vivo(self, pulse_event):
+  @staticmethod
+  def _baricentrico_a_cartesiano_simplex(p0: float, p1: float, p2: float):
     """
-    Proyecta en tiempo real los pulsos detectados (emg_norm_win remuestreado a 20 pts/canal = 60D,
-    idéntico a generador_pca_umap.py) sobre un espacio 2D PCA y calcula la exactitud de clustering
-    no supervisado (K-Means + Algoritmo Húngaro) y el Silhouette Score en vivo.
+    Convierte proporciones baricéntricas (p0, p1, p2) con p0 + p1 + p2 = 1 a coordenadas (x, y)
+    en el triángulo equilátero del Simplex Ternario:
+      - Vértice Ch0 (Digástrico / Apertura):   (0.0, 0.0)
+      - Vértice Ch1 (Cigomático / Sonrisa):    (0.5, sqrt(3)/2)
+      - Vértice Ch2 (Orbicular / Protrusión):  (1.0, 0.0)
+    """
+    s = float(p0 + p1 + p2) + 1e-12
+    p0_n, p1_n, p2_n = float(p0) / s, float(p1) / s, float(p2) / s
+    h_tri = 0.8660254037844386  # sqrt(3) / 2
+    x = p2_n + 0.5 * p1_n
+    y = h_tri * p1_n
+    return x, y
+
+  def _dibujar_base_simplex_ternario(self):
+    """
+    Dibuja el triángulo equilátero del Simplex Ternario Bicompartimental con sus medianas
+    punteadas y las etiquetas de los 3 vértices anatómicos:
+      - Ch0 Digástrico (Apertura /a/, /e/) en (0, 0) — Naranja (#FF8A4C)
+      - Ch1 Cigomático (Sonrisa /i/) en (0.5, sqrt(3)/2) — Turquesa (#2DD4BF)
+      - Ch2 Orbicular (Protrusión /o/, /u/ y Cierre Labial) en (1, 0) — Verde (#4ADE80)
     """
     if not hasattr(self, 'pca_live_plot') or self.pca_live_plot is None:
       return
-    emg_win = pulse_event.get('emg_norm_win')
+    self.pca_live_plot.clear()
+    self.pca_live_plot.setAspectLocked(True)
+    h_tri = 0.8660254037844386
+    self.pca_live_plot.setXRange(-0.20, 1.20, padding=0)
+    self.pca_live_plot.setYRange(-0.16, h_tri + 0.16, padding=0)
+
+    # Borde del triángulo equilátero
+    tri_x = np.array([0.0, 0.5, 1.0, 0.0], dtype=np.float64)
+    tri_y = np.array([0.0, h_tri, 0.0, 0.0], dtype=np.float64)
+    self.pca_live_plot.addItem(
+      pg.PlotCurveItem(x=tri_x, y=tri_y, pen=pg.mkPen('#475569', width=1.9))
+    )
+
+    # Medianas baricéntricas punteadas y centroide (1/3, 1/3, 1/3)
+    med_pen = pg.mkPen('#263244', width=1.0, style=QtCore.Qt.DashLine)
+    for (mx0, my0), (mx1, my1) in [
+      ((0.5, 0.0), (0.5, h_tri)),
+      ((0.0, 0.0), (0.75, 0.5 * h_tri)),
+      ((1.0, 0.0), (0.25, 0.5 * h_tri)),
+    ]:
+      self.pca_live_plot.addItem(
+        pg.PlotCurveItem(x=np.array([mx0, mx1]), y=np.array([my0, my1]), pen=med_pen)
+      )
+
+    # Marcadores en los 3 vértices anatómicos
+    vertex_dots = [
+      (0.0, 0.0, '#FF8A4C'),
+      (0.5, h_tri, '#2DD4BF'),
+      (1.0, 0.0, '#4ADE80'),
+    ]
+    for vx_d, vy_d, vc_d in vertex_dots:
+      self.pca_live_plot.addItem(
+        pg.ScatterPlotItem(
+          x=[vx_d], y=[vy_d], size=6, symbol='o',
+          pen=pg.mkPen(vc_d, width=1.0), brush=pg.mkBrush(vc_d)
+        )
+      )
+
+    verts = [
+      (-0.02, -0.03, '#FF8A4C', 'Ch0 Dig. (/a,e/)', (0.35, 0.0)),
+      (0.50, h_tri + 0.03, '#2DD4BF', 'Ch1 Cig. (/i/)', (0.50, 1.0)),
+      (1.02, -0.03, '#4ADE80', 'Ch2 Orb. (/o,u/)', (0.65, 0.0)),
+    ]
+    for vx, vy, vcol, vtxt, vanch in verts:
+      ti = pg.TextItem(anchor=vanch)
+      ti.setHtml(f"<span style='color:{vcol}; font-family:monospace; font-size:7.3pt; font-weight:bold;'>{vtxt}</span>")
+      ti.setPos(float(vx), float(vy))
+      self.pca_live_plot.addItem(ti)
+
+  def _nombres_tres_canales_mapa_2d(self):
+    """Devuelve los nombres cortos de los 3 canales EMG activos (CH1, CH2, CH3)."""
+    try:
+      emg_ids = [i for i in range(int(getattr(self, 'NUM_CANALES', 0))) if not self._is_mic_channel(i)]
+    except Exception:
+      emg_ids = [0, 1, 2]
+    nombres_all = list(getattr(self, 'nombres_musculos', []) or [])
+
+    def _corto(k_c):
+      musc = None
+      if k_c < len(emg_ids) and emg_ids[k_c] < len(nombres_all):
+        musc = nombres_all[emg_ids[k_c]]
+      if not musc and k_c < len(nombres_all):
+        musc = nombres_all[k_c]
+      musc = str(musc or f"Canal {k_c + 1}").strip()
+      return musc.split()[0][:12] if musc else f"Canal {k_c + 1}"
+    return _corto(0), _corto(1), _corto(2)
+
+  def _nombres_canales_mapa_2d(self):
+    c1, c2, _c3 = self._nombres_tres_canales_mapa_2d()
+    return c1, c2
+
+  def _indices_proyeccion_activa_mapa_2d(self):
+    """
+    Devuelve la tupla (idx_x, idx_y, idx_tam, titulo_par) segun la proyeccion activa:
+      0 -> Canal 1 vs Canal 2 (X=CH1, Y=CH2, Tam=CH3)
+      1 -> Canal 1 vs Canal 3 (X=CH1, Y=CH3, Tam=CH2)
+      2 -> Canal 2 vs Canal 3 (X=CH2, Y=CH3, Tam=CH1)
+    """
+    idx_p = int(getattr(self, 'proyeccion_mapa_2d_idx', 0) or 0)
+    if idx_p == 1:
+      return 0, 2, 1, "Canal 1 vs Canal 3"
+    elif idx_p == 2:
+      return 1, 2, 0, "Canal 2 vs Canal 3"
+    return 0, 1, 2, "Canal 1 vs Canal 2"
+
+  def _on_cambiar_proyeccion_mapa_2d(self, idx_nuevo):
+    """Conmuta en vivo entre 'Canal 1 vs Canal 2', 'Canal 1 vs Canal 3' y 'Canal 2 vs Canal 3'."""
+    try:
+      idx_n = int(idx_nuevo) if int(idx_nuevo) in (0, 1, 2) else 0
+    except Exception:
+      idx_n = 0
+    self.proyeccion_mapa_2d_idx = idx_n
+    if hasattr(self, 'cmb_proyeccion_mapa_2d') and self.cmb_proyeccion_mapa_2d is not None:
+      if self.cmb_proyeccion_mapa_2d.currentIndex() != idx_n:
+        self.cmb_proyeccion_mapa_2d.blockSignals(True)
+        self.cmb_proyeccion_mapa_2d.setCurrentIndex(idx_n)
+        self.cmb_proyeccion_mapa_2d.blockSignals(False)
+    for k_b, btn_b in enumerate(getattr(self, 'btns_proyeccion_mapa', []) or []):
+      btn_b.blockSignals(True)
+      btn_b.setChecked(k_b == idx_n)
+      btn_b.blockSignals(False)
+    self._redibujar_puntos_acumulados_mapa_2d()
+
+  def _dibujar_base_mapa_2d_uv(self):
+    """
+    Configura los ejes, etiquetas y leyenda del Monitor Muscular 2D según la proyección
+    seleccionada (Canal 1 vs Canal 2, Canal 1 vs Canal 3, o Canal 2 vs Canal 3).
+    """
+    if not hasattr(self, 'pca_live_plot') or self.pca_live_plot is None:
+      return
+    self.pca_live_plot.clear()
+    self.pca_live_plot.setAspectLocked(False)
+    self.pca_live_plot.showGrid(x=True, y=True, alpha=0.25)
+    for _ax_name_m3 in ('bottom', 'left'):
+      _ax_m3 = self.pca_live_plot.getAxis(_ax_name_m3)
+      _fnt_ax_m3 = QtGui.QFont("Courier New")
+      try:
+        _fnt_ax_m3.setPointSizeF(8.5)
+      except Exception:
+        pass
+      _ax_m3.setFont(_fnt_ax_m3)
+      _ax_m3.setPen(pg.mkPen('#94a3b8', width=1))
+      _ax_m3.setTextPen(pg.mkPen('#94a3b8'))
+      _ax_m3.show()
+
+    nombres_3 = self._nombres_tres_canales_mapa_2d()
+    ix, iy, iz, titulo_par = self._indices_proyeccion_activa_mapa_2d()
+    lbl_x = f"CH{ix + 1} - {nombres_3[ix]} (µV)"
+    lbl_y = f"CH{iy + 1} - {nombres_3[iy]} (µV)"
+    self.pca_live_plot.setLabel('bottom', lbl_x, color='#94a3b8', **{'font-size': '8.5pt'})
+    self.pca_live_plot.setLabel('left', lbl_y, color='#94a3b8', **{'font-size': '8.5pt'})
+    self.pca_live_plot.setXRange(0.0, 50.0, padding=0.05)
+    self.pca_live_plot.setYRange(0.0, 50.0, padding=0.05)
+
+    if hasattr(self, 'pca_live_groupbox') and self.pca_live_groupbox is not None:
+      self.pca_live_groupbox.setTitle(f"Monitor Muscular 2D por Energía ({titulo_par})")
+    if hasattr(self, 'lbl_pca_legend') and self.lbl_pca_legend is not None:
+      self.lbl_pca_legend.setText(
+        "<span style='color:#E63946;'>●/A/</span> "
+        "<span style='color:#1F77B4;'>●/E/</span> "
+        "<span style='color:#2CA02C;'>●/I/</span> "
+        "<span style='color:#9D4EDD;'>●/O/</span> "
+        "<span style='color:#E7A61A;'>●/U/</span>"
+        "&nbsp;|&nbsp;"
+        f"<span style='color:#cbd5e1;'>X=CH{ix + 1} | Y=CH{iy + 1} | Tam=CH{iz + 1} (µV)</span>"
+      )
+
+  def _amplitudes_uv_del_pulso(self, pulse_event):
+    """
+    Calcula la energía por pulso siguiendo la formulación de metodo_solla_hopfield_mindlin.py:
+      1. Sustracción del piso tónico basal (percentil 15 del segmento inicial de silencio).
+      2. Ventana de intención fonatoria Pre-Fono + Onset ([12%, 58%] de la ventana) y ventana total.
+      3. Energía RMS en microvoltios reales (sqrt(mean(env^2))), P90 e integral de envolvente para
+         cada uno de los 3 canales (CH1, CH2, CH3), además del primer valor singular SVD (sigma_1)
+         y el área orientada de fase de Amador-Mindlin / Lévy (Omega_12).
+    """
+    emg_win = pulse_event.get('emg_raw_win')
     if emg_win is None or not isinstance(emg_win, np.ndarray) or emg_win.ndim != 2 or emg_win.shape[1] < 4:
+      return None
+    n_pts_uv = emg_win.shape[1]
+    win_dur_s_uv = float(pulse_event.get('win_dur_s') or 0.50)
+    t_ms_uv = (np.linspace(0.0, 1.0, n_pts_uv) - 0.45) * (win_dur_s_uv * 1000.0)
+    idx0_uv = max(2, min(n_pts_uv - 2, int(np.argmin(np.abs(t_ms_uv - 0.0)))))
+
+    # Ventana Solla-Hopfield-Mindlin: recorte Pre-Fono + Onset (12% a 58% de la ventana)
+    idx_ini_shm = max(0, int(round(n_pts_uv * 0.12)))
+    idx_fin_shm = max(idx_ini_shm + 4, min(n_pts_uv, int(round(n_pts_uv * 0.58))))
+    n_sil_shm = max(3, n_pts_uv // 8)
+
+    win_k_uv = max(3, min(n_pts_uv // 6, 25))
+    kernel_uv = np.ones(win_k_uv, dtype=np.float64) / float(win_k_uv)
+
+    pre_uv, post_uv, p90_uv, int_uv = [], [], [], []
+    M_pre_list = []
+
+    for c_uv in range(3):
+      if c_uv < emg_win.shape[0]:
+        raw_uv = np.abs(np.asarray(emg_win[c_uv], dtype=np.float64))
+      else:
+        raw_uv = np.zeros(n_pts_uv, dtype=np.float64)
+      env_uv = np.convolve(raw_uv, kernel_uv, mode='same')
+      # Sustraccion del piso tonico lento (percentil 15 del tramo inicial, Solla)
+      piso_uv = float(np.percentile(env_uv[:n_sil_shm], 15.0))
+      env_clean = np.maximum(0.0, env_uv - piso_uv)
+
+      seg_pre_shm = env_clean[idx_ini_shm:idx_fin_shm]
+      if seg_pre_shm.size == 0:
+        seg_pre_shm = env_clean[:idx0_uv]
+      seg_post_uv = env_clean[idx0_uv:]
+
+      # Energia RMS en ventana activa Pre-Fono / Fonacion (formulacion Solla-Hopfield-Mindlin)
+      e_rms_pre = float(np.sqrt(np.mean(seg_pre_shm ** 2) + 1e-8)) if seg_pre_shm.size > 0 else 0.0
+      e_rms_tot = float(np.sqrt(np.mean(env_clean ** 2) + 1e-8))
+      # Combinamos max(e_rms_pre, e_rms_tot) para capturar toda la energia si el pulso tuvo jitter
+      e_canal = max(e_rms_pre, e_rms_tot)
+      pre_uv.append(e_canal)
+      post_uv.append(float(np.max(seg_post_uv)) if seg_post_uv.size > 0 else 0.0)
+      p90_uv.append(float(np.percentile(seg_pre_shm, 90.0)) if seg_pre_shm.size > 0 else e_canal)
+      int_uv.append(float(np.mean(env_clean) * win_dur_s_uv))
+      M_pre_list.append(seg_pre_shm if seg_pre_shm.size > 0 else np.zeros(4, dtype=np.float64))
+
+    # Energia singular principal sigma_1 (SVD 3xT) de Solla-Mindlin
+    try:
+      M_mat = np.vstack(M_pre_list)
+      _, S_vals, _ = np.linalg.svd(M_mat, full_matrices=False)
+      sigma1_uv = float(S_vals[0]) / np.sqrt(max(1, M_mat.shape[1]))
+    except Exception:
+      sigma1_uv = float(np.linalg.norm(pre_uv))
+
+    dom_uv = int(np.argmax(pre_uv)) if len(pre_uv) else 0
+    return {
+      "pre": pre_uv,
+      "post": post_uv,
+      "p90": p90_uv,
+      "integral": int_uv,
+      "sigma1_uv": sigma1_uv,
+      "dom": dom_uv,
+    }
+
+  def _registrar_uv_pulso(self, pulse_event):
+    """
+    NUEVO (Etapa 2): guarda por pulso las amplitudes reales en uV (CH1, CH2, CH3), la vocal y los
+    nombres de musculos, para alimentar el Resumen Rapido TXT al finalizar la toma. No depende del
+    checkbox del Mapa: se registra siempre que se detecte un pulso fonatorio.
+    """
+    try:
+      info_reg = self._amplitudes_uv_del_pulso(pulse_event)
+      if info_reg is None:
+        return
+      if not hasattr(self, 'uv_resumen_pulse_log') or self.uv_resumen_pulse_log is None:
+        self.uv_resumen_pulse_log = []
+      try:
+        emg_ids_reg = [i for i in range(int(getattr(self, 'NUM_CANALES', 0))) if not self._is_mic_channel(i)]
+      except Exception:
+        emg_ids_reg = [0, 1, 2]
+      try:
+        nombres_all_reg = list(getattr(self, 'nombres_musculos', []) or [])
+      except Exception:
+        nombres_all_reg = []
+      nombres_ch_reg = []
+      for k_reg in range(3):
+        musc_reg = None
+        if k_reg < len(emg_ids_reg) and emg_ids_reg[k_reg] < len(nombres_all_reg):
+          musc_reg = nombres_all_reg[emg_ids_reg[k_reg]]
+        if not musc_reg and k_reg < len(nombres_all_reg):
+          musc_reg = nombres_all_reg[k_reg]
+        nombres_ch_reg.append(str(musc_reg) if musc_reg else f"Canal {k_reg}")
+      voc_reg = str(pulse_event.get('vocal') or '').strip().upper()
+      pre_reg = info_reg.get('pre', [0.0, 0.0, 0.0])
+      p_num_cur = int(pulse_event.get('pulse_num', 0) or 0)
+      if self.uv_resumen_pulse_log and self.uv_resumen_pulse_log[-1].get('pulse_num') == p_num_cur and p_num_cur > 0:
+        return
+      self.uv_resumen_pulse_log.append({
+        "pulse_num": p_num_cur,
+        "vocal": voc_reg,
+        "ch1_uv": float(pre_reg[0]),
+        "ch2_uv": float(pre_reg[1]),
+        "ch3_uv": float(pre_reg[2]),
+        "post_uv": [float(uv_p_reg) for uv_p_reg in info_reg.get('post', [0.0, 0.0, 0.0])],
+        "dom_ch": int(info_reg.get('dom', 0)) + 1,
+        "muscles": nombres_ch_reg,
+      })
+      if len(self.uv_resumen_pulse_log) > 4000:
+        self.uv_resumen_pulse_log = self.uv_resumen_pulse_log[-4000:]
+    except Exception as exc_reg:
+      print(f"[Resumen Rapido] Aviso registrando pulso en uV: {exc_reg}")
+
+  def _actualizar_hint_jitter_ms(self, *args):
+    """
+    NUEVO (Etapa 2): muestra en vivo cuantos +/- ms representa el porcentaje de Jitter al BPM actual.
+    Formula: ms = round((60.0 / bpm) * (pct / 100.0) * 1000.0). Ej.: 30 BPM y 15% -> '15% (+-300 ms)'.
+    """
+    try:
+      bpm_hint = max(1.0, float(self.spin_bpm.value())) if hasattr(self, 'spin_bpm') else 30.0
+      pct_hint = float(self.spin_metro_jitter_pct.value()) if hasattr(self, 'spin_metro_jitter_pct') else 0.0
+      ms_hint = round((60.0 / bpm_hint) * (pct_hint / 100.0) * 1000.0)
+      txt_hint = f"Jitter ({pct_hint:.0f}% = +-{ms_hint} ms):"
+      tip_hint = f"{pct_hint:.0f}% del intervalo del metronomo a {bpm_hint:.0f} BPM equivale a +-{ms_hint} ms de variacion aleatoria del tempo."
+      if hasattr(self, 'label_jitter_pct') and self.label_jitter_pct is not None:
+        self.label_jitter_pct.setText(txt_hint)
+        self.label_jitter_pct.setToolTip(tip_hint)
+      if hasattr(self, 'spin_metro_jitter_pct') and self.spin_metro_jitter_pct is not None:
+        self.spin_metro_jitter_pct.setToolTip(f"{pct_hint:.0f}% del intervalo del metronomo ({bpm_hint:.0f} BPM) = +-{ms_hint} ms de Jitter Anti-Sync.")
+    except Exception:
+      pass
+
+  def _lda_accuracy_cv_numpy(self, X_list, labels_list, n_splits=3, semilla=12345):
+    """
+    NUEVO (Etapa 2): Accuracy LDA (covarianza compartida con shrinkage diagonal) en numpy puro,
+    con validacion cruzada estratificada por clase. Devuelve accuracy en % (0..100) o None si
+    no hay datos suficientes para evaluar (menos de 2 clases o menos de 6 pulsos validos).
+    """
+    try:
+      X_lda = np.asarray(X_list, dtype=np.float64)
+      labs_lda = [str(l or '').strip().upper() for l in labels_list]
+      idx_validos_lda = [i for i, l in enumerate(labs_lda) if l and l != '?']
+      if len(idx_validos_lda) < 6:
+        return None
+      X_lda = X_lda[idx_validos_lda]
+      y_lda = np.array([labs_lda[i] for i in idx_validos_lda])
+      clases_lda = sorted(set(y_lda.tolist()))
+      if len(clases_lda) < 2:
+        return None
+      grupos_lda = {c: [i for i, v in enumerate(y_lda) if v == c] for c in clases_lda}
+      min_clase_lda = min(len(v) for v in grupos_lda.values())
+      if min_clase_lda < 2:
+        return None
+      k_lda = min(int(n_splits), min_clase_lda)
+      if k_lda < 2:
+        return None
+      rng_lda = np.random.default_rng(int(semilla))
+      permutas_lda = {c: rng_lda.permutation(grupos_lda[c]).tolist() for c in clases_lda}
+      aciertos_lda = 0
+      total_lda = 0
+      for f_lda in range(k_lda):
+        test_lda = []
+        for c_lda in clases_lda:
+          test_lda.extend([(int(g), c_lda) for g in permutas_lda[c_lda][f_lda::k_lda]])
+        if not test_lda:
+          continue
+        test_g_lda = [g for g, _c in test_lda]
+        clase_de_g = {g: c_g for g, c_g in test_lda}
+        mask_train_lda = np.ones(len(y_lda), dtype=bool)
+        mask_train_lda[test_g_lda] = False
+        X_tr_lda = X_lda[mask_train_lda]
+        y_tr_lda = y_lda[mask_train_lda]
+        if len(set(y_tr_lda.tolist())) < 2:
+          continue
+        medias_lda = {c_t: X_tr_lda[y_tr_lda == c_t].mean(axis=0) for c_t in clases_lda}
+        X_c_lda = np.empty_like(X_tr_lda)
+        for r_lda in range(X_tr_lda.shape[0]):
+          X_c_lda[r_lda] = X_tr_lda[r_lda] - medias_lda[y_tr_lda[r_lda]]
+        n_tr_lda, d_lda = X_c_lda.shape
+        cov_lda = (X_c_lda.T @ X_c_lda) / max(1, n_tr_lda - len(clases_lda))
+        cov_lda = cov_lda + np.eye(d_lda) * (1e-9 + 1e-6 * float(np.trace(cov_lda) / d_lda))
+        try:
+          W_lda = np.linalg.pinv(cov_lda)
+        except Exception:
+          return None
+        for g_t in test_g_lda:
+          x_g_lda = X_lda[g_t]
+          mejor_c_lda = None
+          mejor_v_lda = -1e18
+          for c_t in clases_lda:
+            mu_c_lda = medias_lda[c_t]
+            val_lda = float(x_g_lda @ W_lda @ mu_c_lda) - 0.5 * float(mu_c_lda @ W_lda @ mu_c_lda)
+            if val_lda > mejor_v_lda:
+              mejor_v_lda = val_lda
+              mejor_c_lda = c_t
+          if mejor_c_lda is not None and mejor_c_lda == clase_de_g[g_t]:
+            aciertos_lda += 1
+          total_lda += 1
+      if total_lda <= 0:
+        return None
+      return 100.0 * float(aciertos_lda) / float(total_lda)
+    except Exception:
+      return None
+
+  def _generar_resumen_rapido_txt(self, base_dir_str, metadata=None, modo="Toma", pulse_log=None):
+    """
+    NUEVO (Etapa 2): genera automaticamente 'resumen_rapido_toma.txt' dentro de la carpeta de la
+    medicion al terminar Secuencia Continua o Autograbado. Incluye fecha, sujeto, BPM, Jitter
+    (pct y +/- ms equivalentes), cantidad de pulsos, tabla de amplitud media y desvio estandar en
+    uV de CH1/CH2/CH3 por vocal (con el nombre del musculo configurado), ratios de aislamiento
+    CH2/CH1 y CH3/CH1, y Accuracy LDA (validacion cruzada) global y comparando la Mitad 1 vs la
+    Mitad 2 de los pulsos para detectar caida por habituacion.
+    """
+    meta_txt = dict(metadata or {})
+    log_uv_txt = list(getattr(self, 'uv_resumen_pulse_log', []) or [])
+    try:
+      pulse_log_txt = list(pulse_log) if pulse_log is not None else log_uv_txt
+    except Exception:
+      pulse_log_txt = log_uv_txt
+    now_txt = datetime.now()
+    bpm_txt = int(meta_txt.get('bpm', 30) or 30)
+    jit_txt = dict(meta_txt.get('jitter_config') or {})
+    jit_on_txt = bool(jit_txt.get('enabled', False))
+    jit_pct_txt = float(jit_txt.get('pct', 0.0) or 0.0)
+    jit_mode_txt = str(jit_txt.get('mode', 'exponential_hazard'))
+    jit_ms_txt = round((60.0 / max(1, bpm_txt)) * (jit_pct_txt / 100.0) * 1000.0)
+    sujeto_txt = str(meta_txt.get('sujeto', getattr(self, 'autoforge_sujeto', 'Sujeto')))
+    prueba_txt = str(meta_txt.get('prueba', getattr(self, 'autoforge_prueba', 'Prueba')))
+    letra_txt = str(meta_txt.get('letra', '') or '')
+
+    # Nombres de musculos por canal CH1/CH2/CH3 (sin triada fija)
+    try:
+      emg_ids_txt = [i for i in range(int(getattr(self, 'NUM_CANALES', 0))) if not self._is_mic_channel(i)]
+    except Exception:
+      emg_ids_txt = [0, 1, 2]
+    nombres_all_txt = list(getattr(self, 'nombres_musculos', []) or [])
+    nombres_ch_txt = None
+    if pulse_log_txt:
+      try:
+        musc_log = pulse_log_txt[0].get('muscles') if isinstance(pulse_log_txt[0], dict) else None
+        if isinstance(musc_log, list) and len(musc_log) >= 3:
+          nombres_ch_txt = [str(m) for m in musc_log[:3]]
+      except Exception:
+        nombres_ch_txt = None
+    if not nombres_ch_txt:
+      nombres_ch_txt = []
+      for k_txt in range(3):
+        musc_txt = None
+        if k_txt < len(emg_ids_txt) and emg_ids_txt[k_txt] < len(nombres_all_txt):
+          musc_txt = nombres_all_txt[emg_ids_txt[k_txt]]
+        if not musc_txt and k_txt < len(nombres_all_txt):
+          musc_txt = nombres_all_txt[k_txt]
+        nombres_ch_txt.append(str(musc_txt) if musc_txt else f"Canal {k_txt}")
+
+    por_vocal_txt = {}
+    for p_txt in pulse_log_txt:
+      voc_txt = str((p_txt.get('vocal') if isinstance(p_txt, dict) else '') or '').strip().upper() or '?'
+      arr_txt = por_vocal_txt.setdefault(voc_txt, [])
+      arr_txt.append((
+        float(p_txt.get('ch1_uv', 0.0) or 0.0),
+        float(p_txt.get('ch2_uv', 0.0) or 0.0),
+        float(p_txt.get('ch3_uv', 0.0) or 0.0),
+      ))
+    vocales_orden_txt = ['A', 'E', 'I', 'O', 'U'] + sorted(set(por_vocal_txt.keys()) - {'A', 'E', 'I', 'O', 'U'})
+
+    def _media_sd_txt(vals_txt):
+      if not vals_txt:
+        return (0.0, 0.0)
+      arruv_txt = np.asarray(vals_txt, dtype=np.float64)
+      return (float(np.mean(arruv_txt)), float(np.std(arruv_txt)))
+
+    sep_l_txt = "=" * 76
+    lineas_txt = []
+    lineas_txt.append(sep_l_txt)
+    lineas_txt.append("RESUMEN RAPIDO DE LA TOMA (generado automaticamente por NANDU LSD)")
+    lineas_txt.append(sep_l_txt)
+    lineas_txt.append(f"Fecha y Hora      : {now_txt.strftime('%Y-%m-%d %H:%M:%S')}")
+    lineas_txt.append(f"Sujeto            : {sujeto_txt}")
+    lineas_txt.append(f"Prueba            : {prueba_txt}" + (f" | Vocal de la toma: /{letra_txt}/" if letra_txt else ""))
+    lineas_txt.append(f"Modo              : {modo}")
+    lineas_txt.append(f"BPM               : {bpm_txt}")
+    if jit_on_txt:
+      lineas_txt.append(f"Jitter            : ACTIVO - {jit_pct_txt:.1f}% = +/-{jit_ms_txt} ms a {bpm_txt} BPM (perfil: {jit_mode_txt})")
+    else:
+      lineas_txt.append("Jitter            : INACTIVO (+-0 ms)")
+    pulsos_txt = len(pulse_log_txt)
+    plan_txt = meta_txt.get('pulse_count', None)
+    extra_n_txt = f" (planificados: {plan_txt})" if plan_txt not in (None, '', 0) else ""
+    lineas_txt.append(f"Pulsos analizados : {pulsos_txt}{extra_n_txt}")
+    lineas_txt.append(f"Carpeta           : {base_dir_str}")
+    lineas_txt.append("")
+    lineas_txt.append("Canales y musculos configurados:")
+    for k_h_txt in range(3):
+      lineas_txt.append(f"  CH{k_h_txt + 1}: {nombres_ch_txt[k_h_txt]}")
+    lineas_txt.append("")
+    lineas_txt.append("AMPLITUD POR VOCAL (media +/- desvio estandar, en uV)")
+    lineas_txt.append(f"{'Vocal':7s} | {'n':>4s} | {'CH1 media':>10s} +/- {'CH1 SD':>6s} | {'CH2 media':>10s} +/- {'CH2 SD':>6s} | {'CH3 media':>10s} +/- {'CH3 SD':>6s}")
+    hay_datos_txt = False
+    for voc_t_txt in por_vocal_txt:
+      if voc_t_txt not in por_vocal_txt or not por_vocal_txt[voc_t_txt]:
+        continue
+      m1_t, s1_t = _media_sd_txt([a_t[0] for a_t in por_vocal_txt[voc_t_txt]])
+      m2_t, s2_t = _media_sd_txt([a_t[1] for a_t in por_vocal_txt[voc_t_txt]])
+      m3_t, s3_t = _media_sd_txt([a_t[2] for a_t in por_vocal_txt[voc_t_txt]])
+      hay_datos_txt = True
+      lineas_txt.append(f"  /{voc_t_txt}/ | {len(por_vocal_txt[voc_t_txt]):4d} | {m1_t:10.1f} ± {s1_t:6.1f} | {m2_t:10.1f} ± {s2_t:6.1f} | {m3_t:10.1f} ± {s3_t:6.1f}")
+    if not hay_datos_txt:
+      lineas_txt.append("  (Sin pulsos con amplitudes registradas en esta toma)")
+    lineas_txt.append("")
+    lineas_txt.append("RATIOS DE AISLAMIENTO / CONTRASTE ENTRE CANALES (medios entre pulsos)")
+    lineas_txt.append(f"{'Vocal':7s} | {'Ratio CH2/CH1':>14s} | {'Ratio CH3/CH1':>14s}")
+    hay_ratio_txt = False
+    for voc_r_txt in por_vocal_txt:
+      if not por_vocal_txt[voc_r_txt]:
+        continue
+      raz21_txt = [a_r[1] / a_r[0] for a_r in por_vocal_txt[voc_r_txt] if a_r[0] > 1e-9]
+      raz31_txt = [a_r[2] / a_r[0] for a_r in por_vocal_txt[voc_r_txt] if a_r[0] > 1e-9]
+      m21_txt = float(np.mean(raz21_txt)) if raz21_txt else float('nan')
+      m31_txt = float(np.mean(raz31_txt)) if raz31_txt else float('nan')
+      hay_ratio_txt = True
+      lineas_txt.append(f"  /{voc_r_txt}/ | {m21_txt:14.3f} | {m31_txt:14.3f}")
+    if not hay_ratio_txt:
+      lineas_txt.append("  (Sin pulsos con amplitudes registradas en esta toma)")
+    lineas_txt.append("")
+    lineas_txt.append("SEPARABILIDAD (Accuracy LDA, features CH1/CH2/CH3, validacion cruzada estratificada)")
+    X_all_txt = [(
+      float(p_x.get('ch1_uv', 0.0) or 0.0),
+      float(p_x.get('ch2_uv', 0.0) or 0.0),
+      float(p_x.get('ch3_uv', 0.0) or 0.0),
+    ) for p_x in pulse_log_txt]
+    y_all_txt = [str((p_y.get('vocal') if isinstance(p_y, dict) else '') or '').strip().upper() for p_y in pulse_log_txt]
+    hay_clases_txt = any(a_c and a_c != '?' for a_c in y_all_txt)
+    acc_glob_txt = self._lda_accuracy_cv_numpy(X_all_txt, y_all_txt) if hay_clases_txt else None
+    mitad_txt = len(y_all_txt) // 2
+    acc_h1_txt = None
+    acc_h2_txt = None
+    if mitad_txt >= 4 and hay_clases_txt:
+      acc_h1_txt = self._lda_accuracy_cv_numpy(X_all_txt[:mitad_txt], y_all_txt[:mitad_txt])
+      acc_h2_txt = self._lda_accuracy_cv_numpy(X_all_txt[mitad_txt:], y_all_txt[mitad_txt:])
+    if acc_glob_txt is None:
+      lineas_txt.append("  Accuracy global         : No evaluable (se necesitan >= 2 vocales y > 6 pulsos)")
+    else:
+      lineas_txt.append(f"  Accuracy global         : {acc_glob_txt:.1f}% (n = {len(y_all_txt)} pulsos)")
+    lineas_txt.append(f"  Mitad 1 de los pulsos   : {'No evaluable' if acc_h1_txt is None else f'{acc_h1_txt:.1f}%'}")
+    lineas_txt.append(f"  Mitad 2 de los pulsos   : {'No evaluable' if acc_h2_txt is None else f'{acc_h2_txt:.1f}%'}")
+    if acc_h1_txt is not None and acc_h2_txt is not None:
+      delta_txt = acc_h2_txt - acc_h1_txt
+      if delta_txt <= -10.0:
+        diag_txt = "CAIDA DE SEPARABILIDAD EN LA MITAD FINAL (posible habituacion o fatiga)"
+      elif delta_txt >= 10.0:
+        diag_txt = "MEJORA EN LA MITAD FINAL (aprendizaje / estabilizacion del gesto)"
+      else:
+        diag_txt = "ESTABLE (sin caida relevante por habituacion)"
+      lineas_txt.append(f"  Cambio Mitad1 -> Mitad2 : {delta_txt:+.1f} pct")
+      lineas_txt.append(f"  Diagnostico             : {diag_txt}")
+    lineas_txt.append("")
+    lineas_txt.append("Notas:")
+    lineas_txt.append("  - CH1/CH2/CH3 = los tres primeros canales EMG activos (sin triada fija).")
+    lineas_txt.append("  - Amplitud = RMS de la envolvente Pre-Fono por pulso, calibrada en microvoltios (uV).")
+    lineas_txt.append("  - Tamano del punto en el Mapa 2D en Vivo = CH3 (uV); X = CH1 (uV); Y = CH2 (uV).")
+    ruta_txt_txt = os.path.join(str(base_dir_str), "resumen_rapido_toma.txt")
+    with open(ruta_txt_txt, 'w', encoding='utf-8') as f_txt_txt:
+      f_txt_txt.write("\n".join(lineas_txt) + "\n")
+    print(f"[Resumen Rapido] Generado automaticamente: {ruta_txt_txt}")
+    return ruta_txt_txt
+
+  def _escribir_resumen_rapido_toma_txt(self, base_dir_str, metadata=None, modo="Toma", pulse_log=None):
+    """NUEVO (Etapa 2): escribe automaticamente resumen_rapido_toma.txt en la carpeta indicada."""
+    return self._generar_resumen_rapido_txt(base_dir_str, metadata=metadata, modo=modo, pulse_log=pulse_log)
+
+  def reset_medidor_pca_vivo(self):
+    """Limpia los puntos acumulados del Monitor Muscular 2D en Vivo."""
+    self.live_pca_features = []
+    self.live_pca_labels = []
+    self.live_simplex_history = []
+    self.pca_uv_puntos = []
+    self._dibujar_base_mapa_2d_uv()
+    if hasattr(self, 'lbl_pca_live_metrics') and self.lbl_pca_live_metrics is not None:
+      self.lbl_pca_live_metrics.setText("CH1: -- µV | CH2: -- µV | CH3: -- µV [Vocal --]")
+    if hasattr(self, 'lbl_pca_fisiologia') and self.lbl_pca_fisiologia is not None:
+      self.lbl_pca_fisiologia.setText("Energía Solla-Mindlin: esperando pulso...")
+      self.lbl_pca_fisiologia.setStyleSheet(
+        f"color: {T['text_dim']}; font-size: 8.4px; font-weight: bold; background: {T['bg1']}; border: 1px solid {T['line']}; border-radius: 3px; padding: 1px 3px;"
+      )
+
+  def _redibujar_puntos_acumulados_mapa_2d(self):
+    """
+    Redibuja todos los pulsos acumulados en self.pca_uv_puntos según la proyección activa
+    ('Canal 1 vs Canal 2', 'Canal 1 vs Canal 3' o 'Canal 2 vs Canal 3').
+    """
+    if not hasattr(self, 'pca_live_plot') or self.pca_live_plot is None:
+      return
+    self._dibujar_base_mapa_2d_uv()
+    puntos = getattr(self, 'pca_uv_puntos', None) or []
+    if not puntos:
       return
 
-    target_len = 20
-    vec_parts = []
-    for c_i in range(min(3, emg_win.shape[0])):
-      seg = np.asarray(emg_win[c_i], dtype=np.float64)
-      old_x = np.linspace(0.0, 1.0, len(seg))
-      new_x = np.linspace(0.0, 1.0, target_len)
-      seg_rs = np.interp(new_x, old_x, seg)
-      seg_rs = np.maximum(seg_rs, 0.0)
-      vec_parts.append(seg_rs)
-    while len(vec_parts) < 3:
-      vec_parts.append(np.zeros(target_len, dtype=np.float64))
-    feat_vec = np.concatenate(vec_parts)
+    ix, iy, iz, _titulo_par = self._indices_proyeccion_activa_mapa_2d()
+    colores_vocal_rgb = {
+      'A': (230, 57, 70),   # #E63946 Rojo
+      'E': (31, 119, 180),  # #1F77B4 Azul
+      'I': (44, 160, 44),   # #2CA02C Verde
+      'O': (157, 78, 221),  # #9D4EDD Morado
+      'U': (231, 166, 26),  # #E7A61A Amarillo
+      '?': (148, 163, 184), # #94A3B8 Gris pizarra
+    }
+
+    vals_x = [float(p.get("canales", [p.get("x", 0.0), p.get("y", 0.0), p.get("z", 0.0)])[ix]) for p in puntos]
+    vals_y = [float(p.get("canales", [p.get("x", 0.0), p.get("y", 0.0), p.get("z", 0.0)])[iy]) for p in puntos]
+    vals_z = [float(p.get("canales", [p.get("x", 0.0), p.get("y", 0.0), p.get("z", 0.0)])[iz]) for p in puntos]
+
+    max_x = max(50.0, float(np.max(vals_x)) * 1.15)
+    max_y = max(50.0, float(np.max(vals_y)) * 1.15)
+    max_z = max(30.0, float(np.max(vals_z)))
+    self.pca_live_plot.setXRange(0.0, max_x, padding=0.03)
+    self.pca_live_plot.setYRange(0.0, max_y, padding=0.03)
+
+    n_puntos = len(puntos)
+    for idx_p, pt in enumerate(puntos):
+      es_ultimo = (idx_p == n_puntos - 1)
+      rgb = colores_vocal_rgb.get(pt.get("vocal", "?"), (148, 163, 184))
+      px_val = vals_x[idx_p]
+      py_val = vals_y[idx_p]
+      pz_val = vals_z[idx_p]
+      sz = float(np.clip(8.5 + (pz_val / max_z) * 14.0, 8.5, 22.5))
+
+      if es_ultimo:
+        halo = pg.ScatterPlotItem(
+          x=[px_val],
+          y=[py_val],
+          size=sz + 8.0,
+          symbol='o',
+          pen=pg.mkPen('#FFFFFF', width=2.0),
+          brush=pg.mkBrush(255, 255, 255, 35),
+        )
+        self.pca_live_plot.addItem(halo)
+        punto_item = pg.ScatterPlotItem(
+          x=[px_val],
+          y=[py_val],
+          size=sz,
+          symbol='o',
+          pen=pg.mkPen('#FFFFFF', width=1.4),
+          brush=pg.mkBrush(*rgb, 255),
+        )
+        self.pca_live_plot.addItem(punto_item)
+      else:
+        alpha = int(95 + (130 * idx_p) / max(1, n_puntos))
+        punto_item = pg.ScatterPlotItem(
+          x=[px_val],
+          y=[py_val],
+          size=sz,
+          symbol='o',
+          pen=pg.mkPen('#FFFFFF', width=0.6),
+          brush=pg.mkBrush(*rgb, alpha),
+        )
+        self.pca_live_plot.addItem(punto_item)
+
+  def _actualizar_medidor_pca_vivo(self, pulse_event):
+    """
+    Actualiza el Monitor Muscular 2D en Vivo por Energía (Solla-Hopfield-Mindlin)
+    permitiendo alternar en cualquier momento entre:
+      - Canal 1 vs Canal 2 (Tamaño = Canal 3)
+      - Canal 1 vs Canal 3 (Tamaño = Canal 2)
+      - Canal 2 vs Canal 3 (Tamaño = Canal 1)
+    y mostrando al pie los 3 valores numéricos en microvoltios reales.
+    """
+    if not hasattr(self, 'pca_live_plot') or self.pca_live_plot is None:
+      return
+
+    info_uv = self._amplitudes_uv_del_pulso(pulse_event)
+    if info_uv is None:
+      return
+
+    pre_uv = info_uv.get('pre', [0.0, 0.0, 0.0])
+    post_uv = info_uv.get('post', [0.0, 0.0, 0.0])
+    sigma1_uv = float(info_uv.get('sigma1_uv', 0.0))
+    ch1_uv = float(pre_uv[0]) if len(pre_uv) > 0 else 0.0
+    ch2_uv = float(pre_uv[1]) if len(pre_uv) > 1 else 0.0
+    ch3_uv = float(pre_uv[2]) if len(pre_uv) > 2 else 0.0
+    dom_idx = int(info_uv.get('dom', 0))
+    dom_ch = dom_idx + 1
+
+    ch1_post = float(post_uv[0]) if len(post_uv) > 0 else 0.0
+    ch2_post = float(post_uv[1]) if len(post_uv) > 1 else 0.0
+    ch3_post = float(post_uv[2]) if len(post_uv) > 2 else 0.0
+    dom_post_idx = int(np.argmax([ch1_post, ch2_post, ch3_post]))
+    dom_post_ch = dom_post_idx + 1
 
     vocal_lbl = str(pulse_event.get('vocal') or '').strip().upper()
+    if not vocal_lbl or vocal_lbl == "?":
+      n_prev = len(getattr(self, 'pca_uv_puntos', []))
+      if getattr(self, 'chk_modo_prueba', None) and self.chk_modo_prueba.isChecked():
+        fuente_txt = str(self.cmb_fuente_prueba.currentText()).lower() if hasattr(self, 'cmb_fuente_prueba') else ""
+        if "continua" in fuente_txt:
+          vocal_lbl = ["A", "E", "I", "O", "U"][n_prev % 5]
+        elif "/a/" in fuente_txt:
+          vocal_lbl = "A"
+      elif getattr(self, 'is_autoforge_running', False) and getattr(self, 'is_autoforge_continuo', False):
+        full_seq = getattr(self, 'autoforge_full_sequence', None) or getattr(self, 'autoforge_words', None) or ["A", "E", "I", "O", "U"]
+        vocal_lbl = str(full_seq[n_prev % len(full_seq)]).upper()
     if not vocal_lbl:
       vocal_lbl = "?"
 
-    if not hasattr(self, 'live_pca_features'):
-      self.live_pca_features = []
-      self.live_pca_labels = []
-    self.live_pca_features.append(feat_vec)
-    self.live_pca_labels.append(vocal_lbl)
+    if not hasattr(self, 'pca_uv_puntos') or self.pca_uv_puntos is None:
+      self.pca_uv_puntos = []
 
-    X_arr = np.asarray(self.live_pca_features, dtype=np.float64)
-    Y_arr = np.asarray(self.live_pca_labels)
-    n_samples = len(X_arr)
+    self.pca_uv_puntos.append({
+      "canales": [ch1_uv, ch2_uv, ch3_uv],
+      "x": ch1_uv,
+      "y": ch2_uv,
+      "z": ch3_uv,
+      "vocal": vocal_lbl,
+      "dom": dom_ch,
+      "ch1_post": ch1_post,
+      "ch2_post": ch2_post,
+      "ch3_post": ch3_post,
+      "dom_post": dom_post_ch,
+      "sigma1_uv": sigma1_uv,
+    })
+    if len(self.pca_uv_puntos) > 120:
+      self.pca_uv_puntos = self.pca_uv_puntos[-120:]
 
-    # Proyección 2D: PCA por SVD (centrado y escalado suave) si N >= 3, o coordenadas baricéntricas si N < 3
-    if n_samples >= 3:
-      X_centered = X_arr - np.mean(X_arr, axis=0, keepdims=True)
-      std_col = np.std(X_centered, axis=0, keepdims=True) + 1e-6
-      X_scaled = X_centered / std_col
-      try:
-        u, s, vt = np.linalg.svd(X_scaled, full_matrices=False)
-        X_2d = X_scaled @ vt[:2].T
-      except Exception:
-        X_2d = X_scaled[:, :2]
-    else:
-      # Fallback baricéntrico para los primeros 1-2 pulsos
-      X_2d = np.column_stack([
-        np.mean(X_arr[:, :target_len], axis=1) - np.mean(X_arr[:, target_len:2*target_len], axis=1),
-        np.mean(X_arr[:, 2*target_len:3*target_len], axis=1)
-      ])
+    self._redibujar_puntos_acumulados_mapa_2d()
 
-    # Calcular métricas de separabilidad (K-Means + Húngaro y Silhouette) cuando hay >= 4 muestras y >= 2 vocales reales
-    acc_str = "--%"
-    sil_str = "--"
-    valid_mask = np.array([y in ('A', 'E', 'I', 'O', 'U') for y in Y_arr], dtype=bool)
-    Y_val = Y_arr[valid_mask]
-    X_val = X_2d[valid_mask]
-    clases_unicas = sorted(list(set(Y_val)))
-    if len(clases_unicas) >= 2 and len(Y_val) >= max(4, len(clases_unicas) + 1):
-      try:
-        from sklearn.cluster import KMeans
-        from sklearn.metrics import confusion_matrix, silhouette_score
-        from scipy.optimize import linear_sum_assignment
-        n_k = len(clases_unicas)
-        km = KMeans(n_clusters=n_k, random_state=42, n_init=10)
-        y_pred = km.fit_predict(X_val)
-        y_true_int = np.array([clases_unicas.index(v) for v in Y_val])
-        cm = confusion_matrix(y_true_int, y_pred)
-        r_ind, c_ind = linear_sum_assignment(-cm)
-        acc_val = (cm[r_ind, c_ind].sum() / float(len(Y_val))) * 100.0
-        acc_str = f"{acc_val:.0f}%"
-        if len(Y_val) > n_k:
-          sil_val = float(silhouette_score(X_val, y_true_int))
-          sil_str = f"{sil_val:.2f}"
-      except Exception:
-        pass
-
-    sep_last = float(pulse_event.get('separability_pct', 0.0))
-    self.lbl_pca_live_metrics.setText(f"Acc:{acc_str} Sil:{sil_str} Sep:{sep_last:.0f}% N={n_samples}")
-
-    # Renderizar scatter 2D en self.pca_live_plot
-    self.pca_live_plot.clear()
-    colores_map = {
-      'A': (255, 51, 85),
-      'E': (0, 180, 216),
-      'I': (57, 255, 20),
-      'O': (199, 125, 255),
-      'U': (255, 209, 102),
-      '?': (0, 255, 204),
-    }
-    for v_key in sorted(set(Y_arr)):
-      idx_v = np.where(Y_arr == v_key)[0]
-      if len(idx_v) == 0:
-        continue
-      rgb = colores_map.get(v_key, (0, 255, 204))
-      pts_v = X_2d[idx_v]
-      scatter = pg.ScatterPlotItem(
-        x=pts_v[:, 0],
-        y=pts_v[:, 1],
-        size=8,
-        pen=pg.mkPen('#ffffff', width=0.6),
-        brush=pg.mkBrush(*rgb, 210),
+    if hasattr(self, 'lbl_pca_live_metrics') and self.lbl_pca_live_metrics is not None:
+      self.lbl_pca_live_metrics.setText(
+        f"CH1: {ch1_uv:.1f} µV | CH2: {ch2_uv:.1f} µV | CH3: {ch3_uv:.1f} µV [/{vocal_lbl}/ - Dom: CH{dom_ch}]"
       )
-      self.pca_live_plot.addItem(scatter)
-      if len(pts_v) >= 2 and v_key in ('A', 'E', 'I', 'O', 'U'):
-        cx, cy = float(np.mean(pts_v[:, 0])), float(np.mean(pts_v[:, 1]))
-        centroid_item = pg.ScatterPlotItem(
-          x=[cx],
-          y=[cy],
-          size=13,
-          symbol='d',
-          pen=pg.mkPen('#ffffff', width=1.4),
-          brush=pg.mkBrush(*rgb, 255),
-        )
-        self.pca_live_plot.addItem(centroid_item)
 
-    # Resaltar el último pulso ingresado con un halo blanco
-    last_pt = X_2d[-1]
-    halo = pg.ScatterPlotItem(
-      x=[float(last_pt[0])],
-      y=[float(last_pt[1])],
-      size=15,
-      symbol='o',
-      pen=pg.mkPen('#ffffff', width=2.0),
-      brush=pg.mkBrush(255, 255, 255, 40),
-    )
-    self.pca_live_plot.addItem(halo)
+    if hasattr(self, 'lbl_pca_fisiologia') and self.lbl_pca_fisiologia is not None:
+      self.lbl_pca_fisiologia.setText(
+        f"Post: CH1 {ch1_post:.1f} | CH2 {ch2_post:.1f} | CH3 {ch3_post:.1f} µV | Energía SVD σ1: {sigma1_uv:.1f} µV"
+      )
+      self.lbl_pca_fisiologia.setStyleSheet(
+        f"color: {T['accent']}; font-size: 8.4px; font-weight: bold; background: {T['bg1']}; border: 1px solid {T['line']}; border-radius: 3px; padding: 1px 3px;"
+      )
 
   def abrir_dialogo_pantalla_externa(self):
     """Abre el panel de configuración de Pantalla Externa y Modo Sujeto Ciego."""
@@ -11405,39 +12483,36 @@ class PhonatoryPulseDetector:
         # Obtener vocal exacta (de vocal_cue_log, de autoforge_full_sequence, del simulador o del atractor muscular)
         vocal_actual = ""
         t_onset_perf_est = now_wall + float(t_anchor)
-        cues_list = getattr(plotter, 'vocal_cue_log', None) or []
-        if cues_list:
-            # Buscar el último pulso del metrónomo cuyo disparo haya ocurrido antes (o muy cerca) del onset
-            best_cue = None
-            for c_item in reversed(cues_list):
-                t_c = float(c_item.get('t_perf') or 0.0)
-                if t_c <= t_onset_perf_est + 0.35:
-                    best_cue = c_item
-                    break
-            if best_cue is None:
-                best_cue = cues_list[-1]
-            vocal_actual = str(best_cue.get('palabra') or best_cue.get('vocal') or '').strip().upper()
 
-        if not vocal_actual and getattr(plotter, 'is_autoforge_running', False):
-            words = getattr(plotter, 'autoforge_words', []) or ["A", "E", "I", "O", "U"]
-            if getattr(plotter, 'is_autoforge_continuo', False):
-                full_seq = getattr(plotter, 'autoforge_full_sequence', None) or words
-                b_idx = max(0, int(getattr(plotter, 'metro_beat_count', 1)) - 1)
-                vocal_actual = full_seq[b_idx % len(full_seq)].upper()
-            else:
-                idx_w = int(getattr(plotter, 'autoforge_word_idx', 0))
-                if idx_w < len(words):
-                    vocal_actual = words[idx_w].upper()
-
-        # Si estamos en Modo Prueba (ej. Cande Secuencia Continua o /a/ normal) sin AutoForge activo:
-        if not vocal_actual and getattr(plotter, 'chk_modo_prueba', None) and plotter.chk_modo_prueba.isChecked():
+        # 1. Prioridad: Si estamos en Modo Prueba (ej. Cande Secuencia Continua o /a/ normal):
+        if getattr(plotter, 'chk_modo_prueba', None) and plotter.chk_modo_prueba.isChecked():
             fuente_txt = str(plotter.cmb_fuente_prueba.currentText()).lower() if hasattr(plotter, 'cmb_fuente_prueba') else ""
             if "continua" in fuente_txt:
                 vocal_actual = ["A", "E", "I", "O", "U"][(self.total_pulses_detected - 1) % 5]
             elif "/a/" in fuente_txt:
                 vocal_actual = "A"
 
-        # Si es grabación libre manual, colorear según el atractor muscular dominante (A / E / I / O / U)
+        # 2. Prioridad: AutoForge en ejecucion (Secuencia Continua o Discreta)
+        if not vocal_actual and getattr(plotter, 'is_autoforge_running', False):
+            words = getattr(plotter, 'autoforge_words', []) or ["A", "E", "I", "O", "U"]
+            if getattr(plotter, 'is_autoforge_continuo', False):
+                full_seq = getattr(plotter, 'autoforge_full_sequence', None) or words
+                vocal_actual = str(full_seq[(self.total_pulses_detected - 1) % len(full_seq)]).upper()
+            else:
+                idx_w = int(getattr(plotter, 'autoforge_word_idx', 0))
+                if idx_w < len(words):
+                    vocal_actual = str(words[idx_w]).upper()
+
+        # 3. Prioridad: Buscar en registro de vocal cues cercanos en el tiempo (<= 2.5 s)
+        cues_list = getattr(plotter, 'vocal_cue_log', None) or []
+        if not vocal_actual and cues_list:
+            for c_item in reversed(cues_list):
+                t_c = float(c_item.get('t_perf') or 0.0)
+                if abs(t_onset_perf_est - t_c) <= 2.5:
+                    vocal_actual = str(c_item.get('palabra') or c_item.get('vocal') or '').strip().upper()
+                    break
+
+        # 4. Fallback: Estimacion segun atractor muscular dominante
         if not vocal_actual:
             if dom_idx == 0:
                 vocal_actual = "A"
@@ -11549,7 +12624,7 @@ class MuscleSelectionDialog(QtWidgets.QDialog):
       from utils.config_manager import get_unique_channel_colors
     except ImportError:
       def get_unique_channel_colors(items):
-        return ["#ff754b", "#00a896", "#00cc44", "#ff0000"]
+        return [T['warn'], T['accent'], T['ok'], T['err']]
 
     ch_list = []
     for hw_idx in self.active_hw_channels:
@@ -11587,7 +12662,8 @@ def main():
   app = QtWidgets.QApplication.instance()
   if not app:
     app = QtWidgets.QApplication(sys.argv)
-  app.setStyleSheet(CYBERPUNK_QSS)
+  load_fonts()
+  app.setStyleSheet(build_qss(T))
 
   gui = RealTimePlotter()
   if global_splash:
@@ -11599,6 +12675,7 @@ def main():
   sys.exit(exit_code)
 
 if __name__ == '__main__':
+  ensure_running_in_terminal("AutoForge DAQ Experimental")
   main()
   # hilo.join() ya no es necesario aquí, se maneja en on_start_acq_click y closeEvent
   
