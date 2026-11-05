@@ -217,6 +217,7 @@ def lanzar_script(script_name, args=[]):
         ("search_dirs = [assets_dir, gui_dir, root_dir, pictures_dir]", "search_dirs = [assets_dir, pictures_dir]"),
         ("search_dirs = [assets_dir, gui_dir, root_dir, Path(get_project_root()), pictures_dir]", "search_dirs = [assets_dir, pictures_dir]"),
         ("md_path = os.path.abspath(os.path.join(os.path.dirname(__file__), \"..\", \"justificacion_matematica.md\"))", "md_path = resource_path(os.path.join('archivos_md', 'justificacion_matematica.md'))"),
+        ("md_path = os.path.abspath(os.path.join(os.path.dirname(__file__), \"..\", \"archivos_md\", \"documentacion_matematica.md\"))", "md_path = resource_path(os.path.join('archivos_md', 'documentacion_matematica.md'))"),
         ('comparative_path = os.path.join(root_dir, "analisis_comparativos")', 'comparative_path = user_data_path("analisis_comparativos")'),
         ('db_path = os.path.join(root_dir, "base_de_datos_electrodos")', 'db_path = user_data_path("base_de_datos_electrodos")'),
     ]

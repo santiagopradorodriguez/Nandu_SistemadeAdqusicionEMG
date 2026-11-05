@@ -61,7 +61,7 @@ robocopy "EMG_Ejecutable_Build\dist\NanduLsd" "%ROOT_DIR%build_windows\NanduLsd"
 
 rem Qt6 puede recoger un ICU incompatible desde otras dependencias científicas.
 rem Usamos las DLL del sistema y evitamos runtimes MSVC duplicados en la distribución.
-for /r "%ROOT_DIR%build_windows\NanduLsd" %%F in (icuuc.dll msvcp140.dll vcruntime140.dll vcruntime140_1.dll concrt140.dll) do if exist "%%F" ren "%%F" "%%~nxF.disabled"
+for /r "%ROOT_DIR%build_windows\NanduLsd" %%F in (icuuc.dll) do if exist "%%F" ren "%%F" "%%~nxF.disabled"
 
 echo ====================================================
 echo BUILD COMPLETADO EXITOSAMENTE.

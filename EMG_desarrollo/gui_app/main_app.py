@@ -1179,7 +1179,7 @@ class ReaperStyleHub(QMainWindow):
     self.btn_autoforge_estable.setMinimumHeight(78)
     self.btn_autoforge_estable.setCursor(Qt.PointingHandCursor)
     self.btn_autoforge_estable.setToolTip("Versión clásica ultra-fluida con calibración y auto-escala directa")
-    self.btn_autoforge_estable.clicked.connect(lambda: self._launch_external("acquisition/autoforge_daq_estable.py"))
+    self.btn_autoforge_estable.clicked.connect(lambda: self._launch_external("acquisition/autoforge_daq.py"))
     vbox_btn.addWidget(self.btn_autoforge_estable)
 
     self.btn_autoforge_staging = QPushButton("  AUTOGRABADO\n  EXPERIMENTAL")
