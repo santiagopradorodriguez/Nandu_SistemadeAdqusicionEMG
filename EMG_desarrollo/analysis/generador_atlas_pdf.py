@@ -497,7 +497,7 @@ class GeneradorAtlasPDF:
         std_v = np.std(arr, axis=0) / np.sqrt(len(arr))
         n_pts = len(mean_v)
         t_ms = np.linspace(-PRE_MS, POST_MS, n_pts)
-        return {'t': t_ms, 'mean': mean_v, 'std': std_v, 'n_pulsos': len(arr)}
+        return {'t': t_ms, 'mean': mean_v, 'std': std_v, 'n_pulsos': len(arr), 'raw_pulsos': arr}
 
     def buscar_foto_registro(self, fecha, ses_list, reg=None):
         """Busca la fotografía fiduciaria de colocación de electrodos."""

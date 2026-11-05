@@ -4,16 +4,18 @@
 # Proyecto: NANDU LSD - Sistema de Adquisición EMG y Deep Learning
 # Módulo: utils/generar_voice_cues_naturales.py
 # Descripción: Regenera los audios de locución de vocales (a.wav, e.wav, i.wav,
-#              o.wav, u.wav y frases de preparación) con voz femenina rioplatense /
-#              latina natural y sostenida (~0.60 s), envolvente suave (fade-in y
-#              fade-out coseno de 15 ms) y normalización a -3.0 dBFS en formato
-#              WAV 22050 Hz mono dentro de EMG_desarrollo/assets/voice_cues/.
+#              o.wav, u.wav, di_a.wav..di_u.wav, preparate.wav, haz_silencio.wav,
+#              descanso.wav) usando TTS neuronal de alta definición en español
+#              argentino/latino (edge-tts 'es-AR-ElenaNeural' o gTTS 'com.ar'),
+#              con envolvente suave (fade-in/out de 15 ms) y normalización a
+#              -3.0 dBFS en formato WAV 22050 Hz mono.
+#              PROHIBIDO el sintetizador formántico robótico Klatt.
 # ==============================================================================
 
 import os
 import sys
-import math
 import shutil
+import asyncio
 import tempfile
 import subprocess
 import numpy as np
@@ -22,17 +24,23 @@ from scipy import signal
 
 
 SAMPLE_RATE_TARGET = 22050
-DURATION_VOWEL_S = 0.62
 FADE_MS = 15.0
 TARGET_DBFS = -3.0
 
-# Formantes fisiológicos femeninos (F1, F2, F3 en Hz) para síntesis armónica natural de respaldo
-FORMANTES_FEMENINOS_RIOPLATENSES = {
-    "a": (820.0, 1380.0, 2850.0),
-    "e": (480.0, 2280.0, 2950.0),
-    "i": (320.0, 2750.0, 3300.0),
-    "o": (510.0, 920.0, 2750.0),
-    "u": (350.0, 780.0, 2650.0),
+LOCUCIONES_OFICIALES = {
+    "a": "Aaa",
+    "e": "Eee",
+    "i": "Iii",
+    "o": "Ooo",
+    "u": "Uuu",
+    "di_a": "Di A",
+    "di_e": "Di E",
+    "di_i": "Di I",
+    "di_o": "Di O",
+    "di_u": "Di U",
+    "preparate": "Prepárate",
+    "haz_silencio": "Haz silencio",
+    "descanso": "Descansa",
 }
 
 
@@ -42,6 +50,15 @@ def _aplicar_fade_y_normalizar_dbfs(audio: np.ndarray, sr: int, fade_ms: float =
         return arr
     arr = arr - np.mean(arr)
 
+    # Recortar silencios digitales en los extremos antes de aplicar el fade suave
+    peak_raw = float(np.max(np.abs(arr)) + 1e-9)
+    mask = np.abs(arr) > (0.025 * peak_raw)
+    if np.any(mask):
+        idx = np.where(mask)[0]
+        pad_pre = int(0.015 * sr)
+        pad_post = int(0.035 * sr)
+        arr = arr[max(0, idx[0] - pad_pre):min(len(arr), idx[-1] + pad_post)]
+
     n_fade = max(1, min(int(round((fade_ms / 1000.0) * sr)), len(arr) // 4))
     ramp_in = 0.5 * (1.0 - np.cos(np.pi * np.arange(n_fade) / float(n_fade)))
     ramp_out = 0.5 * (1.0 + np.cos(np.pi * np.arange(n_fade) / float(n_fade)))
@@ -50,108 +67,119 @@ def _aplicar_fade_y_normalizar_dbfs(audio: np.ndarray, sr: int, fade_ms: float =
 
     peak = float(np.max(np.abs(arr)))
     if peak > 1e-8:
-        target_amp = 10.0 ** (target_dbfs / 20.0)  # -3 dBFS ≈ 0.7079
+        target_amp = 10.0 ** (target_dbfs / 20.0)
         arr = (arr / peak) * target_amp
     return np.clip(arr, -1.0, 1.0)
 
 
-def _sintetizar_vocal_formantica_femenina(vocal: str, sr: int = SAMPLE_RATE_TARGET, dur_s: float = DURATION_VOWEL_S) -> np.ndarray:
+def _decodificar_mp3_a_wav_mono(mp3_path: str, out_wav_path: str, sr: int = SAMPLE_RATE_TARGET) -> bool:
+    """Convierte un MP3 generado por edge-tts o gTTS a WAV mono 22050 Hz normalizado a -3 dBFS."""
+    for bin_cand in ("ffmpeg", "avconv"):
+        exe = shutil.which(bin_cand)
+        if exe:
+            try:
+                subprocess.run(
+                    [exe, "-y", "-i", mp3_path, "-ac", "1", "-ar", str(sr), out_wav_path],
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=15,
+                )
+                sr_r, data = wavfile.read(out_wav_path)
+                arr = data.astype(np.float64) / 32767.0 if data.dtype == np.int16 else data.astype(np.float64)
+                arr_norm = _aplicar_fade_y_normalizar_dbfs(arr, sr_r)
+                wavfile.write(out_wav_path, sr_r, np.int16(arr_norm * 32767))
+                return True
+            except Exception:
+                pass
+    return False
+
+
+def sintetizar_con_edge_tts_python(texto: str, out_wav_path: str, voice: str = "es-AR-ElenaNeural", sr: int = SAMPLE_RATE_TARGET) -> bool:
     """
-    Sintetizador Klatt/Rosenberg de voz femenina natural (~215 Hz F0 con vibrato
-    fisiológico de 5.2 Hz y filtrado resonante de 3 formantes vocálicos).
-    Se utiliza como respaldo determinista o complemento armónico suave.
+    Usa la librería Python edge_tts (o el ejecutable edge-tts) con la voz neuronal
+    femenina argentina es-AR-ElenaNeural.
     """
-    n = int(round(sr * dur_s))
-    t = np.linspace(0.0, dur_s, n, endpoint=False)
-    f0_base = 218.0
-    # Micro-vibrato humano suave (5.2 Hz, ±2.2 Hz) y ligera caída de entonación natural al final
-    f0_inst = f0_base + 2.2 * np.sin(2.0 * np.pi * 5.2 * t) - 6.0 * (t / dur_s) ** 2
-    phase = 2.0 * np.pi * np.cumsum(f0_inst) / float(sr)
-
-    # Tren glotal rico en armónicos con caída espectral suave (-12 dB/octava)
-    glottal = np.zeros_like(t)
-    for k in range(1, 22):
-        if k * f0_base >= (sr * 0.45):
-            break
-        glottal += (1.0 / (k ** 1.35)) * np.sin(k * phase)
-
-    f1, f2, f3 = FORMANTES_FEMENINOS_RIOPLATENSES.get(vocal.lower(), (600.0, 1500.0, 2800.0))
-    bws = [85.0, 110.0, 160.0]
-    gains = [1.0, 0.65, 0.25]
-    voiced = np.zeros_like(glottal)
-    for freq, bw, g in zip((f1, f2, f3), bws, gains):
-        b, a = signal.iirpeak(freq / (sr / 2.0), Q=max(2.0, freq / bw))
-        voiced += g * signal.lfilter(b, a, glottal)
-
-    # Envolvente prosódica sostenida suave (sin ataque explosivo)
-    env = np.ones_like(t)
-    n_att = int(0.045 * sr)
-    n_rel = int(0.085 * sr)
-    env[:n_att] = 0.5 * (1.0 - np.cos(np.pi * np.arange(n_att) / float(n_att)))
-    env[-n_rel:] = 0.5 * (1.0 + np.cos(np.pi * np.arange(n_rel) / float(n_rel)))
-    return _aplicar_fade_y_normalizar_dbfs(voiced * env, sr)
-
-
-def _intentar_edge_tts(texto: str, out_wav_path: str, sr: int = SAMPLE_RATE_TARGET) -> bool:
-    """Intenta sintetizar con voz neuronal argentina (es-AR-ElenaNeural) vía edge-tts + ffmpeg."""
-    edge_bin = shutil.which("edge-tts")
-    ffmpeg_bin = shutil.which("ffmpeg")
-    if not edge_bin or not ffmpeg_bin:
-        return False
+    tmp_mp3 = None
     try:
-        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp_mp3:
-            mp3_path = tmp_mp3.name
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tf:
+            tmp_mp3 = tf.name
+
+        # 1. Intentar con el módulo Python edge_tts directamente
+        try:
+            import edge_tts
+            async def _gen():
+                comm = edge_tts.Communicate(texto, voice=voice, rate="-10%")
+                await comm.save(tmp_mp3)
+            asyncio.run(_gen())
+            if os.path.exists(tmp_mp3) and os.path.getsize(tmp_mp3) > 200:
+                if _decodificar_mp3_a_wav_mono(tmp_mp3, out_wav_path, sr=sr):
+                    return True
+        except Exception:
+            pass
+
+        # 2. Intentar vía CLI `python3 -m edge_tts`
         subprocess.run(
-            [edge_bin, "--voice", "es-AR-ElenaNeural", "--rate=-12%", "--text", texto, "--write-media", mp3_path],
+            [sys.executable, "-m", "edge_tts", "--voice", voice, "--rate=-10%", "--text", texto, "--write-media", tmp_mp3],
             check=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             timeout=15,
         )
-        subprocess.run(
-            [ffmpeg_bin, "-y", "-i", mp3_path, "-ac", "1", "-ar", str(sr), out_wav_path],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=15,
-        )
-        os.remove(mp3_path)
-        sr_r, data = wavfile.read(out_wav_path)
-        arr = data.astype(np.float64) / 32767.0 if data.dtype == np.int16 else data.astype(np.float64)
-        # Recortar silencios extremos y asegurar duración sostenida suave (~0.6 s)
-        mask = np.abs(arr) > (0.04 * np.max(np.abs(arr) + 1e-8))
-        if np.any(mask):
-            idx = np.where(mask)[0]
-            arr = arr[max(0, idx[0] - int(0.02 * sr_r)):min(len(arr), idx[-1] + int(0.04 * sr_r))]
-        arr_norm = _aplicar_fade_y_normalizar_dbfs(arr, sr_r)
-        wavfile.write(out_wav_path, sr_r, np.int16(arr_norm * 32767))
-        return True
+        if os.path.exists(tmp_mp3) and os.path.getsize(tmp_mp3) > 200:
+            if _decodificar_mp3_a_wav_mono(tmp_mp3, out_wav_path, sr=sr):
+                return True
     except Exception:
-        return False
+        pass
+    finally:
+        if tmp_mp3 and os.path.exists(tmp_mp3):
+            try:
+                os.remove(tmp_mp3)
+            except Exception:
+                pass
+    return False
 
 
-def regenerar_voice_cues(dest_dir: str):
+def sintetizar_con_gtts_python(texto: str, out_wav_path: str, sr: int = SAMPLE_RATE_TARGET) -> bool:
+    """Fallback secundario usando Google TTS en español rioplatense (tld='com.ar')."""
+    tmp_mp3 = None
+    try:
+        from gtts import gTTS
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tf:
+            tmp_mp3 = tf.name
+        tts = gTTS(text=texto, lang="es", tld="com.ar", slow=False)
+        tts.save(tmp_mp3)
+        if os.path.exists(tmp_mp3) and os.path.getsize(tmp_mp3) > 200:
+            return _decodificar_mp3_a_wav_mono(tmp_mp3, out_wav_path, sr=sr)
+    except Exception:
+        pass
+    finally:
+        if tmp_mp3 and os.path.exists(tmp_mp3):
+            try:
+                os.remove(tmp_mp3)
+            except Exception:
+                pass
+    return False
+
+
+def regenerar_voice_cues(dest_dir: str) -> int:
     os.makedirs(dest_dir, exist_ok=True)
-    print(f"==> Generando audios de locución naturales y sostenidos en: {dest_dir}")
-
-    textos_sostenidos = {
-        "a": "aaa",
-        "e": "eee",
-        "i": "iii",
-        "o": "ooo",
-        "u": "uuu",
-    }
-
-    for vocal, txt_tts in textos_sostenidos.items():
-        wav_path = os.path.join(dest_dir, f"{vocal}.wav")
-        ok_tts = _intentar_edge_tts(txt_tts, wav_path, sr=SAMPLE_RATE_TARGET)
-        if not ok_tts:
-            arr = _sintetizar_vocal_formantica_femenina(vocal, sr=SAMPLE_RATE_TARGET, dur_s=DURATION_VOWEL_S)
-            wavfile.write(wav_path, SAMPLE_RATE_TARGET, np.int16(arr * 32767))
-            metodo = "Síntesis Formántica Klatt Femenina (0.62s, -3 dBFS, fade 15ms)"
+    print(f"==> Generando locuciones neuronales humanas (es-AR-ElenaNeural) en: {dest_dir}")
+    generados = 0
+    for key, texto in LOCUCIONES_OFICIALES.items():
+        wav_path = os.path.join(dest_dir, f"{key}.wav")
+        if sintetizar_con_edge_tts_python(texto, wav_path, voice="es-AR-ElenaNeural", sr=SAMPLE_RATE_TARGET):
+            print(f"  [OK] {key}.wav -> Voz Neuronal es-AR-ElenaNeural ('{texto}')")
+            generados += 1
+        elif sintetizar_con_gtts_python(texto, wav_path, sr=SAMPLE_RATE_TARGET):
+            print(f"  [OK] {key}.wav -> Voz gTTS Rioplatense ('{texto}')")
+            generados += 1
         else:
-            metodo = "Voz Neuronal es-AR-ElenaNeural (-3 dBFS, fade 15ms)"
-        print(f"  [OK] {vocal}.wav -> {metodo}")
+            print(
+                f"  [AVISO] {key}.wav: Sin conexión a edge-tts/gTTS en este entorno. "
+                "Ejecuta `pip install edge-tts && python utils/generar_voice_cues_naturales.py` en tu PC con internet."
+            )
+    return generados
 
 
 def main():

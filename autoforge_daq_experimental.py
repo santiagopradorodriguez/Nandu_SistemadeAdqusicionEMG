@@ -128,21 +128,33 @@ def play_beep(freq=660, duration_ms=80, async_play=True):
       t = np.linspace(0.0, dur_s, n_samples, endpoint=False)
       # Mapear frecuencias agudas clásicas (1200 Hz / 800 Hz) a tonos cálidos de percusión tonal
       f_base = float(freq)
-      if f_base >= 1100:
-        f0 = 659.25  # Mi5 cálido (pulso principal de fonación)
-        amp = 0.28
-        tau_decay = dur_s * 0.42
-      elif f_base >= 750:
-        f0 = 523.25  # Do5 suave (pre-aviso / count-in)
-        amp = 0.20
-        tau_decay = dur_s * 0.38
+      if f_base >= 1400:
+        # ACENTO DIFERENCIADO DE CAMBIO DE VOCAL / VENTANA (Doble tono ascendente Re5 -> La5)
+        f1_chime = 587.33  # Re5
+        f2_chime = 880.00  # La5 brillante pero cálido
+        amp = 0.32
+        tau_decay = dur_s * 0.48
+        mid = n_samples // 2
+        f_vec = np.empty(n_samples, dtype=np.float64)
+        f_vec[:mid] = f1_chime
+        f_vec[mid:] = f2_chime
+        phase = 2.0 * np.pi * np.cumsum(f_vec) / float(sr)
+        wave = np.sin(phase) + 0.30 * np.sin(2.0 * phase)
       else:
-        f0 = max(260.0, f_base * 0.75)  # Sub-pulso suave de aproximación
-        amp = 0.12
-        tau_decay = dur_s * 0.32
-
-      # Onda fundamental + segundo armónico suave tipo marimba
-      wave = np.sin(2.0 * np.pi * f0 * t) + 0.25 * np.sin(2.0 * np.pi * (f0 * 2.0) * t)
+        if f_base >= 1100:
+          f0 = 659.25  # Mi5 cálido (mismo pulso de vocal)
+          amp = 0.26
+          tau_decay = dur_s * 0.42
+        elif f_base >= 750:
+          f0 = 523.25  # Do5 suave (pre-aviso / count-in)
+          amp = 0.20
+          tau_decay = dur_s * 0.38
+        else:
+          f0 = max(260.0, f_base * 0.75)  # Sub-pulso suave de aproximación (1..4)
+          amp = 0.14
+          tau_decay = dur_s * 0.32
+        # Onda fundamental + segundo armónico suave tipo marimba
+        wave = np.sin(2.0 * np.pi * f0 * t) + 0.25 * np.sin(2.0 * np.pi * (f0 * 2.0) * t)
       # Envolvente: fade-in coseno elevado (10 ms) + decaimiento exponencial suave
       attack_samples = max(1, min(int(0.010 * sr), n_samples // 3))
       env = np.exp(-t / max(0.015, tau_decay))
@@ -621,8 +633,19 @@ class VoiceCuePlayer:
       key, text = item
       if not self.enabled or self.muted:
         continue
-      # 1. Intentar reproducir WAV pre-generado en disco (latencia mínima)
+      # 1. Intentar reproducir WAV pre-generado en disco (o sintetizar con edge-tts neuronal si falta)
       wav_path = self._find_wav(key)
+      if not wav_path:
+        try:
+          from utils.generar_voice_cues_naturales import sintetizar_con_edge_tts_python
+          out_dir_vc = self._search_dirs[0]
+          os.makedirs(out_dir_vc, exist_ok=True)
+          cand_wav = os.path.join(out_dir_vc, f"{re.sub(r'[^a-z0-9_]', '_', key.lower())}.wav")
+          if sintetizar_con_edge_tts_python(text, cand_wav):
+            self._cache[key] = cand_wav
+            wav_path = cand_wav
+        except Exception:
+          pass
       if wav_path and os.path.isfile(wav_path):
         try:
           if SD_AVAILABLE:
@@ -2740,8 +2763,9 @@ class DialogoPantallaExterna(QtWidgets.QDialog):
     rem_cfg = self.plotter.config_mgr.get_remote_display_config() if hasattr(self.plotter.config_mgr, 'get_remote_display_config') else {}
     puerto_init = int(rem_cfg.get("puerto", 8765))
     token_init = str(rem_cfg.get("token", ""))
-    ts_pc_init = str(rem_cfg.get("tailscale_ip_pc", _ip_tailscale("")))
-    ts_celu_init = str(rem_cfg.get("tailscale_ip_celu", ""))
+    # SEGURIDAD: Nunca precargar IPs privadas por defecto en los campos visibles (evita fugas en capturas y Git)
+    ts_pc_init = str(rem_cfg.get("tailscale_ip_pc", "") or "")
+    ts_celu_init = str(rem_cfg.get("tailscale_ip_celu", "") or "")
 
     # Auto-iniciar el servidor al abrir el diálogo si todavía no estaba corriendo
     srv = getattr(self.plotter, 'remote_display_server', None)
@@ -2756,13 +2780,20 @@ class DialogoPantallaExterna(QtWidgets.QDialog):
 
     ts_row = QtWidgets.QHBoxLayout()
     self.edit_ts_pc = QtWidgets.QLineEdit(ts_pc_init)
-    self.edit_ts_pc.setToolTip("IP Tailscale de esta PC (ej. )")
+    self.edit_ts_pc.setPlaceholderText("ej. 100.x.y.z (auto-detectada en red)")
+    self.edit_ts_pc.setToolTip("IP Tailscale de esta PC (dejar vacío para autodetección dinámica sin exponer IP)")
     self.edit_ts_celu = QtWidgets.QLineEdit(ts_celu_init)
-    self.edit_ts_celu.setToolTip("IP Tailscale de tu celular (ej. )")
+    self.edit_ts_celu.setPlaceholderText("ej. 100.x.y.z (opcional)")
+    self.edit_ts_celu.setToolTip("IP Tailscale de tu celular o tablet (opcional)")
+    self.chk_revelar_ips = QtWidgets.QCheckBox("Mostrar IPs")
+    self.chk_revelar_ips.setChecked(False)
+    self.chk_revelar_ips.setToolTip("Muestra u oculta las IPs detectadas en tiempo de ejecución (oculto por defecto por privacidad)")
+    self.chk_revelar_ips.toggled.connect(lambda _: self._refresh_status_label())
     ts_row.addWidget(QtWidgets.QLabel("PC:"))
     ts_row.addWidget(self.edit_ts_pc)
     ts_row.addWidget(QtWidgets.QLabel("Celu:"))
     ts_row.addWidget(self.edit_ts_celu)
+    ts_row.addWidget(self.chk_revelar_ips)
     fl.addRow("IPs Tailscale:", ts_row)
 
     self.edit_token = QtWidgets.QLineEdit(token_init)
@@ -2804,8 +2835,8 @@ class DialogoPantallaExterna(QtWidgets.QDialog):
     grp_help = QtWidgets.QGroupBox("Guía de Conexión Rápida (Tailscale / USB / 2do Monitor)")
     hl = QtWidgets.QVBoxLayout(grp_help)
     lbl_h = QtWidgets.QLabel(
-      "• <b>Opción 1 (Tailscale — Recomendada con Wi-Fi de Física):</b> Con Tailscale activo en la PC (<b></b>) "
-      "y en tu celular (<b></b>), entra desde el navegador del celular a <b>http://:8765/</b>.<br>"
+      "• <b>Opción 1 (Tailscale — Recomendada con Wi-Fi):</b> Con Tailscale activo en la PC y en tu celular, "
+      "entra desde el navegador del celular a <b>http://&lt;IP_TAILSCALE_PC&gt;:8765/</b>.<br>"
       "• <b>Opción 2 (Cable USB):</b> Conecta el celular por USB y pulsa 'Túnel USB' para abrir <b>http://127.0.0.1:8765/</b>.<br>"
       "• <b>Opción 3 (2do Monitor HDMI):</b> Pulsa 'Abrir Ventana Externa', arrástrala al segundo monitor y toca F11."
     )
@@ -2821,16 +2852,18 @@ class DialogoPantallaExterna(QtWidgets.QDialog):
 
   def _refresh_status_label(self):
     srv = getattr(self.plotter, 'remote_display_server', None)
-    ip_ts = self.edit_ts_pc.text().strip() or _ip_tailscale("")
-    ip_celu = self.edit_ts_celu.text().strip() or ""
+    revelar = bool(hasattr(self, 'chk_revelar_ips') and self.chk_revelar_ips.isChecked())
+    ip_ts_real = self.edit_ts_pc.text().strip() or (_ip_tailscale("") if revelar else "")
+    ip_ts_show = ip_ts_real if (revelar and ip_ts_real) else "<IP_TAILSCALE_PC>"
+    ip_celu_show = self.edit_ts_celu.text().strip() if revelar else "<CELU>"
     if srv is not None and srv.activo():
-      ip_lan = _ip_local()
+      ip_lan_show = _ip_local() if revelar else "<IP_LAN_LOCAL>"
       p = srv.puerto
       tok = f"?t={srv.token}" if srv.token else ""
       self.lbl_estado_srv.setText(
         f"<span style='color:#39ff14; font-weight:bold;'>ACTIVO (0.0.0.0:{p})</span><br>"
-        f"• <b>Tailscale (para Celu {ip_celu}):</b> <span style='color:#39ff14; font-size:14px; font-weight:bold;'>http://{ip_ts}:{p}/{tok}</span><br>"
-        f"• USB Local: <b>http://127.0.0.1:{p}/{tok}</b> | LAN Física: http://{ip_lan}:{p}/{tok}"
+        f"• <b>Tailscale ({ip_celu_show}):</b> <span style='color:#39ff14; font-size:13px; font-weight:bold;'>http://{ip_ts_show}:{p}/{tok}</span><br>"
+        f"• USB Local: <b>http://127.0.0.1:{p}/{tok}</b> | LAN Física: http://{ip_lan_show}:{p}/{tok}"
       )
       self.btn_toggle_srv.setText("Detener Servidor Remoto")
     else:
@@ -3630,12 +3663,15 @@ class RealTimePlotter(QtWidgets.QWidget):
     test_mode_layout.addWidget(self.cmb_fuente_prueba)
     test_mode_layout.addWidget(self.spin_test_freq)
 
+    # Ocultar spin_test_freq por defecto si la fuente inicial es Cande (no senoidal)
+    self.spin_test_freq.setVisible("seno" in self.cmb_fuente_prueba.currentText().lower())
     self.config_layout.addWidget(self.chk_modo_prueba, 2, 0)
-    self.config_layout.addLayout(test_mode_layout, 2, 1)
-    self.config_layout.addWidget(self.chk_use_mic, 2, 2, 1, 2)
+    self.config_layout.addLayout(test_mode_layout, 2, 1, 1, 3)
 
-    self.config_layout.addWidget(self.label_channels, 3, 0)
-    self.config_layout.addLayout(self.channel_layout, 3, 1, 1, 3)
+    self.config_layout.addWidget(self.chk_use_mic, 3, 0, 1, 4)
+
+    self.config_layout.addWidget(self.label_channels, 4, 0)
+    self.config_layout.addLayout(self.channel_layout, 4, 1, 1, 3)
 
     # --- NUEVO: Puente VM Windows (ZeroMQ) para NI USB-6259 en Pop!_OS / Linux ---
     self.chk_zmq_bridge = QtWidgets.QCheckBox("Puente ZMQ")
@@ -3674,8 +3710,8 @@ class RealTimePlotter(QtWidgets.QWidget):
     zmq_row_layout.addWidget(self.edit_zmq_host, 1)
     zmq_row_layout.addWidget(self.btn_ping_zmq)
 
-    self.config_layout.addWidget(self.chk_zmq_bridge, 4, 0)
-    self.config_layout.addLayout(zmq_row_layout, 4, 1, 1, 3)
+    self.config_layout.addWidget(self.chk_zmq_bridge, 5, 0)
+    self.config_layout.addLayout(zmq_row_layout, 5, 1, 1, 3)
 
     # Inicializar el Metronomo en su propio panel derecho independiente
     self._setup_native_metronome()
@@ -3754,6 +3790,9 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.cmb_metro_jitter_mode.addItems(["exponential_hazard", "uniform", "gaussian"])
     self.cmb_metro_jitter_mode.setFixedHeight(22)
     self.cmb_metro_jitter_mode.setToolTip("exponential_hazard: Tasa de riesgo constante (no predecible). uniform: Uniforme. gaussian: Gaussiano.")
+    self.chk_metro_jitter.toggled.connect(self._regenerar_jitter_schedule_en_vivo)
+    self.spin_metro_jitter_pct.valueChanged.connect(self._regenerar_jitter_schedule_en_vivo)
+    self.cmb_metro_jitter_mode.currentIndexChanged.connect(self._regenerar_jitter_schedule_en_vivo)
 
     self.chk_mute_speaking = QtWidgets.QCheckBox("Mutear Speaking")
     self.chk_mute_speaking.setChecked(False)
@@ -3813,7 +3852,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.chk_escala_cvm.setStyleSheet("color: #ffcc00; font-weight: bold;")
     self.chk_escala_cvm.toggled.connect(self._on_escala_cvm_toggled)
 
-    self.chk_clamp_500uv = QtWidgets.QCheckBox("Limitar Rango Fisiológico (0–500 µV / Anti-Picos)")
+    self.chk_clamp_500uv = QtWidgets.QCheckBox("Límite 0-500 µV (Anti-Picos)")
     self.chk_clamp_500uv.setToolTip("Recorta picos eléctricos (> 500 µV) en los canales EMG y mantiene el eje Y entre 0 y 500 µV para evitar saltos bruscos de escala.")
     self.chk_clamp_500uv.setChecked(True)
     self.chk_clamp_500uv.setStyleSheet("color: #00ffcc; font-weight: bold;")
@@ -3883,8 +3922,9 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     # Boton de Consola / Terminal de Errores
     self.btn_terminal = QtWidgets.QPushButton("CONSOLA / LOGS (0)")
+    self.btn_terminal.setMinimumWidth(180)
     self.btn_terminal.setToolTip("Abre la consola integrada para inspeccionar mensajes, errores de NIDAQmx o abrir una terminal del sistema.")
-    self.btn_terminal.setStyleSheet("QPushButton { background-color: #0B0F19; color: #39FF14; border: 1.5px solid #39FF14; padding: 7px 12px; font-weight: bold; border-radius: 4px; } QPushButton:hover { background-color: #39FF14; color: #050508; }")
+    self.btn_terminal.setStyleSheet("QPushButton { background-color: #0B0F19; color: #39FF14; border: 1.5px solid #39FF14; padding: 5px 10px; font-size: 11px; font-weight: bold; border-radius: 4px; } QPushButton:hover { background-color: #39FF14; color: #050508; }")
     self.btn_terminal.clicked.connect(self.mostrar_consola_diagnostico)
 
     self.btn_start_acq.setMinimumWidth(185)
@@ -4088,14 +4128,20 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.btn_actualizar_notas.setStyleSheet(btn_style_save)
     self.btn_actualizar_notas.clicked.connect(self.actualizar_notas_ultima_medicion)
 
+    self.btn_actualizar_notas.setText("Guardar Notas en Última Medición")
+    self.btn_actualizar_notas.setMinimumWidth(220)
     btn_bar.addWidget(self.btn_tmpl_electrodos)
     btn_bar.addWidget(self.btn_tmpl_piel)
     btn_bar.addWidget(self.btn_tmpl_confusion)
     btn_bar.addWidget(self.btn_tmpl_ruido)
     btn_bar.addStretch(1)
-    btn_bar.addWidget(self.btn_actualizar_notas)
-
     lyt_notas.addLayout(btn_bar)
+
+    btn_save_row = QtWidgets.QHBoxLayout()
+    btn_save_row.setContentsMargins(0, 2, 0, 0)
+    btn_save_row.addStretch(1)
+    btn_save_row.addWidget(self.btn_actualizar_notas)
+    lyt_notas.addLayout(btn_save_row)
     self.notas_groupbox.setVisible(False)
 
   def _insertar_plantilla_nota(self, texto_plantilla: str):
@@ -4794,7 +4840,7 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     pca_bottom_row = QtWidgets.QHBoxLayout()
     pca_bottom_row.setSpacing(3)
-    self.lbl_pca_live_metrics = QtWidgets.QLabel("Acc:--% Sil:-- Sep:--% N=0")
+    self.lbl_pca_live_metrics = QtWidgets.QLabel("Acc: - | Sil: - | N=0")
     self.lbl_pca_live_metrics.setStyleSheet("color: #00ffcc; font-size: 9.5px; font-weight: bold;")
     self.btn_reset_pca_live = QtWidgets.QPushButton("R")
     self.btn_reset_pca_live.setFixedWidth(20)
@@ -5421,7 +5467,22 @@ class RealTimePlotter(QtWidgets.QWidget):
     except Exception:
       pass
 
+  def _regenerar_jitter_schedule_en_vivo(self, *args):
+    """Genera o actualiza en caliente la tabla de intervalos Jitter (funciona también en monitoreo libre previo a grabar)."""
+    bpm_val = max(10, int(self.spin_bpm.value())) if hasattr(self, 'spin_bpm') else 30
+    if hasattr(self, 'chk_metro_jitter') and self.chk_metro_jitter.isChecked() and not getattr(self, 'is_cvm_active', False):
+      n_sched = max(120, int(getattr(self, 'autoforge_target_reps', 30)) * max(1, len(getattr(self, 'autoforge_words', [1]))))
+      self.metro_jitter_schedule = generate_jittered_intervals(
+        bpm=bpm_val,
+        n_pulses=n_sched,
+        jitter_pct=float(self.spin_metro_jitter_pct.value()) / 100.0,
+        mode=self.cmb_metro_jitter_mode.currentText(),
+      )
+    else:
+      self.metro_jitter_schedule = []
+
   def _on_live_bpm_or_subdiv_changed(self, value=None):
+    self._regenerar_jitter_schedule_en_vivo()
     self._persistir_preferencias_en_config_local()
     '''Permite cambiar el BPM o las subdivisiones en vivo (incluso durante Autograbado o Secuencia Continua).'''
     bpm_val = max(10, int(self.spin_bpm.value())) if hasattr(self, 'spin_bpm') else 30
@@ -5629,7 +5690,7 @@ class RealTimePlotter(QtWidgets.QWidget):
       frame_50hz.setStyleSheet("background-color: #111111; border: 1.5px solid #555555; border-radius: 3px; padding: 2px;")
       layout_50hz = QtWidgets.QVBoxLayout(frame_50hz)
       layout_50hz.setContentsMargins(3, 2, 3, 2)
-      label_50hz = QtWidgets.QLabel(f"50Hz ai{hw_idx} - {musculo}: -- µV")
+      label_50hz = QtWidgets.QLabel("Ruido 50 Hz: -- µV")
       label_50hz.setStyleSheet("color: #AAAAAA; font-size: 11px; font-weight: bold;")
       label_50hz.setWordWrap(True)
       layout_50hz.addWidget(label_50hz)
@@ -5821,7 +5882,8 @@ class RealTimePlotter(QtWidgets.QWidget):
           font-weight: bold;
       }
     """)
-    self.metronome_container.setMinimumWidth(165)
+    self.right_side_panel.setMinimumWidth(195)
+    self.metronome_container.setMinimumWidth(190)
     metro_layout = QtWidgets.QVBoxLayout(self.metronome_container)
     metro_layout.setContentsMargins(6, 6, 6, 4)
     metro_layout.setSpacing(2)
@@ -5845,16 +5907,17 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     # --- Semáforo de Fatiga Mioeléctrica (MDF) ubicado debajo del Metrónomo a la derecha ---
     self.frame_fatiga = QtWidgets.QFrame()
-    self.frame_fatiga.setMinimumWidth(165)
-    self.frame_fatiga.setStyleSheet("background-color: #0b1a14; border: 1.5px solid #39ff14; border-radius: 5px; padding: 3px 6px;")
+    self.frame_fatiga.setMinimumWidth(190)
+    self.frame_fatiga.setStyleSheet("background-color: #0b1a14; border: 1.5px solid #39ff14; border-radius: 5px; padding: 2px 4px;")
     lyt_fat = QtWidgets.QHBoxLayout(self.frame_fatiga)
-    lyt_fat.setContentsMargins(4, 2, 4, 2)
-    lyt_fat.setSpacing(5)
+    lyt_fat.setContentsMargins(4, 3, 4, 3)
+    lyt_fat.setSpacing(4)
     self.lbl_fatiga_dot = QtWidgets.QLabel("●")
-    self.lbl_fatiga_dot.setStyleSheet("color: #39ff14; font-size: 14px; font-weight: bold;")
+    self.lbl_fatiga_dot.setStyleSheet("color: #39ff14; font-size: 13px; font-weight: bold;")
     self.lbl_fatiga_text = QtWidgets.QLabel("FATIGA: ESTABLE\nMDF 100%")
+    self.lbl_fatiga_text.setWordWrap(True)
     self.lbl_fatiga_text.setAlignment(QtCore.Qt.AlignCenter)
-    self.lbl_fatiga_text.setStyleSheet("color: #39ff14; font-size: 10px; font-weight: bold; font-family: 'Courier New', monospace;")
+    self.lbl_fatiga_text.setStyleSheet("color: #39ff14; font-size: 10px; font-weight: bold; font-family: 'Courier New', monospace; padding: 1px;")
     lyt_fat.addWidget(self.lbl_fatiga_dot)
     lyt_fat.addWidget(self.lbl_fatiga_text, stretch=1)
     self.right_side_layout.addWidget(self.frame_fatiga)
@@ -6147,14 +6210,19 @@ class RealTimePlotter(QtWidgets.QWidget):
         and not getattr(self, 'is_cvm_active', False)
         and self.metro_count_in_remaining <= 1
     )
-    # En Modo Jitter activo durante fonación, suprimir sub-pulsos para que el sujeto
-    # no pueda anticipar cuándo caerá el siguiente pulso principal.
-    num_subdivs = 1 if jitter_active else max(1, self.spin_metro_subdivs.value())
+    # Conservar siempre los sub-pulsos rítmicos (1..N) incluso con Jitter activo:
+    # cada intervalo estocástico tau_i se divide proporcionalmente en N subdivisiones (tau_i / N).
+    num_subdivs = max(1, self.spin_metro_subdivs.value())
     is_main_beat = (self.metro_subdiv_index == 0)
 
-    if jitter_active and getattr(self, 'metro_jitter_schedule', None) and is_main_beat:
-        sched_idx = max(0, self.metro_beat_count) % len(self.metro_jitter_schedule)
-        self.current_beat_tau_s = float(self.metro_jitter_schedule[sched_idx])
+    if jitter_active and is_main_beat:
+        if not getattr(self, 'metro_jitter_schedule', None):
+            self._regenerar_jitter_schedule_en_vivo()
+        if getattr(self, 'metro_jitter_schedule', None):
+            sched_idx = max(0, self.metro_beat_count) % len(self.metro_jitter_schedule)
+            self.current_beat_tau_s = float(self.metro_jitter_schedule[sched_idx])
+        else:
+            self.current_beat_tau_s = 60.0 / float(bpm)
     elif not jitter_active:
         self.current_beat_tau_s = 60.0 / float(bpm)
 
@@ -6200,6 +6268,11 @@ class RealTimePlotter(QtWidgets.QWidget):
                   subtitulo_fase="Escucha los pulsos de aproximación y entra en el 1",
                   tira_html=tira_prep,
                 )
+                # Disparar locución "Prepárate, di X" rítmicamente sincronizada en el primer pulso del Count-In
+                if cnt_val == 3 and hasattr(self, 'voice_cue_player'):
+                  self._last_spoken_continuo_word = primera_v
+                  self._pre_announced_continuo_beat = 1
+                  self.voice_cue_player.say(f"di_{primera_v.lower()}", f"Prepárate, di {primera_v}", fase="preparacion_sincronizada")
             self.metro_count_in_remaining -= 1
             self.beep_queue.put((800, 200))
         else:
@@ -6244,8 +6317,21 @@ class RealTimePlotter(QtWidgets.QWidget):
                     if self.metro_beat_count > self.autoforge_target_reps:
                         self.estado_guardar_palabra()
                         return
-                # Pulso Principal (1): Beep brillante y definido de fonación (1200 Hz, 110 ms)
-                self.beep_queue.put((1200, 110))
+                # Pulso Principal (1): diferenciar acústicamente cuando cambia la vocal/ventana (1480 Hz chime doble)
+                es_cambio_vocal = False
+                if getattr(self, 'is_autoforge_running', False) and not getattr(self, 'is_cvm_active', False):
+                    words_chk = getattr(self, 'autoforge_words', []) or ["A"]
+                    if getattr(self, 'is_autoforge_continuo', False):
+                        full_s = getattr(self, 'autoforge_full_sequence', None) or (words_chk * max(1, self.autoforge_target_reps))
+                        cur_v = full_s[(self.metro_beat_count - 1) % len(full_s)].upper() if full_s else ""
+                        prev_v = full_s[(self.metro_beat_count - 2) % len(full_s)].upper() if (full_s and self.metro_beat_count > 1) else ""
+                        es_cambio_vocal = (self.metro_beat_count == 1) or (cur_v != prev_v)
+                    else:
+                        es_cambio_vocal = (self.metro_beat_count == 1)
+                if es_cambio_vocal:
+                    self.beep_queue.put((1480, 130))  # Doble tono ascendente de cambio de vocal
+                else:
+                    self.beep_queue.put((1200, 100))  # Pulso cálido de continuación
 
             palabra_actual = ""
             if getattr(self, 'is_autoforge_running', False):
@@ -9045,8 +9131,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     primera_vocal = full_seq_init[0].upper() if full_seq_init else "A"
     self._last_spoken_continuo_word = primera_vocal
     self._pre_announced_continuo_beat = 1
-    if hasattr(self, 'voice_cue_player'):
-      self.voice_cue_player.say(f"di_{primera_vocal.lower()}", f"Prepárate, di {primera_vocal}", fase="preparacion_secuencia_continua")
+    # La locución 'Prepárate, di X' se dispara rítmicamente en el pulso 1 del count-in del metrónomo
     y_center = self._get_plot_y_center()
     self.countdown_text.setPos(-self.PLOT_DURATION_S/2.0, y_center)
     self.countdown_text.setText("PREPÁRATE...\n3")
@@ -9721,8 +9806,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.on_autoscroll_toggle()
     
     # Anunciar UNA SOLA VEZ la vocal durante la preparación del modo discreto (sin repetir A-A-A en cada pulso)
-    if hasattr(self, 'voice_cue_player'):
-      self.voice_cue_player.say(f"di_{palabra.lower()}", f"Prepárate, di {palabra.upper()}", fase="preparacion_palabra_discreta")
+    # La locución 'Prepárate, di X' se dispara rítmicamente en el pulso 1 del count-in del metrónomo
     # Al sonar el pulso 1 real tras los 3 pulsos de preparación, on_metro_beat invoca estado_cambiar_ventana_palabra
     self._on_count_in_finished_cb = self.estado_cambiar_ventana_palabra
     self.start_native_metronome(count_in=4, force_start=True)
@@ -10235,7 +10319,7 @@ class RealTimePlotter(QtWidgets.QWidget):
 
       musculo = self.nombres_musculos[i % len(self.nombres_musculos)]
       if hasattr(self, 'line_noise_status_labels') and i < len(self.line_noise_status_labels):
-        self.line_noise_status_labels[i].setText(f"50Hz ({musculo}): {val_50:.1f} uV [{estado_str}]")
+        self.line_noise_status_labels[i].setText(f"Ruido 50 Hz: {val_50:.1f} µV [{estado_str}]")
         self.line_noise_status_labels[i].setStyleSheet(f"color: {color_txt}; font-size: 11px; font-weight: bold; border: none;")
       if hasattr(self, 'line_noise_status_frames') and i < len(self.line_noise_status_frames):
         self.line_noise_status_frames[i].setStyleSheet(
@@ -10498,22 +10582,22 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     if delta_pct <= -15.0:
       # Fatiga Severa (caída > 15% de la frecuencia mediana)
-      self.lbl_fatiga_dot.setStyleSheet("color: #ff3355; font-size: 15px; font-weight: bold;")
-      self.lbl_fatiga_text.setStyleSheet("color: #ff3355; font-size: 11px; font-weight: bold; font-family: 'Courier New', monospace;")
-      self.frame_fatiga.setStyleSheet("background-color: #240a10; border: 1.5px solid #ff3355; border-radius: 4px;")
-      self.lbl_fatiga_text.setText(f"FATIGA ALERTA ({delta_pct:.0f}% MDF - Sugerido descanso)")
+      self.lbl_fatiga_dot.setStyleSheet("color: #ff3355; font-size: 13px; font-weight: bold;")
+      self.lbl_fatiga_text.setStyleSheet("color: #ff3355; font-size: 10px; font-weight: bold; font-family: 'Courier New', monospace;")
+      self.frame_fatiga.setStyleSheet("background-color: #240a10; border: 1.5px solid #ff3355; border-radius: 4px; padding: 2px 4px;")
+      self.lbl_fatiga_text.setText(f"ALERTA FATIGA ({delta_pct:.0f}%)\nMDF: {curr_mdf:.1f} Hz")
     elif delta_pct <= -8.0:
       # Fatiga Moderada
-      self.lbl_fatiga_dot.setStyleSheet("color: #ffcc00; font-size: 15px; font-weight: bold;")
-      self.lbl_fatiga_text.setStyleSheet("color: #ffcc00; font-size: 11px; font-weight: bold; font-family: 'Courier New', monospace;")
-      self.frame_fatiga.setStyleSheet("background-color: #241d08; border: 1.5px solid #ffcc00; border-radius: 4px;")
-      self.lbl_fatiga_text.setText(f"FATIGA MODERADA ({delta_pct:.0f}% MDF)")
+      self.lbl_fatiga_dot.setStyleSheet("color: #ffcc00; font-size: 13px; font-weight: bold;")
+      self.lbl_fatiga_text.setStyleSheet("color: #ffcc00; font-size: 10px; font-weight: bold; font-family: 'Courier New', monospace;")
+      self.frame_fatiga.setStyleSheet("background-color: #241d08; border: 1.5px solid #ffcc00; border-radius: 4px; padding: 2px 4px;")
+      self.lbl_fatiga_text.setText(f"FATIGA MOD. ({delta_pct:.0f}%)\nMDF: {curr_mdf:.1f} Hz")
     else:
       # Estable
-      self.lbl_fatiga_dot.setStyleSheet("color: #39ff14; font-size: 15px; font-weight: bold;")
-      self.lbl_fatiga_text.setStyleSheet("color: #39ff14; font-size: 11px; font-weight: bold; font-family: 'Courier New', monospace;")
-      self.frame_fatiga.setStyleSheet("background-color: #0b1a14; border: 1.5px solid #39ff14; border-radius: 4px;")
-      self.lbl_fatiga_text.setText(f"FATIGA: ESTABLE ({ratio_pct:.0f}% MDF | {curr_mdf:.1f} Hz)")
+      self.lbl_fatiga_dot.setStyleSheet("color: #39ff14; font-size: 13px; font-weight: bold;")
+      self.lbl_fatiga_text.setStyleSheet("color: #39ff14; font-size: 10px; font-weight: bold; font-family: 'Courier New', monospace;")
+      self.frame_fatiga.setStyleSheet("background-color: #0b1a14; border: 1.5px solid #39ff14; border-radius: 4px; padding: 2px 4px;")
+      self.lbl_fatiga_text.setText(f"ESTABLE ({ratio_pct:.0f}% MDF)\n{curr_mdf:.1f} Hz")
 
   def _preguntar_lanzar_pca(self, modo="Secuencia Continua"):
     """

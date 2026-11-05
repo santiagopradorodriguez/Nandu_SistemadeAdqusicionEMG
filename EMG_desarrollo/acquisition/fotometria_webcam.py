@@ -74,6 +74,38 @@ except ImportError:
     )
 
 
+def _corregir_signo_pose_espejo_camara(pose: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """
+    Invierte el signo de yaw_deg y pitch_deg devueltos por la malla 3D para que
+    coincidan naturalmente con el movimiento del sujeto frente al espejo de la webcam:
+      - "Gire a la derecha" (Paso 2 Perfil Izquierdo) -> Yaw positivo (+25° a +65°).
+      - "Gire a la izquierda" (Paso 4 Perfil Derecho) -> Yaw negativo (-65° a -25°).
+      - "Levante la cabeza / Incline arriba" (Paso 3 Submental) -> Pitch positivo (+10° a +55°).
+    """
+    if not isinstance(pose, dict):
+        return pose
+    if not pose.get("_argon_espejo_ok", False):
+        if "yaw_deg" in pose and pose["yaw_deg"] is not None:
+            pose["yaw_deg"] = -float(pose["yaw_deg"])
+        if "pitch_deg" in pose and pose["pitch_deg"] is not None:
+            pose["pitch_deg"] = -float(pose["pitch_deg"])
+        pose["_argon_espejo_ok"] = True
+    return pose
+
+
+if hasattr(AntigravityAgent, "calcular_pose_y_biometria_facial") and not getattr(
+    AntigravityAgent, "_argon_pose_wrapped", False
+):
+    _orig_calc_pose = AntigravityAgent.calcular_pose_y_biometria_facial
+
+    def _wrapped_calcular_pose_y_biometria_facial(self, *args, **kwargs):
+        res = _orig_calc_pose(self, *args, **kwargs)
+        return _corregir_signo_pose_espejo_camara(res)
+
+    AntigravityAgent.calcular_pose_y_biometria_facial = _wrapped_calcular_pose_y_biometria_facial
+    AntigravityAgent._argon_pose_wrapped = True
+
+
 class WebcamCaptureThread(QtCore.QThread):
     """
     Hilo demonio de captura continua para cámara web con buffer mínimo (CAP_PROP_BUFFERSIZE = 1).
@@ -417,6 +449,37 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
             f"ai{ch}: {musc}" for ch, musc in zip(self.active_channel_indices, self.nombres_musculos)
         ]
 
+        # ----------------------------------------------------------------------
+        # ETAPA 1 - Canal acustico (Ch3 / Microfono) y canal submentoniano
+        # ----------------------------------------------------------------------
+        # a) Los canales de audio (microfono acustico) jamas portan electrodo en
+        #    piel: se excluyen de la lista de marcadores fiduciarios y de las
+        #    fotos de montaje anatomico.
+        self._posiciones_solo_audio: List[int] = [
+            pos for pos, nombre_ch in enumerate(self.nombres_musculos) if _es_canal_solo_audio(nombre_ch)
+        ]
+        # b) Consulta previa obligatoria: designa el canal sEMG submentoniano
+        #    (vientre anterior del digástrico / milohioideo) si lo hay.
+        (
+            self.pos_canal_submentoniano,
+            self.canal_submentoniano_fisico,
+            self.nombre_canal_submentoniano,
+        ) = preguntar_canal_submentoniano(self, self.nombres_musculos, self.active_channel_indices)
+        # c) La foto frontal queda reservada a los musculos faciales directos:
+        #    el canal submentoniano y los canales de audio no se marcan ahi.
+        self._posiciones_electrodo_frontal: List[int] = [
+            pos
+            for pos in range(len(self.nombres_musculos))
+            if pos != self.pos_canal_submentoniano and pos not in self._posiciones_solo_audio
+        ]
+        # d) El canal submentoniano se marca unicamente en la foto submental
+        #    (vista inferior mandibular).
+        self._pairs_submental: List[Dict[str, Any]] = []
+        self._modo_marcado_sub: bool = False
+        self._pend_pos_pole_sub: Optional[Tuple[float, float]] = None
+        self._pend_pos_anchor_sub: Optional[Dict[str, Any]] = None
+        self._snapshot_submental_marcado: Optional[np.ndarray] = None
+
         self.calibracion_inicial_data: Optional[Dict[str, Any]] = (
             dict(initial_calibration) if initial_calibration else None
         )
@@ -608,6 +671,15 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
         self.btn_mark_gnd.toggled.connect(self._on_toggle_mark_gnd)
         btn_row.addWidget(self.btn_mark_gnd)
 
+        # ETAPA 1: marcado del canal submentoniano solo en la foto submental
+        self.btn_mark_sub = QtWidgets.QPushButton("Canal Submental")
+        self.btn_mark_sub.setCheckable(True)
+        self.btn_mark_sub.setStyleSheet(
+            "QPushButton:checked { background-color: #ff9800; color: #000; font-weight: bold; }"
+        )
+        self.btn_mark_sub.toggled.connect(self._on_toggle_mark_sub)
+        btn_row.addWidget(self.btn_mark_sub)
+
         self.btn_clear_pts = QtWidgets.QPushButton("Limpiar")
         self.btn_clear_pts.clicked.connect(self._clear_manual_points)
         btn_row.addWidget(self.btn_clear_pts)
@@ -740,6 +812,10 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
         self.btn_guide_perfil_izq.setCheckable(True)
         self.btn_guide_perfil_izq.setStyleSheet("QPushButton:checked { background-color: #004d40; border-color: #00ffcc; color: #00ffcc; }")
 
+        self.btn_guide_submental = QtWidgets.QPushButton("Guia: Submental +30° (Arriba)")
+        self.btn_guide_submental.setCheckable(True)
+        self.btn_guide_submental.setStyleSheet("QPushButton:checked { background-color: #004d40; border-color: #00ffcc; color: #00ffcc; }")
+
         self.btn_guide_perfil_der = QtWidgets.QPushButton("Guia: Perfil Der -45°")
         self.btn_guide_perfil_der.setCheckable(True)
         self.btn_guide_perfil_der.setStyleSheet("QPushButton:checked { background-color: #004d40; border-color: #00ffcc; color: #00ffcc; }")
@@ -747,11 +823,13 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
         self.guide_group = QtWidgets.QButtonGroup(self)
         self.guide_group.addButton(self.btn_guide_frontal, 0)
         self.guide_group.addButton(self.btn_guide_perfil_izq, 1)
-        self.guide_group.addButton(self.btn_guide_perfil_der, 2)
+        self.guide_group.addButton(self.btn_guide_submental, 2)
+        self.guide_group.addButton(self.btn_guide_perfil_der, 3)
         self.guide_group.buttonClicked.connect(self._on_guide_button_clicked)
 
         guide_row.addWidget(self.btn_guide_frontal)
         guide_row.addWidget(self.btn_guide_perfil_izq)
+        guide_row.addWidget(self.btn_guide_submental)
         guide_row.addWidget(self.btn_guide_perfil_der)
         captures_layout.addLayout(guide_row)
 
@@ -774,7 +852,15 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
         self.btn_capture_perfil_izq.clicked.connect(self._on_capture_perfil_izquierdo)
         perfiles_btn_row.addWidget(self.btn_capture_perfil_izq)
 
-        self.btn_capture_perfil_der = QtWidgets.QPushButton("3: Foto Perfil Der")
+        self.btn_capture_submental = QtWidgets.QPushButton("3: Foto Submental (Mirando Arriba)")
+        self.btn_capture_submental.setStyleSheet(
+            "QPushButton { background-color: #3b2a1a; border: 1px solid #ff9800; padding: 7px; font-size: 11px; }"
+            "QPushButton:hover { background-color: #5d4037; }"
+        )
+        self.btn_capture_submental.clicked.connect(self._on_capture_submental)
+        perfiles_btn_row.addWidget(self.btn_capture_submental)
+
+        self.btn_capture_perfil_der = QtWidgets.QPushButton("4: Foto Perfil Der")
         self.btn_capture_perfil_der.setStyleSheet(
             "QPushButton { background-color: #1a3a4b; border: 1px solid #00b0ff; padding: 7px; font-size: 11px; }"
             "QPushButton:hover { background-color: #245269; }"
@@ -787,23 +873,25 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
         self.btn_capture_profile = self.btn_capture_perfil_izq
         self.chk_profile_guide = self.btn_guide_perfil_izq
 
-        # Miniaturas de verificación 2x2
+        # Miniaturas de verificación
         thumbs_grid = QtWidgets.QGridLayout()
         thumbs_grid.setSpacing(6)
         self.lbl_thumb_frontal = self._create_thumbnail_label("1: Frontal 3D\nPendiente")
         self.lbl_thumb_perfil_izq = self._create_thumbnail_label("2: Perfil Izq\nPendiente")
-        self.lbl_thumb_perfil_der = self._create_thumbnail_label("3: Perfil Der\nPendiente")
+        self.lbl_thumb_submental = self._create_thumbnail_label("3: Submental (Arriba)\nPendiente")
+        self.lbl_thumb_perfil_der = self._create_thumbnail_label("4: Perfil Der\nPendiente")
         self.lbl_thumb_lips = self._create_thumbnail_label("Close-up Labios\nPendiente")
         self.lbl_thumb_profile = self.lbl_thumb_perfil_izq
 
         thumbs_grid.addWidget(self.lbl_thumb_frontal, 0, 0)
         thumbs_grid.addWidget(self.lbl_thumb_perfil_izq, 0, 1)
+        thumbs_grid.addWidget(self.lbl_thumb_submental, 0, 2)
         thumbs_grid.addWidget(self.lbl_thumb_perfil_der, 1, 0)
         thumbs_grid.addWidget(self.lbl_thumb_lips, 1, 1)
         captures_layout.addLayout(thumbs_grid)
 
         self.lbl_capture_summary = QtWidgets.QLabel(
-            "Alinee el rostro dentro de la elipse guia y capture las 3 fotos de referencia."
+            "Alinee el rostro dentro de la elipse guia y capture las fotos de referencia (Frontal, Perfil y Submental)."
         )
         self.lbl_capture_summary.setWordWrap(True)
         self.lbl_capture_summary.setStyleSheet("color: #00ffcc; font-size: 11px;")
@@ -905,6 +993,43 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
         self._marking_gnd_active = bool(checked)
         self._refresh_channel_list_ui()
 
+    def _on_toggle_mark_sub(self, checked: bool) -> None:
+        """
+        ETAPA 1: activa el marcado del canal submentoniano sobre la vista
+        submental congelada (Polo + y luego Polo -). El par queda registrado
+        con vista_marcado="submental" y nunca se proyecta en la foto frontal.
+        """
+        if self.pos_canal_submentoniano is None:
+            if checked:
+                self.btn_mark_sub.setChecked(False)
+                QtWidgets.QMessageBox.information(
+                    self,
+                    "Canal submentoniano",
+                    "No hay canal sEMG designado como submentoniano en este montaje.",
+                )
+            self._modo_marcado_sub = False
+            return
+        self._modo_marcado_sub = bool(checked)
+        if self._modo_marcado_sub:
+            if self._frozen_frame is None and self._last_live_frame is not None:
+                self._frozen_frame = self._last_live_frame.copy()
+                self.btn_freeze.setChecked(True)
+            if self._frozen_frame is None:
+                self.btn_mark_sub.setChecked(False)
+                self._modo_marcado_sub = False
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    "Foto submental requerida",
+                    "No hay vista congelada. Levante la cabeza mirando hacia arriba, "
+                    "pulse Congelar sobre la vista inferior mandibular y marque el "
+                    "canal submentoniano ahi.",
+                )
+                return
+            self._pend_pos_pole_sub = None
+            self._pend_pos_anchor_sub = None
+        self._refresh_channel_list_ui()
+        self._update_preview()
+
     def _get_current_scale_mm_per_px(self) -> Optional[float]:
         mode = self.combo_calibration_mode.currentIndex()
         if mode == 1:  # IED nominal conocida
@@ -940,23 +1065,39 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
         self.list_channels.clear()
         total_ch = len(self.etiquetas_canales)
         es_bipolar = (self.combo_electrode_type.currentIndex() == 0)
+        # ETAPA 1: posiciones de musculos faciales directos a marcar en frontal
+        posiciones_marcado = (
+            list(getattr(self, "_posiciones_electrodo_frontal", []) or []) or list(range(total_ch))
+        )
+        total_marca = len(posiciones_marcado)
+
+        def _lbl_de_pos(pos: int) -> str:
+            return self.etiquetas_canales[pos] if pos < total_ch else f"Canal {pos}"
 
         if self._marking_gnd_active:
             self.lbl_next_channel.setText("HAGA CLIC EN LA OREJA PARA UBICAR LA TIERRA (GND)")
             self.lbl_next_channel.setStyleSheet("color: #ffff00; font-weight: bold;")
+        elif self._modo_marcado_sub:
+            ch_sub = getattr(self, "pos_canal_submentoniano", None)
+            lbl_sub = _lbl_de_pos(ch_sub) if ch_sub is not None else "Canal Submental"
+            if self._pend_pos_pole_sub is not None:
+                self.lbl_next_channel.setText(f"Canal Submental {lbl_sub}: marque Polo (-) sobre la foto submental")
+                self.lbl_next_channel.setStyleSheet("color: #33ccff; font-weight: bold;")
+            else:
+                self.lbl_next_channel.setText(f"Marcar Canal Submental {lbl_sub} en la FOTO SUBMENTAL: clic en Polo (+) y luego Polo (-)")
+                self.lbl_next_channel.setStyleSheet("color: #ff9800; font-weight: bold;")
         elif es_bipolar:
             num_pares = len(self._differential_pairs)
             if self._pending_pos_pole is not None:
-                ch_idx = num_pares
-                lbl = self.etiquetas_canales[ch_idx] if ch_idx < total_ch else f"Canal {ch_idx}"
+                lbl = _lbl_de_pos(posiciones_marcado[num_pares]) if num_pares < total_marca else f"Canal {num_pares}"
                 self.lbl_next_channel.setText(f"Siguiente clic: Polo (-) de {lbl}")
                 self.lbl_next_channel.setStyleSheet("color: #33ccff; font-weight: bold;")
-            elif num_pares < total_ch:
-                lbl = self.etiquetas_canales[num_pares]
-                self.lbl_next_channel.setText(f"Siguiente clic: Polo (+) de {lbl} ({num_pares}/{total_ch} canales)")
+            elif num_pares < total_marca:
+                lbl = _lbl_de_pos(posiciones_marcado[num_pares])
+                self.lbl_next_channel.setText(f"Siguiente clic: Polo (+) de {lbl} ({num_pares}/{total_marca} canales)")
                 self.lbl_next_channel.setStyleSheet("color: #ff5252; font-weight: bold;")
             else:
-                self.lbl_next_channel.setText(f"[OK] Todos los pares diferenciales ({total_ch}/{total_ch}) fueron marcados.")
+                self.lbl_next_channel.setText(f"[OK] Todos los pares diferenciales ({total_marca}/{total_marca}) fueron marcados.")
                 self.lbl_next_channel.setStyleSheet("color: #00ffcc; font-weight: bold;")
         else:
             num_marked = len(self._manual_points_px)
@@ -972,7 +1113,8 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
                 self.lbl_next_channel.setStyleSheet("color: #00ffcc; font-weight: bold;")
 
         if es_bipolar:
-            for idx, label in enumerate(self.etiquetas_canales):
+            for idx, pos in enumerate(posiciones_marcado):
+                label = _lbl_de_pos(pos)
                 if idx < len(self._differential_pairs):
                     pair = self._differential_pairs[idx]
                     ied_txt = f"{pair.get('ied_mm', 0):.1f} mm" if pair.get('ied_mm') else f"{pair.get('ied_px', 0):.0f} px"
@@ -985,6 +1127,16 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
                 else:
                     item_txt = f"[ ] [{idx + 1}] {label} (Pendiente)"
                 self.list_channels.addItem(item_txt)
+            # ETAPA 1: canales fuera del marcado frontal, con destino informado
+            for pos in list(getattr(self, "_posiciones_solo_audio", []) or []):
+                self.list_channels.addItem(
+                    f"[MIC] {self.etiquetas_canales[pos] if pos < total_ch else 'Canal ' + str(pos)} -> sin electrodo (canal acustico)"
+                )
+            pos_sub = getattr(self, "pos_canal_submentoniano", None)
+            if pos_sub is not None:
+                n_sub = len(getattr(self, "_pairs_submental", []) or [])
+                estado_sub = " -> [OK] marcado en la foto Submental" if n_sub > 0 else " -> se marca SOLO en la foto Submental"
+                self.list_channels.addItem(f"[SUB] {_lbl_de_pos(pos_sub)}{estado_sub}")
         else:
             for idx, label in enumerate(self.etiquetas_canales):
                 if idx < len(self._manual_points_px):
@@ -1026,13 +1178,71 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
             self._update_preview()
             return
 
+        # ETAPA 1: marcado del canal submentoniano sobre la foto submental
+        if self._modo_marcado_sub:
+            if self._pend_pos_pole_sub is None:
+                self._pend_pos_pole_sub = (float(img_x), float(img_y))
+                self._pend_pos_anchor_sub = anchor_clic
+                if self._frozen_frame is not None:
+                    self._snapshot_submental_marcado = self._frozen_frame.copy()
+                self._refresh_channel_list_ui()
+                self._update_preview()
+                return
+            pos_sub_pt = self._pend_pos_pole_sub
+            pos_sub_anc = self._pend_pos_anchor_sub
+            neg_sub_pt = (float(img_x), float(img_y))
+            neg_sub_anc = anchor_clic
+            self._pend_pos_pole_sub = None
+            self._pend_pos_anchor_sub = None
+
+            pos_sub = self.pos_canal_submentoniano
+            ch_num_sub = (
+                self.active_channel_indices[pos_sub]
+                if pos_sub < len(self.active_channel_indices)
+                else pos_sub
+            )
+            musc_sub = (
+                self.nombres_musculos[pos_sub]
+                if pos_sub < len(self.nombres_musculos)
+                else f"Musculo {ch_num_sub}"
+            )
+            escala_sub = self._get_current_scale_mm_per_px()
+            ied_px_sub = float(np.hypot(neg_sub_pt[0] - pos_sub_pt[0], neg_sub_pt[1] - pos_sub_pt[1]))
+            pair_sub = {
+                "es_bipolar": True,
+                "polo_positivo": pos_sub_pt,
+                "polo_negativo": neg_sub_pt,
+                "anchor_positivo": pos_sub_anc,
+                "anchor_negativo": neg_sub_anc,
+                "ied_px": ied_px_sub,
+                "ied_mm": (ied_px_sub * escala_sub) if escala_sub is not None else None,
+                "angulo_deg": float(np.degrees(np.arctan2(neg_sub_pt[1] - pos_sub_pt[1], neg_sub_pt[0] - pos_sub_pt[0]))),
+                "canal_fisico": ch_num_sub,
+                "nombre": musc_sub,
+                "diametro_gel_mm": float(self.spin_gel_diam_mm.value()),
+                "distancia_interelectrodo_nominal_mm": float(self.spin_ied_nominal_mm.value()),
+                "vista_marcado": "submental",
+            }
+            self._pairs_submental.clear()
+            self._pairs_submental.append(pair_sub)
+            self._modo_marcado_sub = False
+            self.btn_mark_sub.setChecked(False)
+            self._refresh_channel_list_ui()
+            self._update_preview()
+            return
+
         es_bipolar = (self.combo_electrode_type.currentIndex() == 0)
         total_ch = len(self.etiquetas_canales)
 
         if es_bipolar:
+            # ETAPA 1: el orden de marcado recorre solo los musculos faciales
+            # directos; el canal submentoniano y los canales de audio no se
+            # proyectan en la foto frontal.
+            posiciones_marcado = list(getattr(self, "_posiciones_electrodo_frontal", []) or []) or list(range(total_ch))
+            total_marca = len(posiciones_marcado)
             if self._pending_pos_pole is None:
                 # Primer clic: Polo (+)
-                if len(self._differential_pairs) < total_ch:
+                if len(self._differential_pairs) < total_marca:
                     self._pending_pos_pole = (img_x, img_y)
                     self._pending_pos_anchor = anchor_clic
             else:
@@ -1044,9 +1254,10 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
                 self._pending_pos_pole = None
                 self._pending_pos_anchor = None
 
-                ch_idx = len(self._differential_pairs)
-                ch_num = self.active_channel_indices[ch_idx] if ch_idx < len(self.active_channel_indices) else ch_idx
-                musc = self.nombres_musculos[ch_idx] if ch_idx < len(self.nombres_musculos) else f"Músculo {ch_num}"
+                par_idx = len(self._differential_pairs)
+                pos_idx = posiciones_marcado[par_idx] if par_idx < len(posiciones_marcado) else par_idx
+                ch_num = self.active_channel_indices[pos_idx] if pos_idx < len(self.active_channel_indices) else pos_idx
+                musc = self.nombres_musculos[pos_idx] if pos_idx < len(self.nombres_musculos) else f"Músculo {ch_num}"
 
                 cx = 0.5 * (pos_pt[0] + neg_pt[0])
                 cy = 0.5 * (pos_pt[1] + neg_pt[1])
@@ -1085,6 +1296,17 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
         self._update_preview()
 
     def _on_video_right_clicked(self, _img_x: float, _img_y: float) -> None:
+        # ETAPA 1: cancelar el marcado del canal submentoniano
+        if self._modo_marcado_sub:
+            if self._pend_pos_pole_sub is not None:
+                self._pend_pos_pole_sub = None
+                self._pend_pos_anchor_sub = None
+            else:
+                self._modo_marcado_sub = False
+                self.btn_mark_sub.setChecked(False)
+            self._refresh_channel_list_ui()
+            self._update_preview()
+            return
         if self._marking_gnd_active:
             self._marking_gnd_active = False
             self.btn_mark_gnd.setChecked(False)
@@ -1269,35 +1491,53 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
         dist_cm = pose["distancia_camara_cm"]
         metodo_d = pose.get("metodo_distancia", "antropometria")
 
-        # Evaluar tolerancias según pose activa (Frontal, Perfil Izq, Perfil Der)
+        # Evaluar tolerancias según pose activa (Frontal, Perfil Izq, Submental, Perfil Der)
         target_mode = getattr(self, "_alignment_pose_target", "frontal")
         if target_mode == "perfil_izquierdo":
             yaw_ok = 30.0 <= yaw <= 55.0
             yaw_warn = 22.0 <= yaw <= 62.0
             modo_str = "+45°"
             target_str = "Perfil Izquierdo: Gire cabeza a la derecha - Yaw +45 deg"
+            pitch_ok = abs(pitch) <= 8.0
+            pitch_warn = abs(pitch) <= 13.0
         elif target_mode == "perfil_derecho":
             yaw_ok = -55.0 <= yaw <= -30.0
             yaw_warn = -62.0 <= yaw <= -22.0
             modo_str = "-45°"
             target_str = "Perfil Derecho: Gire cabeza a la izquierda - Yaw -45 deg"
+            pitch_ok = abs(pitch) <= 8.0
+            pitch_warn = abs(pitch) <= 13.0
+        elif target_mode == "submental":
+            yaw_ok = abs(yaw) <= 22.0
+            yaw_warn = abs(yaw) <= 30.0
+            modo_str = "+30° Arriba"
+            target_str = "Submental: Levante la barbilla mirando arriba (Pitch +8 a +58 deg)"
+            pitch_ok = 8.0 <= pitch <= 58.0
+            pitch_warn = 4.0 <= pitch <= 65.0
         elif self._profile_45_mode:
             yaw_ok = 30.0 <= abs(yaw) <= 55.0
             yaw_warn = 22.0 <= abs(yaw) <= 62.0
             modo_str = "45°"
             target_str = "Modo Perfil: Gire rostro hasta 30 a 55 grados"
+            pitch_ok = abs(pitch) <= 8.0
+            pitch_warn = abs(pitch) <= 13.0
         else:
             yaw_ok = abs(yaw) <= 6.0
             yaw_warn = abs(yaw) <= 10.0
             modo_str = "0°"
             target_str = "Ajuste giro e inclinacion hasta poner semaforos en verde"
-
-        pitch_ok = abs(pitch) <= 8.0
-        pitch_warn = abs(pitch) <= 13.0
-        roll_ok = abs(roll) <= 4.0
-        roll_warn = abs(roll) <= 7.5
-        dist_ok = 30.0 <= dist_cm <= 70.0
-        dist_warn = 24.0 <= dist_cm <= 82.0
+            pitch_ok = abs(pitch) <= 8.0
+            pitch_warn = abs(pitch) <= 13.0
+        if target_mode == "submental":
+            roll_ok = abs(roll) <= 15.0
+            roll_warn = abs(roll) <= 22.0
+            dist_ok = 16.0 <= dist_cm <= 105.0
+            dist_warn = 12.0 <= dist_cm <= 120.0
+        else:
+            roll_ok = abs(roll) <= 4.0
+            roll_warn = abs(roll) <= 7.5
+            dist_ok = 30.0 <= dist_cm <= 70.0
+            dist_warn = 24.0 <= dist_cm <= 82.0
 
         all_aligned = yaw_ok and pitch_ok and roll_ok and dist_ok
         guide_color = (118, 230, 0) if all_aligned else (0, 215, 255)
@@ -1569,6 +1809,35 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
                 cv2.circle(canvas, (px, py), 9, (255, 255, 255), 1, cv2.LINE_AA)
                 cv2.putText(canvas, "+ [Marque Polo -]", (px + 10, py - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 1, cv2.LINE_AA)
 
+            # ETAPA 1: pares del canal submentoniano dibujados solo sobre la
+            # vista congelada de la foto submental (nunca sobre la frontal).
+            if self._frozen_frame is not None and (self._pairs_submental or self._modo_marcado_sub):
+                color_sub = (255, 170, 0)
+                for pair_sub in self._pairs_submental:
+                    p_pos_sub = pair_sub["polo_positivo"]
+                    p_neg_sub = pair_sub["polo_negativo"]
+                    sx_pos, sy_pos = int(round(p_pos_sub[0])), int(round(p_pos_sub[1]))
+                    sx_neg, sy_neg = int(round(p_neg_sub[0])), int(round(p_neg_sub[1]))
+                    cv2.arrowedLine(canvas, (sx_neg, sy_neg), (sx_pos, sy_pos), (220, 220, 220), 2, tipLength=0.25)
+                    cv2.circle(canvas, (sx_pos, sy_pos), 7, (0, 69, 255), -1, cv2.LINE_AA)
+                    cv2.circle(canvas, (sx_pos, sy_pos), 9, (255, 255, 255), 1, cv2.LINE_AA)
+                    cv2.putText(canvas, "+", (sx_pos - 4, sy_pos + 4), cv2.FONT_HERSHEY_SIMPLEX, 0.40, (255, 255, 255), 1, cv2.LINE_AA)
+                    cv2.circle(canvas, (sx_neg, sy_neg), 7, (255, 120, 0), -1, cv2.LINE_AA)
+                    cv2.circle(canvas, (sx_neg, sy_neg), 9, (255, 255, 255), 1, cv2.LINE_AA)
+                    cv2.putText(canvas, "-", (sx_neg - 3, sy_neg + 3), cv2.FONT_HERSHEY_SIMPLEX, 0.40, (255, 255, 255), 1, cv2.LINE_AA)
+                    ied_sub_txt = f"{pair_sub['ied_mm']:.1f}mm" if pair_sub.get("ied_mm") else f"{pair_sub['ied_px']:.0f}px"
+                    cv2.putText(
+                        canvas,
+                        f"CANAL SUBMENTAL [{ied_sub_txt}]",
+                        (sx_neg + 10, sy_neg - 6),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.46, color_sub, 2, cv2.LINE_AA,
+                    )
+                if self._modo_marcado_sub and self._pend_pos_pole_sub is not None:
+                    qx, qy = int(round(self._pend_pos_pole_sub[0])), int(round(self._pend_pos_pole_sub[1]))
+                    cv2.circle(canvas, (qx, qy), 7, (0, 69, 255), -1, cv2.LINE_AA)
+                    cv2.circle(canvas, (qx, qy), 9, (255, 255, 255), 1, cv2.LINE_AA)
+                    cv2.putText(canvas, "+ [Marque Polo -]", (qx + 10, qy - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.45, color_sub, 2, cv2.LINE_AA)
+
         else:
             # Monopolar o Automático
             pts_to_draw = []
@@ -1754,6 +2023,9 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
         if button == self.btn_guide_perfil_izq:
             self._alignment_pose_target = "perfil_izquierdo"
             self._profile_45_mode = True
+        elif hasattr(self, "btn_guide_submental") and button == self.btn_guide_submental:
+            self._alignment_pose_target = "submental"
+            self._profile_45_mode = False
         elif button == self.btn_guide_perfil_der:
             self._alignment_pose_target = "perfil_derecho"
             self._profile_45_mode = True
@@ -1813,6 +2085,58 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
         self._refresh_thumbnails_from_state()
         self.lbl_capture_summary.setText(
             f"[OK] Perfil Izquierdo capturado - Yaw: {yaw_val:+.1f} deg. Proceda a Perfil Derecho o Confirmar."
+        )
+
+    def _on_capture_submental(self) -> None:
+        if self._alignment_pose_target != "submental":
+            if hasattr(self, "btn_guide_submental"):
+                self.btn_guide_submental.setChecked(True)
+            self._alignment_pose_target = "submental"
+            self._profile_45_mode = False
+
+        frame = self._get_current_source_frame()
+        if frame is None:
+            return
+
+        fiduciarios = self.agent.extraer_malla_facial_3d(frame)
+        pose = (
+            self.agent.calcular_pose_y_biometria_facial(fiduciarios, frame.shape[:2])
+            if fiduciarios is not None
+            else {}
+        )
+        vis_submental = frame.copy()
+        pitch_val = pose.get("pitch_deg", 0.0)
+        dist_val = pose.get("distancia_camara_cm", 0.0)
+        cv2.rectangle(vis_submental, (10, 10), (520, 62), (0, 0, 0), -1)
+        cv2.rectangle(vis_submental, (10, 10), (520, 62), (0, 255, 204), 1)
+        cv2.putText(
+            vis_submental,
+            f"Referencia Submental - Vientre Anterior Digastrico - {self.sujeto}",
+            (20, 32),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.50,
+            (255, 255, 255),
+            1,
+            cv2.LINE_AA,
+        )
+        cv2.putText(
+            vis_submental,
+            f"Pitch: {pitch_val:+.1f} deg | Dist: {dist_val:.1f} cm",
+            (20, 52),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.48,
+            (0, 255, 204),
+            1,
+            cv2.LINE_AA,
+        )
+
+        self.reference_images["submental"] = vis_submental
+        if self.calibracion_inicial_data is not None:
+            self.calibracion_inicial_data["pose_submental"] = pose
+
+        self._refresh_thumbnails_from_state()
+        self.lbl_capture_summary.setText(
+            f"[OK] Submental capturado - Pitch: {pitch_val:+.1f} deg (Digastrico Ch0 registrado)."
         )
 
     def _on_capture_perfil_derecho(self) -> None:
@@ -1881,6 +2205,50 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
             or (len(self._manual_points_px) > len(electrodos_guardados))
         ):
             self._on_capture_frontal()
+        # ETAPA 1: registrar el canal submentoniano y su marcado en la foto submental
+        try:
+            calib = self.calibracion_inicial_data
+            if calib is not None:
+                pos_sub = self.pos_canal_submentoniano
+                if pos_sub is not None:
+                    calib["canales_submentonianos"] = [
+                        {
+                            "canal_pos": int(pos_sub),
+                            "canal_fisico": int(self.canal_submentoniano_fisico),
+                            "nombre": self.nombre_canal_submentoniano,
+                            "vista_marcado": "submental",
+                        }
+                    ]
+                if self._posiciones_solo_audio:
+                    calib["canales_solo_audio"] = [
+                        {
+                            "canal_fisico": int(self.active_channel_indices[pos]) if pos < len(self.active_channel_indices) else int(pos),
+                            "nombre": self.nombres_musculos[pos] if pos < len(self.nombres_musculos) else f"Canal {pos}",
+                            "vista_marcado": "ninguna",
+                        }
+                        for pos in self._posiciones_solo_audio
+                    ]
+                if self._pairs_submental:
+                    calib["pares_diferenciales_submentonianos"] = [limpiar_para_json(par) for par in self._pairs_submental]
+                    if self._snapshot_submental_marcado is not None:
+                        canvas_sub = self._snapshot_submental_marcado.copy()
+                        for par_sub in self._pairs_submental:
+                            sx_p = int(round(float(par_sub["polo_positivo"][0])))
+                            sy_p = int(round(float(par_sub["polo_positivo"][1])))
+                            sx_n = int(round(float(par_sub["polo_negativo"][0])))
+                            sy_n = int(round(float(par_sub["polo_negativo"][1])))
+                            cv2.arrowedLine(canvas_sub, (sx_n, sy_n), (sx_p, sy_p), (220, 220, 220), 2, tipLength=0.25)
+                            cv2.circle(canvas_sub, (sx_p, sy_p), 7, (0, 69, 255), -1, cv2.LINE_AA)
+                            cv2.circle(canvas_sub, (sx_p, sy_p), 9, (255, 255, 255), 1, cv2.LINE_AA)
+                            cv2.putText(canvas_sub, "+", (sx_p - 4, sy_p + 4), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1, cv2.LINE_AA)
+                            cv2.circle(canvas_sub, (sx_n, sy_n), 7, (255, 120, 0), -1, cv2.LINE_AA)
+                            cv2.circle(canvas_sub, (sx_n, sy_n), 9, (255, 255, 255), 1, cv2.LINE_AA)
+                            cv2.putText(canvas_sub, "-", (sx_n - 3, sy_n + 3), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1, cv2.LINE_AA)
+                            ied_sub_txt = f"{par_sub['ied_mm']:.1f}mm" if par_sub.get("ied_mm") else f"{par_sub['ied_px']:.0f}px"
+                            cv2.putText(canvas_sub, f"CANAL SUBMENTAL [{ied_sub_txt}]", (sx_n + 10, sy_n - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.46, (255, 170, 0), 2, cv2.LINE_AA)
+                        self.reference_images["submental_con_marcas"] = canvas_sub
+        except Exception:
+            pass
         self.accept()
 
     def _refresh_thumbnails_from_state(self) -> None:
@@ -1899,6 +2267,10 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
         elif "perfil_45" in self.reference_images:
             self._display_bgr_on_label(
                 self.reference_images["perfil_45"], self.lbl_thumb_perfil_izq
+            )
+        if "submental" in self.reference_images and hasattr(self, "lbl_thumb_submental"):
+            self._display_bgr_on_label(
+                self.reference_images["submental"], self.lbl_thumb_submental
             )
         if "perfil_derecho" in self.reference_images:
             self._display_bgr_on_label(
@@ -1936,7 +2308,8 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
 
 NOMBRE_FOTO_FRONTAL = "01_frontal.png"
 NOMBRE_FOTO_PERFIL_IZQUIERDO = "02_perfil_izquierdo.png"
-NOMBRE_FOTO_PERFIL_DERECHO = "03_perfil_derecho.png"
+NOMBRE_FOTO_SUBMENTAL = "03_submental.png"
+NOMBRE_FOTO_PERFIL_DERECHO = "04_perfil_derecho.png"
 NOMBRE_METADATA_FOTOMETRIA = "metadata_fotometria.json"
 D_IP_NOMINAL_DEFECTO_MM = 63.0
 TICKS_VERDE_CAPTURA = 16
@@ -1951,6 +2324,155 @@ PALETA_CANALES_MONTAJE = [
 ]
 COLOR_FANTASMA = (255, 255, 0)
 COLOR_FANTASMA_LINEA = (170, 200, 90)
+
+
+# =====================================================================
+# ETAPA 1 - Fotometria: canal acustico (Microfono) y canal submentoniano
+# =====================================================================
+
+PALABRAS_CLAVE_MUSCULO_SUBMENTONIANO = ("digastr", "belly", "milohio", "subment")
+PALABRAS_CLAVE_CANAL_AUDIO = ("mic", "acust", "audio")
+
+
+def _normalizar_texto_ascii(texto: str) -> str:
+    """Texto en minusculas y sin tildes para reglas de nombre de canal."""
+    mapa = str.maketrans({
+        "á": "a", "é": "e", "í": "i", "ó": "o", "ú": "u", "ü": "u",
+        "Á": "a", "É": "e", "Í": "i", "Ó": "o", "Ú": "u", "Ü": "u",
+    })
+    return str(texto or "").strip().lower().translate(mapa)
+
+
+def _es_canal_solo_audio(nombre_musculo: str) -> bool:
+    """True cuando el canal es microfono acustico (Ch3) y no porta electrodo en piel."""
+    texto = _normalizar_texto_ascii(nombre_musculo)
+    return any(clave in texto for clave in PALABRAS_CLAVE_CANAL_AUDIO)
+
+
+def _es_musculo_submentoniano(nombre_musculo: str) -> bool:
+    """True para musculos de la region submentoniana (digástrico / milohioideo)."""
+    texto = _normalizar_texto_ascii(nombre_musculo)
+    return any(clave in texto for clave in PALABRAS_CLAVE_MUSCULO_SUBMENTONIANO)
+
+
+class _DialogoCanalSubmentoniano(QtWidgets.QDialog):
+    """
+    Dialogo inicial del asistente de fotometria: designa el canal sEMG montado
+    en la region submentoniana (vientre anterior del digástrico / milohioideo)
+    o indica que no hay ninguno. El canal elegido se marcara unicamente en la
+    foto submental (vista inferior mandibular) y quedara excluido del marcado
+    de electrodos en la foto frontal, reservada a musculos faciales directos.
+    """
+
+    def __init__(self, posiciones: List[Tuple[int, int, str]], preseleccion_pos: Optional[int], parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Canal sEMG submentoniano - Asistente de Fotometria")
+        self.setMinimumWidth(560)
+        self.posicion_elegida: Optional[int] = preseleccion_pos
+        self.canal_fisico_elegido: Optional[int] = None
+        self.nombre_elegido: str = ""
+        # Tablas de pos -> canal fisico y nombre (las llena el llamador)
+        self._pos_a_canal_fisico: Dict[int, int] = {}
+        self._pos_a_nombre: Dict[int, str] = {}
+
+        layout = QtWidgets.QVBoxLayout(self)
+        intro = QtWidgets.QLabel(
+            "Consultas de montaje anatomico del asistente de fotometria.\n\n"
+            "Algun canal sEMG esta montado en la region submentoniana?\n"
+            "(Vientre anterior del digástrico / milohioideo, bajo el menton)\n\n"
+            "- El canal asignado se marcara unicamente en la foto SUBMENTAL\n"
+            "  (vista inferior mandibular) y quedara excluido de la marcacion\n"
+            "  de electrodos en la foto frontal.\n"
+            "- La foto frontal queda reservada a los musculos faciales directos.\n"
+            "- El canal del microfono acustico (Ch3) no se marca nunca en piel."
+        )
+        intro.setWordWrap(True)
+        layout.addWidget(intro)
+
+        self._grupo_botones = QtWidgets.QButtonGroup(self)
+        self._radio_por_pos: Dict[Optional[int], QtWidgets.QRadioButton] = {}
+
+        rb_ninguno = QtWidgets.QRadioButton(
+            "Ninguno: todos los canales estan en musculos faciales directos"
+        )
+        self._grupo_botones.addButton(rb_ninguno)
+        self._radio_por_pos[None] = rb_ninguno
+        layout.addWidget(rb_ninguno)
+
+        for pos, canal_fisico, nombre in posiciones:
+            rb = QtWidgets.QRadioButton(f"Canal Ch{canal_fisico} (ai{canal_fisico}): {nombre}")
+            self._grupo_botones.addButton(rb)
+            self._radio_por_pos[pos] = rb
+            layout.addWidget(rb)
+
+        separador = QtWidgets.QFrame()
+        separador.setFrameShape(QtWidgets.QFrame.HLine)
+        layout.addWidget(separador)
+
+        fila_botones = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel
+        )
+        fila_botones.accepted.connect(self.accept)
+        fila_botones.rejected.connect(self.reject)
+        layout.addWidget(fila_botones)
+
+        if preseleccion_pos is not None and preseleccion_pos in self._radio_por_pos:
+            self._radio_por_pos[preseleccion_pos].setChecked(True)
+        elif None in self._radio_por_pos:
+            self._radio_por_pos[None].setChecked(True)
+
+    def accept(self) -> None:  # noqa: D102 - comportamiento QDialog + captura de seleccion
+        for pos, rb in self._radio_por_pos.items():
+            if rb.isChecked():
+                self.posicion_elegida = pos
+                break
+        super().accept()
+
+    def resultado(self) -> Tuple[Optional[int], Optional[int], str]:
+        """(pos, canal_fisico, nombre) del canal submentoniano o (None, None, '')."""
+        pos = self.posicion_elegida
+        if pos is None:
+            return (None, None, "")
+        return (pos, self._pos_a_canal_fisico[pos], self._pos_a_nombre[pos])
+
+
+def preguntar_canal_submentoniano(
+    parent: Optional[QtWidgets.QWidget],
+    nombres_musculos: Optional[List[str]],
+    active_channel_indices: Optional[List[int]],
+) -> Tuple[Optional[int], Optional[int], str]:
+    """
+    ETAPA 1: consulta al usuario si hay canal sEMG submentoniano y cual es.
+
+    Preselecciona el canal cuyo nombre contiene digastrico / belly /
+    milohioideo / subment; en defecto preselecciona "Ninguno". Los canales
+    de audio (Ch3 Microfono) jamas aparecen como candidatos.
+
+    Retorna (pos_en_listas, canal_fisico, nombre); si la respuesta es
+    ninguno retorna (None, None, "").
+    """
+    lista_nombres = list(nombres_musculos or [])
+    lista_indices = [int(c) for c in active_channel_indices] if active_channel_indices else list(range(max(len(lista_nombres), 1)))
+    while len(lista_nombres) < len(lista_indices):
+        lista_nombres.append(f"Canal {lista_indices[len(lista_nombres)]}")
+    posiciones: List[Tuple[int, int, str]] = []
+    for pos, canal_fisico in enumerate(lista_indices):
+        nombre_ch = str(lista_nombres[pos]) if pos < len(lista_nombres) else f"Canal {canal_fisico}"
+        if _es_canal_solo_audio(nombre_ch):
+            continue
+        posiciones.append((pos, canal_fisico, nombre_ch))
+
+    preseleccion = None
+    for pos, canal_fisico, nombre in posiciones:
+        if _es_musculo_submentoniano(nombre):
+            preseleccion = pos
+            break
+
+    dialogo = _DialogoCanalSubmentoniano(posiciones, preseleccion, parent=parent)
+    dialogo._pos_a_canal_fisico = {pos: canal for pos, canal, _ in posiciones}
+    dialogo._pos_a_nombre = {pos: nombre for pos, _, nombre in posiciones}
+    dialogo.exec()
+    return dialogo.resultado()
 
 
 def resolver_directorio_proyecto() -> str:
@@ -2072,9 +2594,10 @@ FRASES_VOZ_ASISTENTE: Dict[str, str] = {
     "La foto se toma automaticamente",
     "paso2": "Paso 2 de 4. Gire la cabeza 45 grados a la derecha hasta que el semaforo "
     "quede verde. La foto se toma automaticamente",
-    "paso3": "Paso 3 de 4. Vuelva al centro y gire la cabeza 45 grados a la izquierda "
-    "para la foto de control. La foto se toma automaticamente",
-    "paso4": "Paso 4 de 4. Se abre la ventana del comentario de la sesion. "
+    "paso_submental": "Paso 3. Levante la cabeza mirando hacia arriba para registrar los electrodos submentales del digastrico",
+    # ETAPA 1: instruccion de marcado del canal submentoniano sobre la foto submental
+    "paso_marca_submental": "Ahora marque el canal submentoniano sobre la foto del menton: haga clic en el polo positivo y despues en el polo negativo",    "paso3": "Paso 4. Gire la cabeza 45 grados a la izquierda para la foto de control. La foto se toma automaticamente",
+    "paso4": "Paso final. Se abre la ventana del comentario de la sesion. "
     "Escribalo si lo desea y confirme para grabar la sesion",
     "activada": "Guia por voz activada",
     "prueba": "Guia por voz activada: si escucha esta frase, el motor funciona correctamente",
@@ -2106,6 +2629,8 @@ FRASES_VOZ_ASISTENTE: Dict[str, str] = {
     "ajuste_dist": "Ajuste la distancia: quedo muy cerca o muy lejos de la camara",
     "casi_barbilla": "Casi: nivele la barbilla arriba y abajo",
     "casi_enderece": "Casi: enderece la cabeza ligeramente",
+    "incline_arriba": "Levante la barbilla mirando hacia arriba",
+    "baje_un_poco": "Baje la barbilla ligeramente",
     "mantenga": "Mantenga la pose: capturando la foto automaticamente",
 }
 
@@ -2456,10 +2981,11 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
     punteados sobre la piel, la colocacion de una medicion anterior.
 
     Secuencia lineal:
-      - Paso 1 de 4: Foto Frontal + marcado de Canal 0 y Canal 2
-      - Paso 2 de 4: Foto Perfil Izquierdo + marcado de Canal 1
-      - Paso 3 de 4: Foto de Control Perfil Derecho
-      - Paso 4 de 4: Parametros de montaje y comentario de sesion
+      - Paso 1: Foto Frontal + marcado de canales EMG
+      - Paso 2: Foto Perfil Izquierdo (+45° a la derecha)
+      - Paso 3: Foto Submental (Mirando hacia arriba +30° - Vientre Anterior del Digástrico)
+      - Paso 4: Foto de Control Perfil Derecho (-45° a la izquierda)
+      - Paso 5: Parámetros de montaje y comentario de sesión
 
     Al confirmar entrega las fotos del montaje y metadata_fotometria con
     coordenadas 2D, vertices 3D anclados por v_idx y offsets dx/dy, IED en mm,
@@ -2470,8 +2996,11 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
     PASO_MARCA_FRONTAL = 1
     PASO_PERFIL_IZQ = 2
     PASO_MARCA_PERFIL = 3
-    PASO_PERFIL_DER = 4
-    PASO_PARAMETROS = 5
+    PASO_SUBMENTAL = 4
+    PASO_PERFIL_DER = 5
+    PASO_PARAMETROS = 6
+    # ETAPA 1: paso de marcado del canal submentoniano (solo foto submental)
+    PASO_MARCA_SUBMENTAL = 7
 
     def __init__(
         self,
@@ -2506,22 +3035,46 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
                 self.nombres_musculos.append(f"Canal {self.active_channel_indices[pos]}")
 
         # Filtrar canales que sean Micrófono para que solo se marquen electrodos EMG reales
+        # ETAPA 1: exclusion obligatoria del canal acustico - Ch3 se omite siempre
+        # (o cualquier canal cuyo nombre indique microfono/auduo/acustico).
         emg_positions: List[int] = []
+        self._canales_solo_audio: List[int] = []
         for pos_idx, musc_name in enumerate(self.nombres_musculos):
             m_low = str(musc_name or "").strip().lower()
             hw_c = self.active_channel_indices[pos_idx] if pos_idx < len(self.active_channel_indices) else pos_idx
-            if "mic" in m_low or "audio" in m_low or (hw_c == 3 and m_low in ("", "canal 3", "canal_3", "ch3", "ai3")):
+            if _es_canal_solo_audio(m_low) or hw_c == 3 or "mic" in m_low or "audio" in m_low or (hw_c == 3 and m_low in ("", "canal 3", "canal_3", "ch3", "ai3")):
+                self._canales_solo_audio.append(pos_idx)
                 continue
             emg_positions.append(pos_idx)
         if not emg_positions:
             emg_positions = list(range(len(self.active_channel_indices)))
         self._emg_positions: List[int] = emg_positions
 
+        # ETAPA 1: pregunta previa al usuario sobre el canal submentoniano
+        # (vientre anterior del digástrico / milohioideo). Preselecciona el
+        # canal cuyo nombre contiene digastrico/belly/milohioideo/subment.
+        (
+            self._pos_canal_submentoniano,
+            self._canal_submentoniano_fisico,
+            self._nombre_canal_submentoniano,
+        ) = preguntar_canal_submentoniano(self, self.nombres_musculos, self.active_channel_indices)
+        if self._pos_canal_submentoniano in getattr(self, "_canales_solo_audio", []):
+            self._pos_canal_submentoniano = None
+            self._canal_submentoniano_fisico = None
+            self._nombre_canal_submentoniano = ""
+
         # Por defecto: marcar TODOS los canales EMG en orden correlativo (0, 1, 2...) en la foto frontal
         # para que jamás se salte ni se pierda el canal intermedio (Canal 1). Si el usuario prefiere
         # marcar el Canal 1 en la foto de Perfil Izquierdo, también puede hacerlo en el Paso 2.
-        self._canales_frontal: List[int] = list(emg_positions)
+        # ETAPA 1: el canal submentoniano queda excluido del marcado frontal y
+        # se marcará unicamente en la foto submental (vista inferior mandibular).
+        self._canales_frontal: List[int] = [
+            p for p in emg_positions if p != self._pos_canal_submentoniano
+        ]
         self._canales_perfil: List[int] = []
+        self._canales_submental: List[int] = (
+            [self._pos_canal_submentoniano] if self._pos_canal_submentoniano is not None else []
+        )
 
         # Estado del asistente
         self._paso: int = self.PASO_FRONTAL
@@ -2533,6 +3086,7 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         self._fotos: Dict[str, Optional[np.ndarray]] = {
             "frontal": None,
             "perfil_izquierdo": None,
+            "submental": None,
             "perfil_derecho": None,
         }
         self._pose_fotos: Dict[str, Any] = {}
@@ -2979,14 +3533,33 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
                 "instruccion": "",
                 "sub": "Clic izquierdo marca los Polos sobre la foto congelada | Clic derecho deshace | Continuar avanza al terminar",
             }
+        if paso == self.PASO_MARCA_SUBMENTAL:
+            canal_txt = (
+                f"Canal {self._nombre_canal(self._pos_canal_submentoniano)[0]} - "
+                f"{self._nombre_canal(self._pos_canal_submentoniano)[1]}"
+                if self._pos_canal_submentoniano is not None
+                else "sin canal submentoniano designado"
+            )
+            return {
+                "titulo": "Paso 3 : Foto Submental - Marcado del Canal Submentoniano",
+                "instruccion": "",
+                "sub": f"Canales a marcar SOLO en esta imagen inferior mandibular: {canal_txt} | "
+                       "Clic izquierdo marca los Polos, clic derecho deshace, Continuar avanza",
+            }
+        if paso == self.PASO_SUBMENTAL:
+            return {
+                "titulo": "Paso 3 : Foto Submental (Mirando hacia ARRIBA +30°)",
+                "instruccion": "Levante la cabeza y mire hacia ARRIBA (Pitch positivo +15° a +45°) para registrar los electrodos del vientre anterior del digastrico (Canal 0).",
+                "sub": "Sostenga la elevacion del menton hasta que el semaforo quede en verde.",
+            }
         if paso == self.PASO_PERFIL_DER:
             return {
-                "titulo": "Paso 3 de 4 : Foto Perfil Derecho (Gire a la IZQUIERDA -45°)",
+                "titulo": "Paso 4 : Foto Perfil Derecho (Gire a la IZQUIERDA -45°)",
                 "instruccion": "Ahora gire la cabeza 45 grados hacia la IZQUIERDA (Yaw negativo -25° a -65°) hasta poner el semaforo en verde.",
                 "sub": "Exige orientacion opuesta al paso anterior (solo se activa al girar a la izquierda)",
             }
         return {
-            "titulo": "Paso 4 de 4 : Parametros de Montaje",
+            "titulo": "Paso 5 : Parametros de Montaje",
             "instruccion": "Revise diametro de gel y distancia inter-electrodo nominal; "
                            "agregue un comentario si lo desea. Confirme para grabar la sesion.",
             "sub": "Al confirmar, el montaje se guarda en la carpeta activa de la medicion",
@@ -2999,7 +3572,9 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         # (o repetir) el perfil izquierdo se olvida la referencia anterior.
         if nuevo_paso in (self.PASO_FRONTAL, self.PASO_PERFIL_IZQ):
             self._yaw_signo_perfil = None
-        es_paso_congelado = nuevo_paso in (self.PASO_MARCA_FRONTAL, self.PASO_MARCA_PERFIL)
+        es_paso_congelado = nuevo_paso in (
+            self.PASO_MARCA_FRONTAL, self.PASO_MARCA_PERFIL, self.PASO_MARCA_SUBMENTAL
+        )
         if not es_paso_congelado:
             self._frozen_frame = None
             self._frozen_fiduciarios = None
@@ -3007,6 +3582,9 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
             self._iniciar_marcado(self._canales_frontal)
         elif nuevo_paso == self.PASO_MARCA_PERFIL:
             self._iniciar_marcado(self._canales_perfil)
+        elif nuevo_paso == self.PASO_MARCA_SUBMENTAL:
+            # ETAPA 1: marcado del canal submentoniano unicamente aqui
+            self._iniciar_marcado(self._canales_submental)
         self._canal_anunciado = None
         self._clave_pendiente = ""
         self._frames_clave = 0
@@ -3027,7 +3605,9 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
 
     def _refrescar_estado_ui(self) -> None:
         textos = self._textos_paso_actual()
-        paso_marca = self._paso in (self.PASO_MARCA_FRONTAL, self.PASO_MARCA_PERFIL)
+        paso_marca = self._paso in (
+            self.PASO_MARCA_FRONTAL, self.PASO_MARCA_PERFIL, self.PASO_MARCA_SUBMENTAL
+        )
         if paso_marca:
             canal = self._canal_actual_marca()
             if canal is not None:
@@ -3065,7 +3645,7 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
             self.lbl_instruccion_paso.setText(textos["instruccion"])
         self.lbl_sub_paso.setText(textos["sub"])
 
-        es_paso_espera = self._paso in (self.PASO_FRONTAL, self.PASO_PERFIL_IZQ, self.PASO_PERFIL_DER)
+        es_paso_espera = self._paso in (self.PASO_FRONTAL, self.PASO_PERFIL_IZQ, self.PASO_SUBMENTAL, self.PASO_PERFIL_DER)
         self.btn_tomar_ahora.setVisible(es_paso_espera)
         self.btn_tomar_ahora.setEnabled(es_paso_espera)
         self.btn_repetir_foto.setVisible(paso_marca)
@@ -3095,7 +3675,8 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         for clave, nombre_foto in (
             ("frontal", "01_frontal.png"),
             ("perfil_izquierdo", "02_perfil_izquierdo.png"),
-            ("perfil_derecho", "03_perfil_derecho.png"),
+            ("submental", "03_submental.png"),
+            ("perfil_derecho", "04_perfil_derecho.png"),
         ):
             toma = self._fotos.get(clave)
             estado_foto = "capturada" if toma is not None else "pendiente"
@@ -3105,6 +3686,12 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         for pos in range(len(self.active_channel_indices)):
             fisico, nombre = self._nombre_canal(pos)
             par = self._pares_por_canal.get(pos)
+            # ETAPA 1: informar canales sin marcado anatomico en piel
+            if pos in getattr(self, "_canales_solo_audio", []):
+                self.list_progreso.addItem(
+                    f"[MIC] Canal {fisico} - {nombre} - sin electrodo (canal acustico)"
+                )
+                continue
             en_cola = pos in self._cola_marcado and self._canal_actual_marca() == pos
             if par is not None:
                 ied_txt = (
@@ -3123,9 +3710,19 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
                     self.list_progreso.addItem(
                         f"[ >] Canal {fisico} - {nombre} - Marque Polo +"
                     )
-            else:
+            elif pos == getattr(self, "_pos_canal_submentoniano", None):
+                # ETAPA 1: el canal submentoniano se marca en la foto submental
                 self.list_progreso.addItem(
-                    f"[  ] Canal {fisico} - {nombre} - Pendiente"
+                    f"[SUB] Canal {fisico} - {nombre} - se marca solo en la foto Submental"
+                )
+            else:
+                sub_motivo = (
+                    " (se marca en la foto Submental)"
+                    if pos in getattr(self, "_canales_submental", [])
+                    else ""
+                )
+                self.list_progreso.addItem(
+                    f"[  ] Canal {fisico} - {nombre} - Pendiente{sub_motivo}"
                 )
 
     # =====================================================================
@@ -3153,7 +3750,9 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         return ancla
 
     def _al_clic_izquierdo(self, img_x: float, img_y: float) -> None:
-        if self._paso not in (self.PASO_MARCA_FRONTAL, self.PASO_MARCA_PERFIL):
+        if self._paso not in (
+            self.PASO_MARCA_FRONTAL, self.PASO_MARCA_PERFIL, self.PASO_MARCA_SUBMENTAL
+        ):
             return
         canal_pos = self._canal_actual_marca()
         if canal_pos is None:
@@ -3176,7 +3775,9 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         self._actualizar_lista_progreso()
 
     def _al_clic_derecho(self, _img_x: float, _img_y: float) -> None:
-        if self._paso not in (self.PASO_MARCA_FRONTAL, self.PASO_MARCA_PERFIL):
+        if self._paso not in (
+            self.PASO_MARCA_FRONTAL, self.PASO_MARCA_PERFIL, self.PASO_MARCA_SUBMENTAL
+        ):
             return
         if self._pend_pos_pole is not None:
             self._pend_pos_pole = None
@@ -3246,6 +3847,10 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         if self._paso == self.PASO_MARCA_FRONTAL:
             self._ir_a_paso(self.PASO_PERFIL_IZQ)
         elif self._paso == self.PASO_MARCA_PERFIL:
+            self._ir_a_paso(self.PASO_SUBMENTAL)
+        elif self._paso == self.PASO_MARCA_SUBMENTAL:
+            # ETAPA 1: tras marcar el canal submentoniano en la foto submental,
+            # la secuencia continua con la foto de control del perfil derecho.
             self._ir_a_paso(self.PASO_PERFIL_DER)
 
     # =====================================================================
@@ -3319,6 +3924,8 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         claves = {
             self.PASO_FRONTAL: "paso1",
             self.PASO_PERFIL_IZQ: "paso2",
+            self.PASO_SUBMENTAL: "paso_submental",
+            self.PASO_MARCA_SUBMENTAL: "paso_marca_submental",
             self.PASO_PERFIL_DER: "paso3",
             self.PASO_PARAMETROS: "paso4",
         }
@@ -3330,6 +3937,9 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
     def _al_cambiar_modo_distribucion_canales(self, en_perfil: bool) -> None:
         """Permite elegir si el Canal 1 se marca en Frontal junto a 0 y 2, o en Perfil Izquierdo."""
         emg_pos = list(getattr(self, "_emg_positions", range(len(self.active_channel_indices))))
+        # ETAPA 1: el canal submentoniano nunca participa de la foto frontal
+        # ni del modo perfil: su marcado vive solo en la foto submental.
+        emg_pos = [p for p in emg_pos if p != getattr(self, "_pos_canal_submentoniano", None)]
         if en_perfil and len(emg_pos) >= 2:
             c_mid = emg_pos[1]
             self._canales_frontal = [p for p in emg_pos if p != c_mid]
@@ -3372,6 +3982,13 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
                 return "regrese"
             if not (25.0 <= yaw <= 65.0):
                 return "casi_perfil"
+        elif paso == self.PASO_SUBMENTAL:
+            if pitch < 8.0:
+                return "incline_arriba"
+            if pitch > 58.0:
+                return "baje_un_poco"
+            if abs(yaw) > 22.0:
+                return "centro"
         elif paso == self.PASO_PERFIL_DER:
             # Perfil Derecho exige girar cabeza hacia la izquierda (Yaw negativo -65° a -25°)
             if yaw > -22.0:
@@ -3434,9 +4051,14 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
             for pos_canal in self._canales_perfil:
                 self._pares_por_canal.pop(pos_canal, None)
             self._ir_a_paso(self.PASO_PERFIL_IZQ)
+        elif self._paso in (self.PASO_SUBMENTAL, self.PASO_MARCA_SUBMENTAL):
+            for pos_canal in getattr(self, "_canales_submental", []):
+                self._pares_por_canal.pop(pos_canal, None)
+            self._fotos["submental"] = None
+            self._ir_a_paso(self.PASO_SUBMENTAL)
 
     def _al_tomar_de_todas_formas(self) -> None:
-        if self._paso in (self.PASO_FRONTAL, self.PASO_PERFIL_IZQ, self.PASO_PERFIL_DER):
+        if self._paso in (self.PASO_FRONTAL, self.PASO_PERFIL_IZQ, self.PASO_SUBMENTAL, self.PASO_PERFIL_DER):
             self._capturar_paso()
 
     # =====================================================================
@@ -3447,26 +4069,34 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         """Rangos direccionales con signo del semaforo segun la pose objetivo del paso actual:
         - PASO_FRONTAL    : [-8°, +8°]
         - PASO_PERFIL_IZQ : [+25°, +65°] (giro hacia la derecha)
+        - PASO_SUBMENTAL  : Pitch [+15°, +45°] (mirando hacia arriba - vientre anterior)
         - PASO_PERFIL_DER : [-65°, -25°] (giro hacia la izquierda)
         """
         paso = self._paso
         if paso == self.PASO_PERFIL_IZQ:
             yaw_rango, yaw_rango_warn = (25.0, 65.0), (18.0, 72.0)
+            pitch_rango, pitch_rango_warn = (-10.0, 10.0), (-16.0, 16.0)
         elif paso == self.PASO_PERFIL_DER:
             yaw_rango, yaw_rango_warn = (-65.0, -25.0), (-72.0, -18.0)
+            pitch_rango, pitch_rango_warn = (-10.0, 10.0), (-16.0, 16.0)
+        elif paso == self.PASO_SUBMENTAL:
+            yaw_rango, yaw_rango_warn = (-22.0, 22.0), (-30.0, 30.0)
+            pitch_rango, pitch_rango_warn = (8.0, 58.0), (4.0, 65.0)
         else:
             yaw_rango, yaw_rango_warn = (-8.0, 8.0), (-14.0, 14.0)
+            pitch_rango, pitch_rango_warn = (-10.0, 10.0), (-16.0, 16.0)
+        es_sub = (paso == self.PASO_SUBMENTAL)
         return {
             "yaw": yaw_rango,
             "yaw_warn": yaw_rango_warn,
-            "yaw_absoluto": (25.0, 65.0) if paso in (self.PASO_PERFIL_IZQ, self.PASO_PERFIL_DER) else (0.0, 8.0),
-            "yaw_absoluto_warn": (18.0, 72.0) if paso in (self.PASO_PERFIL_IZQ, self.PASO_PERFIL_DER) else (0.0, 14.0),
-            "pitch": (-10.0, 10.0),
-            "pitch_warn": (-16.0, 16.0),
-            "roll": (-6.0, 6.0),
-            "roll_warn": (-11.0, 11.0),
-            "dist": (30.0, 70.0),
-            "dist_warn": (24.0, 82.0),
+            "yaw_absoluto": (25.0, 65.0) if paso in (self.PASO_PERFIL_IZQ, self.PASO_PERFIL_DER) else (0.0, 22.0 if es_sub else 8.0),
+            "yaw_absoluto_warn": (18.0, 72.0) if paso in (self.PASO_PERFIL_IZQ, self.PASO_PERFIL_DER) else (0.0, 30.0 if es_sub else 14.0),
+            "pitch": pitch_rango,
+            "pitch_warn": pitch_rango_warn,
+            "roll": (-15.0, 15.0) if es_sub else (-6.0, 6.0),
+            "roll_warn": (-22.0, 22.0) if es_sub else (-11.0, 11.0),
+            "dist": (16.0, 105.0) if es_sub else (30.0, 70.0),
+            "dist_warn": (12.0, 120.0) if es_sub else (24.0, 82.0),
         }
 
     def _en_rango(self, valor: float, rango: Tuple[float, float]) -> bool:
@@ -3595,11 +4225,12 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
 
         if not congelado:
             es_paso_espera = self._paso in (
-                self.PASO_FRONTAL, self.PASO_PERFIL_IZQ, self.PASO_PERFIL_DER
+                self.PASO_FRONTAL, self.PASO_PERFIL_IZQ, self.PASO_SUBMENTAL, self.PASO_PERFIL_DER
             )
+            ticks_objetivo = max(6, TICKS_VERDE_CAPTURA // 2) if self._paso == self.PASO_SUBMENTAL else TICKS_VERDE_CAPTURA
             if verde and es_paso_espera and fiduciarios is not None:
                 self._frames_verde += 1
-                if self._frames_verde >= TICKS_VERDE_CAPTURA:
+                if self._frames_verde >= ticks_objetivo:
                     self._capturar_paso()
                     return
             else:
@@ -3620,7 +4251,9 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         if not congelado:
             cv2.ellipse(canvas, (cx, cy), (rx, ry), 0, 0, 360, color_guia, 2, cv2.LINE_AA)
 
-        es_paso_espera = self._paso in (self.PASO_FRONTAL, self.PASO_PERFIL_IZQ, self.PASO_PERFIL_DER)
+        es_paso_espera = self._paso in (
+            self.PASO_FRONTAL, self.PASO_PERFIL_IZQ, self.PASO_SUBMENTAL, self.PASO_PERFIL_DER
+        )
         if es_paso_espera and not congelado:
             centro_semaforo = (ancho - 46, 26)
             color_semaforo = (90, 225, 90) if verde else (60, 60, 230)
@@ -3669,7 +4302,11 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         escala = self.d_ip_nominal_mm / dip_px if dip_px and dip_px > 1.0 else None
         canales_visibles = (
             set(self._canales_marcado_paso)
-            if (congelado and self._paso in (self.PASO_MARCA_FRONTAL, self.PASO_MARCA_PERFIL) and self._canales_marcado_paso)
+            if (
+                congelado
+                and self._paso in (self.PASO_MARCA_FRONTAL, self.PASO_MARCA_PERFIL, self.PASO_MARCA_SUBMENTAL)
+                and self._canales_marcado_paso
+            )
             else set(self._pares_por_canal.keys())
         )
         for pos_canal, par in sorted(self._pares_por_canal.items()):
@@ -3762,6 +4399,16 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
             destino = (
                 self.PASO_MARCA_PERFIL
                 if len(self._canales_perfil) > 0
+                else self.PASO_SUBMENTAL
+            )
+        elif self._paso == self.PASO_SUBMENTAL:
+            self._fotos["submental"] = frame.copy()
+            self._pose_fotos["submental"] = limpiar_para_json(pose)
+            # ETAPA 1: si hay canal submentoniano designado, el marcado de ese
+            # canal solicita SOLO esta foto submental (vista inferior mandibular).
+            destino = (
+                self.PASO_MARCA_SUBMENTAL
+                if self._canales_submental
                 else self.PASO_PERFIL_DER
             )
         else:
@@ -4041,10 +4688,16 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         montaje: Dict[str, Any] = {}
         for pos_canal, par in self._pares_por_canal.items():
             fisico, nombre = self._nombre_canal(pos_canal)
+            # ETAPA 1: la foto de origen respeta la anatomia del marcado
+            # (frontal para musculos faciales, submental para el canal sub).
             foto_canal = (
-                NOMBRE_FOTO_FRONTAL
-                if pos_canal in self._canales_frontal
-                else NOMBRE_FOTO_PERFIL_IZQUIERDO
+                NOMBRE_FOTO_SUBMENTAL
+                if pos_canal in getattr(self, "_canales_submental", [])
+                else (
+                    NOMBRE_FOTO_FRONTAL
+                    if pos_canal in self._canales_frontal
+                    else NOMBRE_FOTO_PERFIL_IZQUIERDO
+                )
             )
             montaje[f"Ch{pos_canal}"] = {
                 "canal_pos": pos_canal,
@@ -4067,10 +4720,15 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         pares_lista: List[Dict[str, Any]] = []
         for pos_canal, par in sorted(self._pares_por_canal.items()):
             fisico, nombre = self._nombre_canal(pos_canal)
+            # ETAPA 1: foto de origen coherente con la anatomia del canal
             foto_canal = (
-                NOMBRE_FOTO_FRONTAL
-                if pos_canal in self._canales_frontal
-                else NOMBRE_FOTO_PERFIL_IZQUIERDO
+                NOMBRE_FOTO_SUBMENTAL
+                if pos_canal in getattr(self, "_canales_submental", [])
+                else (
+                    NOMBRE_FOTO_FRONTAL
+                    if pos_canal in self._canales_frontal
+                    else NOMBRE_FOTO_PERFIL_IZQUIERDO
+                )
             )
             polo_pos_info = self._polo_del_par(par, "anchor_positivo", "polo_positivo")
             polo_neg_info = self._polo_del_par(par, "anchor_negativo", "polo_negativo")
@@ -4120,6 +4778,28 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         meta_calib["prueba"] = self.prueba
         meta_calib["canales_activos_fisicos"] = list(self.active_channel_indices)
         meta_calib["nombres_musculos_canales"] = list(self.nombres_musculos)
+        # ETAPA 1: trazabilidad de canal submentoniano y canal acustico
+        meta_calib["canales_submentonianos"] = (
+            [
+                {
+                    "canal_pos": int(self._pos_canal_submentoniano),
+                    "canal_fisico": int(self._canal_submentoniano_fisico),
+                    "nombre": self._nombre_canal_submentoniano,
+                    "vista_marcado": "submental",
+                }
+            ]
+            if getattr(self, "_pos_canal_submentoniano", None) is not None
+            else []
+        )
+        meta_calib["canales_solo_audio"] = [
+            {
+                "canal_pos": int(pos),
+                "canal_fisico": int(self.active_channel_indices[pos]) if pos < len(self.active_channel_indices) else int(pos),
+                "nombre": self.nombres_musculos[pos] if pos < len(self.nombres_musculos) else f"Canal {pos}",
+                "vista_marcado": "ninguna",
+            }
+            for pos in getattr(self, "_canales_solo_audio", [])
+        ]
         meta_calib["total_electrodos_detectados"] = len(electrodos_lista)
         meta_calib["total_pares_diferenciales"] = len(pares_lista)
         meta_calib["electrodos"] = electrodos_lista
@@ -4135,6 +4815,28 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
             "prueba": self.prueba,
             "canales_activos_fisicos": list(self.active_channel_indices),
             "nombres_musculos_canales": list(self.nombres_musculos),
+            # ETAPA 1: trazabilidad de canal submentoniano y canal acustico
+            "canales_submentonianos": (
+                [
+                    {
+                        "canal_pos": int(self._pos_canal_submentoniano),
+                        "canal_fisico": int(self._canal_submentoniano_fisico),
+                        "nombre": self._nombre_canal_submentoniano,
+                        "vista_marcado": "submental",
+                    }
+                ]
+                if getattr(self, "_pos_canal_submentoniano", None) is not None
+                else []
+            ),
+            "canales_solo_audio": [
+                {
+                    "canal_pos": int(pos),
+                    "canal_fisico": int(self.active_channel_indices[pos]) if pos < len(self.active_channel_indices) else int(pos),
+                    "nombre": self.nombres_musculos[pos] if pos < len(self.nombres_musculos) else f"Canal {pos}",
+                    "vista_marcado": "ninguna",
+                }
+                for pos in getattr(self, "_canales_solo_audio", [])
+            ],
             "diametro_gel_mm": round(gel, 2),
             "distancia_interelectrodo_nominal_mm": round(ied_nominal, 2),
             "distancia_interpupilar_nominal_mm": self.d_ip_nominal_mm,
@@ -4147,6 +4849,7 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
             "fotos_montaje": [
                 NOMBRE_FOTO_FRONTAL,
                 NOMBRE_FOTO_PERFIL_IZQUIERDO,
+                NOMBRE_FOTO_SUBMENTAL,
                 NOMBRE_FOTO_PERFIL_DERECHO,
             ],
             "fotos_montaje_dir": "fotos_montaje",
@@ -4177,6 +4880,8 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         for clave, canales_foto in (
             ("frontal", self._canales_frontal),
             ("perfil_izquierdo", self._canales_perfil),
+            # ETAPA 1: el canal submentoniano se dibuja sobre la foto submental
+            ("submental", list(getattr(self, "_canales_submental", []) or [])),
         ):
             base = self._fotos.get(clave)
             if base is None or base.size == 0:
@@ -4442,6 +5147,7 @@ class WebcamPhotometryManager(QtCore.QObject):
             fotos_dict = {
                 "frontal": self.reference_images.get("frontal_cruda") if "frontal_cruda" in self.reference_images else self.reference_images.get("frontal_triangulada"),
                 "perfil_izquierdo": self.reference_images.get("perfil_izquierdo") if "perfil_izquierdo" in self.reference_images else self.reference_images.get("perfil_45"),
+                "submental": self.reference_images.get("submental"),
                 "perfil_derecho": self.reference_images.get("perfil_derecho"),
             }
             fotos_marcas_dict = {
@@ -4526,6 +5232,8 @@ class WebcamPhotometryManager(QtCore.QObject):
             elif fotos_raw.get("perfil_izquierdo") is not None:
                 self.reference_images["perfil_izquierdo"] = fotos_raw["perfil_izquierdo"].copy()
                 self.reference_images["perfil_45"] = fotos_raw["perfil_izquierdo"].copy()
+            if fotos_raw.get("submental") is not None:
+                self.reference_images["submental"] = fotos_raw["submental"].copy()
             if fotos_raw.get("perfil_derecho") is not None:
                 self.reference_images["perfil_derecho"] = fotos_raw["perfil_derecho"].copy()
             self.is_enabled = True
@@ -4582,6 +5290,7 @@ class WebcamPhotometryManager(QtCore.QObject):
         mapeo_fotos = {
             "frontal": NOMBRE_FOTO_FRONTAL,
             "perfil_izquierdo": NOMBRE_FOTO_PERFIL_IZQUIERDO,
+            "submental": NOMBRE_FOTO_SUBMENTAL,
             "perfil_derecho": NOMBRE_FOTO_PERFIL_DERECHO,
         }
         try:
@@ -4786,6 +5495,7 @@ class WebcamPhotometryManager(QtCore.QObject):
                     for nombre_foto in (
                         NOMBRE_FOTO_FRONTAL,
                         NOMBRE_FOTO_PERFIL_IZQUIERDO,
+                        NOMBRE_FOTO_SUBMENTAL,
                         NOMBRE_FOTO_PERFIL_DERECHO,
                     ):
                         if os.path.isfile(os.path.join(dir_montaje_sesion, nombre_foto)):

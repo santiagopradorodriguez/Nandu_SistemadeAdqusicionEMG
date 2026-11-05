@@ -14,6 +14,24 @@ if not getattr(sys, 'frozen', False):
     sys.path.insert(0, root_project_dir)
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+try:
+  from terminal_launcher import launch_in_visible_terminal, ensure_running_in_terminal, configure_live_terminal_streams
+except ImportError:
+  try:
+    from utils.terminal_launcher import launch_in_visible_terminal, ensure_running_in_terminal, configure_live_terminal_streams
+  except ImportError:
+    def configure_live_terminal_streams(*a, **kw): pass
+    def ensure_running_in_terminal(*a, **kw): pass
+    def launch_in_visible_terminal(cmd, title="Ñandú Tool", cwd=None):
+      import subprocess
+      return subprocess.Popen(cmd, cwd=cwd)
+configure_live_terminal_streams("Ñandú LSD")
+
+try:
+  from theme import get_main_hub_palette, build_main_hub_qss
+except ImportError:
+  from utils.theme import get_main_hub_palette, build_main_hub_qss
+
 def _get_writable_temp_dir():
     """Retorna un directorio escribible para scripts temporales y datos efímeros."""
     if getattr(sys, 'frozen', False):
@@ -224,7 +242,7 @@ from PySide6.QtWidgets import (
   QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
   QDockWidget, QTextEdit, QLabel, QTreeView, QTabWidget,
   QToolBar, QPushButton, QSizePolicy, QMessageBox, QComboBox,
-  QTableWidget, QTableWidgetItem, QScrollArea, QDialog
+  QTableWidget, QTableWidgetItem, QScrollArea, QDialog, QFrame
 )
 from PySide6.QtCore import Qt, QThreadPool, QSize, QTimer
 from PySide6.QtGui import QFont, QColor, QTextCursor, QAction, QPixmap, QIcon, QCursor
@@ -511,21 +529,29 @@ class ReaperStyleHub(QMainWindow):
     super().__init__()
     self.root_dir = get_project_root()
     self.base_dir = get_database_path()
-    self.setWindowTitle("Ñandú LSD - EMG Analytics Studio (DAW Edition)")
+    self.setWindowTitle("Ñandú LSD")
     
     # Modo de acoplamiento múltiple para los paneles
     self.setDockOptions(QMainWindow.AllowNestedDocks | QMainWindow.AllowTabbedDocks)
     
-    # Área Central (Donde irían los gráficos grandes / Osciloscopio)
-    self.setWindowTitle("Ñandú LSD - Estación Biomédica (EMG)")
-    self.setGeometry(100, 100, 1400, 800)
-    
-    # Crear la Barra de Herramientas Superior
+    self._theme_variant = "azul"
+    try:
+      from utils.config_manager import ConfigManager
+      saved_theme = ConfigManager().get("estetica_global", "tema_hub")
+      if saved_theme in ("azul", "rojo"):
+        self._theme_variant = saved_theme
+    except Exception:
+      pass
+
+    self.setWindowTitle("Ñandú LSD")
+    self.setGeometry(80, 60, 1440, 840)
+
+    # Crear la Barra Superior (Header)
     self._create_main_toolbar()
-    
+
     # Crear el Workspace Central (Pestañas)
     self.tabs = QTabWidget()
-    self.tabs.setStyleSheet("QTabBar::tab { height: 40px; width: 250px; font-weight: bold; font-size: 14px; }")
+    self.tabs.setDocumentMode(True)
     self.setCentralWidget(self.tabs)
     
     self._setup_tabs()
@@ -586,26 +612,18 @@ class ReaperStyleHub(QMainWindow):
     if args is None:
         args = []
     
+    env = os.environ.copy()
+    env["PYTHONUNBUFFERED"] = "1"
+    env["NANDU_IN_TERMINAL"] = "1"
+
     if getattr(sys, 'frozen', False):
       try:
         cmd_frozen = [sys.executable, "--run-script", script_name] + args
+        print(f"\n[HUB -> PROCESO] Ejecutando: {' '.join(cmd_frozen)}", flush=True)
         if sys.platform == "win32":
-          subprocess.Popen(cmd_frozen, creationflags=subprocess.CREATE_NEW_CONSOLE)
+          subprocess.Popen(cmd_frozen, env=env)
         else:
-          import shutil
-          terminals = ['xterm', 'konsole', 'gnome-terminal', 'xfce4-terminal']
-          term_cmd = None
-          for t in terminals:
-              if shutil.which(t):
-                  if t == 'xterm': term_cmd = [t, '-e'] + cmd_frozen
-                  elif t == 'konsole': term_cmd = [t, '-e'] + cmd_frozen
-                  elif t == 'gnome-terminal': term_cmd = [t, '--'] + cmd_frozen
-                  else: term_cmd = [t, '-e'] + cmd_frozen
-                  break
-          if term_cmd:
-              subprocess.Popen(term_cmd)
-          else:
-              subprocess.Popen(cmd_frozen)
+          subprocess.Popen(cmd_frozen, env=env, stdout=sys.__stdout__, stderr=sys.__stderr__)
       except Exception as e:
         QMessageBox.critical(self, "Error Crítico", f"Error al abrir {script_name}:\n{e}")
       return
@@ -618,23 +636,9 @@ class ReaperStyleHub(QMainWindow):
       return
       
     try:
-      if sys.platform == "win32":
-        subprocess.Popen([sys.executable, script_path] + args, creationflags=subprocess.CREATE_NEW_CONSOLE)
-      else:
-        import shutil
-        terminals = ['xterm', 'konsole', 'gnome-terminal', 'xfce4-terminal']
-        term_cmd = None
-        for t in terminals:
-            if shutil.which(t):
-                if t == 'xterm': term_cmd = [t, '-e', sys.executable, script_path] + args
-                elif t == 'konsole': term_cmd = [t, '-e', sys.executable, script_path] + args
-                elif t == 'gnome-terminal': term_cmd = [t, '--', sys.executable, script_path] + args
-                else: term_cmd = [t, '-e', sys.executable, script_path] + args
-                break
-        if term_cmd:
-            subprocess.Popen(term_cmd)
-        else:
-            subprocess.Popen([sys.executable, script_path] + args)
+      cmd_run = [sys.executable, "-u", script_path] + [str(a) for a in args]
+      print(f"\n[HUB -> PROCESO] Ejecutando en terminal activa: {' '.join(cmd_run)}", flush=True)
+      launch_in_visible_terminal(cmd_run, title=f"Ñandú - {os.path.basename(script_path)}", cwd=root_dir)
     except Exception as e:
       QMessageBox.critical(self, "Error Crítico", f"Error al abrir {script_name}:\n{e}")
 
@@ -646,68 +650,302 @@ class ReaperStyleHub(QMainWindow):
     else:
         self._launch_external("analysis/reproductor_canal3.py")
 
+  def _run_extractor_pulsos(self, *args):
+    """Ejecuta el extractor de pulsos vocales pasándole la medición seleccionada en el explorador."""
+    selected_paths = self.explorer_widget.get_selected_paths()
+    if selected_paths:
+        self._launch_external("analysis/extractor_pulsos_vocales.py", args=[selected_paths[0]])
+    else:
+        self._launch_external("analysis/extractor_pulsos_vocales.py")
+
+  @staticmethod
+  def _make_header_svg_icon(kind: str, color_hex: str = "#cbd5e1", size: int = 18) -> QIcon:
+    from PySide6.QtGui import QPixmap, QPainter, QColor, QPen, QPainterPath
+    import math
+    pix = QPixmap(size, size)
+    pix.fill(Qt.transparent)
+    p = QPainter(pix)
+    p.setRenderHint(QPainter.Antialiasing, True)
+    pen = QPen(QColor(color_hex), 1.6)
+    pen.setCapStyle(Qt.RoundCap)
+    pen.setJoinStyle(Qt.RoundJoin)
+    p.setPen(pen)
+    cx, cy = size / 2.0, size / 2.0
+    if kind == "gear":
+      r_in = size * 0.18
+      r_out = size * 0.36
+      p.drawEllipse(int(cx - r_in), int(cy - r_in), int(2 * r_in), int(2 * r_in))
+      for deg in range(0, 360, 45):
+        rad = math.radians(deg)
+        x1 = cx + (r_out - 1.5) * math.cos(rad)
+        y1 = cy + (r_out - 1.5) * math.sin(rad)
+        x2 = cx + (r_out + 1.8) * math.cos(rad)
+        y2 = cy + (r_out + 1.8) * math.sin(rad)
+        p.drawLine(int(round(x1)), int(round(y1)), int(round(x2)), int(round(y2)))
+      p.drawEllipse(int(cx - r_out), int(cy - r_out), int(2 * r_out), int(2 * r_out))
+    elif kind == "exit":
+      p.drawRoundedRect(2, 2, size - 7, size - 4, 2, 2)
+      p.drawLine(int(cx - 1), int(cy), size - 2, int(cy))
+      p.drawLine(size - 5, int(cy - 3), size - 2, int(cy))
+      p.drawLine(size - 5, int(cy + 3), size - 2, int(cy))
+    p.end()
+    return QIcon(pix)
+
+  @staticmethod
+  def _make_circular_nandu_pixmap(img_path: str, diameter: int, border_color: str = "#38bdf8", glow: bool = True) -> QPixmap:
+    # CORRECCION ETAPA 1: render circular nitido por supermuestreo 2x
+    # (mantiene la firma y el estilo; devuelve QPixmap con devicePixelRatio 2).
+    from PySide6.QtGui import QPixmap, QPainter, QColor, QPen, QBrush, QPainterPath, QRadialGradient
+    scale = 2
+    canvas_size = (diameter + (16 if glow else 4)) * scale
+    out = QPixmap(canvas_size, canvas_size)
+    out.fill(Qt.transparent)
+    p = QPainter(out)
+    p.setRenderHint(QPainter.Antialiasing, True)
+    p.setRenderHint(QPainter.SmoothPixmapTransform, True)
+    cx, cy = canvas_size / 2.0, canvas_size / 2.0
+    r = (diameter * scale) / 2.0
+
+    if glow:
+      grad = QRadialGradient(cx, cy, r + 8 * scale)
+      c_glow = QColor(border_color)
+      c_glow.setAlpha(95)
+      c_zero = QColor(border_color)
+      c_zero.setAlpha(0)
+      grad.setColorAt(0.70, c_glow)
+      grad.setColorAt(1.0, c_zero)
+      p.setPen(Qt.NoPen)
+      p.setBrush(QBrush(grad))
+      p.drawEllipse(0, 0, canvas_size, canvas_size)
+
+    x0 = int(round(cx - r))
+    y0 = int(round(cy - r))
+    clip = QPainterPath()
+    clip.addEllipse(x0, y0, diameter * scale, diameter * scale)
+    p.save()
+    p.setClipPath(clip)
+    p.fillRect(x0, y0, diameter * scale, diameter * scale, QColor("#0d1520"))
+    if img_path and os.path.isfile(img_path):
+      src = QPixmap(img_path)
+      if not src.isNull():
+        scaled = src.scaled(diameter * scale, diameter * scale, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+        sx = x0 + ((diameter * scale) - scaled.width()) // 2
+        sy = y0 + ((diameter * scale) - scaled.height()) // 2
+        p.drawPixmap(sx, sy, scaled)
+    else:
+      # Silueta vectorial de respaldo si no hay imagen
+      p.setPen(QPen(QColor("#e2e8f0"), 2.2))
+      p.drawEllipse(x0 + (diameter * scale) // 3, y0 + (diameter * scale) // 4, (diameter * scale) // 3, (diameter * scale) // 4)
+    p.restore()
+
+    pen_ring = QPen(QColor(border_color), (2.0 if glow else 1.5) * scale)
+    p.setPen(pen_ring)
+    p.setBrush(Qt.NoBrush)
+    p.drawEllipse(x0, y0, diameter * scale, diameter * scale)
+    p.end()
+    out.setDevicePixelRatio(float(scale))
+    return out
+
+  @staticmethod
+  def _make_centered_nandu_card_pixmap(img_path: str, width: int = 230, height: int = 230, border_color: str = "#ef4444", glow: bool = True) -> QPixmap:
+    """
+    Renderiza la fotografía / logo oficial original del Ñandú (logo_nandu_lsd.png) en alta
+    resolución (supermuestreo HiDPI 2x) centrada con bordes redondeados suaves y halo.
+    """
+    from PySide6.QtGui import QPixmap, QPainter, QColor, QPen, QBrush, QPainterPath, QRadialGradient
+    scale = 2
+    pad = (14 if glow else 4) * scale
+    cw = width * scale + 2 * pad
+    ch = height * scale + 2 * pad
+    out = QPixmap(cw, ch)
+    out.fill(Qt.transparent)
+    p = QPainter(out)
+    p.setRenderHint(QPainter.Antialiasing, True)
+    p.setRenderHint(QPainter.SmoothPixmapTransform, True)
+
+    if glow:
+      cx, cy = cw / 2.0, ch / 2.0
+      r_glow = max(width, height) * scale * 0.58
+      grad = QRadialGradient(cx, cy, r_glow)
+      c_glow = QColor(border_color)
+      c_glow.setAlpha(85)
+      c_zero = QColor(border_color)
+      c_zero.setAlpha(0)
+      grad.setColorAt(0.65, c_glow)
+      grad.setColorAt(1.0, c_zero)
+      p.setPen(Qt.NoPen)
+      p.setBrush(QBrush(grad))
+      p.drawRect(0, 0, cw, ch)
+
+    x0, y0 = pad, pad
+    w_box, h_box = width * scale, height * scale
+    radius = 18.0 * scale
+
+    clip = QPainterPath()
+    clip.addRoundedRect(float(x0), float(y0), float(w_box), float(h_box), radius, radius)
+    p.save()
+    p.setClipPath(clip)
+    p.fillRect(x0, y0, w_box, h_box, QColor("#0d1520"))
+    if img_path and os.path.isfile(img_path):
+      src = QPixmap(img_path)
+      if not src.isNull():
+        scaled = src.scaled(w_box, h_box, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+        sx = x0 + (w_box - scaled.width()) // 2
+        sy = y0 + (h_box - scaled.height()) // 2
+        p.drawPixmap(sx, sy, scaled)
+    p.restore()
+
+    pen_border = QPen(QColor(border_color), 2.2 * scale)
+    p.setPen(pen_border)
+    p.setBrush(Qt.NoBrush)
+    p.drawRoundedRect(float(x0), float(y0), float(w_box), float(h_box), radius, radius)
+    p.end()
+    out.setDevicePixelRatio(float(scale))
+    return out
+
+  def _resolve_nandu_avatar_path(self, header_icon: bool = False) -> str:
+    base_here = os.path.dirname(os.path.abspath(__file__))
+    root_here = os.path.dirname(base_here)
+    repo_top = os.path.dirname(root_here)
+    # Prioridad absoluta al logo original oficial (logo_nandu_lsd.png); se descarta nandu_avatar_card.png (IA).
+    target_names = ["logo_nandu_lsd.png", "logo.png"]
+    search_folders = [
+      os.path.join(base_here, "assets"),
+      base_here,
+      os.path.join(root_here, "assets"),
+      root_here,
+      repo_top,
+      os.path.join(repo_top, "EMG_desarrollo", "gui_app", "assets"),
+      os.path.join(repo_top, "EMG_desarrollo"),
+    ]
+    for folder in search_folders:
+      for name in target_names:
+        cand = os.path.join(folder, name)
+        if os.path.isfile(cand):
+          return cand
+    return ""
+
   def _create_main_toolbar(self):
     """
-    Ejecuta la funcionalidad de _create_main_toolbar.
-
-    Returns:
-      Any: Resultado de la ejecución de la función.
+    Construye la Barra Superior (Header) según las maquetas de referencia:
+    - Izquierda: Avatar circular del Ñandú con el logo oficial (logo_nandu_lsd.png) + Título 'Ñandú LSD'
+    - Derecha: Conmutador de Tema (Azul/Rojo), 'Gestor de Sesiones', 'Configuración y Ayuda' y botón Salir.
     """
-    toolbar = QToolBar("Herramientas Adicionales")
-    toolbar.setIconSize(QSize(16, 16))
+    from PySide6.QtWidgets import QToolButton, QMenu, QSizePolicy
+    toolbar = QToolBar("Barra Principal")
+    toolbar.setObjectName("mainHeaderBar")
+    toolbar.setIconSize(QSize(18, 18))
     toolbar.setMovable(False)
     toolbar.setFloatable(False)
-    self.setCorner(Qt.TopLeftCorner, Qt.LeftDockWidgetArea)
+    # La barra superior abarca todo el ancho superior por encima del panel izquierdo
+    self.setCorner(Qt.TopLeftCorner, Qt.TopDockWidgetArea)
     self.setCorner(Qt.BottomLeftCorner, Qt.LeftDockWidgetArea)
     self.addToolBar(Qt.TopToolBarArea, toolbar)
-    from PySide6.QtWidgets import QToolButton, QMenu
-    
-    def create_menu_button(title, items):
-        btn = QToolButton()
-        btn.setText(title)
-        btn.setPopupMode(QToolButton.InstantPopup)
-        menu = QMenu(btn)
-        for name, script in items:
-            action = QAction(name, self)
-            if script == "_internal_config":
-                action.triggered.connect(self._open_config_dialog)
-            elif script == "_internal_report":
-                action.triggered.connect(self._open_report_dialog)
-            elif script == "analysis/plotter_calibrado.py":
-                action.triggered.connect(self._run_plotter_calibrado)
-            elif script == "analysis/correlaciondeseñales.py":
-                action.triggered.connect(self._run_correlacion_nativo)
-            elif script == "analysis/reproductor_canal3.py":
-                action.triggered.connect(self._run_reproductor_audio)
-            elif script == "deep_learning/autoencoder_no_supervisado_gui.py":
-                action.triggered.connect(self._lanzar_estudio_autoencoder_no_sup)
-            else:
-                action.triggered.connect(lambda checked=False, s=script: self._launch_external(s))
-            menu.addAction(action)
-        btn.setMenu(menu)
-        toolbar.addWidget(btn)
-        
-    create_menu_button(" Configuración & Ayuda", [
-        (" Configuración General", "_internal_config"),
-        ("Instrucciones y Créditos", "instrucciones_uso.py")
-    ])
 
-    create_menu_button(" Utilidades", [
-        ("Generador de Reportes PDF", "_internal_report"),
-        ("Extractor de Pulsos por Vocal (Secuencia -> PCA/UMAP)", "analysis/extractor_pulsos_vocales.py"),
-        ("Puente DAQ Windows (GUI 1-Clic)", "daq_bridge_server.py"),
-        ("Sanitizar Repositorio para GitHub", "utils/limpiar_repo_para_github.py"),
-        ("Entrenamiento AutoForge", "acquisition/modulo_de_entrenamiento.py"),
-        ("Metrónomo", "acquisition/metronomo_visual.py"),
-        ("Segmentador de Secuencias Continuas", "analysis/segmentador_secuencias.py"),
-        ("Editar Medición", "utils/editor_mediciones.py"),
-        ("Reproductor de Audios", "analysis/reproductor_canal3.py")
-    ])
+    # 1. Logo circular del Ñandú a la izquierda
+    self.lbl_header_logo = QLabel()
+    self.lbl_header_logo.setFixedSize(38, 38)
+    self.lbl_header_logo.setAlignment(Qt.AlignCenter)
+    toolbar.addWidget(self.lbl_header_logo)
 
-    create_menu_button(" Deep Learning", [
-        ("Estudio Autoencoder No Supervisado", "deep_learning/autoencoder_no_supervisado_gui.py"),
-        ("Visualizador de Features", "deep_learning/dataset_tools/visor_features.py")
-    ])
+    # 2. Título principal (nombre oficial de la aplicacion)
+    self.lbl_header_title = QLabel("Ñandú LSD")
+    self.lbl_header_title.setStyleSheet(
+      "color: #f1f5f9; font-size: 16px; font-weight: 700; padding-left: 6px; background: transparent;"
+    )
+    toolbar.addWidget(self.lbl_header_title)
+
+    # Espaciador flexible central
+    spacer = QWidget()
+    spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+    spacer.setStyleSheet("background: transparent;")
+    toolbar.addWidget(spacer)
+
+    # 3. Botón rápido para conmutar entre los dos temas de las maquetas (Azul Cian / Rojo Neón)
+    self.btn_theme_switch = QPushButton("Tema: Azul Cian")
+    self.btn_theme_switch.setObjectName("themeSwitchBtn")
+    self.btn_theme_switch.setCursor(Qt.PointingHandCursor)
+    self.btn_theme_switch.setToolTip("Alternar entre el Tema Azul Cian y el Tema Rojo Neón")
+    self.btn_theme_switch.clicked.connect(self._toggle_theme_variant)
+    toolbar.addWidget(self.btn_theme_switch)
+
+    gear_ic = self._make_header_svg_icon("gear", "#cbd5e1", 18)
+
+    def _bind_script_action(menu_obj, label_txt, script_target):
+      act = QAction(label_txt, self)
+      if script_target == "_internal_config":
+        act.triggered.connect(self._open_config_dialog)
+      elif script_target == "_internal_report":
+        act.triggered.connect(self._open_report_dialog)
+      elif script_target == "_toggle_explorer":
+        act.triggered.connect(lambda: self.dock_explorer.setVisible(not self.dock_explorer.isVisible()) if hasattr(self, "dock_explorer") else None)
+      elif script_target == "_toggle_console":
+        act.triggered.connect(lambda: self.dock_terminal.setVisible(not self.dock_terminal.isVisible()) if hasattr(self, "dock_terminal") else None)
+      elif script_target == "_toggle_theme":
+        act.triggered.connect(self._toggle_theme_variant)
+      elif script_target == "analysis/plotter_calibrado.py":
+        act.triggered.connect(self._run_plotter_calibrado)
+      elif script_target == "analysis/correlaciondeseñales.py":
+        act.triggered.connect(self._run_correlacion_nativo)
+      elif script_target == "analysis/reproductor_canal3.py":
+        act.triggered.connect(self._run_reproductor_audio)
+      elif script_target == "analysis/extractor_pulsos_vocales.py":
+        act.triggered.connect(self._run_extractor_pulsos)
+      elif script_target == "deep_learning/autoencoder_no_supervisado_gui.py":
+        act.triggered.connect(self._lanzar_estudio_autoencoder_no_sup)
+      else:
+        act.triggered.connect(lambda checked=False, s=script_target: self._launch_external(s))
+      menu_obj.addAction(act)
+
+    # 4. Botón 'Gestor de Sesiones' (con acceso al panel de sesiones, utilidades y Deep Learning)
+    self.btn_hdr_sesiones = QToolButton()
+    self.btn_hdr_sesiones.setObjectName("headerNavBtn")
+    self.btn_hdr_sesiones.setIcon(gear_ic)
+    self.btn_hdr_sesiones.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+    self.btn_hdr_sesiones.setText(" Gestor de Sesiones")
+    self.btn_hdr_sesiones.setPopupMode(QToolButton.InstantPopup)
+    self.btn_hdr_sesiones.setCursor(Qt.PointingHandCursor)
+    menu_ses = QMenu(self.btn_hdr_sesiones)
+    _bind_script_action(menu_ses, "Mostrar / Ocultar Panel de Sesiones", "_toggle_explorer")
+    _bind_script_action(menu_ses, "Generador de Reportes PDF", "_internal_report")
+    _bind_script_action(menu_ses, "Extractor de Pulsos por Vocal (Secuencia -> PCA/UMAP)", "analysis/extractor_pulsos_vocales.py")
+    _bind_script_action(menu_ses, "Segmentador de Secuencias Continuas", "analysis/segmentador_secuencias.py")
+    _bind_script_action(menu_ses, "Editar Medición", "utils/editor_mediciones.py")
+    _bind_script_action(menu_ses, "Reproductor de Audios", "analysis/reproductor_canal3.py")
+    menu_ses.addSeparator()
+    _bind_script_action(menu_ses, "Puente DAQ Windows (GUI 1-Clic)", "daq_bridge_server.py")
+    _bind_script_action(menu_ses, "Entrenamiento AutoForge", "acquisition/modulo_de_entrenamiento.py")
+    _bind_script_action(menu_ses, "Metrónomo Visual", "acquisition/metronomo_visual.py")
+    _bind_script_action(menu_ses, "Estudio Autoencoder No Supervisado", "deep_learning/autoencoder_no_supervisado_gui.py")
+    _bind_script_action(menu_ses, "Visualizador de Features", "deep_learning/dataset_tools/visor_features.py")
+    _bind_script_action(menu_ses, "Sanitizar Repositorio para GitHub", "utils/limpiar_repo_para_github.py")
+    self.btn_hdr_sesiones.setMenu(menu_ses)
+    toolbar.addWidget(self.btn_hdr_sesiones)
+
+    # 5. Botón 'Configuración y Ayuda'
+    self.btn_hdr_config = QToolButton()
+    self.btn_hdr_config.setObjectName("headerNavBtn")
+    self.btn_hdr_config.setIcon(gear_ic)
+    self.btn_hdr_config.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+    self.btn_hdr_config.setText(" Configuración y Ayuda")
+    self.btn_hdr_config.setPopupMode(QToolButton.InstantPopup)
+    self.btn_hdr_config.setCursor(Qt.PointingHandCursor)
+    menu_cfg = QMenu(self.btn_hdr_config)
+    _bind_script_action(menu_cfg, "Configuración General", "_internal_config")
+    _bind_script_action(menu_cfg, "Alternar Tema Visual (Azul Cian / Rojo Neón)", "_toggle_theme")
+    _bind_script_action(menu_cfg, "Mostrar / Ocultar Consola de Orquestador", "_toggle_console")
+    _bind_script_action(menu_cfg, "Instrucciones y Créditos", "instrucciones_uso.py")
+    self.btn_hdr_config.setMenu(menu_cfg)
+    toolbar.addWidget(self.btn_hdr_config)
+
+    # 6. Botón de salida a la derecha [->]
+    self.btn_hdr_exit = QToolButton()
+    self.btn_hdr_exit.setObjectName("headerNavBtn")
+    self.btn_hdr_exit.setIcon(self._make_header_svg_icon("exit", "#cbd5e1", 18))
+    self.btn_hdr_exit.setToolTip("Cerrar Ñandú LSD")
+    self.btn_hdr_exit.setCursor(Qt.PointingHandCursor)
+    self.btn_hdr_exit.clicked.connect(self.close)
+    toolbar.addWidget(self.btn_hdr_exit)
 
   def _open_config_dialog(self):
     """
@@ -867,169 +1105,98 @@ class ReaperStyleHub(QMainWindow):
     except Exception as e:
       print(f"> Error buscando logo: {e}")
 
-    # Contenedor izquierdo para logo e info
-    vbox_info = QVBoxLayout()
-    
-    # Etiqueta para el Logo
-    lbl_logo = QLabel()
-    lbl_logo.setAlignment(Qt.AlignCenter)
-    if logo_path and os.path.exists(logo_path):
-      from PySide6.QtGui import QPixmap
-      pix = QPixmap(logo_path)
-      pix = pix.scaled(480, 180, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-      lbl_logo.setPixmap(pix)
-      lbl_logo.setStyleSheet("padding: 10px; background-color: #050505; border-radius: 8px; border: 1px solid #222;")
-    else:
-      lbl_logo.setText("<h2>[ÑANDÚ LSD LOGO]</h2><p style='color:#888;'>Coloca un archivo 'logo_nandu_lsd.png' en la carpeta raíz</p>")
-      lbl_logo.setStyleSheet("color: #FF0000; background-color: #111; border: 1px dashed #FF4444; padding: 20px; border-radius: 8px;")
-    
-    vbox_info.addWidget(lbl_logo)
-    
-    md_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "archivos_md", "documentacion_matematica.md"))
-    file_url = f"file:///{md_path.replace(chr(92), '/')}"
-    
-    html_intro = f"""
-    <div style='padding: 20px;'>
-      <h2 style='color:#00ffff;'>Plataforma de Investigación EMG v6.2 (Edición Integral Ñandú LSD)</h2>
-      <p>Bienvenido al hub centralizado para adquisición en tiempo real, curación, procesamiento DSP y análisis de Deep Learning de señales electromiográficas (sEMG).</p>
-      
-      <h3 style='color:#00ffaa;'>Novedades Actualización v6.2 (Adquisición Neuro-Ergonómica, Puente DAQ & Extractor PCA/UMAP):</h3>
-      <ul>
-        <li><b>Rango Fisiológico 0–500 µV y Supresión Anti-Picos en Autograbado:</b> Limitador inteligente de transitorios eléctricos (> 500 µV) con auto-escala robusta P98.5 para mantener siempre visible la actividad muscular real sin saltos molestos de escala.</li>
-        <li><b>PCA 2D en Tiempo Real Multicolor por Vocal y BPM Desbloqueado (10–240 BPM):</b> Proyección en vivo coloreada por vocal activa (<code>/A/, /E/, /I/, /O/, /U/</code>), ajuste dinámico de BPM en plena Secuencia Continua/Autograbado y pulso acústico neuro-ergonómico suave (tipo marimba/woodblock sin reflejo de sobresalto).</li>
-        <li><b>Pantalla Externa Espejada Completa y Fotometría 3D Direccional:</b> Espejado exacto de instrucciones de fase (Ruido Basal, CVM, Count-in, Descanso y tira De Bruijn) en segundo monitor y web, más triangulación de los 3 canales EMG con validación estricta de giro izquierdo (+25°..+65°) y derecho (-65°..-25°).</li>
-        <li><b>Extractor de Pulsos por Vocal (Jitter / De Bruijn &rarr; PCA/UMAP) y Gestor Zero-Lag:</b> Nuevo módulo (<code>extractor_pulsos_vocales.py</code>) que agrupa pulsos de secuencias continuas en carpetas <code>A_..., E_..., I_..., O_..., U_...</code> listas para <code>generador_pca_umap.py</code>, junto con caché instantáneo en <code>SessionExplorer</code> y GUI de 1 clic para el Puente DAQ en Windows.</li>
-        <li><b>Sistema de Colores y Mapeo Anatómico por Músculo:</b> Convención estandarizada fija por canal: <i>Depresor Anguli Oris</i> (violeta), <i>Mylohyoid</i> (verde), <i>Orbicularis Oris</i> (amarillo) y <i>Micrófono/Canal 3</i> (rojo permanente).</li>
-        <li><b>Metadatos y Trazabilidad Enriquecida:</b> Registro unificado de <code>muscles_map</code>, <code>muscles</code> y <code>timestamp</code> en <code>metadata.json</code>, propagado automáticamente en recortes y segmentaciones.</li>
-        <li><b>Motores Analíticos Desacoplados:</b> Nuevos motores independientes para análisis discreto (<code>discrete_motor</code>), barrido paramétrico y entrenamiento (<code>training_motor</code>), reducción dimensional PCA 2D/3D con siluetas y distancias inter-vocálicas (<code>pca_motor</code>), proyecciones UMAP supervisadas y no supervisadas (<code>umap_motor</code>) y generador automático de rankings de experimentos (<code>generar_graficos_y_ranking</code>).</li>
-        <li><b>Autoencoders Convolucionales 1D (PyTorch):</b> Redes neuronales convolucionales profundas para compresión no lineal a espacios latentes 2D/3D y decodificación continua de potenciales mioeléctricos.</li>
-        <li><b>Resolución Centralizada de Rutas (<code>path_utils</code>):</b> Desacople total que garantiza que <code>base_de_datos_electrodos</code> y reportes comparativos residan junto al ejecutable tanto en desarrollo como en distribución compilada.</li>
-        <li><b>Optimización y Depuración:</b> Eliminación de librerías obsoletas (XGBoost) para un sistema más rápido, liviano y enfocado.</li>
-      </ul>
+    lyt_daq.setContentsMargins(18, 16, 18, 12)
+    lyt_daq.setSpacing(18)
 
-      <h3 style='color:#ffaa00;'>Instrucciones Rápidas:</h3>
-      <ul>
-        <li><b>1. Adquisición:</b> Haz clic en el botón de la derecha para capturar nuevas mediciones con metrónomo y cuenta regresiva, confirmando los músculos en el diálogo inicial.</li>
-        <li><b>2. Visualización:</b> Inspecciona las curvas en el Explorador CSV y visores de electrodos con identificación por color de cada músculo.</li>
-        <li><b>3. Curación y Análisis:</b> Selecciona mediciones en el gestor de sesiones, verifica los canales deseados y haz clic en <i>PROCESAR</i> en la pestaña 3.</li>
-        <li><b>4. Machine Learning & Deep Learning:</b> Accede a la Pestaña 4 para entrenar Autoencoders 1D, calcular proyecciones topológicas PCA/UMAP o binarizar patrones mediante Método Trevisan.</li>
-      </ul>
-      
-      <h3 style='color:#00ff00;'>Fundamento Teórico:</h3>
-      <p>Para revisar las ecuaciones utilizadas en la extracción de ruido (RMS, P-P) y las justificaciones del procesamiento, haz clic en el siguiente enlace:</p>
-      <p> <a href='{file_url}' style='color:#00aaff; font-size: 14px;'><b>Abrir documentacion_matematica.md</b></a></p>
-    </div>
-    """
-    
-    lbl_intro = QLabel(html_intro)
-    lbl_intro.setWordWrap(True)
-    lbl_intro.setTextFormat(Qt.RichText)
-    lbl_intro.setTextInteractionFlags(Qt.TextBrowserInteraction)
-    lbl_intro.setOpenExternalLinks(True)
-    lbl_intro.setStyleSheet("QLabel { background-color: #111111; color: white; border: 1px solid #333333; border-radius: 8px; margin-top: 10px; }")
-    
-    btn_daq = QPushButton(" INICIAR ADQUISICIÓN\nDE SEÑALES (DAQ)")
-    btn_daq.setStyleSheet("""
-      QPushButton {
-        font-family: 'Consolas', 'Courier New', monospace;
-        font-size: 24px; 
-        font-weight: 900; 
-        background-color: #0d0d1a; 
-        color: #00ffcc; 
-        padding: 40px 20px;
-        border-radius: 4px;
-        border: 2px solid #00ffcc;
-        border-right: 8px solid #ff003c;
-        border-bottom: 8px solid #ff003c;
-      }
-      QPushButton:hover {
-        background-color: #00ffcc;
-        color: #0d0d1a;
-        border: 2px solid #ff003c;
-        border-right: 8px solid #ff003c;
-        border-bottom: 8px solid #ff003c;
-      }
-      QPushButton:pressed {
-        background-color: #ff003c;
-        color: #ffffff;
-        border: 2px solid #ffffff;
-      }
-    """)
-    btn_daq.clicked.connect(lambda: self._launch_external("acquisition/manual_daq.py"))
-    
-    vbox_info.addWidget(lbl_intro, stretch=2)
-    lyt_daq.addLayout(vbox_info, stretch=2)
-    lyt_daq.addSpacing(20)
-    
+    md_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "archivos_md", "documentacion_matematica.md"))
+    self._doc_file_url = f"file:///{md_path.replace(chr(92), '/')}"
+    self._resolved_logo_path = self._resolve_nandu_avatar_path(header_icon=False) or logo_path or ""
+
+    # --- TARJETA CENTRAL DE BIENVENIDA (Card de Inicio Redondeada) ---
+    self.welcome_card = QFrame()
+    self.welcome_card.setObjectName("welcomeCard")
+    card_vbox = QVBoxLayout(self.welcome_card)
+    card_vbox.setContentsMargins(26, 22, 26, 20)
+    card_vbox.setSpacing(12)
+
+    # Cabecera y Foto Original del Ñandú centrada con alta resolución en el centro de la tarjeta
+    title_vbox = QVBoxLayout()
+    title_vbox.setSpacing(6)
+    self.lbl_card_title = QLabel("Ñandú LSD — Sistema de Adquisición sEMG y Deep Learning")
+    self.lbl_card_title.setWordWrap(True)
+    self.lbl_card_title.setAlignment(Qt.AlignCenter)
+    self.lbl_card_subtitle = QLabel(
+      "Bienvenido al hub centralizado para adquisición en tiempo real, curación, "
+      "procesamiento DSP y análisis de Deep Learning de señales electromiográficas (sEMG)."
+    )
+    self.lbl_card_subtitle.setWordWrap(True)
+    self.lbl_card_subtitle.setAlignment(Qt.AlignCenter)
+    self.lbl_card_subtitle.setStyleSheet("color: #cbd5e1; font-size: 13.5px; line-height: 1.4; background: transparent;")
+    title_vbox.addWidget(self.lbl_card_title)
+    title_vbox.addWidget(self.lbl_card_subtitle)
+    card_vbox.addLayout(title_vbox)
+
+    # Contenedor central prolijo para la foto original oficial del Ñandú (logo_nandu_lsd.png)
+    center_logo_hbox = QHBoxLayout()
+    center_logo_hbox.setContentsMargins(0, 4, 0, 4)
+    center_logo_hbox.addStretch(1)
+    self.lbl_card_avatar = QLabel()
+    self.lbl_card_avatar.setFixedSize(236, 236)
+    self.lbl_card_avatar.setAlignment(Qt.AlignCenter)
+    center_logo_hbox.addWidget(self.lbl_card_avatar, alignment=Qt.AlignCenter)
+    center_logo_hbox.addStretch(1)
+    card_vbox.addLayout(center_logo_hbox)
+
+    # Cuerpo de novedades con viñetas coloreadas según el tema activo
+    self.lbl_intro = QLabel()
+    self.lbl_intro.setWordWrap(True)
+    self.lbl_intro.setTextFormat(Qt.RichText)
+    self.lbl_intro.setTextInteractionFlags(Qt.TextBrowserInteraction)
+    self.lbl_intro.setOpenExternalLinks(True)
+    self.lbl_intro.setAlignment(Qt.AlignTop | Qt.AlignLeft)
+
+    scroll_intro = QScrollArea()
+    scroll_intro.setWidgetResizable(True)
+    scroll_intro.setFrameShape(QFrame.NoFrame)
+    scroll_intro.setStyleSheet("QScrollArea { background: transparent; border: none; } QWidget { background: transparent; }")
+    scroll_intro.setWidget(self.lbl_intro)
+    card_vbox.addWidget(scroll_intro, stretch=1)
+
+    lyt_daq.addWidget(self.welcome_card, stretch=7)
+
+    # --- COLUMNA DERECHA DE BOTONES PRINCIPALES (Botonera de Acción con Íconos y Glow) ---
     vbox_btn = QVBoxLayout()
-    vbox_btn.addStretch()
-    vbox_btn.addWidget(btn_daq)
-    
-    btn_autoforge_staging = QPushButton("AUTOGRABADO")
-    btn_autoforge_staging.setStyleSheet("""
-      QPushButton {
-        font-family: 'Consolas', 'Courier New', monospace;
-        font-size: 20px; 
-        font-weight: 900; 
-        background-color: #1a0d00; 
-        color: #FF8800; 
-        padding: 30px 15px;
-        border-radius: 4px;
-        border: 2px solid #FF8800;
-        border-right: 8px solid #FFFF00;
-        border-bottom: 8px solid #FFFF00;
-        margin-top: 8px;
-      }
-      QPushButton:hover {
-        background-color: #FF8800;
-        color: #0a0000;
-        border: 2px solid #FFFF00;
-        border-right: 8px solid #FFFF00;
-        border-bottom: 8px solid #FFFF00;
-      }
-      QPushButton:pressed {
-        background-color: #FFFF00;
-        color: #000000;
-        border: 2px solid #ffffff;
-      }
-    """)
-    btn_autoforge_staging.clicked.connect(lambda: self._launch_external("acquisition/autoforge_daq_experimental.py"))
-    vbox_btn.addWidget(btn_autoforge_staging)
-    
-    btn_decoder_beta = QPushButton("DECODIFICADOR TIEMPO REAL - BETA\nAUTOENCODER + GATE DOBLE")
-    btn_decoder_beta.setStyleSheet("""
-      QPushButton {
-        font-family: 'Consolas', 'Courier New', monospace;
-        font-size: 18px; 
-        font-weight: 900; 
-        background-color: #120b1a; 
-        color: #d188ff; 
-        padding: 25px 15px;
-        border-radius: 4px;
-        border: 2px solid #d188ff;
-        border-right: 8px solid #00ffcc;
-        border-bottom: 8px solid #00ffcc;
-        margin-top: 10px;
-      }
-      QPushButton:hover {
-        background-color: #d188ff;
-        color: #0d0d1a;
-        border: 2px solid #00ffcc;
-        border-right: 8px solid #00ffcc;
-        border-bottom: 8px solid #00ffcc;
-      }
-      QPushButton:pressed {
-        background-color: #00ffcc;
-        color: #000000;
-        border: 2px solid #ffffff;
-      }
-    """)
-    btn_decoder_beta.clicked.connect(lambda: self._launch_external("acquisition/autoforge_daq_decodificador.py"))
-    vbox_btn.addWidget(btn_decoder_beta)
-    
-    vbox_btn.addStretch()
-    
-    lyt_daq.addLayout(vbox_btn, stretch=1)
+    vbox_btn.setContentsMargins(0, 0, 0, 0)
+    vbox_btn.setSpacing(14)
+
+    self.btn_daq = QPushButton("  INICIAR ADQUISICIÓN\n  DE SEÑALES (DAQ)")
+    self.btn_daq.setMinimumHeight(112)
+    self.btn_daq.setCursor(Qt.PointingHandCursor)
+    self.btn_daq.clicked.connect(lambda: self._launch_external("acquisition/manual_daq.py"))
+    vbox_btn.addWidget(self.btn_daq)
+
+    self.btn_autoforge_estable = QPushButton("  AUTOGRABADO")
+    self.btn_autoforge_estable.setMinimumHeight(78)
+    self.btn_autoforge_estable.setCursor(Qt.PointingHandCursor)
+    self.btn_autoforge_estable.setToolTip("Versión clásica ultra-fluida con calibración y auto-escala directa")
+    self.btn_autoforge_estable.clicked.connect(lambda: self._launch_external("acquisition/autoforge_daq_estable.py"))
+    vbox_btn.addWidget(self.btn_autoforge_estable)
+
+    self.btn_autoforge_staging = QPushButton("  AUTOGRABADO\n  EXPERIMENTAL")
+    self.btn_autoforge_staging.setMinimumHeight(78)
+    self.btn_autoforge_staging.setCursor(Qt.PointingHandCursor)
+    self.btn_autoforge_staging.setToolTip("Versión experimental con Fotometría 3D, PCA en vivo, Jitter y Locución")
+    self.btn_autoforge_staging.clicked.connect(lambda: self._launch_external("acquisition/autoforge_daq_experimental.py"))
+    vbox_btn.addWidget(self.btn_autoforge_staging)
+
+    self.btn_decoder_beta = QPushButton("  DECODIFICADOR (BETA)")
+    self.btn_decoder_beta.setMinimumHeight(78)
+    self.btn_decoder_beta.setCursor(Qt.PointingHandCursor)
+    self.btn_decoder_beta.clicked.connect(lambda: self._launch_external("acquisition/autoforge_daq_decodificador.py"))
+    vbox_btn.addWidget(self.btn_decoder_beta)
+
+    vbox_btn.addStretch(1)
+    lyt_daq.addLayout(vbox_btn, stretch=3)
     self.tabs.addTab(self.tab_daq, "1. INICIO Y ADQUISICIÓN")
     
     # --- TAB 2: VISUALIZACIÓN NATIVA ---
@@ -1241,6 +1408,10 @@ class ReaperStyleHub(QMainWindow):
     if hasattr(self.explorer_widget, 'btn_autoencoder_no_sup'):
       self.explorer_widget.btn_autoencoder_no_sup.clicked.connect(self._navegar_a_autoencoder_no_sup)
     
+    # Ocultar barra de título del QDockWidget para que el Gestor de Sesiones quede integrado como en la maqueta
+    empty_title = QWidget()
+    empty_title.setFixedHeight(0)
+    self.dock_explorer.setTitleBarWidget(empty_title)
     self.dock_explorer.setWidget(self.explorer_widget)
     self.addDockWidget(Qt.LeftDockWidgetArea, self.dock_explorer)
 
@@ -3729,23 +3900,58 @@ if metricas.get('fig_path') and os.path.exists(metricas['fig_path']):
       self.electrode_viewer.load_measurements(paths)
 
   def _create_dock_terminal(self):
-    """Panel inferior para logs (Consola Integrada)"""
+    """Panel inferior para logs (Consola de Orquestador Multihilo con diseño redondeado de la maqueta)"""
     self.dock_terminal = QDockWidget("Consola de Orquestador Multihilo", self)
     self.dock_terminal.setAllowedAreas(Qt.BottomDockWidgetArea | Qt.TopDockWidgetArea)
-    
+    empty_hdr = QWidget()
+    empty_hdr.setFixedHeight(0)
+    self.dock_terminal.setTitleBarWidget(empty_hdr)
+
+    outer_wrap = QWidget()
+    outer_lyt = QVBoxLayout(outer_wrap)
+    outer_lyt.setContentsMargins(18, 0, 18, 12)
+    outer_lyt.setSpacing(0)
+
+    self.console_card = QFrame()
+    self.console_card.setObjectName("consoleCard")
+    card_lyt = QVBoxLayout(self.console_card)
+    card_lyt.setContentsMargins(0, 0, 0, 0)
+    card_lyt.setSpacing(0)
+
+    hdr_bar = QWidget()
+    hdr_bar.setObjectName("consoleHeaderBar")
+    hdr_bar.setFixedHeight(32)
+    hdr_lyt = QHBoxLayout(hdr_bar)
+    hdr_lyt.setContentsMargins(14, 0, 10, 0)
+
+    hdr_lyt.addStretch(1)
+    lbl_con_title = QLabel("Consola de Orquestador Multihilo")
+    lbl_con_title.setStyleSheet("color: #e2e8f0; font-size: 13px; font-weight: 600; background: transparent;")
+    hdr_lyt.addWidget(lbl_con_title)
+    hdr_lyt.addStretch(1)
+
+    btn_close_con = QPushButton("✕")
+    btn_close_con.setFixedSize(24, 24)
+    btn_close_con.setCursor(Qt.PointingHandCursor)
+    btn_close_con.setToolTip("Ocultar Consola de Orquestador Multihilo")
+    btn_close_con.setStyleSheet(
+      "QPushButton { background: transparent; color: #94a3b8; border: none; font-size: 14px; font-weight: bold; } "
+      "QPushButton:hover { color: #f87171; }"
+    )
+    btn_close_con.clicked.connect(self.dock_terminal.hide)
+    hdr_lyt.addWidget(btn_close_con)
+    card_lyt.addWidget(hdr_bar)
+
     self.log_console = QTextEdit()
+    self.log_console.setObjectName("orchestratorConsole")
     self.log_console.setReadOnly(True)
+    self.log_console.setMinimumHeight(88)
+    self.log_console.setMaximumHeight(135)
     self.log_console.document().setMaximumBlockCount(3000)
-    self.log_console.setStyleSheet("""
-      QTextEdit {
-        background-color: #050505;
-        color: #00ff00;
-        font-family: 'Consolas', 'Courier New', monospace;
-        font-size: 12px;
-        border: 1px solid #222;
-      }
-    """)
-    self.dock_terminal.setWidget(self.log_console)
+    card_lyt.addWidget(self.log_console)
+
+    outer_lyt.addWidget(self.console_card)
+    self.dock_terminal.setWidget(outer_wrap)
     self.addDockWidget(Qt.BottomDockWidgetArea, self.dock_terminal)
 
   def _run_analysis(self, interactivo=True):
@@ -4000,63 +4206,212 @@ finally:
     print("\n> ERROR DURANTE EL PROCESAMIENTO:")
     print(str(value))
 
-  def _setup_styles(self):
-    # Aplicamos estrictamente la estética del web_viewer (Negro, Rojo, Courier)
-    """
-    Ejecuta la funcionalidad de _setup_styles.
+  @staticmethod
+  def _make_action_button_icon(kind: str, color_hex: str, size: int = 30) -> QIcon:
+    from PySide6.QtGui import QPixmap, QPainter, QColor, QPen, QBrush, QPolygonF
+    from PySide6.QtCore import QPointF
+    pix = QPixmap(size, size)
+    pix.fill(Qt.transparent)
+    p = QPainter(pix)
+    p.setRenderHint(QPainter.Antialiasing, True)
+    col = QColor(color_hex)
+    pen = QPen(col, 2.0)
+    p.setPen(pen)
+    p.setBrush(Qt.NoBrush)
+    p.drawEllipse(2, 2, size - 4, size - 4)
+    cx, cy = size / 2.0, size / 2.0
+    if kind == "play":
+      p.setBrush(QBrush(col))
+      p.setPen(Qt.NoPen)
+      tri = QPolygonF([
+        QPointF(cx - 3.0, cy - 5.0),
+        QPointF(cx - 3.0, cy + 5.0),
+        QPointF(cx + 5.5, cy),
+      ])
+      p.drawPolygon(tri)
+    elif kind == "target":
+      p.setBrush(QBrush(col))
+      p.setPen(Qt.NoPen)
+      p.drawEllipse(int(cx - 4), int(cy - 4), 8, 8)
+    elif kind == "square":
+      p.setBrush(QBrush(col))
+      p.setPen(Qt.NoPen)
+      p.drawRoundedRect(int(cx - 4), int(cy - 4), 8, 8, 1.5, 1.5)
+    p.end()
+    return QIcon(pix)
 
-    Returns:
-      Any: Resultado de la ejecución de la función.
-    """
-    self.setStyleSheet("""
-      QMainWindow, QWidget {
-        background-color: #000000;
-        color: #ffffff;
-        font-family: 'Courier New', Courier, monospace;
-      }
-      QDockWidget {
-        font-weight: bold;
-        color: #ffffff;
-      }
-      QDockWidget::title {
-        background: #111111;
-        text-align: center;
-        padding: 6px;
-        border: 1px solid #FF0000;
-        color: #FF0000;
-        font-size: 14px;
-        letter-spacing: 1px;
-      }
-      QTabWidget::pane {
-        border: 2px solid #FF0000;
-        background-color: #0a0a0a;
-      }
-      QTabBar::tab {
-        background-color: transparent;
-        color: #888888;
-        border: 1px solid #333333;
-        padding: 8px 20px;
-        font-weight: bold;
-        font-size: 14px;
-      }
-      QTabBar::tab:hover {
-        color: #ffffff;
-        border-color: #777777;
-      }
-      QTabBar::tab:selected {
-        background-color: #FF0000;
-        color: #000000;
-        border-color: #FF0000;
-      }
-      QTextEdit {
-        background-color: #0c0c0c;
-        color: #00ff00;
-        border: 1px solid #333333;
-      }
-      QLabel {
-        background-color: transparent;
-      }
-    """)
+  def _toggle_theme_variant(self):
+    new_v = "rojo" if getattr(self, "_theme_variant", "azul") == "azul" else "azul"
+    self.apply_theme_variant(new_v)
+    try:
+      from utils.config_manager import ConfigManager
+      ConfigManager().set("estetica_global", "tema_hub", new_v)
+    except Exception:
+      pass
+
+  def _build_welcome_bullets_html(self, P: dict) -> str:
+    b_col = P["bullet_inner"]
+    file_url = getattr(self, "_doc_file_url", "")
+    items = [
+      (
+        "Rango Fisiológico 0–500 µV y Supresión Anti-Picos en Autograbado:",
+        "Limitador inteligente de transitorios eléctricos (> 500 µV) con auto-escala robusta P98.5 "
+        "para mantener siempre visible la actividad muscular real sin saltos molestos de escala.",
+      ),
+      (
+        "PCA 2D en Tiempo Real Multicolor por Vocal y BPM Desbloqueado (10–240 BPM):",
+        "Proyección en vivo coloreada por vocal activa (/A/, /E/, /I/, /O/, /U/), "
+        "pulso acústico neuro-ergonómico suave (tipo marimba sin reflejo de sobresalto).",
+      ),
+      (
+        "Pantalla Externa Espejada Completa y Fotometría 3D Direccional:",
+        "Espejado exacto de instrucciones de fase (Ruido Basal, CVM, Count-in, Descanso y tira "
+        "de Bruijn) con validación direccional de perfil izquierdo (+25°..+65°) y derecho (-65°..-25°).",
+      ),
+      (
+        "Extractor de Pulsos por Vocal (Jitter / De Bruijn — PCA/UMAP) y Gestor Zero-Lag:",
+        "Segmentación limpia en carpetas por vocal y generación de Patrón Muscular Neon Clinical Slate, "
+        "con vinculación directa desde el Gestor de Sesiones y apertura en terminal visible.",
+      ),
+    ]
+    rows_html = []
+    for title_b, body_b in items:
+      rows_html.append(
+        f"<div style='margin-bottom: 10px; line-height: 1.42;'>"
+        f"<span style='color:{b_col}; font-size:15px;'>&#9673;</span>&nbsp;&nbsp;"
+        f"<b style='color:#f8fafc; font-size:13.5px;'>{title_b}</b> "
+        f"<span style='color:#cbd5e1; font-size:13px;'>{body_b}</span>"
+        f"</div>"
+      )
+    return (
+      f"<div style='padding-top: 2px;'>"
+      f"<div style='color:#f1f5f9; font-size:15.5px; font-weight:700; margin-bottom:12px;'>"
+      f"Novedades Actualización v6.2 (Adquisición Neuro-Ergonómica, Puente DAQ &amp; Extractor PCA/UMAP)"
+      f"</div>"
+      + "".join(rows_html)
+      + f"<div style='margin-top: 12px; font-size: 12.5px; color: #94a3b8;'>"
+        f"Documentación teórica y ecuaciones DSP: "
+        f"<a href='{file_url}' style='color:{P['accent_bright']}; text-decoration:none; font-weight:600;'>"
+        f"Abrir documentacion_matematica.md</a></div>"
+      + "</div>"
+    )
+
+  def apply_theme_variant(self, variant: str = "azul"):
+    from PySide6.QtWidgets import QGraphicsDropShadowEffect
+    from PySide6.QtGui import QColor
+    self._theme_variant = "rojo" if "roj" in str(variant).lower() else "azul"
+    P = get_main_hub_palette(self._theme_variant)
+    self.setStyleSheet(build_main_hub_qss(self._theme_variant))
+
+    if hasattr(self, "btn_theme_switch"):
+      self.btn_theme_switch.setText(P["label"])
+
+    # Actualizar logo circular de la barra superior y avatar circular de la tarjeta de bienvenida
+    hdr_logo_path = self._resolve_nandu_avatar_path(header_icon=True)
+    if hasattr(self, "lbl_header_logo"):
+      self.lbl_header_logo.setPixmap(
+        self._make_circular_nandu_pixmap(hdr_logo_path, diameter=32, border_color=P["border_card"], glow=False)
+      )
+    card_logo_path = hdr_logo_path or getattr(self, "_resolved_logo_path", "")
+    if hasattr(self, "lbl_card_avatar"):
+      self.lbl_card_avatar.setPixmap(
+        self._make_centered_nandu_card_pixmap(card_logo_path, width=212, height=212, border_color=P["accent"], glow=True)
+      )
+
+    if hasattr(self, "lbl_card_title"):
+      self.lbl_card_title.setStyleSheet(
+        f"color: {P['accent_title']}; font-size: 22px; font-weight: 800; background: transparent;"
+      )
+    if hasattr(self, "lbl_intro"):
+      self.lbl_intro.setText(self._build_welcome_bullets_html(P))
+
+    # Estilizar los 4 botones de acción laterales con iconos circulares y efecto glow
+    btn_specs = [
+      (
+        getattr(self, "btn_daq", None),
+        "play",
+        P["btn_daq_bg0"],
+        P["btn_daq_bg1"],
+        P["btn_daq_border"],
+        P["btn_daq_fg"],
+        P["btn_daq_glow"],
+        15,
+      ),
+      (
+        getattr(self, "btn_autoforge_estable", None),
+        "target",
+        P["btn_auto_bg0"],
+        P["btn_auto_bg1"],
+        P["btn_auto_border"],
+        P["btn_auto_fg"],
+        P["btn_auto_border"],
+        14,
+      ),
+      (
+        getattr(self, "btn_autoforge_staging", None),
+        "square",
+        P["btn_exp_bg0"],
+        P["btn_exp_bg1"],
+        P["btn_exp_border"],
+        P["btn_exp_fg"],
+        P["btn_exp_border"],
+        14,
+      ),
+      (
+        getattr(self, "btn_decoder_beta", None),
+        "play",
+        P["btn_dec_bg0"],
+        P["btn_dec_bg1"],
+        P["btn_dec_border"],
+        P["btn_dec_fg"],
+        P["btn_dec_border"],
+        14,
+      ),
+    ]
+    for btn_w, ic_kind, bg0, bg1, bdr, fg, glow_hex, fsize in btn_specs:
+      if btn_w is None:
+        continue
+      btn_w.setIcon(self._make_action_button_icon(ic_kind, fg, 28))
+      btn_w.setIconSize(QSize(28, 28))
+      btn_w.setStyleSheet(f"""
+        QPushButton {{
+          font-family: 'Segoe UI', 'Inter', 'Ubuntu', sans-serif;
+          font-size: {fsize}px;
+          font-weight: 800;
+          letter-spacing: 0.4px;
+          text-align: center;
+          color: {fg};
+          background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {bg0}, stop:1 {bg1});
+          border: 2px solid {bdr};
+          border-radius: 10px;
+          padding: 14px 18px;
+        }}
+        QPushButton:hover {{
+          background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 {bg1}, stop:1 {bdr});
+          color: #ffffff;
+          border: 2px solid #ffffff;
+        }}
+        QPushButton:pressed {{
+          background-color: {bdr};
+          color: #05080f;
+        }}
+      """)
+      try:
+        eff = QGraphicsDropShadowEffect(btn_w)
+        eff.setBlurRadius(22 if btn_w is getattr(self, "btn_daq", None) else 14)
+        eff.setOffset(0, 0)
+        c_sh = QColor(glow_hex)
+        c_sh.setAlpha(135 if btn_w is getattr(self, "btn_daq", None) else 75)
+        eff.setColor(c_sh)
+        btn_w.setGraphicsEffect(eff)
+      except Exception:
+        pass
+
+    if hasattr(self, "explorer_widget") and hasattr(self.explorer_widget, "apply_theme_variant"):
+      self.explorer_widget.apply_theme_variant(self._theme_variant)
+
+  def _setup_styles(self):
+    self.apply_theme_variant(getattr(self, "_theme_variant", "azul"))
 
   def _launch_dl_ml_script(self, script_rel_path):
     rutas = self.explorer_widget.get_selected_paths()
@@ -4134,34 +4489,70 @@ def main():
       pass
   
   # El ejecutable pone el icono en la raíz (sys._MEIPASS), no en gui_app/
+  # CORRECCION ETAPA 1: el icono de la ventana del sistema operativo usa el
+  # logo oficial del Nandu (logo_nandu_lsd.png); icono.ico queda como respaldo.
+  logo_icono_path = None
+  candidatos_icono_nandu = [
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "logo_nandu_lsd.png"),
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo_nandu_lsd.png"),
+    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "gui_app", "assets", "logo_nandu_lsd.png"),
+    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logo_nandu_lsd.png"),
+    os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "EMG_desarrollo", "gui_app", "assets", "logo_nandu_lsd.png"),
+    os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "logo_nandu_lsd.png"),
+  ]
+  if getattr(sys, 'frozen', False) or hasattr(sys, '_MEIPASS'):
+    candidatos_icono_nandu.insert(0, os.path.join(sys._MEIPASS, "logo_nandu_lsd.png"))
+    candidatos_icono_nandu.insert(1, os.path.join(sys._MEIPASS, "assets", "logo_nandu_lsd.png"))
+  icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'icono.ico')
   if getattr(sys, 'frozen', False):
     icon_path = os.path.join(sys._MEIPASS, 'icono.ico')
-  else:
-    icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'icono.ico')
-    
-  if os.path.exists(icon_path):
+  for c_path_icono in candidatos_icono_nandu:
+    if os.path.isfile(c_path_icono):
+      logo_icono_path = c_path_icono
+      break
+  if logo_icono_path:
+    app.setWindowIcon(QIcon(logo_icono_path))
+  elif os.path.exists(icon_path):
     app.setWindowIcon(QIcon(icon_path))
   # -----------------------------------------------------------
   
   # 1. Buscar logo para el Splash Screen
   logo_path = None
   try:
-    root_dir = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    gui_dir = Path(os.path.dirname(os.path.abspath(__file__)))
-    assets_dir = gui_dir / "assets"
-    pictures_dir = Path.home() / "Pictures"
-    
-    search_dirs = [assets_dir, gui_dir, root_dir, Path(get_project_root()), pictures_dir]
+    candidatos_logo = [
+      os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "logo_nandu_lsd.png"),
+      os.path.join(os.path.dirname(os.path.abspath(__file__)), "logo_nandu_lsd.png"),
+      os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "gui_app", "assets", "logo_nandu_lsd.png"),
+      os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logo_nandu_lsd.png"),
+      os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "EMG_desarrollo", "gui_app", "assets", "logo_nandu_lsd.png"),
+      os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "EMG_desarrollo", "logo_nandu_lsd.png"),
+      os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "logo_nandu_lsd.png"),
+    ]
     if hasattr(sys, '_MEIPASS'):
-      search_dirs.insert(0, Path(sys._MEIPASS))
-    for search_dir in search_dirs:
-      if search_dir.exists():
-        for filename in os.listdir(search_dir):
-          if filename.lower().startswith("logo") and filename.lower().endswith((".png", ".jpg", ".jpeg")):
-            logo_path = str(search_dir / filename)
-            break
-      if logo_path:
+      candidatos_logo.insert(0, os.path.join(sys._MEIPASS, "logo_nandu_lsd.png"))
+      candidatos_logo.insert(1, os.path.join(sys._MEIPASS, "assets", "logo_nandu_lsd.png"))
+    for c_path in candidatos_logo:
+      if os.path.isfile(c_path):
+        logo_path = c_path
         break
+
+    if not logo_path:
+      root_dir = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+      gui_dir = Path(os.path.dirname(os.path.abspath(__file__)))
+      assets_dir = gui_dir / "assets"
+      pictures_dir = Path.home() / "Pictures"
+      
+      search_dirs = [assets_dir, gui_dir, root_dir, Path(get_project_root()), pictures_dir]
+      if hasattr(sys, '_MEIPASS'):
+        search_dirs.insert(0, Path(sys._MEIPASS))
+      for search_dir in search_dirs:
+        if search_dir.exists():
+          for filename in os.listdir(search_dir):
+            if filename.lower().startswith("logo") and filename.lower().endswith((".png", ".jpg", ".jpeg")):
+              logo_path = str(search_dir / filename)
+              break
+        if logo_path:
+          break
   except Exception:
     pass
 
@@ -4207,4 +4598,5 @@ def main():
   sys.exit(app.exec())
 
 if __name__ == "__main__":
+  ensure_running_in_terminal("Ñandú LSD")
   main()
