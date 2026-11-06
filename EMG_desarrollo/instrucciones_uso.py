@@ -119,6 +119,20 @@ INSTRUCTIONS_HTML = """
         <li><span class="highlight">Editor y Migrador de Mediciones:</span> Herramientas para renombrar, curar metadatos y asegurar la organizacion jerarquica por fechas de la base de datos.</li>
     </ul>
 
+    <h2>Pantalla Externa por Red: Generar el Link y Conectar</h2>
+    <p>La app levanta automaticamente un servidor de estimulos en el puerto <code>8765</code> (configurable). Al iniciar, la consola imprime el link completo con la IP local de la PC, por ejemplo <span class="highlight">http://192.168.1.42:8765/</span>. Ese link se abre en el navegador del celu, tablet u otra PC de la misma red y muestra la palabra gigante, el metronomo y la tira de secuencia sincronizada.</p>
+    <div class="box">Todo esta en el boton <b>PANTALLA EXTERNA (Tailscale/USB)</b> de la barra superior: abre un dialogo con las tres opciones de conexion y con las URLs listas para pasar al dispositivo externo.</div>
+    <ul>
+        <li><span class="highlight">Opcion 1 - Tailscale (Wi-Fi por red):</span> Instalar Tailscale en la PC y en el dispositivo externo con la misma cuenta. En el dialogo, escribir la <b>IP Tailscale de la PC</b> (o activar <b>Mostrar IPs</b>) y pulsar <b>Abrir / Verificar Tailscale</b>, que muestra la URL final y valida la conexion. En el navegador externo entrar a <code>http://IP_TAILSCALE_PC:8765/</code>. Si el firewall bloquea: <code>sudo ufw allow in on tailscale0 to any port 8765 proto tcp</code>.</li>
+        <li><span class="highlight">Opcion 2 - USB (adb reverse):</span> Conectar el celu por USB con depuracion USB activada y pulsar el boton de <b>reverse USB</b> del dialogo. Luego en el celu entrar a <code>http://127.0.0.1:8765/</code>. Ideal para redes institucionales con aislamiento de clientes (AP isolation).</li>
+        <li><span class="highlight">Opcion 3 - 2do monitor HDMI:</span> Pulsar <b>Abrir ventana externa</b>: se abre <i>Pantalla Externa de Estimulos (Sujeto)</i>, una ventana nativa de Qt. Arrastrarla al segundo monitor y ponerla en pantalla completa con <b>F11</b>.</li>
+    </ul>
+    <ul>
+        <li><b>Token (opcional):</b> Si se configura un token en el dialogo, la URL del dispositivo se vuelve <code>http://IP:PUERTO/?t=TOKEN</code>. Sin token el acceso es libre dentro de la red.</li>
+        <li><b>Link exacto en consola:</b> El dialogo muestra el estado y las URLs de Tailscale; el link con la IP fisica de la red local se imprime al iniciar la app en la terminal (linea con <code>[Display Remoto] Servidor activo en</code>).</li>
+        <li><b>Alcance:</b> El servidor publica el estado de los estimulos para el sujeto; no reenvia la senal EMG. Es un espejo de estimulos, no un visor de senal.</li>
+    </ul>
+
     <div class="footer">
         <b>LABORATORIO DE SISTEMAS DINAMICOS (LSD)</b><br>
         Facultad de Ciencias Exactas y Naturales (FCEyN), Universidad de Buenos Aires (UBA).<br><br>
