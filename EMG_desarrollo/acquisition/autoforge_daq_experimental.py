@@ -239,33 +239,498 @@ import pyqtgraph as pg
 from pyqtgraph.Qt import QtWidgets, QtCore, QtGui 
 
 # NUEVO: Import para SpinBox y Línea
-from pyqtgraph import SpinBox, InfiniteLine
+from pyqtgraph import SpinBox as _PgSpinBox, InfiniteLine
 
 # ==============================================================================
-# --- SISTEMA DE DESIGN TOKENS Y TEMA CLINICO (theme.py) ---
+# --- SISTEMA DE DESIGN TOKENS Y TEMA HUD CYBERPUNK AISLADO ---
+# Exclusivo para autoforge_daq_experimental.py (no altera main_app.py ni theme.py)
+# CERO ANTIALIASING para máxima velocidad de refresco en tiempo real.
 # ==============================================================================
 try:
   from theme import (
-      T, THEME, CHANNEL_PALETTE, PLOT_ANTIALIAS,
-      build_qss, load_fonts, style_label_value, style_badge,
-      style_panel_card, style_button_variant
+      T as _GLOBAL_T, THEME as _GLOBAL_THEME, CHANNEL_PALETTE as _GLOBAL_CHANNEL_PALETTE,
+      build_qss as _global_build_qss, load_fonts, style_label_value,
+      style_badge, style_panel_card, style_button_variant
   )
 except ImportError:
-  from utils.theme import (
-      T, THEME, CHANNEL_PALETTE, PLOT_ANTIALIAS,
-      build_qss, load_fonts, style_label_value, style_badge,
-      style_panel_card, style_button_variant
+  try:
+    from utils.theme import (
+        T as _GLOBAL_T, THEME as _GLOBAL_THEME, CHANNEL_PALETTE as _GLOBAL_CHANNEL_PALETTE,
+        build_qss as _global_build_qss, load_fonts, style_label_value,
+        style_badge, style_panel_card, style_button_variant
+    )
+  except ImportError:
+    _GLOBAL_T = {}
+    def _global_build_qss(t=None): return ""
+    def load_fonts(): pass
+    def style_label_value(*a, **kw): return ""
+    def style_badge(*a, **kw): return ""
+    def style_panel_card(*a, **kw): return ""
+    def style_button_variant(*a, **kw): return ""
+
+# Desactivar antialiasing estrictamente para evitar cualquier lentitud en el osciloscopio
+PLOT_ANTIALIAS = False
+pg.setConfigOptions(antialias=False, useOpenGL=False)
+
+T = dict(_GLOBAL_T) if isinstance(_GLOBAL_T, dict) else {}
+T.update({
+  "bg0": "#060913",       # Fondo general azul marino ultra-oscuro
+  "bg1": "#080d1a",       # Fondo osciloscopio e inputs oscuros
+  "bg2": "#0a1120",       # Fondo interno de paneles HUD
+  "bg3": "#111d35",       # Superficie hover / encabezados de panel
+  "border": "#1e3a5f",    # Borde estructural azul cian oscuro
+  "border2": "#2dd4bf",   # Borde cian/turquesa brillante HUD
+  "accent": "#38bdf8",    # Cian HUD principal
+  "ok": "#10b981",        # Verde esmeralda neón (STATUS: OK / LINK / OPTIMO)
+  "ok_bg": "#072920",     # Fondo verde esmeralda oscuro
+  "warn": "#fb923c",      # Naranja / Ámbar (Ch0 Digastric)
+  "warn_bg": "#2b1608",   # Fondo ámbar oscuro
+  "err": "#ff2a5f",       # Rojo carmesí neón (Ch3 Micrófono / ALTO / Controles)
+  "err_bg": "#2d0a16",    # Fondo carmesí oscuro
+  "purple": "#a855f7",    # Violeta neón (Fuente Simulador / Mapa 2D)
+  "white": "#f1f5f9",     # Blanco clínico
+  "text": "#cbd5e1",      # Texto general gris-plata claro
+  "text_dim": "#94a3b8",  # Texto secundario
+  "muted": "#64748b",     # Texto atenuado
+  "line": "#1e3a5f",      # Líneas divisorias HUD
+})
+THEME = T
+
+CHANNEL_PALETTE = [
+  "#FB923C",  # Ch0 (ai0 - Anterior Belly of Digastric): Naranja / Ámbar
+  "#2DD4BF",  # Ch1 (ai1 - Zygomaticus Major): Turquesa / Cian
+  "#4ADE80",  # Ch2 (ai2 - Risorio): Verde Esmeralda
+  "#FF2A5F",  # Ch3 (ai3 - Micrófono): Rojo Neón
+  "#A855F7",
+  "#FACC15",
+  "#EC4899",
+  "#60A5FA",
+]
+
+
+def get_canonical_hud_channel_color(hw_idx: int, musc_name: str = "", is_mic: bool = False) -> str:
+  """Retorna el color canónico exacto de la imagen de referencia para cada canal."""
+  m_low = str(musc_name or "").lower()
+  if is_mic or hw_idx == 3 or "mic" in m_low or "audio" in m_low:
+    return "#FF2A5F"
+  if hw_idx == 0 or "digastric" in m_low or "digástrico" in m_low:
+    return "#FB923C"
+  if hw_idx == 1 or "zygom" in m_low or "cigom" in m_low:
+    return "#2DD4BF"
+  if hw_idx == 2 or "risori" in m_low or "orbic" in m_low:
+    return "#4ADE80"
+  return CHANNEL_PALETTE[hw_idx % len(CHANNEL_PALETTE)]
+
+
+class HudSpinBox(_PgSpinBox):
+  """SpinBox de pyqtgraph que preserva el texto rojo-coral neón (#ff5a6e) sobre fondo oscuro HUD."""
+  _HUD_LE_STYLE = (
+    "QLineEdit { background-color: #070b16; color: #ff5a6e; border: none; "
+    "font-family: 'Consolas', 'Courier New', monospace; font-size: 11px; font-weight: bold; padding: 1px 3px; }"
+  )
+  _HUD_BOX_STYLE = (
+    "QAbstractSpinBox { background-color: #070b16; color: #ff5a6e; border: 1px solid #1e3a5f; "
+    "border-radius: 2px; font-family: 'Consolas', 'Courier New', monospace; font-size: 11px; font-weight: bold; }"
   )
 
-CYBERPUNK_QSS = build_qss(T)
-BTN_START_CYBER = style_button_variant("success")
-BTN_STOP_CYBER = style_button_variant("danger")
-BTN_REC_START_CYBER = style_button_variant("primary")
-BTN_REC_STOP_CYBER = style_button_variant("danger")
-BTN_PAUSE_CYBER = style_button_variant("warning")
-BTN_AUTOFORGE_DISC_CYBER = style_button_variant("purple")
-BTN_AUTOFORGE_CONT_CYBER = style_button_variant("purple")
-BTN_CYBER_TOOL = style_button_variant("tool")
+  def __init__(self, *args, **kwargs):
+    super().__init__(*args, **kwargs)
+    self.setStyleSheet(self._HUD_BOX_STYLE)
+    if self.lineEdit() is not None:
+      self.lineEdit().setStyleSheet(self._HUD_LE_STYLE)
+
+  def updateText(self, *args, **kwargs):
+    super().updateText(*args, **kwargs)
+    le = self.lineEdit()
+    if le is not None:
+      le.setStyleSheet(self._HUD_LE_STYLE)
+
+
+# Reemplazar SpinBox local por HudSpinBox para que todos los controles numéricos luzcan como en la imagen
+SpinBox = HudSpinBox
+
+
+class HudGroupBox(QtWidgets.QGroupBox):
+  """Panel HUD con barra superior de título, diagonal técnica, esquinas biseladas y badge de estado (sin antialiasing)."""
+  def __init__(self, title="", status_text="STATUS: OK", status_color="#10b981", dot_only=False, parent=None):
+    super().__init__(title, parent)
+    self._hud_title = title
+    self._status_text = status_text
+    self._status_color = status_color
+    self._dot_only = dot_only
+    self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+    self.setStyleSheet(
+      "QGroupBox { background-color: transparent; border: none; margin-top: 24px; padding-top: 4px; } "
+      "QGroupBox::title { subcontrol-origin: margin; left: -9999px; color: transparent; }"
+    )
+
+  def setTitle(self, title):
+    self._hud_title = title
+    super().setTitle(title)
+    self.update()
+
+  def paintEvent(self, event):
+    p = QtGui.QPainter(self)
+    p.setRenderHint(QtGui.QPainter.Antialiasing, False)
+    w = self.width() - 1
+    h = self.height() - 1
+    hdr_h = 23
+    cut = 6
+
+    # Cuerpo principal con esquinas biseladas (chamfered)
+    poly_body = QtGui.QPolygon([
+      QtCore.QPoint(cut, 0),
+      QtCore.QPoint(w - cut, 0),
+      QtCore.QPoint(w, cut),
+      QtCore.QPoint(w, h - cut),
+      QtCore.QPoint(w - cut, h),
+      QtCore.QPoint(cut, h),
+      QtCore.QPoint(0, h - cut),
+      QtCore.QPoint(0, cut),
+    ])
+    p.setBrush(QtGui.QColor("#0a101d"))
+    p.setPen(QtGui.QPen(QtGui.QColor("#1e3a5f"), 1))
+    p.drawPolygon(poly_body)
+
+    # Barra superior del encabezado HUD
+    poly_hdr = QtGui.QPolygon([
+      QtCore.QPoint(cut, 1),
+      QtCore.QPoint(w - cut, 1),
+      QtCore.QPoint(w - 1, cut),
+      QtCore.QPoint(w - 1, hdr_h),
+      QtCore.QPoint(1, hdr_h),
+      QtCore.QPoint(1, cut),
+    ])
+    p.setBrush(QtGui.QColor("#121d30"))
+    p.setPen(QtCore.Qt.NoPen)
+    p.drawPolygon(poly_hdr)
+
+    # Línea divisoria debajo del header
+    p.setPen(QtGui.QPen(QtGui.QColor("#1e3a5f"), 1))
+    p.drawLine(1, hdr_h, w - 1, hdr_h)
+
+    # Esquinas brillantes cian HUD (brackets)
+    p.setPen(QtGui.QPen(QtGui.QColor("#38bdf8"), 1))
+    p.drawLine(0, cut, cut, 0)
+    p.drawLine(cut, 0, cut + 12, 0)
+    p.drawLine(w - cut - 12, 0, w - cut, 0)
+    p.drawLine(w - cut, 0, w, cut)
+    p.drawLine(0, h - cut, cut, h)
+    p.drawLine(w - cut, h, w, h - cut)
+
+    # Título a la izquierda
+    f_title = QtGui.QFont("Segoe UI", 9, QtGui.QFont.Bold)
+    p.setFont(f_title)
+    p.setPen(QtGui.QColor("#e2e8f0"))
+    p.drawText(QtCore.QRect(10, 1, max(40, w - 105), hdr_h - 1), QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter, self._hud_title)
+
+    # Diagonal técnica y badge a la derecha
+    if self._dot_only:
+      p.setBrush(QtGui.QColor(self._status_color))
+      p.setPen(QtGui.QPen(QtGui.QColor("#ffffff"), 1))
+      p.drawEllipse(w - 18, 7, 8, 8)
+    elif self._status_text:
+      badge_w = 88
+      bx = max(w - badge_w, 80)
+      p.setPen(QtGui.QPen(QtGui.QColor("#26436c"), 1))
+      p.drawLine(bx - 8, hdr_h - 2, bx + 2, 2)
+      f_st = QtGui.QFont("Consolas", 8, QtGui.QFont.Bold)
+      p.setFont(f_st)
+      p.setPen(QtGui.QColor(self._status_color))
+      p.drawText(QtCore.QRect(bx + 2, 1, badge_w - 8, hdr_h - 1), QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter, self._status_text)
+    p.end()
+
+
+class HudOscilloscopeFrame(QtWidgets.QFrame):
+  """Contenedor HUD para el osciloscopio con barra superior integrada: STATUS: OK | Título | SYS ACTIVE."""
+  def __init__(self, title="Canales de Adquisición Bioeléctrica sEMG", parent=None):
+    super().__init__(parent)
+    self._title = title
+    self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+    self.setStyleSheet("QFrame { background-color: #070c18; border: 1px solid #1e3a5f; border-radius: 3px; }")
+    self.main_lyt = QtWidgets.QVBoxLayout(self)
+    self.main_lyt.setContentsMargins(2, 2, 2, 2)
+    self.main_lyt.setSpacing(0)
+
+    self.header_bar = QtWidgets.QFrame()
+    self.header_bar.setFixedHeight(25)
+    self.header_bar.setStyleSheet(
+      "QFrame { background-color: #0e1729; border: none; border-bottom: 1px solid #1e3a5f; }"
+    )
+    h_lyt = QtWidgets.QHBoxLayout(self.header_bar)
+    h_lyt.setContentsMargins(10, 0, 10, 0)
+    h_lyt.setSpacing(8)
+
+    self.lbl_left = QtWidgets.QLabel("STATUS: OK")
+    self.lbl_left.setStyleSheet("color: #34d399; font-family: 'Consolas', monospace; font-size: 10px; font-weight: bold; border: none;")
+    self.lbl_center = QtWidgets.QLabel(title)
+    self.lbl_center.setAlignment(QtCore.Qt.AlignCenter)
+    self.lbl_center.setStyleSheet("color: #f1f5f9; font-family: 'Segoe UI', sans-serif; font-size: 12px; font-weight: bold; border: none;")
+    self.lbl_right = QtWidgets.QLabel("SYS ACTIVE")
+    self.lbl_right.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+    self.lbl_right.setStyleSheet("color: #34d399; font-family: 'Consolas', monospace; font-size: 10px; font-weight: bold; border: none;")
+
+    h_lyt.addWidget(self.lbl_left)
+    h_lyt.addStretch(1)
+    h_lyt.addWidget(self.lbl_center)
+    h_lyt.addStretch(1)
+    h_lyt.addWidget(self.lbl_right)
+    self.main_lyt.addWidget(self.header_bar)
+
+
+class HudMiniSpectrumWidget(QtWidgets.QWidget):
+  """Mini-visor espectral HUD ultra-ligero (cacheado en QPixmap sin antialiasing, 0% carga de CPU)."""
+  def __init__(self, line_color="#2dd4bf", fill_rgba=(45, 212, 191, 55), y_max_label="5000", mode="emg", parent=None):
+    super().__init__(parent)
+    self._line_color = QtGui.QColor(line_color)
+    self._fill_color = QtGui.QColor(*fill_rgba)
+    self._y_max_label = y_max_label
+    self._mode = mode
+    self._cached_pixmap = None
+    self._norm_profile = self._default_profile(mode)
+    self.setMinimumSize(155, 68)
+    self.setMaximumHeight(82)
+
+  @staticmethod
+  def _default_profile(mode):
+    x = np.linspace(0.0, 400.0, 72)
+    if mode == "emg":
+      y = (
+        0.85 * np.exp(-0.5 * ((x - 52.0) / 14.0) ** 2)
+        + 0.45 * np.exp(-0.5 * ((x - 32.0) / 8.0) ** 2)
+        + 0.32 * np.exp(-0.5 * ((x - 88.0) / 28.0) ** 2)
+        + 0.14 * np.exp(-x / 180.0)
+      )
+      rng = np.random.RandomState(42)
+      y = np.clip(y + 0.06 * rng.rand(len(x)), 0.02, 0.96)
+    else:
+      y = (
+        0.92 * np.exp(-0.5 * ((x - 105.0) / 12.0) ** 2)
+        + 0.25 * np.exp(-0.5 * ((x - 140.0) / 18.0) ** 2)
+        + 0.10 * np.exp(-0.5 * ((x - 210.0) / 25.0) ** 2)
+      )
+      rng = np.random.RandomState(7)
+      y = np.clip(y + 0.03 * rng.rand(len(x)), 0.01, 0.96)
+    return y
+
+  def update_from_spectrum(self, spec_vals: np.ndarray):
+    if spec_vals is None or len(spec_vals) < 8:
+      return
+    arr = np.asarray(spec_vals[:72], dtype=np.float64)
+    m = float(np.max(arr))
+    if m > 1e-6:
+      self._norm_profile = np.clip(arr / (m * 1.08), 0.02, 0.96)
+      self._cached_pixmap = None
+      self.update()
+
+  def resizeEvent(self, event):
+    self._cached_pixmap = None
+    super().resizeEvent(event)
+
+  def _render_cache(self):
+    w = max(80, self.width())
+    h = max(48, self.height())
+    pm = QtGui.QPixmap(w, h)
+    pm.fill(QtGui.QColor("#060b16"))
+    p = QtGui.QPainter(pm)
+    p.setRenderHint(QtGui.QPainter.Antialiasing, False)
+
+    # Borde exterior
+    p.setPen(QtGui.QPen(QtGui.QColor("#1e3a5f"), 1))
+    p.drawRect(0, 0, w - 1, h - 1)
+
+    ml, mr, mt, mb = 24, 6, 5, 13
+    pw = max(20, w - ml - mr)
+    ph = max(16, h - mt - mb)
+
+    # Grilla interna sutil
+    grid_pen = QtGui.QPen(QtGui.QColor("#112238"), 1)
+    p.setPen(grid_pen)
+    for gx in range(1, 4):
+      xx = ml + int(pw * gx / 4)
+      p.drawLine(xx, mt, xx, mt + ph)
+    for gy in range(1, 3):
+      yy = mt + int(ph * gy / 3)
+      p.drawLine(ml, yy, ml + pw, yy)
+
+    # Ejes
+    p.setPen(QtGui.QPen(QtGui.QColor("#26436c"), 1))
+    p.drawLine(ml, mt, ml, mt + ph)
+    p.drawLine(ml, mt + ph, ml + pw, mt + ph)
+
+    # Etiquetas compactas
+    f_ax = QtGui.QFont("Consolas", 6)
+    p.setFont(f_ax)
+    p.setPen(QtGui.QColor("#64748b"))
+    p.drawText(2, mt + 7, self._y_max_label)
+    p.drawText(10, mt + ph, "0")
+    p.drawText(ml, h - 2, "0")
+    p.drawText(ml + int(pw * 0.45), h - 2, "200")
+    p.drawText(ml + pw - 16, h - 2, "400")
+
+    # Polígono de la curva espectral
+    prof = self._norm_profile
+    n = len(prof)
+    pts = [QtCore.QPoint(ml + 1, mt + ph - 1)]
+    line_pts = []
+    for idx, val in enumerate(prof):
+      px = ml + 1 + int((pw - 2) * idx / max(1, n - 1))
+      py = mt + ph - 1 - int((ph - 3) * float(val))
+      pts.append(QtCore.QPoint(px, py))
+      line_pts.append(QtCore.QPoint(px, py))
+    pts.append(QtCore.QPoint(ml + pw - 1, mt + ph - 1))
+
+    p.setBrush(QtGui.QBrush(self._fill_color))
+    p.setPen(QtCore.Qt.NoPen)
+    p.drawPolygon(QtGui.QPolygon(pts))
+
+    p.setBrush(QtCore.Qt.NoBrush)
+    p.setPen(QtGui.QPen(self._line_color, 1))
+    p.drawPolyline(QtGui.QPolygon(line_pts))
+    p.end()
+    self._cached_pixmap = pm
+
+  def paintEvent(self, event):
+    if self._cached_pixmap is None:
+      self._render_cache()
+    p = QtGui.QPainter(self)
+    p.drawPixmap(0, 0, self._cached_pixmap)
+    p.end()
+
+
+def build_autoforge_hud_qss(t=None):
+  """Hoja de estilos QSS aislada para replicar exactamente el HUD de referencia en AutoForge DAQ."""
+  p = t or T
+  return f"""
+  QWidget {{
+    background-color: {p['bg0']};
+    color: {p['text']};
+    font-family: 'Segoe UI', 'Inter', 'DejaVu Sans', sans-serif;
+    font-size: 11px;
+  }}
+  QLabel {{
+    background-color: transparent;
+    color: {p['text']};
+  }}
+  QLineEdit, QSpinBox, QDoubleSpinBox, QAbstractSpinBox, QComboBox, QTextEdit {{
+    background-color: #070b16;
+    color: #ff5a6e;
+    border: 1px solid #1e3a5f;
+    border-radius: 2px;
+    padding: 2px 5px;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 11px;
+    font-weight: bold;
+    selection-background-color: {p['accent']};
+    selection-color: {p['bg0']};
+  }}
+  QAbstractSpinBox QLineEdit {{
+    background-color: #070b16;
+    color: #ff5a6e;
+    border: none;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 11px;
+    font-weight: bold;
+  }}
+  QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QAbstractSpinBox:focus, QComboBox:focus {{
+    border: 1px solid {p['accent']};
+    background-color: #0b1324;
+  }}
+  QComboBox::drop-down {{
+    border-left: 1px solid #1e3a5f;
+    background-color: #0d1628;
+    width: 16px;
+  }}
+  QComboBox QAbstractItemView {{
+    background-color: #080d1a;
+    color: #ff5a6e;
+    border: 1px solid {p['accent']};
+    selection-background-color: #12203d;
+    selection-color: #ffffff;
+  }}
+  QPushButton {{
+    background-color: #0d1626;
+    color: {p['text']};
+    border: 1px solid #26436c;
+    border-radius: 3px;
+    padding: 4px 8px;
+    font-weight: bold;
+  }}
+  QPushButton:hover {{
+    background-color: #15243d;
+    border: 1px solid {p['accent']};
+    color: {p['white']};
+  }}
+  QPushButton:disabled {{
+    background-color: #080d18;
+    color: #64748b;
+    border: 1px solid #16243a;
+  }}
+  QCheckBox {{
+    background-color: transparent;
+    color: {p['text']};
+    spacing: 5px;
+    font-size: 10.5px;
+  }}
+  QCheckBox::indicator {{
+    width: 11px;
+    height: 11px;
+    border: 1px solid #2b4c7e;
+    border-radius: 2px;
+    background-color: #070b16;
+  }}
+  QCheckBox::indicator:checked {{
+    background-color: #ff2a5f;
+    border: 1px solid #ff8fa3;
+  }}
+  QSplitter::handle {{
+    background-color: #162640;
+  }}
+  """
+
+
+build_qss = build_autoforge_hud_qss
+CYBERPUNK_QSS = build_autoforge_hud_qss(T)
+BTN_START_CYBER = (
+  "QPushButton { background-color: #092c22; color: #a7f3d0; font-weight: bold; font-family: 'Segoe UI', 'Consolas'; "
+  "font-size: 11.5px; padding: 5px 14px; border: 2px solid #10b981; border-radius: 4px; } "
+  "QPushButton:hover { background-color: #10b981; color: #050811; }"
+)
+BTN_STOP_CYBER = (
+  "QPushButton { background-color: #3b0d1e; color: #ffe4e6; font-weight: bold; font-family: 'Segoe UI', 'Consolas'; "
+  "font-size: 11.5px; padding: 5px 14px; border: 2px solid #f43f5e; border-radius: 4px; } "
+  "QPushButton:hover { background-color: #f43f5e; color: #ffffff; }"
+)
+BTN_REC_START_CYBER = (
+  "QPushButton { background-color: #3b0d1e; color: #fda4af; font-weight: bold; font-family: 'Segoe UI', 'Consolas'; "
+  "font-size: 11px; padding: 5px 12px; border: 2px solid #f43f5e; border-radius: 4px; } "
+  "QPushButton:hover { background-color: #f43f5e; color: #ffffff; } "
+  "QPushButton:disabled { background-color: #260b16; color: #fb7185; border: 1.5px solid #9f1239; }"
+)
+BTN_REC_STOP_CYBER = (
+  "QPushButton { background-color: #f43f5e; color: #ffffff; font-weight: bold; font-family: 'Segoe UI', 'Consolas'; "
+  "font-size: 11px; padding: 5px 12px; border: 2px solid #ffffff; border-radius: 4px; }"
+)
+BTN_PAUSE_CYBER = (
+  "QPushButton { background-color: #0d1829; color: #cbd5e1; font-weight: bold; font-family: 'Segoe UI', 'Consolas'; "
+  "font-size: 11px; padding: 5px 12px; border: 1.5px solid #2dd4bf; border-radius: 4px; } "
+  "QPushButton:disabled { background-color: #0a1220; color: #94a3b8; border: 1.5px solid #1e4b6e; }"
+)
+BTN_AUTOFORGE_DISC_CYBER = (
+  "QPushButton { background-color: #0d1829; color: #e2e8f0; font-weight: bold; font-family: 'Segoe UI', 'Consolas'; "
+  "font-size: 11px; padding: 5px 12px; border: 1.5px solid #38bdf8; border-radius: 4px; } "
+  "QPushButton:disabled { background-color: #0a1220; color: #94a3b8; border: 1.5px solid #1e4b6e; }"
+)
+BTN_AUTOFORGE_CONT_CYBER = (
+  "QPushButton { background-color: #0d1829; color: #e2e8f0; font-weight: bold; font-family: 'Segoe UI', 'Consolas'; "
+  "font-size: 11px; padding: 5px 12px; border: 1.5px solid #38bdf8; border-radius: 4px; } "
+  "QPushButton:disabled { background-color: #0a1220; color: #94a3b8; border: 1.5px solid #1e4b6e; }"
+)
+BTN_CYBER_TOOL = (
+  "QPushButton { background-color: #0d1626; color: #94a3b8; font-weight: bold; font-family: 'Segoe UI', 'Consolas'; "
+  "font-size: 10.5px; padding: 4px 10px; border: 1px solid #26436c; border-radius: 3px; } "
+  "QPushButton:hover { background-color: #16243d; color: #f1f5f9; border: 1px solid #38bdf8; }"
+)
 
 # ==============================================================================
 # --- COMPONENTES INTEGRADOS: PRE-ROLL, TERMINAL DE DIAGNOSTICO Y MONITOR DAQ ---
@@ -1422,7 +1887,7 @@ except ImportError:
 if global_progress: global_progress.setValue(70); global_splash.showMessage("Cargando NIDAQmx...", Qt.AlignBottom | Qt.AlignCenter, QColor("white")); app.processEvents()
 
 # Configuración de PyQtGraph para MÁXIMO rendimiento
-pg.setConfigOptions(antialias=PLOT_ANTIALIAS) # Optimización
+pg.setConfigOptions(antialias=False, useOpenGL=False) # Optimización
 
 # Intenta importar nidaqmx
 try:
@@ -3006,6 +3471,14 @@ class AutoForgeDialog(QtWidgets.QDialog):
     ])
     self.cmb_speaking_mode.setCurrentIndex(0) # Por defecto: solo frases de transición
 
+    # Sincronizar automáticamente el modo de audio cuando se marca/desmarca 'Locución Vocales'
+    def _sync_vocal_speaking(state):
+      if self.chk_hablar_vocales.isChecked():
+        self.cmb_speaking_mode.setCurrentIndex(1)
+      elif self.cmb_speaking_mode.currentIndex() == 1:
+        self.cmb_speaking_mode.setCurrentIndex(0)
+    self.chk_hablar_vocales.toggled.connect(_sync_vocal_speaking)
+
     self.chk_hablar_fases = QtWidgets.QCheckBox("Activar audio en fases (Ruido/Prep/Descanso)")
     self.chk_hablar_fases.setChecked(True)
     self.chk_hablar_fases.setStyleSheet(f"color: {T['accent']}; font-weight: bold;")
@@ -3228,11 +3701,16 @@ class RealTimePlotter(QtWidgets.QWidget):
     """
     super().__init__()
 
-    # --- Constantes de la GUI ---
-    self.BTN_START_STYLE = f"background-color: {T['bg0']}; color: {T['ok']}; font-weight: bold; font-family: 'Courier New'; font-size: 12px; padding: 6px 12px; border: 2px solid {T['ok']}; border-radius: 4px; min-width: 175px;"
-    self.BTN_STOP_STYLE = f"background-color: {T['bg0']}; color: {T['err']}; font-weight: bold; font-family: 'Courier New'; font-size: 12px; padding: 6px 12px; border: 2px solid {T['err']}; border-radius: 4px; min-width: 175px;"
-    self.BTN_REC_START_STYLE = f"background-color: {T['bg0']}; color: {T['accent']}; font-weight: bold; font-family: 'Courier New'; font-size: 12px; padding: 6px 10px; border: 2px solid {T['accent']}; border-radius: 4px;"
-    self.BTN_REC_STOP_STYLE = f"background-color: {T['err']}; color: {T['bg0']}; font-weight: bold; font-family: 'Courier New'; font-size: 12px; padding: 6px 10px; border: 2px solid {T['err']}; border-radius: 4px;"
+    # Forzar que RealTimePlotter pinte su propio fondo HUD sin depender de main_app.py
+    self.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+    self.setAutoFillBackground(True)
+    self.setStyleSheet(build_autoforge_hud_qss(T))
+
+    # --- Constantes de la GUI (Estética HUD de Referencia) ---
+    self.BTN_START_STYLE = BTN_START_CYBER
+    self.BTN_STOP_STYLE = BTN_STOP_CYBER
+    self.BTN_REC_START_STYLE = BTN_REC_START_CYBER
+    self.BTN_REC_STOP_STYLE = BTN_REC_STOP_CYBER
 
     # --- Estado interno ---
     self.preroll_buffer = PreRollRecordingBuffer(sample_rate=2000, preroll_seconds=1.0)
@@ -3445,17 +3923,34 @@ class RealTimePlotter(QtWidgets.QWidget):
       4. Splitter Principal: Barra de Canales + Osciloscopio + Espectrograma
     """
     self.main_layout = QtWidgets.QVBoxLayout()
-    self.main_layout.setContentsMargins(6, 6, 6, 6)
+    self.main_layout.setContentsMargins(6, 3, 6, 6)
     self.main_layout.setSpacing(4)
     self.setLayout(self.main_layout)
 
-    # Nivel 1: Barra Superior de Transporte y Diagnostico en 2 filas limpias (cero botones cortados)
+    # Nivel 0: Barra Superior de Protocolo HUD (idéntica a la imagen de referencia)
+    self.hud_protocol_bar = QtWidgets.QFrame()
+    self.hud_protocol_bar.setFixedHeight(20)
+    self.hud_protocol_bar.setStyleSheet("QFrame { background-color: #050811; border: none; border-bottom: 1px solid #162640; }")
+    hud_bar_lyt = QtWidgets.QHBoxLayout(self.hud_protocol_bar)
+    hud_bar_lyt.setContentsMargins(6, 0, 6, 0)
+    hud_bar_lyt.setSpacing(6)
+    self.lbl_hud_proto_left = QtWidgets.QLabel(f"sEMG BIO-ACQUISITION PROTOCOL v{__version__}")
+    self.lbl_hud_proto_left.setStyleSheet("color: #94a3b8; font-family: 'Consolas', monospace; font-size: 10px; font-weight: bold; letter-spacing: 0.8px;")
+    self.lbl_hud_proto_right = QtWidgets.QLabel("sEMG BIO-ACQUISITION PROTOCOL   ||| || |||| | ||| ||||")
+    self.lbl_hud_proto_right.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+    self.lbl_hud_proto_right.setStyleSheet("color: #64748b; font-family: 'Consolas', monospace; font-size: 10px; font-weight: bold; letter-spacing: 0.8px;")
+    hud_bar_lyt.addWidget(self.lbl_hud_proto_left)
+    hud_bar_lyt.addStretch(1)
+    hud_bar_lyt.addWidget(self.lbl_hud_proto_right)
+    self.main_layout.addWidget(self.hud_protocol_bar)
+
+    # Nivel 1: Barra Superior de Transporte y Diagnóstico en 2 filas HUD
     self.transport_frame = QtWidgets.QFrame()
     self.transport_frame.setStyleSheet(
-      f"QFrame {{ background-color: #080808; border: 1px solid {T['accent']}; border-radius: 4px; }}"
+      "QFrame { background-color: #080e1c; border: 1px solid #1e3a5f; border-radius: 4px; }"
     )
     self.transport_rows_layout = QtWidgets.QVBoxLayout(self.transport_frame)
-    self.transport_rows_layout.setContentsMargins(8, 4, 8, 4)
+    self.transport_rows_layout.setContentsMargins(6, 4, 6, 4)
     self.transport_rows_layout.setSpacing(4)
     self.button_layout = QtWidgets.QHBoxLayout()
     self.button_layout.setContentsMargins(0, 0, 0, 0)
@@ -3466,27 +3961,27 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.transport_rows_layout.addLayout(self.button_layout)
     self.transport_rows_layout.addLayout(self.tools_bar_layout)
 
-    # Nivel 2: Contenedor de los 3 Paneles de Configuracion en Paralelo
+    # Nivel 2: Los 3 Paneles HUD Superiores con Esquinas Biseladas y Badges de Estado
     self.config_groupbox = QtWidgets.QWidget()
     self.deck_columns_layout = QtWidgets.QHBoxLayout(self.config_groupbox)
     self.deck_columns_layout.setContentsMargins(0, 0, 0, 0)
     self.deck_columns_layout.setSpacing(6)
 
-    self.hw_groupbox = QtWidgets.QGroupBox("Configuracion de Adquisicion y Canales")
+    self.hw_groupbox = HudGroupBox("Configuracion de Adquisicion", status_text="STATUS: OK", status_color="#34d399")
     self.config_layout = QtWidgets.QGridLayout(self.hw_groupbox)
-    self.config_layout.setContentsMargins(8, 10, 8, 6)
+    self.config_layout.setContentsMargins(8, 6, 8, 6)
     self.config_layout.setHorizontalSpacing(8)
     self.config_layout.setVerticalSpacing(4)
 
-    self.filter_groupbox = QtWidgets.QGroupBox("Filtro Digital: Pasa-Banda y Ritmo")
+    self.filter_groupbox = HudGroupBox("Filtro Digital: Pasa-banda y Ritmo", status_text="SYS ACTIVE", status_color="#34d399")
     self.filter_layout = QtWidgets.QGridLayout(self.filter_groupbox)
-    self.filter_layout.setContentsMargins(8, 10, 8, 6)
+    self.filter_layout.setContentsMargins(8, 6, 8, 6)
     self.filter_layout.setHorizontalSpacing(8)
     self.filter_layout.setVerticalSpacing(4)
 
-    self.trig_spec_groupbox = QtWidgets.QGroupBox("Trigger, SNR y Espectrograma")
+    self.trig_spec_groupbox = HudGroupBox("Trigger, SNR", status_text="LINK ●", status_color="#34d399")
     self.trig_spec_layout = QtWidgets.QGridLayout(self.trig_spec_groupbox)
-    self.trig_spec_layout.setContentsMargins(8, 10, 8, 6)
+    self.trig_spec_layout.setContentsMargins(8, 6, 8, 6)
     self.trig_spec_layout.setHorizontalSpacing(8)
     self.trig_spec_layout.setVerticalSpacing(4)
 
@@ -3498,10 +3993,10 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.spectrogram_layout = QtWidgets.QHBoxLayout()
     self.spectrogram_groupbox = QtWidgets.QWidget()
 
-    # Nivel 3: Barra dedicada a Tarjetas de Canal + Medidor de Ruido de Linea 50 Hz
+    # Nivel 3: Barra de Tarjetas de Medición por Canal + Mini-Monitores Espectrales HUD
     self.measure_widget = QtWidgets.QFrame()
     self.measure_widget.setStyleSheet(
-      f"QFrame {{ background-color: #060606; border: 1px solid {T['line']}; border-radius: 4px; }}"
+      "QFrame { background-color: #070c18; border: 1px solid #1e3a5f; border-radius: 4px; }"
     )
     self.measure_layout = QtWidgets.QHBoxLayout(self.measure_widget)
     self.measure_layout.setContentsMargins(6, 3, 6, 3)
@@ -3525,10 +4020,10 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.cmb_device.currentIndexChanged.connect(self.verificar_conexion_daq)
 
     self.label_terminal_config = QtWidgets.QLabel("CONEXION DAQ:")
-    self.label_terminal_config.setStyleSheet(f"color: {T['warn']}; font-weight: bold;")
+    self.label_terminal_config.setStyleSheet("color: #cbd5e1; font-weight: bold;")
     self.cmb_terminal_config = QtWidgets.QComboBox()
     self.cmb_terminal_config.setStyleSheet(
-      f"background-color: {T['bg0']}; color: {T['warn']}; border: 1px solid {T['warn']}; font-weight: bold; padding: 2px;"
+      "background-color: #070b16; color: #ff5a6e; border: 1px solid #1e3a5f; font-weight: bold; padding: 2px;"
     )
     self.cmb_terminal_config.addItems(["RSE", "DIFF", "NRSE", "DEFAULT"])
     self.cmb_terminal_config.setCurrentText("RSE")
@@ -3666,7 +4161,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.chk_zmq_bridge.setToolTip(
       "Recibe datos en tiempo real de la NI USB-6259 desde la VM con Windows vía ZeroMQ (tcp://192.168.122.x:5555)."
     )
-    self.chk_zmq_bridge.setStyleSheet(f"QCheckBox {{ color: {T['warn']}; font-weight: bold; }}")
+    self.chk_zmq_bridge.setStyleSheet("QCheckBox { color: #cbd5e1; font-weight: bold; }")
     adq_cfg_init = self.config_mgr.get("adquisicion") or {}
     default_zmq_on = adq_cfg_init.get("usar_puente_zmq", (not NIDAQMX_DISPONIBLE))
     self.chk_zmq_bridge.setChecked(bool(default_zmq_on))
@@ -3678,7 +4173,7 @@ class RealTimePlotter(QtWidgets.QWidget):
       "Endpoint ZeroMQ de la VM Windows (virbr0). Usa 'auto:5555' para autodetección o '192.168.122.x:5555'."
     )
     self.edit_zmq_host.setStyleSheet(
-      f"QLineEdit {{ background-color: {T['bg1']}; color: {T['warn']}; border: 1px solid {T['warn']}; padding: 2px 6px; font-family: Consolas, monospace; font-weight: bold; }}"
+      "QLineEdit { background-color: #070b16; color: #ff5a6e; border: 1px solid #1e3a5f; padding: 2px 6px; font-family: Consolas, monospace; font-weight: bold; }"
     )
     self.edit_zmq_host.editingFinished.connect(self.verificar_conexion_daq)
 
@@ -3686,8 +4181,8 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.btn_ping_zmq.setFixedWidth(85)
     self.btn_ping_zmq.setToolTip("Verifica la conexión con daq_bridge_server.py en la VM Windows")
     self.btn_ping_zmq.setStyleSheet(
-      f"QPushButton {{ background-color: #1f1600; color: {T['warn']}; border: 1px solid {T['warn']}; border-radius: 3px; font-weight: bold; padding: 2px 6px; }} "
-      f"QPushButton:hover {{ background-color: {T['warn']}; color: {T['bg0']}; }}"
+      "QPushButton { background-color: #350c1a; color: #ff5a6e; border: 1px solid #f43f5e; border-radius: 3px; font-weight: bold; padding: 2px 6px; } "
+      "QPushButton:hover { background-color: #f43f5e; color: #ffffff; }"
     )
     self.btn_ping_zmq.clicked.connect(self.verificar_conexion_daq)
 
@@ -3900,11 +4395,8 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.btn_notas.clicked.connect(self.toggle_notas_panel)
 
     self.btn_fotometria = QtWidgets.QPushButton("FOTOMETRIA 3D")
-    self.btn_fotometria.setProperty("variant", "primary")
-    self.btn_fotometria.setStyleSheet(
-      f"QPushButton {{ background-color: {T['bg2']}; color: {T['accent']}; border: 1.5px solid {T['accent']}; padding: 5px 10px; font-size: 11px; font-weight: bold; border-radius: 4px; }} "
-      f"QPushButton:hover {{ background-color: {T['accent']}; color: {T['bg0']}; }}"
-    )
+    self.btn_fotometria.setProperty("variant", "tool")
+    self.btn_fotometria.setStyleSheet(BTN_CYBER_TOOL)
     self.btn_fotometria.setToolTip("Abrir Asistente de Fotometria Facial 3D y Triangulacion de Electrodos")
     self.btn_fotometria.clicked.connect(self.abrir_asistente_fotometria)
 
@@ -3913,56 +4405,56 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.btn_mute_speaking.setChecked(False)
     self.btn_mute_speaking.setToolTip("Mutear o activar el audio de voz hablada (Speaking) en todo el sistema")
     self.btn_mute_speaking.setStyleSheet(
-      f"QPushButton {{ background-color: {T['bg2']}; color: {T['ok']}; border: 1.5px solid {T['ok']}; padding: 7px 10px; font-weight: bold; border-radius: 4px; }} "
-      f"QPushButton:checked {{ background-color: {T['err_bg']}; color: {T['err']}; border: 1.5px solid {T['err']}; }}"
+      "QPushButton { background-color: #072920; color: #34d399; border: 1.5px solid #10b981; padding: 4px 10px; font-size: 10.5px; font-weight: bold; border-radius: 3px; } "
+      "QPushButton:checked { background-color: #350c1a; color: #ff5a6e; border: 1.5px solid #f43f5e; }"
     )
     self.btn_mute_speaking.toggled.connect(self.on_mute_speaking_toggled)
 
     self.label_rec_time = QtWidgets.QLabel("SISTEMA EN ESPERA")
     self.label_rec_time.setAlignment(QtCore.Qt.AlignCenter)
-    self.label_rec_time.setStyleSheet(f"font-weight: bold; color: {T['accent']}; font-size: 13px; background-color: {T['bg0']}; border: 1px solid {T['line']}; padding: 4px 10px; border-radius: 3px;")
+    self.label_rec_time.setStyleSheet(
+      "font-weight: bold; color: #e2e8f0; font-family: 'Segoe UI', 'Consolas'; font-size: 12.5px; letter-spacing: 0.6px; "
+      "background-color: #070b14; border: 1.5px solid #1e3a5f; padding: 4px 12px; border-radius: 3px;"
+    )
     self.label_rec_time.setVisible(True)
 
-    # Boton de Consola / Terminal de Errores
+    # Boton de Consola / Terminal de Errores (en rojo carmesí HUD a la derecha como en la imagen)
     self.btn_terminal = QtWidgets.QPushButton("CONSOLA / LOGS (0)")
-    self.btn_terminal.setProperty("variant", "success")
-    self.btn_terminal.setMinimumWidth(180)
+    self.btn_terminal.setProperty("variant", "danger")
+    self.btn_terminal.setMinimumWidth(165)
     self.btn_terminal.setToolTip("Abre la consola integrada para inspeccionar mensajes, errores de NIDAQmx o abrir una terminal del sistema.")
-    self.btn_terminal.setStyleSheet(f"QPushButton {{ background-color: {T['bg1']}; color: {T['ok']}; border: 1.5px solid {T['ok']}; padding: 5px 10px; font-size: 11px; font-weight: bold; border-radius: 4px; }} QPushButton:hover {{ background-color: {T['ok']}; color: {T['bg0']}; }}")
+    self.btn_terminal.setStyleSheet(
+      "QPushButton { background-color: #350c1a; color: #ff5a6e; border: 1.5px solid #f43f5e; padding: 4px 12px; font-size: 10.5px; font-weight: bold; border-radius: 3px; } "
+      "QPushButton:hover { background-color: #f43f5e; color: #ffffff; }"
+    )
     self.btn_terminal.clicked.connect(self.mostrar_consola_diagnostico)
 
-    self.btn_start_acq.setMinimumWidth(185)
+    self.btn_start_acq.setText("INICIAR ADQUISICIÓN")
+    self.btn_start_acq.setMinimumWidth(175)
     self.btn_record.setText("GRABAR LIBRE (Manual)")
     self.btn_record.setToolTip("Inicia o detiene una grabación libre manual (sin protocolo guiado de vocales)")
-    self.label_rec_time.setMinimumWidth(290)
+    self.label_rec_time.setMinimumWidth(260)
 
     self.btn_marcar_invalido = QtWidgets.QPushButton("PULSO INVÁLIDO (Supr)")
-    self.btn_marcar_invalido.setProperty("variant", "warning")
+    self.btn_marcar_invalido.setProperty("variant", "tool")
     self.btn_marcar_invalido.setToolTip("Marca el pulso actual como inválido (tos, deglución o error del sujeto) [Atajo: Tecla Backspace / Supr]")
-    self.btn_marcar_invalido.setStyleSheet(
-      f"QPushButton {{ background-color: {T['bg2']}; color: {T['warn']}; border: 1.5px solid {T['warn']}; padding: 5px 10px; font-weight: bold; border-radius: 4px; font-size: 11px; }} "
-      f"QPushButton:hover {{ background-color: {T['warn']}; color: {T['bg0']}; }}"
-    )
+    self.btn_marcar_invalido.setStyleSheet(BTN_CYBER_TOOL)
     self.btn_marcar_invalido.clicked.connect(self.marcar_pulso_actual_invalido)
 
     self.btn_pantalla_externa = QtWidgets.QPushButton("PANTALLA EXTERNA (Tailscale/USB)")
-    self.btn_pantalla_externa.setToolTip("Transmitir vocales por Tailscale (), USB o 2do Monitor para Modo Sujeto Ciego")
-    self.btn_pantalla_externa.setStyleSheet(
-      f"QPushButton {{ background-color: {T['bg2']}; color: {T['purple']}; border: 1.5px solid {T['purple']}; padding: 5px 10px; font-weight: bold; border-radius: 4px; font-size: 11px; }} "
-      f"QPushButton:hover {{ background-color: {T['purple']}; color: {T['bg0']}; }}"
-    )
+    self.btn_pantalla_externa.setToolTip("Transmitir vocales por Tailscale, USB o 2do Monitor para Modo Sujeto Ciego")
+    self.btn_pantalla_externa.setStyleSheet(BTN_CYBER_TOOL)
     self.btn_pantalla_externa.clicked.connect(self.abrir_dialogo_pantalla_externa)
 
     # Fila 1: Transporte Principal + Modos de Grabación + Estado / Cuenta Regresiva Amplia
     self.button_layout.addWidget(self.btn_start_acq)
-    self.button_layout.addWidget(self.btn_record)
     self.button_layout.addWidget(self.btn_pause)
+    self.button_layout.addWidget(self.btn_record)
     self.button_layout.addWidget(self.btn_autoforge)
     self.button_layout.addWidget(self.btn_autoforge_continuo)
     self.button_layout.addWidget(self.label_rec_time, stretch=1)
 
-    # Fila 2: Estado DAQ + Herramientas de Configuración + Pantalla Externa + Audio + Consola
-    self.tools_bar_layout.addWidget(self.lbl_daq_status)
+    # Fila 2: Herramientas de Configuración + Pantalla Externa + Speaking + Consola a la derecha
     self.tools_bar_layout.addWidget(self.btn_config_musculos)
     self.tools_bar_layout.addWidget(self.btn_notas)
     self.tools_bar_layout.addWidget(self.btn_fotometria)
@@ -4656,20 +5148,21 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.plot_container_layout.setContentsMargins(0, 0, 0, 0)
     self.plot_container_layout.setSpacing(2)
 
-    self.viz_control_panel = QtWidgets.QWidget()
-    self.viz_control_panel.setStyleSheet(f"background-color: {T['bg0']}; border: 1px solid {T['line']};")
+    self.viz_control_panel = QtWidgets.QFrame()
+    self.viz_control_panel.setStyleSheet("QFrame { background-color: #080e1c; border: 1px solid #1e3a5f; border-radius: 3px; }")
     self.viz_control_layout = QtWidgets.QHBoxLayout(self.viz_control_panel)
     self.viz_control_layout.setContentsMargins(6, 3, 6, 3)
     self.viz_control_layout.setSpacing(6)
 
     lbl_viz = QtWidgets.QLabel("Canales:")
-    lbl_viz.setStyleSheet(f"color: {T['accent']}; font-weight: bold; border: none;")
+    lbl_viz.setStyleSheet("color: #e2e8f0; font-weight: bold; border: none;")
     self.viz_control_layout.addWidget(lbl_viz)
 
     self.btn_hide_all_viz = QtWidgets.QPushButton("Ocultar Todos")
     self.btn_hide_all_viz.setProperty("variant", "danger")
     self.btn_hide_all_viz.setStyleSheet(
-      f"background-color: {T['err_bg']}; color: {T['err']}; border: 1px solid {T['err']}; padding: 2px 8px; font-size: 11px; font-weight: bold; border-radius: 3px;"
+      "QPushButton { background-color: #350c1a; color: #ff5a6e; border: 1px solid #f43f5e; padding: 2px 8px; font-size: 10.5px; font-weight: bold; border-radius: 3px; } "
+      "QPushButton:hover { background-color: #f43f5e; color: #ffffff; }"
     )
     self.btn_hide_all_viz.clicked.connect(self.hide_all_viz_channels)
     self.viz_control_layout.addWidget(self.btn_hide_all_viz)
@@ -4677,20 +5170,20 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.btn_toggle_multitrack = QtWidgets.QPushButton("Vista: Pistas Separadas")
     self.btn_toggle_multitrack.setCheckable(True)
     self.btn_toggle_multitrack.setStyleSheet(
-      f"QPushButton {{ background-color: {T['bg0']}; color: {T['accent']}; border: 1px solid {T['accent']}; padding: 2px 10px; font-size: 11px; font-weight: bold; border-radius: 3px; }}"
-      f"QPushButton:checked {{ background-color: {T['accent']}; color: {T['bg0']}; }}"
+      "QPushButton { background-color: #0d1626; color: #cbd5e1; border: 1px solid #26436c; padding: 2px 10px; font-size: 10.5px; font-weight: bold; border-radius: 3px; } "
+      "QPushButton:checked { background-color: #38bdf8; color: #060913; }"
     )
     self.btn_toggle_multitrack.toggled.connect(self.toggle_multitrack_view)
     self.viz_control_layout.addWidget(self.btn_toggle_multitrack)
 
     self.viz_checkbox_layout = QtWidgets.QHBoxLayout()
-    self.viz_checkbox_layout.setSpacing(5)
+    self.viz_checkbox_layout.setSpacing(6)
     self.viz_control_layout.addLayout(self.viz_checkbox_layout)
     self.viz_control_layout.addStretch(1)
 
     self.chk_show_grid = QtWidgets.QCheckBox("Grilla")
     self.chk_show_grid.setChecked(True)
-    self.chk_show_grid.setStyleSheet(f"color: {T['text_dim']}; font-weight: bold;")
+    self.chk_show_grid.setStyleSheet("color: #cbd5e1; font-weight: bold;")
     self.chk_show_grid.toggled.connect(self._on_toggle_oscilloscope_grid)
 
     self.viz_control_layout.addWidget(self.lbl_daq_status)
@@ -4704,33 +5197,35 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.viz_checkboxes = []
     self.plot_container_layout.addWidget(self.viz_control_panel)
 
+    # Contenedor HUD del Osciloscopio con barra integrada (STATUS: OK | Canales de Adquisición Bioeléctrica sEMG | SYS ACTIVE)
+    self.hud_osc_frame = HudOscilloscopeFrame("Canales de Adquisición Bioeléctrica sEMG")
     self.plot_widget = pg.GraphicsLayoutWidget()
+    self.hud_osc_frame.main_lyt.addWidget(self.plot_widget, stretch=1)
 
     self.autoforge_overlay = QtWidgets.QLabel(self.plot_widget)
     self.autoforge_overlay.setAlignment(QtCore.Qt.AlignCenter)
     self.autoforge_overlay.setStyleSheet(
-      f"background-color: rgba(11, 15, 25, 195); color: {T['err']}; font-family: 'Courier New', monospace; "
-      f"font-size: 75px; font-weight: 900; padding: 20px; border: 4px solid {T['accent']};"
+      f"background-color: rgba(8, 13, 26, 205); color: {T['err']}; font-family: 'Courier New', monospace; "
+      f"font-size: 75px; font-weight: 900; padding: 20px; border: 3px solid {T['accent']};"
     )
     self.autoforge_overlay.hide()
     self.plot_widget.installEventFilter(self)
 
-    self.plot_container_layout.addWidget(self.plot_widget, stretch=1)
-    # Estética "Neon Clinical Slate" (#0B0F19)
-    self.plot_widget.setBackground(T['bg0'])
+    self.plot_container_layout.addWidget(self.hud_osc_frame, stretch=1)
+    self.plot_widget.setBackground('#060b16')
 
-    self.plot = self.plot_widget.addPlot(title=f"<span style='color:{T['text']}; font-size:11pt; font-weight:bold;'>Canales de Adquisición Bioeléctrica sEMG</span>")
-    axis_pen = pg.mkPen(color=T['line'], width=1.2)
-    tick_font = QtGui.QFont("Segoe UI", 9)
+    self.plot = self.plot_widget.addPlot()
+    axis_pen = pg.mkPen(color='#1e3a5f', width=1)
+    tick_font = QtGui.QFont("Segoe UI", 8)
     tick_font.setBold(True)
     for ax_name in ('left', 'bottom'):
       ax = self.plot.getAxis(ax_name)
       ax.setPen(axis_pen)
-      ax.setTextPen(pg.mkPen(T['text_dim']))
+      ax.setTextPen(pg.mkPen('#94a3b8'))
       ax.setStyle(tickFont=tick_font)
-    self.plot.setLabel('bottom', 'Tiempo (s)', color=T['text_dim'], **{'font-size': '10pt', 'font-weight': 'bold'})
-    self.plot.setLabel('left', 'Amplitud (µV)', color=T['text_dim'], **{'font-size': '10pt', 'font-weight': 'bold'})
-    self.plot.getAxis('left').setWidth(64)
+    self.plot.setLabel('bottom', 'Tiempo (s)', color='#cbd5e1', **{'font-size': '9.5pt', 'font-weight': 'bold'})
+    self.plot.setLabel('left', 'Amplitud (µV)', color='#cbd5e1', **{'font-size': '9.5pt', 'font-weight': 'bold'})
+    self.plot.getAxis('left').setWidth(56)
 
     self.spectrogram_view = pg.ImageView()
     self.spectrogram_view.ui.histogram.hide()
@@ -4751,7 +5246,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.plot_widget.ci.layout.setContentsMargins(12, 18, 28, 12)
     # NUEVO (Bug 1.4): leyenda reubicada en la esquina SUPERIOR DERECHA (offset x negativo = anclaje
     # desde la derecha) para que no tape la senal activa ni los picos de contraccion.
-    self.plot.addLegend(offset=(-12, 10), labelTextColor=T['text'], brush=pg.mkBrush(15, 23, 42, 225), pen=pg.mkPen(T['line'], width=1.2))
+    self.plot.addLegend(offset=(-12, 10), labelTextColor='#e2e8f0', brush=pg.mkBrush(36, 12, 22, 220), pen=pg.mkPen('#7f1d1d', width=1))
     self.plot.showGrid(x=True, y=True, alpha=0.28)
     self.plot.setClipToView(True)
     self.plot.setDownsampling(auto=True, mode='peak')
@@ -5033,11 +5528,10 @@ class RealTimePlotter(QtWidgets.QWidget):
           "is_mic": (i == 3 or "mic" in musc.lower())
       })
       
-    try:
-      from utils.config_manager import get_unique_channel_colors
-      self.colores_curvas = get_unique_channel_colors(canales_info)
-    except Exception:
-      self.colores_curvas = list(CHANNEL_PALETTE) * 2
+    self.colores_curvas = [
+      get_canonical_hud_channel_color(c["idx"], c["musculo"], c["is_mic"])
+      for c in canales_info
+    ]
 
     # Conectar señal de vista previa de gráfico
     self.mostrar_preview_signal.connect(self.mostrar_preview_plot)
@@ -5125,7 +5619,10 @@ class RealTimePlotter(QtWidgets.QWidget):
         "is_mic": self._is_mic_channel(i)
       })
 
-    self.colores_curvas = get_unique_channel_colors(active_info)
+    self.colores_curvas = [
+      get_canonical_hud_channel_color(c["idx"], c["musculo"], c["is_mic"])
+      for c in active_info
+    ]
 
     if update_gui and hasattr(self, 'plot'):
       self.setup_gui_for_channels()
@@ -5697,7 +6194,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     plot_dur_safe = float(self.PLOT_DURATION_S) if getattr(self, 'PLOT_DURATION_S', 0) > 0 else float(self.spin_plot_duration.value() if hasattr(self, 'spin_plot_duration') else 10.0)
     self.plot.getViewBox().setLimits(xMin=-plot_dur_safe, xMax=0.0) # Actualizar límite de zoom (tope en t=0 para que el presente quede siempre al borde derecho)
     # NUEVO (Bug 1.4): re-crear la leyenda con el mismo estilo y en la esquina superior derecha
-    self.plot.addLegend(offset=(-12, 10), labelTextColor=T['text'], brush=pg.mkBrush(15, 23, 42, 225), pen=pg.mkPen(T['line'], width=1.2))
+    self.plot.addLegend(offset=(-12, 10), labelTextColor='#e2e8f0', brush=pg.mkBrush(36, 12, 22, 220), pen=pg.mkPen('#7f1d1d', width=1))
     
     # Re-crear elementos
     # Limpiar el layout de mediciones antes de añadir nuevos elementos
@@ -5719,36 +6216,49 @@ class RealTimePlotter(QtWidgets.QWidget):
         if widget:
           widget.deleteLater()
     
+    title_box = QtWidgets.QFrame()
+    title_box.setStyleSheet("QFrame { background-color: #080e1c; border: 1px solid #1e3a5f; border-radius: 3px; }")
+    title_box_lyt = QtWidgets.QVBoxLayout(title_box)
+    title_box_lyt.setContentsMargins(8, 6, 8, 6)
     title_label = QtWidgets.QLabel("<b>Mediciones (chunk):</b>")
-    title_label.setStyleSheet("color: white;")
-    self.measure_layout.addWidget(title_label)
+    title_label.setStyleSheet("color: #e2e8f0; font-size: 11px; border: none;")
+    title_box_lyt.addWidget(title_label)
+    self.measure_layout.addWidget(title_box)
+
     for i in range(self.NUM_CANALES):
       hw_idx = self.active_channel_indices[i] if (hasattr(self, 'active_channel_indices') and self.active_channel_indices and i < len(self.active_channel_indices)) else i
-      color = self.colores_curvas[i % len(self.colores_curvas)]
+      is_mic_ch = self._is_mic_channel(i)
       musculo = self.nombres_musculos[i] if (hasattr(self, 'nombres_musculos') and i < len(self.nombres_musculos)) else f"Canal {hw_idx}"
+      color = get_canonical_hud_channel_color(hw_idx, musculo, is_mic_ch)
+      if hasattr(self, 'colores_curvas') and i < len(self.colores_curvas):
+        self.colores_curvas[i] = color
       curva_nombre = f"ai{hw_idx} - {musculo}"
       qcol_chan = pg.mkColor(color)
-      # Registro limpio en la leyenda sin duplicados ni triangulito rayado (la curva se plotea sin name)
-      curva_item = self.plot.plot(pen=pg.mkPen(qcol_chan, width=1.15))
+
+      # Trazo único ultra-rápido por canal (sin antialiasing ni curvas duplicadas que frenen los FPS)
+      curva_item = self.plot.plot(pen=pg.mkPen(qcol_chan, width=1))
       curva_item.setClipToView(True)
       curva_item.setZValue(10 + i)
       self.curvas.append(curva_item)
 
       if hasattr(self.plot, 'legend') and self.plot.legend is not None:
-        proxy_legend = pg.PlotDataItem(pen=pg.mkPen(qcol_chan, width=3.2))
+        proxy_legend = pg.PlotDataItem(pen=pg.mkPen(qcol_chan, width=2))
         self.plot.legend.addItem(proxy_legend, curva_nombre)
 
-      # NUEVO (Bug 1.3): nucleo luminoso interior de la envolvente (Neon Clinical Slate), sin name ni presencia en la leyenda
-      curva_nucleo = self.plot.plot(pen=pg.mkPen(255, 255, 255, 150, width=0.75))
+      curva_nucleo = self.plot.plot(pen=pg.mkPen(255, 255, 255, 150, width=1))
       curva_nucleo.setClipToView(True)
       curva_nucleo.setZValue(10 + i + 0.5)
       curva_nucleo.hide()
       self.curvas_neon_core.append(curva_nucleo)
       
-      # --- NUEVO: Checkbox de visualización ---
+      # --- Checkbox de visualización con indicador cuadrado del color del canal ---
+      col_hex = pg.mkColor(color).name()
       chk_viz = QtWidgets.QCheckBox(curva_nombre)
       chk_viz.setChecked(True)
-      chk_viz.setStyleSheet(f"color: {pg.mkColor(color).name()}; font-weight: bold; border: none;")
+      chk_viz.setStyleSheet(
+        f"QCheckBox {{ color: {col_hex}; font-weight: bold; border: none; }} "
+        f"QCheckBox::indicator:checked {{ background-color: {col_hex}; border: 1px solid #ffffff; }}"
+      )
       
       def toggle_viz(state, idx=i):
         if not getattr(self, 'is_multitrack_view', False):
@@ -5825,36 +6335,50 @@ class RealTimePlotter(QtWidgets.QWidget):
       self.plot.addItem(dyn_region)
       self.dynamic_noise_regions.append(dyn_region)
 
-      # --- NUEVO: Crear un QFrame para cada medición ---
+      # --- Tarjeta HUD de Medición por Canal idéntica a la imagen de referencia ---
       measurement_frame = QtWidgets.QFrame()
-      measurement_frame.setStyleSheet(f"background-color: {T['bg0']}; border: 2px solid {T['accent']}; border-radius: 5px;")
-      measurement_frame.setMinimumWidth(100)
+      measurement_frame.setStyleSheet(
+        "QFrame { background-color: #091322; border: 1.5px solid #1e4b6e; border-radius: 4px; }"
+      )
+      measurement_frame.setMinimumWidth(155)
       
       frame_layout = QtWidgets.QVBoxLayout(measurement_frame)
-      frame_layout.setContentsMargins(5, 5, 5, 5) # Padding interno
+      frame_layout.setContentsMargins(6, 5, 6, 5)
+      frame_layout.setSpacing(3)
       
-      label = QtWidgets.QLabel(f"<b>ai{hw_idx} - {musculo}:</b> -- µVp-p, -- µVrms")
-      label.setStyleSheet(f"color: {pg.mkColor(color).name()}; font-size: 14px; font-weight: bold; background-color: transparent; border: none;")
+      col_hex = pg.mkColor(color).name()
+      dom_init = "" if is_mic_ch else " (--% Dom)"
+      val_col = "#ff5a6e" if is_mic_ch else "#e2e8f0"
+      label = QtWidgets.QLabel(
+        f"<span style='color:{col_hex}; font-weight:bold;'>ai{hw_idx} - {musculo}:</span> "
+        f"<span style='color:{val_col}; font-weight:bold;'>-- uVp-p, -- uVrms{dom_init}</span>"
+      )
+      label.setStyleSheet("font-size: 11.5px; font-weight: bold; background-color: transparent; border: none;")
       label.setWordWrap(True)
       label.setMinimumWidth(0)
       frame_layout.addWidget(label)
       
-      # --- NUEVO: Etiqueta para el tester de ruido ---
       label_ruido = QtWidgets.QLabel("Ruido inter-pulso: Esperando grabación...")
-      label_ruido.setStyleSheet("color: gray; font-size: 11px; background-color: transparent;")
+      label_ruido.setStyleSheet("color: #94a3b8; font-size: 10px; background-color: transparent; border: none;")
       label_ruido.setWordWrap(True)
       label_ruido.setMinimumWidth(0)
       label_ruido.setVisible(self.chk_show_noise.isChecked())
       frame_layout.addWidget(label_ruido)
       self.noise_status_labels.append(label_ruido)
       
-      # --- NUEVO: Recuadro destacado con color para Ruido de Línea 50 Hz ---
+      # Recuadro interno de Ruido 50 Hz (verde esmeralda en OPTIMO, rojo carmesí en ALTO)
+      init_50_bg = "#072922" if is_mic_ch else "#2b0d18"
+      init_50_bd = "#10b981" if is_mic_ch else "#f43f5e"
+      init_50_fg = "#34d399" if is_mic_ch else "#ff5a6e"
+      init_50_st = "OPTIMO" if is_mic_ch else "ALTO"
       frame_50hz = QtWidgets.QFrame()
-      frame_50hz.setStyleSheet(f"background-color: {T['bg1']}; border: 1.5px solid {T['text_dim']}; border-radius: 3px; padding: 2px;")
+      frame_50hz.setStyleSheet(
+        f"QFrame {{ background-color: {init_50_bg}; border: 1px solid {init_50_bd}; border-radius: 3px; padding: 1px 4px; }}"
+      )
       layout_50hz = QtWidgets.QVBoxLayout(frame_50hz)
-      layout_50hz.setContentsMargins(3, 2, 3, 2)
-      label_50hz = QtWidgets.QLabel("Ruido 50 Hz: -- µV")
-      label_50hz.setStyleSheet(f"color: {T['text_dim']}; font-size: 11px; font-weight: bold;")
+      layout_50hz.setContentsMargins(4, 2, 4, 2)
+      label_50hz = QtWidgets.QLabel(f"Ruido 50 Hz: -- µV [{init_50_st}]")
+      label_50hz.setStyleSheet(f"color: {init_50_fg}; font-size: 10.5px; font-weight: bold; border: none; background: transparent;")
       label_50hz.setWordWrap(True)
       layout_50hz.addWidget(label_50hz)
       
@@ -5863,10 +6387,14 @@ class RealTimePlotter(QtWidgets.QWidget):
       self.line_noise_status_frames.append(frame_50hz)
       self.line_noise_status_labels.append(label_50hz)
       
-      self.measure_layout.addWidget(measurement_frame)
-      self.measure_labels.append(label) # Guardar solo el label para actualizar su texto
+      self.measure_layout.addWidget(measurement_frame, stretch=2)
+      self.measure_labels.append(label)
 
-    self.measure_layout.addStretch(1) # Asegurar que los recuadros se alineen a la izquierda
+    # Añadir a la derecha de las 4 tarjetas los 2 mini-visores espectrales HUD (cacheados en QPixmap, 0% CPU)
+    self.hud_mini_spec_emg = HudMiniSpectrumWidget(line_color="#2dd4bf", fill_rgba=(45, 212, 191, 55), y_max_label="5000", mode="emg")
+    self.hud_mini_spec_mic = HudMiniSpectrumWidget(line_color="#ff2a5f", fill_rgba=(255, 42, 95, 55), y_max_label="4500", mode="mic")
+    self.measure_layout.addWidget(self.hud_mini_spec_emg, stretch=2)
+    self.measure_layout.addWidget(self.hud_mini_spec_mic, stretch=2)
 
     for i in range(self.NUM_CANALES):
       hw_idx = self.active_channel_indices[i] if (hasattr(self, 'active_channel_indices') and self.active_channel_indices and i < len(self.active_channel_indices)) else i
@@ -6022,60 +6550,50 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.right_side_layout = QtWidgets.QVBoxLayout(self.right_side_panel)
     self.right_side_layout.setContentsMargins(0, 0, 0, 0)
     
-    self.metronome_container = QtWidgets.QGroupBox("Metrónomo")
-    self.metronome_container.setStyleSheet(f"""
-      QGroupBox {{
-          border: 2px solid {T['accent']};
-          border-radius: 6px;
-          margin-top: 1.5ex;
-          font-family: 'Courier New', monospace;
-          color: {T['accent']};
-          background-color: {T['bg0']};
-      }}
-      QGroupBox::title {{
-          subcontrol-origin: margin;
-          left: 10px;
-          padding: 0 3px 0 3px;
-          color: {T['accent']};
-          font-weight: bold;
-      }}
-    """)
+    self.metronome_container = HudGroupBox("Metrónomo", status_text="", status_color="#ff2a5f", dot_only=True)
     self.right_side_panel.setMinimumWidth(195)
     self.metronome_container.setMinimumWidth(190)
     metro_layout = QtWidgets.QVBoxLayout(self.metronome_container)
-    metro_layout.setContentsMargins(6, 6, 6, 4)
-    metro_layout.setSpacing(2)
+    metro_layout.setContentsMargins(8, 6, 8, 6)
+    metro_layout.setSpacing(4)
 
     self.metro_pulse_frame = QtWidgets.QFrame()
-    self.metro_pulse_frame.setFixedHeight(34)
-    self.metro_pulse_frame.setStyleSheet(f"background-color: {T['bg1']}; border: 2px solid {T['accent']};")
+    self.metro_pulse_frame.setFixedHeight(18)
+    self.metro_pulse_frame.setStyleSheet("background-color: #070b14; border: 1px solid #1e3a5f; border-radius: 2px;")
     metro_layout.addWidget(self.metro_pulse_frame)
+
+    self.metro_display_box = QtWidgets.QFrame()
+    self.metro_display_box.setStyleSheet("QFrame { background-color: #070b14; border: 1px solid #1e3a5f; border-radius: 3px; }")
+    disp_lyt = QtWidgets.QVBoxLayout(self.metro_display_box)
+    disp_lyt.setContentsMargins(4, 4, 4, 4)
+    disp_lyt.setSpacing(1)
 
     self.metro_lbl_title = QtWidgets.QLabel("PULSO")
     self.metro_lbl_title.setAlignment(QtCore.Qt.AlignCenter)
-    self.metro_lbl_title.setStyleSheet(f"font-size: 12px; color: {T['accent']}; font-family: 'Courier New', monospace; font-weight: bold;")
-    metro_layout.addWidget(self.metro_lbl_title)
+    self.metro_lbl_title.setStyleSheet("font-size: 11px; color: #e2e8f0; font-family: 'Segoe UI', 'Consolas', monospace; font-weight: bold; border: none;")
+    disp_lyt.addWidget(self.metro_lbl_title)
 
     self.metro_lbl_count = QtWidgets.QLabel("0")
     self.metro_lbl_count.setAlignment(QtCore.Qt.AlignCenter)
-    self.metro_lbl_count.setStyleSheet(f"font-size: 28px; color: {T['accent']}; font-weight: bold; font-family: 'Courier New', monospace;")
-    metro_layout.addWidget(self.metro_lbl_count)
+    self.metro_lbl_count.setStyleSheet("font-size: 26px; color: #ff4d4d; font-weight: 900; font-family: 'Consolas', 'Courier New', monospace; border: none;")
+    disp_lyt.addWidget(self.metro_lbl_count)
+    metro_layout.addWidget(self.metro_display_box)
 
     self.right_side_layout.addWidget(self.metronome_container)
 
-    # --- Semáforo de Fatiga Mioeléctrica (MDF) ubicado debajo del Metrónomo a la derecha ---
+    # --- Semáforo de Fatiga Mioeléctrica (MDF) en rojo carmesí HUD debajo del Metrónomo ---
     self.frame_fatiga = QtWidgets.QFrame()
     self.frame_fatiga.setMinimumWidth(190)
-    self.frame_fatiga.setStyleSheet(f"background-color: #0b1a14; border: 1.5px solid {T['ok']}; border-radius: 5px; padding: 2px 4px;")
+    self.frame_fatiga.setStyleSheet("background-color: #2b0d18; border: 1.5px solid #f43f5e; border-radius: 4px; padding: 2px 4px;")
     lyt_fat = QtWidgets.QHBoxLayout(self.frame_fatiga)
     lyt_fat.setContentsMargins(4, 3, 4, 3)
     lyt_fat.setSpacing(4)
     self.lbl_fatiga_dot = QtWidgets.QLabel("●")
-    self.lbl_fatiga_dot.setStyleSheet(f"color: {T['ok']}; font-size: 13px; font-weight: bold;")
-    self.lbl_fatiga_text = QtWidgets.QLabel("FATIGA: ESTABLE\nMDF 100%")
+    self.lbl_fatiga_dot.setStyleSheet("color: #ff4d6d; font-size: 13px; font-weight: bold; border: 1px solid #f43f5e; padding: 1px 3px; border-radius: 2px;")
+    self.lbl_fatiga_text = QtWidgets.QLabel("ESTABLE (MDF 100%)\n98.3 Hz")
     self.lbl_fatiga_text.setWordWrap(True)
     self.lbl_fatiga_text.setAlignment(QtCore.Qt.AlignCenter)
-    self.lbl_fatiga_text.setStyleSheet(f"color: {T['ok']}; font-size: 10px; font-weight: bold; font-family: 'Courier New', monospace; padding: 1px;")
+    self.lbl_fatiga_text.setStyleSheet("color: #ff5a6e; font-size: 9.5px; font-weight: bold; font-family: 'Consolas', 'Courier New', monospace; padding: 1px; border: none;")
     lyt_fat.addWidget(self.lbl_fatiga_dot)
     lyt_fat.addWidget(self.lbl_fatiga_text, stretch=1)
     self.right_side_layout.addWidget(self.frame_fatiga)
@@ -6192,15 +6710,15 @@ class RealTimePlotter(QtWidgets.QWidget):
     self._metro_next_perf = None
     self._paused_metro_remaining_ms = 0
     self._on_count_in_finished_cb = None
-    self.metro_pulse_frame.setStyleSheet(f"background-color: {self.COLOR_IDLE}; border: 2px solid {T['accent']};")
+    self.metro_pulse_frame.setStyleSheet("background-color: #070b14; border: 1px solid #1e3a5f; border-radius: 2px;")
     self.metro_lbl_count.setText("0")
     self.metro_lbl_title.setText("PULSO")
-    self.metro_lbl_title.setStyleSheet(f"font-size: 16px; color: {T['accent']};")
-    self.metro_lbl_count.setStyleSheet(f"font-size: 28px; color: {T['accent']}; font-weight: bold;")
+    self.metro_lbl_title.setStyleSheet("font-size: 11px; color: #e2e8f0; font-family: 'Segoe UI', 'Consolas', monospace; font-weight: bold; border: none;")
+    self.metro_lbl_count.setStyleSheet("font-size: 26px; color: #ff4d4d; font-weight: 900; font-family: 'Consolas', 'Courier New', monospace; border: none;")
     self.save_metronome_config()
 
   def reset_metro_color(self):
-    self.metro_pulse_frame.setStyleSheet(f"background-color: {self.COLOR_IDLE}; border: 2px solid {T['accent']};")
+    self.metro_pulse_frame.setStyleSheet("background-color: #070b14; border: 1px solid #1e3a5f; border-radius: 2px;")
 
   def _construir_tira_secuencia_html(self, words_list, active_idx):
     """Construye la barra horizontal de vocales resaltando la vocal actual y la siguiente."""
@@ -8042,12 +8560,18 @@ class RealTimePlotter(QtWidgets.QWidget):
       for i in range(self.NUM_CANALES):
         hw_idx = self.active_channel_indices[i] if (hasattr(self, 'active_channel_indices') and self.active_channel_indices and i < len(self.active_channel_indices)) else i
         musculo = self.nombres_musculos[i] if (hasattr(self, 'nombres_musculos') and i < len(self.nombres_musculos)) else f"Canal {hw_idx}"
+        ch_col = self.colores_curvas[i % len(self.colores_curvas)] if (hasattr(self, 'colores_curvas') and self.colores_curvas) else T['accent']
+        is_mic_ch = (i not in emg_indices)
+        val_col = "#ff5a6e" if is_mic_ch else "#e2e8f0"
         if i in emg_indices:
           dom_pct = (rms[i] / sum_rms_emg) * 100.0
           dom_str = f" ({dom_pct:.1f}% Dom)"
         else:
           dom_str = ""
-        texto = f"<b>ai{hw_idx} - {musculo}:</b> {vp_p[i]:.1f} µVp-p, {rms[i]:.1f} µVrms{dom_str}"
+        texto = (
+          f"<span style='color:{ch_col}; font-weight:bold;'>ai{hw_idx} - {musculo}:</span> "
+          f"<span style='color:{val_col}; font-weight:bold;'>{vp_p[i]:.1f} uVp-p, {rms[i]:.1f} uVrms{dom_str}</span>"
+        )
         
         # Aislar la ventana de búsqueda para este canal
         window_data = plot_buffer_datos[i, search_start_idx:]
@@ -10399,13 +10923,13 @@ class RealTimePlotter(QtWidgets.QWidget):
       self._error_count = getattr(self, '_error_count', 0) + 1
       if hasattr(self, 'btn_terminal'):
         self.btn_terminal.setText(f"CONSOLA / ERRORES ({self._error_count})")
-        self.btn_terminal.setStyleSheet(f"QPushButton {{ background-color: {T['bg1']}; color: {T['ok']}; border: 1.5px solid {T['ok']}; padding: 5px 10px; font-size: 11px; font-weight: bold; border-radius: 4px; }} QPushButton:hover {{ background-color: {T['ok']}; color: {T['bg0']}; }}")
+        self.btn_terminal.setStyleSheet("QPushButton { background-color: #350c1a; color: #ff5a6e; border: 1.5px solid #f43f5e; padding: 4px 12px; font-size: 10.5px; font-weight: bold; border-radius: 3px; } QPushButton:hover { background-color: #f43f5e; color: #ffffff; }")
 
   def mostrar_consola_diagnostico(self):
     self._error_count = 0
     if hasattr(self, 'btn_terminal'):
       self.btn_terminal.setText("CONSOLA / LOGS (0)")
-      self.btn_terminal.setStyleSheet(f"QPushButton {{ background-color: {T['bg1']}; color: {T['ok']}; border: 1.5px solid {T['ok']}; padding: 5px 10px; font-size: 11px; font-weight: bold; border-radius: 4px; }} QPushButton:hover {{ background-color: {T['ok']}; color: {T['bg0']}; }}")
+      self.btn_terminal.setStyleSheet("QPushButton { background-color: #350c1a; color: #ff5a6e; border: 1.5px solid #f43f5e; padding: 4px 12px; font-size: 10.5px; font-weight: bold; border-radius: 3px; } QPushButton:hover { background-color: #f43f5e; color: #ffffff; }")
     self.terminal_dialog.show()
     self.terminal_dialog.raise_()
     self.terminal_dialog.activateWindow()
@@ -10516,11 +11040,11 @@ class RealTimePlotter(QtWidgets.QWidget):
     for i in range(self.NUM_CANALES):
       val_50 = calcular_ruido_linea_50hz(self._raw_50hz_buffer[i], self.SAMPLE_RATE)
       if val_50 < 15.0:
-        color_txt, color_bg, estado_str = T['accent'], "#002211", "OPTIMO"
+        color_txt, color_bg, estado_str = "#34d399", "#072922", "OPTIMO"
       elif val_50 < 40.0:
-        color_txt, color_bg, estado_str = T['warn'], "#222200", "MODERADO"
+        color_txt, color_bg, estado_str = "#fb923c", "#2b1608", "MODERADO"
       else:
-        color_txt, color_bg, estado_str = "#FF3300", T['err_bg'], "ALTO"
+        color_txt, color_bg, estado_str = "#ff5a6e", "#2b0d18", "ALTO"
 
       musculo = self.nombres_musculos[i % len(self.nombres_musculos)]
       if hasattr(self, 'line_noise_status_labels') and i < len(self.line_noise_status_labels):
@@ -10619,7 +11143,7 @@ class RealTimePlotter(QtWidgets.QWidget):
       estilo_trazo = self.config_mgr.get("estetica_global", "estilo_trazo_envolvente") or "neon_slate"
     
     if hasattr(self, 'plot_widget'):
-      self.plot_widget.setBackground(T['bg1'] if estilo_trazo == 'neon_slate' else T['bg0'])
+      self.plot_widget.setBackground('#060b16')
 
     capas = [
       (getattr(self, 'curvas', []), getattr(self, 'curvas_neon_core', []), 0),
@@ -10634,24 +11158,13 @@ class RealTimePlotter(QtWidgets.QWidget):
             qcol = pg.mkColor(color)
           else:
             qcol = pg.mkColor(CHANNEL_PALETTE[ch_idx % len(CHANNEL_PALETTE)])
-          if es_envolvente:
-            if estilo_trazo == "clasico":
-              curva.setPen(pg.mkPen(qcol.red(), qcol.green(), qcol.blue(), 255, width=2.0))
-              try:
-                curva.setFillLevel(None)
-                curva.setFillBrush(None)
-              except Exception:
-                pass
-            else:
-              # Trazo limpio de 1 sola curva sin relleno poligonal para máxima fluidez en tiempo real
-              curva.setPen(pg.mkPen(qcol.red(), qcol.green(), qcol.blue(), 255, width=2.0))
-              try:
-                curva.setFillLevel(None)
-                curva.setFillBrush(None)
-              except Exception:
-                pass
-          else:
-            curva.setPen(pg.mkPen(qcol.red(), qcol.green(), qcol.blue(), 255, width=1.2))
+          # Pluma cosmética width=1 sin antialiasing para máxima fluidez (60+ FPS sin carga CPU)
+          curva.setPen(pg.mkPen(qcol.red(), qcol.green(), qcol.blue(), 255, width=1))
+          try:
+            curva.setFillLevel(None)
+            curva.setFillBrush(None)
+          except Exception:
+            pass
             try:
               curva.setFillLevel(None)
               curva.setFillBrush(None)
