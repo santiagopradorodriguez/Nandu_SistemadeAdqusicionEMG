@@ -19,6 +19,7 @@ import sys
 import tempfile
 import threading
 import time
+from collections import deque
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -2977,6 +2978,135 @@ class _DialogoComentarioSesion(QtWidgets.QDialog):
         self.accept()
 
 
+# =====================================================================
+# Trazador de Trayectorias de Puntos Faciales (v6.2)
+# Registra y dibuja el rastro temporal de puntos labiales y menton,
+# reaprovechando la inferencia que el asistente ya hace en cada marco.
+# Costo adicional estimado: nulo en inferencia (sin hilos ni instancias
+# extra de MediaPipe) y unos microsegundos por marco en el append.
+# =====================================================================
+PUNTOS_TRAZADOS = {
+    "comisura_izq": 61,   # comisura labial izquierda
+    "comisura_der": 291,  # comisura labial derecha
+    "labio_sup": 13,      # centro del labio superior
+    "labio_inf": 14,      # centro del labio inferior
+    "menton": 152,        # menton (referencia mandibular)
+}
+REFERENCIA_TRAZADO = 1                 # punta de nariz: referencia de profundidad relativa
+TRAZADO_CADENCIA_MIN_S = 1.0 / 15.0    # registrar como maximo ~15 Hz (descarte de extras)
+TRAZADO_LARGO_HISTORIAL = 900          # ~60 s de rastro a 15 Hz
+TRAZADO_N_MARCO_RASTRO = 48            # cuantos puntos hacia atras se dibujan en preview
+COLORES_TRAZO_BGR = {
+    "comisura_izq": (60, 180, 255),
+    "comisura_der": (40, 150, 255),
+    "labio_sup": (255, 80, 220),
+    "labio_inf": (70, 250, 250),
+    "menton": (100, 255, 120),
+}
+
+
+class TrazadorVideoPuntos:
+    """Acumula la trayectoria temporal de los puntos faciales clave.
+
+    Se alimenta de los fiduciarios que el asistente lineal ya extrae por marco
+    en `_update_preview` (deteccion frame a frame): no crea hilos, no crea un
+    landmarker extra y su unico trabajo por registro es guardar coordenadas en
+    un `deque` acotado funciona como buffer circular. Incluye dibujado del rastro
+    sobre el preview y exportacion a CSV junto al resto del montaje.
+    """
+
+    def __init__(self, historial_muestras: int = TRAZADO_LARGO_HISTORIAL) -> None:
+        self._lock = threading.Lock()
+        self._muestras = deque(maxlen=int(historial_muestras))
+        self.habilitado = True
+        self.ver_rastro = True
+        self._t_ultima = 0.0
+
+    def registrar(self, fiduciarios: Optional[Dict[str, Any]], t_perf: float) -> None:
+        """Registra una muestra de trayectoria (o el hueco por rostro perdido)."""
+        if not getattr(self, "habilitado", False) or fiduciarios is None:
+            return
+        with self._lock:
+            if (t_perf - self._t_ultima) < TRAZADO_CADENCIA_MIN_S and self._muestras:
+                return
+            p2d = fiduciarios.get("puntos_2d_px")
+            p3d = fiduciarios.get("puntos_3d")
+            if p2d is None or p3d is None or len(p2d) == 0 or len(p3d) == 0:
+                return
+            self._t_ultima = t_perf
+            n_p = min(len(p2d), len(p3d))
+            z_ref = float(p3d[REFERENCIA_TRAZADO][2]) if n_p > REFERENCIA_TRAZADO else 0.0
+            pts = {}
+            for nombre, indice in PUNTOS_TRAZADOS.items():
+                if 0 <= int(indice) < n_p:
+                    pts[nombre] = (
+                        float(p2d[int(indice)][0]),
+                        float(p2d[int(indice)][1]),
+                        float(p3d[int(indice)][2]) - z_ref,
+                    )
+            if not pts:
+                return
+            self._muestras.append({"t": float(t_perf), "ok": True, "pts": pts})
+
+    def marcar_rostro_perdido(self, t_perf: float) -> None:
+        """Marca un hueco en el rastro para no enlazar puntos a traves del desvanecimiento."""
+        if not getattr(self, "habilitado", False) or not self._muestras:
+            return
+        with self._lock:
+            if self._muestras and self._muestras[-1].get("ok", True):
+                self._muestras.append({"t": float(t_perf), "ok": False, "pts": {}})
+
+    def dibujar_rastro(self, canvas: np.ndarray) -> None:
+        """Superpone el rastro reciente de los puntos sobre el marco del preview."""
+        if not getattr(self, "ver_rastro", False) or canvas is None:
+            return
+        with self._lock:
+            muestras = list(self._muestras)
+        muestras = muestras[-TRAZADO_N_MARCO_RASTRO:]
+        n_hist = len(muestras)
+        if n_hist < 2:
+            return
+        for nombre in PUNTOS_TRAZADOS:
+            trazo = []
+            for muestra in muestras:
+                punto = muestra.get("pts", {}).get(nombre)
+                if punto is None:
+                    continue
+                trazo.append((int(round(punto[0])), int(round(punto[1]))))
+            if len(trazo) < 2:
+                continue
+            color = COLORES_TRAZO_BGR.get(nombre, (160, 160, 160))
+            cv2.polylines(canvas, [np.asarray(trazo, dtype=np.int32)], False, color, 2, cv2.LINE_AA)
+            ult = trazo[-1]
+            cv2.circle(canvas, ult, 5, color, -1, cv2.LINE_AA)
+            cv2.circle(canvas, ult, 7, (255, 255, 255), 1, cv2.LINE_AA)
+
+    def paquete_para_sesion(self) -> Dict[str, Any]:
+        """Exporta el rastro acumulado como estructura serializable para el metadata de sesion."""
+        with self._lock:
+            copia = list(self._muestras)
+        muestras_ok = [m for m in copia if m.get("ok")]
+        t0 = muestras_ok[0]["t"] if muestras_ok else None
+        filas: List[List[float]] = []
+        for muestra in muestras_ok:
+            fila = [round(float(muestra["t"] - t0), 3)]
+            for nombre in PUNTOS_TRAZADOS:
+                punto = muestra["pts"].get(nombre)
+                if punto is None:
+                    fila.extend([0.0, 0.0, 0.0])
+                else:
+                    fila.extend([round(float(punto[0]), 2), round(float(punto[1]), 2), round(float(punto[2]), 4)])
+            filas.append(fila)
+        return {
+            "frecuencia_reg_max_hz": round(1.0 / TRAZADO_CADENCIA_MIN_S, 2),
+            "puntos": list(PUNTOS_TRAZADOS.keys()),
+            "referencia_z": "punta_nariz",
+            "t_base_s": round(float(t0), 3) if t0 is not None else 0.0,
+            "n_muestras": len(filas),
+            "muestras": filas,
+        }
+
+
 class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
     """
     Asistente Lineal Simple de Fotometria: guia foto a foto para registrar la
@@ -3023,6 +3153,9 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         self.sujeto = sujeto or "Sujeto"
         self.prueba = prueba or "Experimento"
         self.d_ip_nominal_mm = float(d_ip_nominal_mm)
+        # CORRECCION (v6.2): trazador de trayectoria de puntos faciales (labios/menton).
+        # Reaprovecha la inferencia del asistente; no agrega funciones ni hilos extra.
+        self.trazador = TrazadorVideoPuntos()
 
         if active_channel_indices and len(active_channel_indices) > 0:
             self.active_channel_indices: List[int] = [int(c) for c in active_channel_indices]
@@ -4207,6 +4340,17 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
             fiduciarios = None
         self._fiduciarios_marco = fiduciarios
 
+        # CORRECCION (v6.2): registrar la trayectoria de puntos reutilizando la
+        # inferencia ya hecha en este marco (nada de MediaPipe adicional).
+        try:
+            if getattr(self, "trazador", None) is not None:
+                if congelado or fiduciarios is None:
+                    self.trazador.marcar_rostro_perdido(time.perf_counter())
+                else:
+                    self.trazador.registrar(fiduciarios, time.perf_counter())
+        except Exception:
+            pass
+
         canvas = frame.copy()
         pose = None
         verde = False
@@ -4242,6 +4386,11 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
             if self._fantasma_activado:
                 self._dibujar_fantasma(canvas, fiduciarios, pose or {})
 
+        if not congelado and getattr(self, "trazador", None) is not None:
+            try:
+                self.trazador.dibujar_rastro(canvas)
+            except Exception:
+                pass
         self._aplicar_destello(canvas)
         self._mostrar_bgr(canvas, self.video_label)
 
@@ -4955,6 +5104,13 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
             "metadata": self._construir_metadata_fotometria(),
             "comentario": str(self.edit_comentario.text().strip()),
         }
+        # CORRECCION (v6.2): adjuntar la trayectoria de puntos faciales capturada
+        # en vivo durante el asistente (viaja junto al metadata hasta el CSV).
+        try:
+            if getattr(self, "trazador", None) is not None:
+                self._datos_sesion["trayectoria_puntos"] = self.trazador.paquete_para_sesion()
+        except Exception:
+            pass
         self.accept()
 
     def obtener_datos_sesion(self) -> Dict[str, Any]:
@@ -5324,6 +5480,26 @@ class WebcamPhotometryManager(QtCore.QObject):
             ruta_json = os.path.join(str(output_dir), NOMBRE_METADATA_FOTOMETRIA)
             with open(ruta_json, "w", encoding="utf-8") as handle:
                 json.dump(metadata, handle, indent=2, ensure_ascii=False)
+
+            # CORRECCION (v6.2): exportar la trayectoria de puntos faciales del
+            # asistente (labios/menton) como CSV al lado del resto del montaje.
+            datos_trazado = datos.get("trayectoria_puntos")
+            if datos_trazado and datos_trazado.get("n_muestras", 0) > 0:
+                destino_trazado = os.path.join(str(output_dir), "trayectoria_puntos.csv")
+                with open(destino_trazado, "w", encoding="utf-8", newline="") as f_csv_tr:
+                    writer_tr = csv.writer(f_csv_tr)
+                    encabezado_tr = ["t_s", "rostro_ok"]
+                    for nombre_tr in PUNTOS_TRAZADOS:
+                        encabezado_tr.extend(
+                            [f"{nombre_tr}_x_px", f"{nombre_tr}_y_px", f"{nombre_tr}_z_rel"]
+                        )
+                    writer_tr.writerow(encabezado_tr)
+                    for fila_tr in datos_trazado.get("muestras", []):
+                        writer_tr.writerow([fila_tr[0], 1] + list(fila_tr[1:]))
+                print(
+                    f"[FotometriaWebcam] Trayectoria de puntos exportada: {destino_trazado} "
+                    f"({datos_trazado.get('n_muestras', 0)} muestras)"
+                )
 
             # Garantizar también fotometria/calibracion_espacial.json con la ubicación exacta de los electrodos
             dir_fotometria = os.path.join(str(output_dir), "fotometria")
