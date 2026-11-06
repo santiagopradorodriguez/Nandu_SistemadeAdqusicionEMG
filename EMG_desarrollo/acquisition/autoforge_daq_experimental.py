@@ -1591,7 +1591,7 @@ def zmq_bridge_acquisition_thread(
       stop_event.set()
 
 
-def microphone_thread(chunk_samples, sample_rate, num_canales, data_queue, stop_event):
+def microphone_thread(chunk_samples, sample_rate, num_canales, data_queue, stop_event, mic_channel_idx=None):
   """
   Ejecuta la funcionalidad de microphone_thread.
 
@@ -1625,8 +1625,14 @@ def microphone_thread(chunk_samples, sample_rate, num_canales, data_queue, stop_
         import numpy as np
         data = indata[:, 0]
         buffer = np.zeros((num_canales, len(data)))
-        for i in range(num_canales):
-          buffer[i, :] = data
+        # CORRECCION (v6.2): el audio del mic de PC va UNICAMENTE al canal declarado como mic,
+        # nada de replicar la misma senal en todos los canales (antes contaminaba la vista y el umbral).
+        # Si no se detecta canal de mic, se preserva el comportamiento historico (replicar).
+        if mic_channel_idx is not None and 0 <= int(mic_channel_idx) < num_canales:
+          buffer[int(mic_channel_idx), :] = data
+        else:
+          for i in range(num_canales):
+            buffer[i, :] = data
         data_queue.put(buffer)
 
     with sd.InputStream(samplerate=sample_rate, channels=1, callback=audio_callback, blocksize=chunk_samples):
@@ -3838,11 +3844,9 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.filter_layout.addWidget(self.label_jitter_mode, 4, 3)
     self.filter_layout.addWidget(self.cmb_metro_jitter_mode, 4, 4, 1, 2)
 
-    self.chk_escala_cvm = QtWidgets.QCheckBox("Normalizar Eje Y en % CVM")
-    self.chk_escala_cvm.setToolTip("Normaliza las señales EMG en porcentaje de la Contracción Voluntaria Máxima (% CVM) en tiempo real.")
-    self.chk_escala_cvm.setChecked(False)
-    self.chk_escala_cvm.setStyleSheet(f"color: {T['warn']}; font-weight: bold;")
-    self.chk_escala_cvm.toggled.connect(self._on_escala_cvm_toggled)
+    # CORRECCION (v6.2): se retiro el checkbox de visualizacion en % CVM. El eje es siempre
+    # microvoltios absolutos y la autoescala controla el rango sin normalizaciones paralelas.
+    # La metrica CVM sigue disponible en tomas y reportes.
 
     self.chk_clamp_500uv = QtWidgets.QCheckBox("Límite 0-500 µV (Anti-Picos)")
     self.chk_clamp_500uv.setToolTip("Recorta picos eléctricos (> 500 µV) en los canales EMG y mantiene el eje Y entre 0 y 500 µV para evitar saltos bruscos de escala.")
@@ -4010,7 +4014,6 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.trig_spec_layout.addWidget(self.chk_spectrogram_enable, 3, 0, 1, 2)
     self.trig_spec_layout.addWidget(self.label_spectrogram_chan, 3, 2)
     self.trig_spec_layout.addWidget(self.cmb_spectrogram_chan, 3, 3)
-    self.chk_escala_cvm.setVisible(False)
     self.trig_spec_layout.addWidget(self.chk_clamp_500uv, 4, 0, 1, 4)
 
     self.measure_labels = []
@@ -5501,7 +5504,17 @@ class RealTimePlotter(QtWidgets.QWidget):
 
       if self.chk_use_mic.isChecked():
         chunk_samples_dinamico = int(self.SAMPLE_RATE * 0.05)
-        self.acquisition_thread = threading.Thread(target=microphone_thread, args=(chunk_samples_dinamico, self.SAMPLE_RATE, self.NUM_CANALES, self.data_queue, self.stop_event), daemon=True)
+        # CORRECCION (v6.2): localizar el canal de mic (indices de canal activo) para el hilo de
+        # mic de PC; el audio entra solo a ese canal del buffer visual.
+        mic_idx_modo_pc = None
+        try:
+          for _ch_i_mic in range(int(self.NUM_CANALES)):
+            if self._is_mic_channel(_ch_i_mic):
+              mic_idx_modo_pc = _ch_i_mic
+              break
+        except Exception:
+          mic_idx_modo_pc = None
+        self.acquisition_thread = threading.Thread(target=microphone_thread, args=(chunk_samples_dinamico, self.SAMPLE_RATE, self.NUM_CANALES, self.data_queue, self.stop_event, mic_idx_modo_pc), daemon=True)
       elif self.chk_modo_prueba.isChecked():
         test_freq = self.spin_test_freq.value()
         tipo_prueba = self.cmb_fuente_prueba.currentText()
@@ -7687,20 +7700,10 @@ class RealTimePlotter(QtWidgets.QWidget):
           rms_tail = calculate_rms_envelope(self.plot_buffer_datos[i, -tail_len:], window_size)
           self.env_buffer_datos[i, -total_muestras_leidas:] = rms_tail[-total_muestras_leidas:]
 
-      escala_cvm_activa = bool(getattr(self, 'chk_escala_cvm', None) and self.chk_escala_cvm.isChecked())
-
       for i in range(self.NUM_CANALES):
         try:
           src_arr = np.nan_to_num(self.env_buffer_datos[i] if is_rms else self.plot_buffer_datos[i])
           x_enviar, y_enviar = decimate_min_max(self.plot_vector_tiempo, src_arr, max_points=3000)
-
-          if escala_cvm_activa and not self._is_mic_channel(i):
-            ref_cvm = 500.0
-            if hasattr(self, 'cvm_env_p95_per_channel') and i < len(self.cvm_env_p95_per_channel) and self.cvm_env_p95_per_channel[i] > 10.0:
-              ref_cvm = float(self.cvm_env_p95_per_channel[i])
-            elif getattr(self, 'supremo_global_p95_uV', 0.0) > 10.0:
-              ref_cvm = float(self.supremo_global_p95_uV)
-            y_enviar = (y_enviar / (ref_cvm + 1e-6)) * 100.0
 
           if not getattr(self, 'is_multitrack_view', False):
             if i < len(self.curvas) and self.curvas[i].isVisible():
@@ -11018,9 +11021,9 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     print(f"[PULSO {method_tag} 0.5τ] #{pulse_event['pulse_num']}{vocal_tag} | {p_str} | Supremo: {supremo:.1f} µV | Sep: {sep:.1f}%{sync_str} | {atractor}")
     try:
-      self._registrar_uv_pulso(pulse_event)
+      info_uv_callback = self._registrar_uv_pulso(pulse_event)
       if getattr(self, 'chk_pca_experimental', None) and self.chk_pca_experimental.isChecked():
-        self._actualizar_medidor_pca_vivo(pulse_event)
+        self._actualizar_medidor_pca_vivo(pulse_event, info_uv=info_uv_callback)
       emg_raw = pulse_event.get('emg_raw_win')
       fs = float(getattr(self, 'SAMPLE_RATE', 2000.0) or 2000.0)
       if emg_raw is not None:
@@ -11031,24 +11034,8 @@ class RealTimePlotter(QtWidgets.QWidget):
 # =============================================================================
 
   
-  def _on_escala_cvm_toggled(self, checked):
-    """Actualiza la etiqueta del eje Y entre microvoltios y % CVM."""
-    if checked:
-      self.plot.setLabel('left', 'Amplitud [% CVM]', color=T['warn'])
-      is_rms = hasattr(self, 'chk_rms_env') and self.chk_rms_env.isChecked()
-      if is_rms:
-        self.plot.setYRange(0.0, 120.0, padding=0.05)
-      else:
-        self.plot.setYRange(-120.0, 120.0, padding=0.05)
-      print("[Escala] Visualización en % CVM activada (normalizada por contracción máxima).")
-    else:
-      self.plot.setLabel('left', 'Amplitud (µV)', color=T['text_dim'])
-      is_rms = hasattr(self, 'chk_rms_env') and self.chk_rms_env.isChecked()
-      if is_rms:
-        self.plot.setYRange(0.0, 500.0, padding=0.05)
-      else:
-        self.plot.setYRange(-500.0, 500.0, padding=0.05)
-      print("[Escala] Visualización en microvoltios absolutos [µV] restaurada.")
+  # CORRECCION (v6.2): se retiro el metodo _on_escala_cvm_toggled junto con el checkbox del modo
+  # % CVM. La visualizacion del eje Y queda siempre en microvoltios; el rango lo gobierna la autoescala.
 
   def _actualizar_semaforo_fatiga_en_vivo(self, emg_raw_win, sample_rate):
     """
@@ -11299,6 +11286,9 @@ class RealTimePlotter(QtWidgets.QWidget):
     if not hasattr(self, 'pca_live_plot') or self.pca_live_plot is None:
       return
     self.pca_live_plot.clear()
+    # CORRECCION (v6.2): tras clear() los items persistentes del Mapa 2D quedan invalidos y se recrean.
+    self._pca_scatter_todos = None
+    self._pca_scatter_halo = None
     self.pca_live_plot.setAspectLocked(False)
     self.pca_live_plot.showGrid(x=True, y=True, alpha=0.25)
     for _ax_name_m3 in ('bottom', 'left'):
@@ -11412,11 +11402,13 @@ class RealTimePlotter(QtWidgets.QWidget):
     NUEVO (Etapa 2): guarda por pulso las amplitudes reales en uV (CH1, CH2, CH3), la vocal y los
     nombres de musculos, para alimentar el Resumen Rapido TXT al finalizar la toma. No depende del
     checkbox del Mapa: se registra siempre que se detecte un pulso fonatorio.
+    CORRECCION (v6.2): devuelve el dict info_uv (amplitudes uV del pulso) o None, para reutilizar
+    el calculo en el Monitor 2D y evitar recomputarlo dos veces por pulso.
     """
     try:
       info_reg = self._amplitudes_uv_del_pulso(pulse_event)
       if info_reg is None:
-        return
+        return None
       if not hasattr(self, 'uv_resumen_pulse_log') or self.uv_resumen_pulse_log is None:
         self.uv_resumen_pulse_log = []
       try:
@@ -11439,7 +11431,7 @@ class RealTimePlotter(QtWidgets.QWidget):
       pre_reg = info_reg.get('pre', [0.0, 0.0, 0.0])
       p_num_cur = int(pulse_event.get('pulse_num', 0) or 0)
       if self.uv_resumen_pulse_log and self.uv_resumen_pulse_log[-1].get('pulse_num') == p_num_cur and p_num_cur > 0:
-        return
+        return info_reg
       self.uv_resumen_pulse_log.append({
         "pulse_num": p_num_cur,
         "vocal": voc_reg,
@@ -11452,8 +11444,10 @@ class RealTimePlotter(QtWidgets.QWidget):
       })
       if len(self.uv_resumen_pulse_log) > 4000:
         self.uv_resumen_pulse_log = self.uv_resumen_pulse_log[-4000:]
+      return info_reg
     except Exception as exc_reg:
       print(f"[Resumen Rapido] Aviso registrando pulso en uV: {exc_reg}")
+      return None
 
   def _actualizar_hint_jitter_ms(self, *args):
     """
@@ -11729,17 +11723,44 @@ class RealTimePlotter(QtWidgets.QWidget):
 
   def _redibujar_puntos_acumulados_mapa_2d(self):
     """
-    Redibuja todos los pulsos acumulados en self.pca_uv_puntos según la proyección activa
+    Redibuja todos los pulsos acumulados en self.pca_uv_puntos segun la proyeccion activa
     ('Canal 1 vs Canal 2', 'Canal 1 vs Canal 3' o 'Canal 2 vs Canal 3').
+    CORRECCION (v6.2): en lugar de recrear hasta 120-240 ScatterPlotItem por pulso, usa dos
+    items persistentes en batch (puntos + halo) refrescados con un solo setData.
     """
     if not hasattr(self, 'pca_live_plot') or self.pca_live_plot is None:
       return
     self._dibujar_base_mapa_2d_uv()
+    self._pca_scatter_todos = None
+    self._pca_scatter_halo = None
     puntos = getattr(self, 'pca_uv_puntos', None) or []
     if not puntos:
       return
 
     ix, iy, iz, _titulo_par = self._indices_proyeccion_activa_mapa_2d()
+    self._crea_items_mapa_2d()
+    spots_todos, halo_spot = self._spots_mapa_2d(puntos, ix, iy, iz)
+    self._pca_scatter_todos.setData(spots_todos)
+    if halo_spot is not None:
+      self._pca_scatter_halo.setData([halo_spot])
+
+  def _crea_items_mapa_2d(self):
+    """CORRECCION (v6.2): crea los dos ScatterPlotItem persistentes del Mapa 2D."""
+    if not hasattr(self, 'pca_live_plot') or self.pca_live_plot is None:
+      return
+    if getattr(self, '_pca_scatter_todos', None) is None:
+      self._pca_scatter_todos = pg.ScatterPlotItem(x=[], y=[])
+      self.pca_live_plot.addItem(self._pca_scatter_todos)
+    if getattr(self, '_pca_scatter_halo', None) is None:
+      self._pca_scatter_halo = pg.ScatterPlotItem(x=[], y=[])
+      self._pca_scatter_halo.setZValue(10)
+      self.pca_live_plot.addItem(self._pca_scatter_halo)
+
+  def _spots_mapa_2d(self, puntos, ix, iy, iz):
+    """
+    CORRECCION (v6.2): construye (lista_spots, spot_halo) para los items del Mapa 2D.
+    Ajusta ademas los rangos X/Y al maximo de los puntos acumulados (misma regla 1.15/piso 50 uV).
+    """
     colores_vocal_rgb = {
       'A': (230, 57, 70),   # #E63946 Rojo
       'E': (31, 119, 180),  # #1F77B4 Azul
@@ -11748,58 +11769,68 @@ class RealTimePlotter(QtWidgets.QWidget):
       'U': (231, 166, 26),  # #E7A61A Amarillo
       '?': (148, 163, 184), # #94A3B8 Gris pizarra
     }
-
+    n_puntos = len(puntos)
     vals_x = [float(p.get("canales", [p.get("x", 0.0), p.get("y", 0.0), p.get("z", 0.0)])[ix]) for p in puntos]
     vals_y = [float(p.get("canales", [p.get("x", 0.0), p.get("y", 0.0), p.get("z", 0.0)])[iy]) for p in puntos]
     vals_z = [float(p.get("canales", [p.get("x", 0.0), p.get("y", 0.0), p.get("z", 0.0)])[iz]) for p in puntos]
 
-    max_x = max(50.0, float(np.max(vals_x)) * 1.15)
-    max_y = max(50.0, float(np.max(vals_y)) * 1.15)
-    max_z = max(30.0, float(np.max(vals_z)))
+    max_x = max(50.0, float(np.max(vals_x)) * 1.15) if vals_x else 50.0
+    max_y = max(50.0, float(np.max(vals_y)) * 1.15) if vals_y else 50.0
+    max_z = max(30.0, float(np.max(vals_z))) if vals_z else 30.0
     self.pca_live_plot.setXRange(0.0, max_x, padding=0.03)
     self.pca_live_plot.setYRange(0.0, max_y, padding=0.03)
 
-    n_puntos = len(puntos)
-    for idx_p, pt in enumerate(puntos):
+    spots = []
+    for idx_p in range(n_puntos):
       es_ultimo = (idx_p == n_puntos - 1)
-      rgb = colores_vocal_rgb.get(pt.get("vocal", "?"), (148, 163, 184))
-      px_val = vals_x[idx_p]
-      py_val = vals_y[idx_p]
-      pz_val = vals_z[idx_p]
-      sz = float(np.clip(8.5 + (pz_val / max_z) * 14.0, 8.5, 22.5))
-
+      rgb = colores_vocal_rgb.get(puntos[idx_p].get("vocal", "?"), (148, 163, 184))
+      sz = float(np.clip(8.5 + (vals_z[idx_p] / max_z) * 14.0, 8.5, 22.5))
       if es_ultimo:
-        halo = pg.ScatterPlotItem(
-          x=[px_val],
-          y=[py_val],
-          size=sz + 8.0,
-          symbol='o',
-          pen=pg.mkPen('#FFFFFF', width=2.0),
-          brush=pg.mkBrush(255, 255, 255, 35),
-        )
-        self.pca_live_plot.addItem(halo)
-        punto_item = pg.ScatterPlotItem(
-          x=[px_val],
-          y=[py_val],
-          size=sz,
-          symbol='o',
-          pen=pg.mkPen('#FFFFFF', width=1.4),
-          brush=pg.mkBrush(*rgb, 255),
-        )
-        self.pca_live_plot.addItem(punto_item)
+        pen_p = pg.mkPen('#FFFFFF', width=1.4)
+        alpha_p = 255
       else:
-        alpha = int(95 + (130 * idx_p) / max(1, n_puntos))
-        punto_item = pg.ScatterPlotItem(
-          x=[px_val],
-          y=[py_val],
-          size=sz,
-          symbol='o',
-          pen=pg.mkPen('#FFFFFF', width=0.6),
-          brush=pg.mkBrush(*rgb, alpha),
-        )
-        self.pca_live_plot.addItem(punto_item)
+        pen_p = pg.mkPen('#FFFFFF', width=0.6)
+        alpha_p = int(min(255, 95 + (130 * idx_p) / max(1, n_puntos)))
+      spots.append({
+        'pos': (vals_x[idx_p], vals_y[idx_p]),
+        'size': sz,
+        'brush': pg.mkBrush(*rgb, alpha_p),
+        'pen': pen_p,
+      })
 
-  def _actualizar_medidor_pca_vivo(self, pulse_event):
+    halo_spot = None
+    if n_puntos > 0:
+      sz_last = float(np.clip(8.5 + (vals_z[-1] / max_z) * 14.0, 8.5, 22.5))
+      halo_spot = {
+        'pos': (vals_x[-1], vals_y[-1]),
+        'size': sz_last + 8.0,
+        'brush': pg.mkBrush(255, 255, 255, 35),
+        'pen': pg.mkPen('#FFFFFF', width=2.0),
+      }
+    return spots, halo_spot
+
+  def _agregar_punto_mapa_2d_incremental(self):
+    """
+    CORRECCION (v6.2): actualiza el Mapa 2D tras cada pulso SIN reconstruir la base ni recrear
+    items Qt: refresca los dos ScatterPlotItem persistentes con un solo setData por pulso.
+    Si los items no existen (primer pulso o proyeccion cambiada), cae al redibujo completo.
+    """
+    if not hasattr(self, 'pca_live_plot') or self.pca_live_plot is None:
+      return
+    puntos = getattr(self, 'pca_uv_puntos', None) or []
+    if not puntos:
+      return
+    if getattr(self, '_pca_scatter_todos', None) is None or getattr(self, '_pca_scatter_halo', None) is None:
+      # Requiere redibujo completo una sola vez (pinta base, historial y crea los items persistentes).
+      self._redibujar_puntos_acumulados_mapa_2d()
+      return
+    ix, iy, iz, _titulo_par = self._indices_proyeccion_activa_mapa_2d()
+    spots_todos, halo_spot = self._spots_mapa_2d(puntos, ix, iy, iz)
+    self._pca_scatter_todos.setData(spots_todos)
+    if halo_spot is not None:
+      self._pca_scatter_halo.setData([halo_spot])
+
+  def _actualizar_medidor_pca_vivo(self, pulse_event, info_uv=None):
     """
     Actualiza el Monitor Muscular 2D en Vivo por Energía (Solla-Hopfield-Mindlin)
     permitiendo alternar en cualquier momento entre:
@@ -11807,11 +11838,14 @@ class RealTimePlotter(QtWidgets.QWidget):
       - Canal 1 vs Canal 3 (Tamaño = Canal 2)
       - Canal 2 vs Canal 3 (Tamaño = Canal 1)
     y mostrando al pie los 3 valores numéricos en microvoltios reales.
+    CORRECCION (v6.2): acepta info_uv precalculado por _registrar_uv_pulso para evitar el doble
+    calculo por pulso; si no se pasa, lo computa igual que antes.
     """
     if not hasattr(self, 'pca_live_plot') or self.pca_live_plot is None:
       return
 
-    info_uv = self._amplitudes_uv_del_pulso(pulse_event)
+    if info_uv is None:
+      info_uv = self._amplitudes_uv_del_pulso(pulse_event)
     if info_uv is None:
       return
 
@@ -11864,7 +11898,8 @@ class RealTimePlotter(QtWidgets.QWidget):
     if len(self.pca_uv_puntos) > 120:
       self.pca_uv_puntos = self.pca_uv_puntos[-120:]
 
-    self._redibujar_puntos_acumulados_mapa_2d()
+    # CORRECCION (v6.2): camino incremental, sin reconstruir los items Qt en cada pulso.
+    self._agregar_punto_mapa_2d_incremental()
 
     if hasattr(self, 'lbl_pca_live_metrics') and self.lbl_pca_live_metrics is not None:
       self.lbl_pca_live_metrics.setText(

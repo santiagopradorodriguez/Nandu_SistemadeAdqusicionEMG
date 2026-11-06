@@ -309,6 +309,9 @@ class WebcamCaptureThread(QtCore.QThread):
                         cap = None
                         with self._lock:
                             self._is_open = False
+                            # CORRECCION (v6.2): invalidar el frame en cache para no seguir exportando
+                            # la misma imagen vieja con equipo perdido (snapshots repetidos con recientes timestamps).
+                            self._latest_frame = None
                         self.cameraStatusChanged.emit(False, f"Buscando cámara {self.camera_index}...")
                         consecutive_failures = 0
                     else:
