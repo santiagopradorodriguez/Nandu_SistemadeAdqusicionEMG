@@ -61,7 +61,7 @@ else:
     pg.setConfigOption('background', '#ffffff')
     pg.setConfigOption('foreground', '#000000')
 
-MAX_POINTS_TO_PLOT = 25_000 # Límite optimizado para LTTB (muy fluido y preserva picos)
+MAX_POINTS_TO_PLOT = 8_000 # Optimizado para LTTB ultra-rápido en tiempo real y respuesta inmediata de sliders
 
 def downsample_lttb_fast(x, y, threshold):
     if len(x) <= threshold: return x, y
@@ -818,7 +818,7 @@ class CsvViewerWidget(QWidget):
         self.plot_widget.setClipToView(True) # OPTIMIZACIÓN: Solo dibuja los puntos en pantalla
         self.plot_widget.setLabel('bottom', 'Tiempo', units='s')
         self.plot_widget.setLabel('left', 'Amplitud', units='µV')
-        self.plot_widget.showGrid(x=True, y=True, alpha=0.3)
+        self.plot_widget.showGrid(x=True, y=True, alpha=0.65)
         self.plot_widget.addLegend()
         self.plot_widget.sigXRangeChanged.connect(self._on_plot_xrange_changed)
         self.plot_widget.sigYRangeChanged.connect(self._on_plot_yrange_changed)
@@ -1660,6 +1660,8 @@ class CsvViewerWidget(QWidget):
     def update_plot(self):
         if self.df is None: return
         self.plot_widget.clear()
+        self._processed_channel_y = {}
+        self._active_plot_curves = {}
         
         # Limpiar la leyenda para evitar que se acumulen nombres viejos (canales "fantasma")
         if getattr(self.plot_widget.plotItem, 'legend', None) is not None:
@@ -1734,9 +1736,13 @@ class CsvViewerWidget(QWidget):
                 offset_val = self.channel_offsets.get(canal, 0)
                 y_data = y_data + offset_val
                     
-                # 6. Downsampling y Graficación
-                x_plot, y_plot = downsample_lttb_fast(self.time_data, y_data, MAX_POINTS_TO_PLOT)
-                self.plot_widget.plot(x_plot, y_plot, name=nombre_plot, pen=pg.mkPen(color, width=1.5))
+                # 6. Downsampling dinámico sobre la ventana visible [x_min, x_max]
+                # En ventanas cortas (<= 3 s) grafica el 100% de las muestras reales sin submuestreo.
+                self._processed_channel_y[canal] = y_data
+                x_plot, y_plot = self._slice_and_downsample_visible(self.time_data, y_data)
+                curva_csv = self.plot_widget.plot(x_plot, y_plot, name=nombre_plot, pen=pg.mkPen(color, width=1))
+                curva_csv.setClipToView(True)
+                self._active_plot_curves[canal] = curva_csv
 
     def _on_offset_changed(self, canal, offset_val):
         self.channel_offsets[canal] = offset_val
@@ -1756,12 +1762,61 @@ class CsvViewerWidget(QWidget):
         # En vez de autoRange() que rompe la sincronización, aplicamos manualmente
         self._apply_view_ranges()
 
+    def _slice_and_downsample_visible(self, t_arr, y_arr, x_range=None):
+        """
+        Recorta primero los datos al rango temporal visible [x_min, x_max] (con margen de 15%)
+        y recién después aplica LTTB/MinMax sobre la ventana recortada.
+        Si la ventana visible es <= 3.0 segundos (o tiene <= 16000 muestras), devuelve todas las
+        muestras reales sin pérdida alguna de morfología ni picos de acción muscular.
+        """
+        if t_arr is None or len(t_arr) == 0:
+            return t_arr, y_arr
+        if x_range is None:
+            try:
+                vb_range = self.plot_widget.viewRange()[0]
+                if vb_range and (vb_range[1] - vb_range[0]) > 1e-4:
+                    x_range = (float(vb_range[0]), float(vb_range[1]))
+            except Exception:
+                x_range = None
+        if x_range is None:
+            t_start = self.slider_time.value() / 100.0 if hasattr(self, 'slider_time') else float(t_arr[0])
+            dur = self.spin_zoom_x.value() if hasattr(self, 'spin_zoom_x') else float(t_arr[-1] - t_arr[0])
+            x_range = (t_start, t_start + max(0.05, dur))
+
+        x_min, x_max = float(x_range[0]), float(x_range[1])
+        span = max(0.01, x_max - x_min)
+        margin = span * 0.15
+        i0 = max(0, int(np.searchsorted(t_arr, x_min - margin, side='left')) - 1)
+        i1 = min(len(t_arr), int(np.searchsorted(t_arr, x_max + margin, side='right')) + 1)
+        if i1 - i0 < 2:
+            return downsample_lttb_fast(t_arr, y_arr, MAX_POINTS_TO_PLOT)
+
+        t_sub = t_arr[i0:i1]
+        y_sub = y_arr[i0:i1]
+        # En zoom fino (<= 3.0 s) o si caben dentro del presupuesto ampliado, mostrar 100% muestras reales
+        budget = 24_000 if span <= 3.0 else MAX_POINTS_TO_PLOT
+        if span <= 3.0 and len(t_sub) <= 150_000:
+            return t_sub, y_sub
+        return downsample_lttb_fast(t_sub, y_sub, budget)
+
+    def _refresh_visible_curves_resolution(self, x_range=None):
+        """Actualiza en vivo los puntos de las curvas ya filtradas al hacer zoom o desplazar en X."""
+        if not hasattr(self, '_processed_channel_y') or not hasattr(self, '_active_plot_curves'):
+            return
+        for canal, y_data in self._processed_channel_y.items():
+            curva = self._active_plot_curves.get(canal)
+            if curva is not None:
+                x_plot, y_plot = self._slice_and_downsample_visible(self.time_data, y_data, x_range=x_range)
+                curva.setData(x_plot, y_plot)
+
     def _apply_view_ranges(self):
         if self.df is None or self._updating_sliders: return
         
         t_start = self.slider_time.value() / 100.0
         duracion = self.spin_zoom_x.value()
-        self.plot_widget.setXRange(t_start, t_start + duracion, padding=0)
+        x_rng = (t_start, t_start + duracion)
+        self.plot_widget.setXRange(x_rng[0], x_rng[1], padding=0)
+        self._refresh_visible_curves_resolution(x_range=x_rng)
         
         amp_pct = self.slider_zoom_y.value() / 100.0
         y_span = (self.global_max_y * 2.5) * amp_pct
@@ -1780,12 +1835,13 @@ class CsvViewerWidget(QWidget):
         self._apply_view_ranges()
 
     def _on_plot_xrange_changed(self, _, range_tuple):
-        """Sincronizar slider cuando el usuario arrastra el gráfico con el mouse en el eje X"""
+        """Sincronizar slider y resolución de la señal cuando el usuario hace zoom o arrastra en el eje X"""
         if self._updating_sliders or self.df is None: return
         self._updating_sliders = True
         self.slider_time.setValue(int(range_tuple[0] * 100))
         duracion = range_tuple[1] - range_tuple[0]
-        self.spin_zoom_x.setValue(max(0.1, duracion))
+        self.spin_zoom_x.setValue(max(0.05, duracion))
+        self._refresh_visible_curves_resolution(x_range=range_tuple)
         self._updating_sliders = False
 
     def _on_plot_yrange_changed(self, _, range_tuple):

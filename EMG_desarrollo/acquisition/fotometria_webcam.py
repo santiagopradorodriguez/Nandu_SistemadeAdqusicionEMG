@@ -10,6 +10,7 @@
 import csv
 import hashlib
 import json
+import math
 import os
 import pathlib
 import re
@@ -258,6 +259,8 @@ class WebcamCaptureThread(QtCore.QThread):
             if cap is not None and cap.isOpened():
                 try:
                     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+                    cap.set(cv2.CAP_PROP_FPS, 60.0)
                 except Exception:
                     pass
                 cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.frame_width)
@@ -613,9 +616,9 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
         hud_layout = QtWidgets.QGridLayout(hud_group)
         hud_layout.setSpacing(8)
 
-        self.badge_yaw = self._create_metric_badge("Yaw (Giro): --°")
-        self.badge_pitch = self._create_metric_badge("Pitch (Inclinación): --°")
-        self.badge_roll = self._create_metric_badge("Roll (Ladeo): --°")
+        self.badge_yaw = self._create_metric_badge("Giro (Yaw): --°")
+        self.badge_pitch = self._create_metric_badge("Inclinación (Pitch): --°")
+        self.badge_roll = self._create_metric_badge("Ladeo (Roll): --°")
         self.badge_dist = self._create_metric_badge("Distancia: -- cm")
 
         hud_layout.addWidget(self.badge_yaw, 0, 0)
@@ -774,9 +777,14 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
         calib_layout.addLayout(dims_grid)
 
         self.chk_show_ears = QtWidgets.QCheckBox("Mostrar Detección de Orejas (Trago y Lóbulo)")
-        self.chk_show_ears.setChecked(True)
+        self.chk_show_ears.setChecked(False)
         self.chk_show_ears.toggled.connect(self._update_preview)
         calib_layout.addWidget(self.chk_show_ears)
+
+        self.chk_show_landmarks = QtWidgets.QCheckBox("Mostrar puntos faciales guía (Landmarks)")
+        self.chk_show_landmarks.setChecked(False)
+        self.chk_show_landmarks.toggled.connect(self._update_preview)
+        calib_layout.addWidget(self.chk_show_landmarks)
 
         right_col.addWidget(calib_group)
 
@@ -1359,10 +1367,14 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
         self._update_preview()
 
     def _on_load_ghost_reference(self) -> None:
-        start_dir = os.getcwd()
+        start_dir = os.path.join(os.getcwd(), "EMG_desarrollo", "base_de_datos_electrodos")
+        if not os.path.exists(start_dir):
+            start_dir = os.path.join(os.getcwd(), "base_de_datos_electrodos")
+        if not os.path.exists(start_dir):
+            start_dir = os.getcwd()
         filepath, _ = QtWidgets.QFileDialog.getOpenFileName(
             self,
-            "Seleccionar calibracion_espacial.json de sesión anterior",
+            "Seleccionar metadata_fotometria.json o calibracion_espacial.json",
             start_dir,
             "Archivos JSON (*.json);;Todos los archivos (*)",
         )
@@ -1374,6 +1386,27 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
                 data = json.load(f)
             meta = data.get("metadatos_calibracion_espacial", data)
             electrodos = meta.get("electrodos", [])
+            # Fallback a electrodos en raíz si vienen directo de metadata_fotometria.json
+            if not electrodos and "electrodos" in data:
+                electrodos = data["electrodos"]
+                if isinstance(meta, dict) and "electrodos" not in meta:
+                    meta["electrodos"] = electrodos
+
+            # Fallback si vienen definidos en el montaje por canal
+            if not electrodos and "montaje" in data:
+                montaje = data["montaje"]
+                electrodos = []
+                for ch_k, ch_val in montaje.items():
+                    if isinstance(ch_val, dict):
+                        p_pos = ch_val.get("polo_positivo")
+                        p_neg = ch_val.get("polo_negativo")
+                        if p_pos and p_pos.get("v_idx") is not None:
+                            electrodos.append({"id_electrodo": f"{ch_k}_pos", "canal": ch_k, "polo": "+", **p_pos})
+                        if p_neg and p_neg.get("v_idx") is not None:
+                            electrodos.append({"id_electrodo": f"{ch_k}_neg", "canal": ch_k, "polo": "-", **p_neg})
+                if isinstance(meta, dict):
+                    meta["electrodos"] = electrodos
+
             if not electrodos:
                 QtWidgets.QMessageBox.warning(
                     self,
@@ -1387,7 +1420,7 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
             self.chk_show_ghost.setEnabled(True)
             self.chk_show_ghost.setChecked(True)
             self.lbl_ghost_status.setText(
-                f"[Ghost activo] {os.path.basename(filepath)} ({len(electrodos)} electrodos)"
+                f"[Ghost activo] {os.path.basename(filepath)} ({len(electrodos)} polos)"
             )
             self.lbl_ghost_status.setStyleSheet("color: #00ffcc; font-size: 11px; font-weight: bold;")
             self._update_preview()
@@ -1473,9 +1506,9 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
                 2,
                 cv2.LINE_AA,
             )
-            self._set_badge_status(self.badge_yaw, "Yaw: Sin rostro", "bad")
-            self._set_badge_status(self.badge_pitch, "Pitch: Sin rostro", "bad")
-            self._set_badge_status(self.badge_roll, "Roll: Sin rostro", "bad")
+            self._set_badge_status(self.badge_yaw, "Giro: Sin rostro", "bad")
+            self._set_badge_status(self.badge_pitch, "Inclinación: Sin rostro", "bad")
+            self._set_badge_status(self.badge_roll, "Ladeo: Sin rostro", "bad")
             self._set_badge_status(self.badge_dist, "Distancia: --", "bad")
             return
 
@@ -1497,51 +1530,57 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
 
         # Evaluar tolerancias según pose activa (Frontal, Perfil Izq, Submental, Perfil Der)
         target_mode = getattr(self, "_alignment_pose_target", "frontal")
+        es_modo_perfil = target_mode in ("perfil_izquierdo", "perfil_derecho") or self._profile_45_mode
         if target_mode == "perfil_izquierdo":
-            yaw_ok = 30.0 <= yaw <= 55.0
-            yaw_warn = 22.0 <= yaw <= 62.0
+            yaw_ok = 18.0 <= abs(yaw) <= 72.0 and (yaw >= 18.0 or abs(yaw) >= 22.0)
+            yaw_warn = 12.0 <= abs(yaw) <= 80.0
             modo_str = "+45°"
-            target_str = "Perfil Izquierdo: Gire cabeza a la derecha - Yaw +45 deg"
-            pitch_ok = abs(pitch) <= 8.0
-            pitch_warn = abs(pitch) <= 13.0
+            target_str = "Perfil Izquierdo: Gire cabeza a la derecha (+45 deg)"
+            pitch_ok = abs(pitch) <= 16.0
+            pitch_warn = abs(pitch) <= 24.0
         elif target_mode == "perfil_derecho":
-            yaw_ok = -55.0 <= yaw <= -30.0
-            yaw_warn = -62.0 <= yaw <= -22.0
+            yaw_ok = 18.0 <= abs(yaw) <= 72.0 and (yaw <= -18.0 or abs(yaw) >= 22.0)
+            yaw_warn = 12.0 <= abs(yaw) <= 80.0
             modo_str = "-45°"
-            target_str = "Perfil Derecho: Gire cabeza a la izquierda - Yaw -45 deg"
-            pitch_ok = abs(pitch) <= 8.0
-            pitch_warn = abs(pitch) <= 13.0
+            target_str = "Perfil Derecho: Gire cabeza a la izquierda (-45 deg)"
+            pitch_ok = abs(pitch) <= 16.0
+            pitch_warn = abs(pitch) <= 24.0
         elif target_mode == "submental":
-            yaw_ok = abs(yaw) <= 22.0
-            yaw_warn = abs(yaw) <= 30.0
+            yaw_ok = abs(yaw) <= 25.0
+            yaw_warn = abs(yaw) <= 35.0
             modo_str = "+30° Arriba"
-            target_str = "Submental: Levante la barbilla mirando arriba (Pitch +8 a +58 deg)"
+            target_str = "Submental: Levante la barbilla mirando arriba (+8 a +58 deg)"
             pitch_ok = 8.0 <= pitch <= 58.0
             pitch_warn = 4.0 <= pitch <= 65.0
         elif self._profile_45_mode:
-            yaw_ok = 30.0 <= abs(yaw) <= 55.0
-            yaw_warn = 22.0 <= abs(yaw) <= 62.0
+            yaw_ok = 18.0 <= abs(yaw) <= 72.0
+            yaw_warn = 12.0 <= abs(yaw) <= 80.0
             modo_str = "45°"
-            target_str = "Modo Perfil: Gire rostro hasta 30 a 55 grados"
-            pitch_ok = abs(pitch) <= 8.0
-            pitch_warn = abs(pitch) <= 13.0
+            target_str = "Modo Perfil: Gire rostro entre 20 y 65 grados"
+            pitch_ok = abs(pitch) <= 16.0
+            pitch_warn = abs(pitch) <= 24.0
         else:
-            yaw_ok = abs(yaw) <= 6.0
-            yaw_warn = abs(yaw) <= 10.0
+            yaw_ok = abs(yaw) <= 8.0
+            yaw_warn = abs(yaw) <= 14.0
             modo_str = "0°"
             target_str = "Ajuste giro e inclinacion hasta poner semaforos en verde"
-            pitch_ok = abs(pitch) <= 8.0
-            pitch_warn = abs(pitch) <= 13.0
+            pitch_ok = abs(pitch) <= 10.0
+            pitch_warn = abs(pitch) <= 16.0
         if target_mode == "submental":
+            roll_ok = abs(roll) <= 18.0
+            roll_warn = abs(roll) <= 25.0
+            dist_ok = 16.0 <= dist_cm <= 110.0
+            dist_warn = 12.0 <= dist_cm <= 125.0
+        elif es_modo_perfil:
             roll_ok = abs(roll) <= 15.0
             roll_warn = abs(roll) <= 22.0
-            dist_ok = 16.0 <= dist_cm <= 105.0
-            dist_warn = 12.0 <= dist_cm <= 120.0
+            dist_ok = 20.0 <= dist_cm <= 95.0
+            dist_warn = 15.0 <= dist_cm <= 115.0
         else:
-            roll_ok = abs(roll) <= 4.0
-            roll_warn = abs(roll) <= 7.5
-            dist_ok = 30.0 <= dist_cm <= 70.0
-            dist_warn = 24.0 <= dist_cm <= 82.0
+            roll_ok = abs(roll) <= 8.0
+            roll_warn = abs(roll) <= 13.0
+            dist_ok = 26.0 <= dist_cm <= 80.0
+            dist_warn = 20.0 <= dist_cm <= 95.0
 
         all_aligned = yaw_ok and pitch_ok and roll_ok and dist_ok
         guide_color = (118, 230, 0) if all_aligned else (0, 215, 255)
@@ -1578,40 +1617,37 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
             cv2.circle(canvas, pt_l_der, 3, (255, 204, 0), -1, cv2.LINE_AA)
             cv2.putText(canvas, "Oreja R", (pt_t_der[0] + 6, pt_t_der[1] - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.40, (255, 204, 0), 1, cv2.LINE_AA)
 
-        # Contorno de labios y mentón para referencia biométrica
-        pts_2d = fiduciarios["puntos_2d_px"]
-        for lm_idx in (
-            INDICE_LABIO_SUP_INTERNO,
-            INDICE_LABIO_INF_INTERNO,
-            INDICE_COMISURA_IZQ,
-            INDICE_COMISURA_DER,
-            INDICE_MENTON_GNATHION,
-        ):
-            if lm_idx < len(pts_2d):
-                lx, ly = int(pts_2d[lm_idx, 0]), int(pts_2d[lm_idx, 1])
-                cv2.circle(canvas, (lx, ly), 3, (204, 255, 0), -1, cv2.LINE_AA)
+        # Contorno de labios y mentón para referencia biométrica y visualización de landmarks (sutil y conmutable)
+        if getattr(self, "chk_show_landmarks", None) is not None and self.chk_show_landmarks.isChecked():
+            pts_2d = fiduciarios["puntos_2d_px"]
+            for nombre_pt, lm_idx in PUNTOS_TRAZADOS.items():
+                if lm_idx < len(pts_2d):
+                    lx, ly = int(pts_2d[lm_idx, 0]), int(pts_2d[lm_idx, 1])
+                    color_bgr = COLORES_TRAZO_BGR.get(nombre_pt, (204, 255, 0))
+                    cv2.circle(canvas, (lx, ly), 2, color_bgr, -1, cv2.LINE_AA)
+                    cv2.circle(canvas, (lx, ly), 3, (255, 255, 255), 1, cv2.LINE_AA)
 
-        # Actualizar badges en el panel Qt
+        # Actualizar badges en el panel Qt (en español)
         self._set_badge_status(
             self.badge_yaw,
-            f"Yaw - {modo_str}: {yaw:+.1f}°",
+            f"Giro ({modo_str}): {yaw:+.1f}°",
             "ok" if yaw_ok else ("warn" if yaw_warn else "bad"),
         )
         self._set_badge_status(
             self.badge_pitch,
-            f"Pitch: {pitch:+.1f}°",
+            f"Inclinación: {pitch:+.1f}°",
             "ok" if pitch_ok else ("warn" if pitch_warn else "bad"),
         )
         self._set_badge_status(
             self.badge_roll,
-            f"Roll: {roll:+.1f}°",
+            f"Ladeo: {roll:+.1f}°",
             "ok" if roll_ok else ("warn" if roll_warn else "bad"),
         )
 
         dist_tag = "Auto" if "antropometria" in metodo_d else ("D_IP" if "d_ip" in metodo_d else ("IED" if "ied" in metodo_d else "Fija"))
         self._set_badge_status(
             self.badge_dist,
-            f"Dist: {dist_cm:.1f}cm ({dist_tag})",
+            f"Distancia: {dist_cm:.1f} cm ({dist_tag})",
             "ok" if dist_ok else ("warn" if dist_warn else "bad"),
         )
 
@@ -1649,12 +1685,16 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
         proyecciones = self.agent.proyectar_referencia_fantasma(fiduciarios, self._ghost_reference_data)
         for idx, item in enumerate(proyecciones):
             tx, ty = int(item["target_2d_px"][0]), int(item["target_2d_px"][1])
-            cv2.circle(canvas, (tx, ty), 13, (255, 255, 0), 2, cv2.LINE_AA)
-            cv2.circle(canvas, (tx, ty), 6, (255, 0, 255), 1, cv2.LINE_AA)
-            cv2.line(canvas, (tx - 16, ty), (tx + 16, ty), (255, 255, 0), 1, cv2.LINE_AA)
-            cv2.line(canvas, (tx, ty - 16), (tx, ty + 16), (255, 255, 0), 1, cv2.LINE_AA)
+            polo = item.get("polo", "")
+            # Color verde brillante de precisión para guía de alineación
+            color_aro = (0, 255, 136) if polo == "+" else ((255, 170, 0) if polo == "-" else (0, 255, 204))
+            cv2.circle(canvas, (tx, ty), 11, color_aro, 1, cv2.LINE_AA)
+            cv2.circle(canvas, (tx, ty), 3, (255, 255, 255), -1, cv2.LINE_AA)
+            cv2.line(canvas, (tx - 10, ty), (tx + 10, ty), color_aro, 1, cv2.LINE_AA)
+            cv2.line(canvas, (tx, ty - 10), (tx, ty + 10), color_aro, 1, cv2.LINE_AA)
 
-            etiqueta = f"Ghost {item.get('canal', idx)}"
+            nombre_canal = item.get("canal") or f"Ch{idx}"
+            etiqueta = f"{nombre_canal} {polo}".strip()
             if idx < len(self._manual_points_px):
                 mx, my = self._manual_points_px[idx]
                 err_px = float(np.hypot(mx - tx, my - ty))
@@ -1662,10 +1702,10 @@ class InitialAlignmentDialog(QtWidgets.QDialog):
             cv2.putText(
                 canvas,
                 etiqueta,
-                (tx + 14, ty - 8),
+                (tx + 12, ty - 6),
                 cv2.FONT_HERSHEY_SIMPLEX,
-                0.44,
-                (255, 255, 0),
+                0.40,
+                color_aro,
                 1,
                 cv2.LINE_AA,
             )
@@ -2316,7 +2356,8 @@ NOMBRE_FOTO_SUBMENTAL = "03_submental.png"
 NOMBRE_FOTO_PERFIL_DERECHO = "04_perfil_derecho.png"
 NOMBRE_METADATA_FOTOMETRIA = "metadata_fotometria.json"
 D_IP_NOMINAL_DEFECTO_MM = 63.0
-TICKS_VERDE_CAPTURA = 16
+TICKS_VERDE_CAPTURA = 45
+TICKS_VERDE_FRONTAL = 55
 
 PALETA_CANALES_MONTAJE = [
     (0, 255, 128),
@@ -2986,15 +3027,36 @@ class _DialogoComentarioSesion(QtWidgets.QDialog):
 # extra de MediaPipe) y unos microsegundos por marco en el append.
 # =====================================================================
 PUNTOS_TRAZADOS = {
-    "comisura_izq": 61,   # comisura labial izquierda
-    "comisura_der": 291,  # comisura labial derecha
-    "labio_sup": 13,      # centro del labio superior
-    "labio_inf": 14,      # centro del labio inferior
-    "menton": 152,        # menton (referencia mandibular)
+    "comisura_izq": 61,    # comisura labial izquierda (cheilion izq)
+    "comisura_der": 291,   # comisura labial derecha (cheilion der)
+    "labio_sup": 13,       # centro del labio superior (labiale superius)
+    "labio_inf": 14,       # centro del labio inferior (labiale inferius)
+    "menton": 152,         # menton (gnathion, referencia mandibular)
+    "mejilla_izq": 207,    # centro de la mejilla izquierda (buccinador medio)
+    "mejilla_der": 427,    # centro de la mejilla derecha (buccinador medio)
+    "risorio_izq": 214,    # traccion horizontal del risorio izquierdo (debajo de mejilla)
+    "risorio_der": 434,    # traccion horizontal del risorio derecho (debajo de mejilla)
+    "masetero_izq": 58,    # vientre anterior del masetero / rama mandibular izquierda
+    "masetero_der": 288,   # vientre anterior del masetero / rama mandibular derecha
+    "malar_izq": 123,      # pomulo / malar superior izquierdo (cigomatico mayor)
+    "malar_der": 352,      # pomulo / malar superior derecho (cigomatico mayor)
+    "cupido_izq": 37,      # cresta philtrum / arco cupido izquierdo
+    "cupido_der": 267,     # cresta philtrum / arco cupido derecho
+    "labio_inf_izq": 84,   # vermellon inferior paramedial izquierdo
+    "labio_inf_der": 314,  # vermellon inferior paramedial derecho
+    "submenton": 199,      # region submandibular / suelo bucal posterior
+    # Landmarks óseos invariantes a la fonación (Tarea A - Head Frame):
+    "nariz": 1,            # pronasale (punta nasal)
+    "puente_nasal": 4,     # puente nasal óseo
+    "glabela": 10,         # frente / glabela
+    "ojo_izq": 33,         # canto ocular externo izquierdo
+    "ojo_der": 263,        # canto ocular externo derecho
+    "trago_izq": 234,      # trago / insercion auricular izquierda
+    "trago_der": 454,      # trago / insercion auricular derecha
 }
 REFERENCIA_TRAZADO = 1                 # punta de nariz: referencia de profundidad relativa
-TRAZADO_CADENCIA_MIN_S = 1.0 / 15.0    # registrar como maximo ~15 Hz (descarte de extras)
-TRAZADO_LARGO_HISTORIAL = 900          # ~60 s de rastro a 15 Hz
+TRAZADO_CADENCIA_MIN_S = 1.0 / 60.0    # registrar hasta 60 Hz nativos (16.6 ms para capturar transitorios de 60-100 ms)
+TRAZADO_LARGO_HISTORIAL = 72000        # ~20 min de rastro continuo a 60 Hz sin descartar muestras
 TRAZADO_N_MARCO_RASTRO = 48            # cuantos puntos hacia atras se dibujan en preview
 COLORES_TRAZO_BGR = {
     "comisura_izq": (60, 180, 255),
@@ -3002,28 +3064,83 @@ COLORES_TRAZO_BGR = {
     "labio_sup": (255, 80, 220),
     "labio_inf": (70, 250, 250),
     "menton": (100, 255, 120),
+    "mejilla_izq": (255, 160, 50),     # centro de mejilla
+    "mejilla_der": (255, 160, 50),
+    "risorio_izq": (50, 220, 255),     # risorio (amarillo dorado brillante)
+    "risorio_der": (50, 220, 255),
+    "masetero_izq": (0, 165, 255),     # masetero medio / borde mandibular (naranja rojizo)
+    "masetero_der": (0, 165, 255),
+    "malar_izq": (180, 100, 255),      # pomulo / malar: purpura
+    "malar_der": (160, 80, 255),
+    "cupido_izq": (255, 120, 180),
+    "cupido_der": (255, 120, 180),
+    "labio_inf_izq": (120, 220, 255),
+    "labio_inf_der": (120, 220, 255),
+    "submenton": (80, 200, 160),
+    "nariz": (0, 255, 255),
+    "puente_nasal": (0, 220, 220),
+    "glabela": (255, 255, 0),
+    "ojo_izq": (255, 200, 0),
+    "ojo_der": (255, 200, 0),
+    "trago_izq": (200, 200, 255),
+    "trago_der": (200, 200, 255),
 }
+COLUMNAS_EXTENDIDAS_RIGIDO = [
+    "yaw_deg",
+    "pitch_deg",
+    "roll_deg",
+    "ap_bruto_mm",
+    "com_bruto_mm",
+    "mej_bruto_mm",
+    "mal_bruto_mm",
+    "mas_bruto_mm",
+    "ap_rigido_mm",
+    "com_rigido_mm",
+    "mej_rigido_mm",
+    "mal_rigido_mm",
+    "mas_rigido_mm",
+]
 
 
 class TrazadorVideoPuntos:
-    """Acumula la trayectoria temporal de los puntos faciales clave.
+    """Acumula la trayectoria temporal de los puntos faciales clave y biomarcadores cinematicos.
 
     Se alimenta de los fiduciarios que el asistente lineal ya extrae por marco
-    en `_update_preview` (deteccion frame a frame): no crea hilos, no crea un
-    landmarker extra y su unico trabajo por registro es guardar coordenadas en
-    un `deque` acotado funciona como buffer circular. Incluye dibujado del rastro
-    sobre el preview y exportacion a CSV junto al resto del montaje.
+    en `_update_preview` o del tracker continuo en segundo plano durante la grabacion DAQ:
+    guarda coordenadas y biomarcadores cinematicos en un `deque` circular. Incluye
+    dibujado del rastro sobre el preview y exportacion a CSV junto al resto del montaje.
     """
 
     def __init__(self, historial_muestras: int = TRAZADO_LARGO_HISTORIAL) -> None:
         self._lock = threading.Lock()
         self._muestras = deque(maxlen=int(historial_muestras))
         self.habilitado = True
-        self.ver_rastro = True
+        self.ver_rastro = False
         self._t_ultima = 0.0
+        self._t0_grabacion: Optional[float] = None
 
-    def registrar(self, fiduciarios: Optional[Dict[str, Any]], t_perf: float) -> None:
-        """Registra una muestra de trayectoria (o el hueco por rostro perdido)."""
+    def iniciar_grabacion_sincronizada(self, t0_perf: float) -> None:
+        """Reinicia el historial y fija t0 para sincronizacion precisa con el DAQ."""
+        with self._lock:
+            self._muestras.clear()
+            self._t0_grabacion = float(t0_perf)
+            self._t_ultima = 0.0
+            self.habilitado = True
+
+    def reanclar_t0(self, nuevo_t0_perf: float) -> None:
+        """Actualiza el instante t0 sin borrar las muestras previas de ruido basal."""
+        with self._lock:
+            self._t0_grabacion = float(nuevo_t0_perf)
+            self.habilitado = True
+
+    def registrar(
+        self,
+        fiduciarios: Optional[Dict[str, Any]],
+        t_perf: float,
+        vocal_activa: str = "",
+        pulso_idx: int = -1,
+    ) -> None:
+        """Registra una muestra de trayectoria y calcula 3 biomarcadores cinematicos."""
         if not getattr(self, "habilitado", False) or fiduciarios is None:
             return
         with self._lock:
@@ -3046,7 +3163,99 @@ class TrazadorVideoPuntos:
                     )
             if not pts:
                 return
-            self._muestras.append({"t": float(t_perf), "ok": True, "pts": pts})
+
+            dip_val = fiduciarios.get("distancia_interpupilar_px")
+            try:
+                dip_px = float(dip_val) if dip_val is not None else 1.0
+            except (ValueError, TypeError):
+                dip_px = 1.0
+            escala = 63.0 / dip_px if dip_px > 1.0 else 1.0
+
+            # Biomarcadores cinemáticos brutos (2D escalado por DIP) y compensados por Cuerpo Rígido (Head Frame 3D)
+            r_loc = fiduciarios.get("puntos_locales_craneo_mm")
+            if r_loc is None:
+                try:
+                    info_hf = AntigravityAgent.calcular_marco_craneal_y_proyeccion_local(p2d, p3d)
+                    r_loc = info_hf["r_local_mm"]
+                except Exception:
+                    r_loc = None
+
+            def _dist_2d_pts(a_name, b_name):
+                if a_name in pts and b_name in pts:
+                    pa, pb = pts[a_name], pts[b_name]
+                    return math.hypot(pa[0] - pb[0], pa[1] - pb[1]) * escala
+                return 0.0
+
+            def _dist_3d_loc(idx_a, idx_b):
+                if r_loc is not None and max(idx_a, idx_b) < len(r_loc):
+                    return float(np.linalg.norm(r_loc[idx_a] - r_loc[idx_b]))
+                return 0.0
+
+            ap_bruto_mm = _dist_2d_pts("labio_sup", "labio_inf")
+            com_bruto_mm = _dist_2d_pts("comisura_izq", "comisura_der")
+            mej_bruto_mm = 0.5 * (_dist_2d_pts("comisura_izq", "mejilla_izq") + _dist_2d_pts("comisura_der", "mejilla_der"))
+            mal_bruto_mm = 0.5 * (_dist_2d_pts("comisura_izq", "malar_izq") + _dist_2d_pts("comisura_der", "malar_der"))
+            mas_bruto_mm = 0.5 * (_dist_2d_pts("comisura_izq", "masetero_izq") + _dist_2d_pts("comisura_der", "masetero_der"))
+
+            ap_rigido_mm = _dist_3d_loc(13, 14) if r_loc is not None else ap_bruto_mm
+            com_rigido_mm = _dist_3d_loc(61, 291) if r_loc is not None else com_bruto_mm
+            mej_rigido_mm = 0.5 * (_dist_3d_loc(61, 207) + _dist_3d_loc(291, 427)) if r_loc is not None else mej_bruto_mm
+            mal_rigido_mm = 0.5 * (_dist_3d_loc(61, 123) + _dist_3d_loc(291, 352)) if r_loc is not None else mal_bruto_mm
+            mas_rigido_mm = 0.5 * (_dist_3d_loc(61, 58) + _dist_3d_loc(291, 288)) if r_loc is not None else mas_bruto_mm
+
+            apertura_vertical_mm = ap_bruto_mm
+            ancho_comisuras_mm = com_bruto_mm
+
+            descenso_menton_mm = 0.0
+            if r_loc is not None and len(r_loc) > 152:
+                descenso_menton_mm = float(np.linalg.norm(r_loc[152] - r_loc[1]))
+            elif "menton" in pts and n_p > REFERENCIA_TRAZADO:
+                y_nariz = float(p2d[REFERENCIA_TRAZADO][1])
+                y_menton = float(pts["menton"][1])
+                descenso_menton_mm = abs(y_menton - y_nariz) * escala
+
+            # Ángulos craneales instantáneos (yaw, pitch, roll)
+            yaw_deg, pitch_deg, roll_deg = 0.0, 0.0, 0.0
+            try:
+                if "ojo_izq" in pts and "ojo_der" in pts:
+                    dy_o = pts["ojo_der"][1] - pts["ojo_izq"][1]
+                    dx_o = max(abs(pts["ojo_der"][0] - pts["ojo_izq"][0]), 1.0)
+                    roll_deg = float(math.degrees(math.atan2(dy_o, dx_o)))
+                if "nariz" in pts and "trago_izq" in pts and "trago_der" in pts:
+                    c_tr_x = 0.5 * (pts["trago_izq"][0] + pts["trago_der"][0])
+                    sp_tr = max(abs(pts["trago_der"][0] - pts["trago_izq"][0]), 1.0)
+                    yaw_deg = float(math.degrees(math.atan2(pts["nariz"][0] - c_tr_x, 0.45 * sp_tr)))
+                if "nariz" in pts and "ojo_izq" in pts and "ojo_der" in pts and "menton" in pts:
+                    ym_o = 0.5 * (pts["ojo_izq"][1] + pts["ojo_der"][1])
+                    sp_om = max(abs(pts["menton"][1] - ym_o), 1.0)
+                    ratio_nv = ((pts["nariz"][1] - ym_o) / sp_om) - 0.365
+                    pitch_deg = float(math.degrees(math.atan2(0.7 * ratio_nv, 0.45)))
+            except Exception:
+                pass
+
+            self._muestras.append({
+                "t": float(t_perf),
+                "ok": True,
+                "pts": pts,
+                "vocal": str(vocal_activa),
+                "pulso": int(pulso_idx),
+                "apertura_mm": round(float(apertura_vertical_mm), 3),
+                "comisuras_mm": round(float(ancho_comisuras_mm), 3),
+                "menton_mm": round(float(descenso_menton_mm), 3),
+                "yaw_deg": round(float(yaw_deg), 2),
+                "pitch_deg": round(float(pitch_deg), 2),
+                "roll_deg": round(float(roll_deg), 2),
+                "ap_bruto_mm": round(float(ap_bruto_mm), 3),
+                "com_bruto_mm": round(float(com_bruto_mm), 3),
+                "mej_bruto_mm": round(float(mej_bruto_mm), 3),
+                "mal_bruto_mm": round(float(mal_bruto_mm), 3),
+                "mas_bruto_mm": round(float(mas_bruto_mm), 3),
+                "ap_rigido_mm": round(float(ap_rigido_mm), 3),
+                "com_rigido_mm": round(float(com_rigido_mm), 3),
+                "mej_rigido_mm": round(float(mej_rigido_mm), 3),
+                "mal_rigido_mm": round(float(mal_rigido_mm), 3),
+                "mas_rigido_mm": round(float(mas_rigido_mm), 3),
+            })
 
     def marcar_rostro_perdido(self, t_perf: float) -> None:
         """Marca un hueco en el rastro para no enlazar puntos a traves del desvanecimiento."""
@@ -3054,7 +3263,16 @@ class TrazadorVideoPuntos:
             return
         with self._lock:
             if self._muestras and self._muestras[-1].get("ok", True):
-                self._muestras.append({"t": float(t_perf), "ok": False, "pts": {}})
+                self._muestras.append({
+                    "t": float(t_perf),
+                    "ok": False,
+                    "pts": {},
+                    "vocal": "",
+                    "pulso": -1,
+                    "apertura_mm": 0.0,
+                    "comisuras_mm": 0.0,
+                    "menton_mm": 0.0,
+                })
 
     def dibujar_rastro(self, canvas: np.ndarray) -> None:
         """Superpone el rastro reciente de los puntos sobre el marco del preview."""
@@ -3086,22 +3304,53 @@ class TrazadorVideoPuntos:
         with self._lock:
             copia = list(self._muestras)
         muestras_ok = [m for m in copia if m.get("ok")]
-        t0 = muestras_ok[0]["t"] if muestras_ok else None
-        filas: List[List[float]] = []
+        if self._t0_grabacion is not None:
+            t0 = self._t0_grabacion
+        else:
+            t0 = muestras_ok[0]["t"] if muestras_ok else None
+        filas: List[List[Any]] = []
         for muestra in muestras_ok:
-            fila = [round(float(muestra["t"] - t0), 3)]
+            t_rel = round(float(muestra["t"] - (t0 if t0 is not None else 0.0)), 3)
+            fila: List[Any] = [t_rel]
             for nombre in PUNTOS_TRAZADOS:
                 punto = muestra["pts"].get(nombre)
                 if punto is None:
                     fila.extend([0.0, 0.0, 0.0])
                 else:
                     fila.extend([round(float(punto[0]), 2), round(float(punto[1]), 2), round(float(punto[2]), 4)])
+            fila.extend([
+                str(muestra.get("vocal", "")),
+                int(muestra.get("pulso", -1)),
+                float(muestra.get("apertura_mm", 0.0)),
+                float(muestra.get("comisuras_mm", 0.0)),
+                float(muestra.get("menton_mm", 0.0)),
+                float(muestra.get("yaw_deg", 0.0)),
+                float(muestra.get("pitch_deg", 0.0)),
+                float(muestra.get("roll_deg", 0.0)),
+                float(muestra.get("ap_bruto_mm", 0.0)),
+                float(muestra.get("com_bruto_mm", 0.0)),
+                float(muestra.get("mej_bruto_mm", 0.0)),
+                float(muestra.get("mal_bruto_mm", 0.0)),
+                float(muestra.get("mas_bruto_mm", 0.0)),
+                float(muestra.get("ap_rigido_mm", 0.0)),
+                float(muestra.get("com_rigido_mm", 0.0)),
+                float(muestra.get("mej_rigido_mm", 0.0)),
+                float(muestra.get("mal_rigido_mm", 0.0)),
+                float(muestra.get("mas_rigido_mm", 0.0)),
+            ])
             filas.append(fila)
         return {
             "frecuencia_reg_max_hz": round(1.0 / TRAZADO_CADENCIA_MIN_S, 2),
             "puntos": list(PUNTOS_TRAZADOS.keys()),
-            "referencia_z": "punta_nariz",
+            "referencia_z": "marco_local_craneo",
             "t_base_s": round(float(t0), 3) if t0 is not None else 0.0,
+            "columnas_adicionales": [
+                "vocal",
+                "pulso",
+                "apertura_vertical_mm",
+                "ancho_comisuras_mm",
+                "descenso_menton_mm",
+            ] + COLUMNAS_EXTENDIDAS_RIGIDO,
             "n_muestras": len(filas),
             "muestras": filas,
         }
@@ -3380,10 +3629,10 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         grupo_semaforo = QtWidgets.QGroupBox("Semáforo de Alineación en Vivo")
         cuadricula = QtWidgets.QGridLayout(grupo_semaforo)
         cuadricula.setSpacing(8)
-        self.badge_yaw = self._crear_badge("Yaw: --")
-        self.badge_pitch = self._crear_badge("Pitch: --")
-        self.badge_roll = self._crear_badge("Roll: --")
-        self.badge_dist = self._crear_badge("Dist: -- cm")
+        self.badge_yaw = self._crear_badge("Giro: --")
+        self.badge_pitch = self._crear_badge("Inclinación: --")
+        self.badge_roll = self._crear_badge("Ladeo: --")
+        self.badge_dist = self._crear_badge("Distancia: -- cm")
         cuadricula.addWidget(self.badge_yaw, 0, 0)
         cuadricula.addWidget(self.badge_pitch, 0, 1)
         cuadricula.addWidget(self.badge_roll, 0, 2)
@@ -3430,7 +3679,7 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         layout_pasos.addWidget(self.lbl_sub_paso)
 
         fila_foto = QtWidgets.QHBoxLayout()
-        self.btn_tomar_ahora = QtWidgets.QPushButton("Tomar de Todas Formas")
+        self.btn_tomar_ahora = QtWidgets.QPushButton("Capturar Foto Ahora (Manual)")
         self.btn_tomar_ahora.clicked.connect(self._al_tomar_de_todas_formas)
         fila_foto.addWidget(self.btn_tomar_ahora)
         self.btn_repetir_foto = QtWidgets.QPushButton("Repetir Foto de este Paso")
@@ -3942,13 +4191,49 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         neg_pt: Tuple[float, float],
         neg_anc: Optional[Dict[str, Any]],
     ) -> None:
-        """Registra un par bipolar completo con anclajes, IED y angulo."""
+        """Registra un par bipolar completo con anclajes, IED, angulo y distancias a fiduciarios."""
         fisico, nombre = self._nombre_canal(canal_pos)
         ied_px = float(np.hypot(neg_pt[0] - pos_pt[0], neg_pt[1] - pos_pt[1]))
         dip_px = self._dip_px_del_paso()
-        escala = (self.d_ip_nominal_mm / dip_px) if dip_px and dip_px > 1.0 else None
+        escala_local = (self.d_ip_nominal_mm / dip_px) if dip_px and dip_px > 1.0 else None
+        # En vistas inclinadas o laterales (submental / perfil) la distancia interpupilar 2D
+        # sufre escorzo; priorizar la escala frontal calibrada cuando este disponible.
+        if self._paso in (self.PASO_MARCA_SUBMENTAL, self.PASO_MARCA_PERFIL) and self._escala_mm_px_frontal is not None:
+            escala = float(self._escala_mm_px_frontal)
+        else:
+            escala = escala_local if escala_local is not None else self._escala_mm_px_frontal
         ied_mm = ied_px * escala if escala is not None else None
         angulo = float(np.degrees(np.arctan2(neg_pt[1] - pos_pt[1], neg_pt[0] - pos_pt[0])))
+
+        cx = 0.5 * (float(pos_pt[0]) + float(neg_pt[0]))
+        cy = 0.5 * (float(pos_pt[1]) + float(neg_pt[1]))
+        dist_fiduciarios_mm: Dict[str, Optional[float]] = {
+            "dist_nariz_pronasale_mm": None,
+            "dist_menton_gnathion_mm": None,
+            "dist_comisura_labial_mm": None,
+            "dist_oreja_trago_mm": None,
+        }
+        fiduciarios_act = self._frozen_fiduciarios if self._frozen_frame is not None else self._fiduciarios_marco
+        if fiduciarios_act is not None and "puntos_2d_px" in fiduciarios_act and escala is not None:
+            pts_2d = fiduciarios_act["puntos_2d_px"]
+            n_pts = len(pts_2d)
+            if n_pts > 1:
+                dist_fiduciarios_mm["dist_nariz_pronasale_mm"] = round(
+                    float(np.hypot(cx - pts_2d[1, 0], cy - pts_2d[1, 1]) * escala), 2
+                )
+            if n_pts > 152:
+                dist_fiduciarios_mm["dist_menton_gnathion_mm"] = round(
+                    float(np.hypot(cx - pts_2d[152, 0], cy - pts_2d[152, 1]) * escala), 2
+                )
+            if n_pts > 291:
+                d_com_izq = float(np.hypot(cx - pts_2d[61, 0], cy - pts_2d[61, 1]))
+                d_com_der = float(np.hypot(cx - pts_2d[291, 0], cy - pts_2d[291, 1]))
+                dist_fiduciarios_mm["dist_comisura_labial_mm"] = round(min(d_com_izq, d_com_der) * escala, 2)
+            if n_pts > 454:
+                d_tr_izq = float(np.hypot(cx - pts_2d[234, 0], cy - pts_2d[234, 1]))
+                d_tr_der = float(np.hypot(cx - pts_2d[454, 0], cy - pts_2d[454, 1]))
+                dist_fiduciarios_mm["dist_oreja_trago_mm"] = round(min(d_tr_izq, d_tr_der) * escala, 2)
+
         par = {
             "es_bipolar": True,
             "canal_pos": canal_pos,
@@ -3965,6 +4250,7 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
             "escala_mm_px": escala,
             "diametro_gel_mm": float(self.spin_gel_diam_mm.value()),
             "distancia_interelectrodo_nominal_mm": float(self.spin_ied_nominal_mm.value()),
+            **dist_fiduciarios_mm,
         }
         self._pares_por_canal[canal_pos] = par
 
@@ -4111,27 +4397,25 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
             if abs(yaw) > bandas["yaw"][1]:
                 return "casi_frontal"
         elif paso == self.PASO_PERFIL_IZQ:
-            # Perfil Izquierdo exige girar cabeza hacia la derecha (Yaw positivo +25° a +65°)
-            if yaw < 22.0:
+            if abs(yaw) < 18.0:
                 return "siga_derecha"
-            if yaw > 70.0:
+            if abs(yaw) > 74.0:
                 return "regrese"
-            if not (25.0 <= yaw <= 65.0):
+            if not self._yaw_ok(yaw, True):
                 return "casi_perfil"
         elif paso == self.PASO_SUBMENTAL:
             if pitch < 8.0:
                 return "incline_arriba"
             if pitch > 58.0:
                 return "baje_un_poco"
-            if abs(yaw) > 22.0:
+            if abs(yaw) > 25.0:
                 return "centro"
         elif paso == self.PASO_PERFIL_DER:
-            # Perfil Derecho exige girar cabeza hacia la izquierda (Yaw negativo -65° a -25°)
-            if yaw > -22.0:
+            if abs(yaw) < 18.0:
                 return "siga_izquierda"
-            if yaw < -70.0:
+            if abs(yaw) > 74.0:
                 return "regrese"
-            if not (-65.0 <= yaw <= -25.0):
+            if not self._yaw_ok(yaw, True):
                 return "casi_perfil"
         if not self._en_rango(pitch, bandas["pitch_warn"]):
             return "no_incline"
@@ -4202,47 +4486,59 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
     # =====================================================================
 
     def _bandas_objetivo(self) -> Dict[str, Any]:
-        """Rangos direccionales con signo del semaforo segun la pose objetivo del paso actual:
-        - PASO_FRONTAL    : [-8°, +8°]
-        - PASO_PERFIL_IZQ : [+25°, +65°] (giro hacia la derecha)
-        - PASO_SUBMENTAL  : Pitch [+15°, +45°] (mirando hacia arriba - vientre anterior)
-        - PASO_PERFIL_DER : [-65°, -25°] (giro hacia la izquierda)
-        """
+        """Rangos del semáforo según la pose objetivo del paso actual con tolerancias ergonómicas para perfiles."""
         paso = self._paso
-        if paso == self.PASO_PERFIL_IZQ:
-            yaw_rango, yaw_rango_warn = (25.0, 65.0), (18.0, 72.0)
-            pitch_rango, pitch_rango_warn = (-10.0, 10.0), (-16.0, 16.0)
-        elif paso == self.PASO_PERFIL_DER:
-            yaw_rango, yaw_rango_warn = (-65.0, -25.0), (-72.0, -18.0)
-            pitch_rango, pitch_rango_warn = (-10.0, 10.0), (-16.0, 16.0)
-        elif paso == self.PASO_SUBMENTAL:
-            yaw_rango, yaw_rango_warn = (-22.0, 22.0), (-30.0, 30.0)
-            pitch_rango, pitch_rango_warn = (8.0, 58.0), (4.0, 65.0)
-        else:
-            yaw_rango, yaw_rango_warn = (-8.0, 8.0), (-14.0, 14.0)
-            pitch_rango, pitch_rango_warn = (-10.0, 10.0), (-16.0, 16.0)
+        es_perfil = paso in (self.PASO_PERFIL_IZQ, self.PASO_PERFIL_DER)
         es_sub = (paso == self.PASO_SUBMENTAL)
+        if paso == self.PASO_PERFIL_IZQ:
+            yaw_rango, yaw_rango_warn = (18.0, 72.0), (12.0, 80.0)
+            pitch_rango, pitch_rango_warn = (-16.0, 16.0), (-24.0, 24.0)
+        elif paso == self.PASO_PERFIL_DER:
+            yaw_rango, yaw_rango_warn = (-72.0, -18.0), (-80.0, -12.0)
+            pitch_rango, pitch_rango_warn = (-16.0, 16.0), (-24.0, 24.0)
+        elif paso == self.PASO_SUBMENTAL:
+            yaw_rango, yaw_rango_warn = (-25.0, 25.0), (-34.0, 34.0)
+            pitch_rango, pitch_rango_warn = (14.0, 60.0), (8.0, 68.0)
+        else:
+            yaw_rango, yaw_rango_warn = (-8.5, 8.5), (-15.0, 15.0)
+            pitch_rango, pitch_rango_warn = (-11.0, 11.0), (-18.0, 18.0)
         return {
             "yaw": yaw_rango,
             "yaw_warn": yaw_rango_warn,
-            "yaw_absoluto": (25.0, 65.0) if paso in (self.PASO_PERFIL_IZQ, self.PASO_PERFIL_DER) else (0.0, 22.0 if es_sub else 8.0),
-            "yaw_absoluto_warn": (18.0, 72.0) if paso in (self.PASO_PERFIL_IZQ, self.PASO_PERFIL_DER) else (0.0, 30.0 if es_sub else 14.0),
+            "yaw_absoluto": (18.0, 72.0) if es_perfil else (0.0, 25.0 if es_sub else 8.5),
+            "yaw_absoluto_warn": (12.0, 80.0) if es_perfil else (0.0, 34.0 if es_sub else 15.0),
             "pitch": pitch_rango,
             "pitch_warn": pitch_rango_warn,
-            "roll": (-15.0, 15.0) if es_sub else (-6.0, 6.0),
-            "roll_warn": (-22.0, 22.0) if es_sub else (-11.0, 11.0),
-            "dist": (16.0, 105.0) if es_sub else (30.0, 70.0),
-            "dist_warn": (12.0, 120.0) if es_sub else (24.0, 82.0),
+            "roll": (-18.0, 18.0) if es_sub else ((-15.0, 15.0) if es_perfil else (-8.0, 8.0)),
+            "roll_warn": (-25.0, 25.0) if es_sub else ((-22.0, 22.0) if es_perfil else (-13.0, 13.0)),
+            "dist": (16.0, 110.0) if es_sub else ((20.0, 95.0) if es_perfil else (26.0, 78.0)),
+            "dist_warn": (12.0, 125.0) if es_sub else ((15.0, 115.0) if es_perfil else (20.0, 92.0)),
         }
 
     def _en_rango(self, valor: float, rango: Tuple[float, float]) -> bool:
         return rango[0] <= valor <= rango[1]
 
     def _yaw_ok(self, yaw: float, estricto: bool) -> bool:
-        """Compara el yaw CON SIGNO con la banda direccional del paso actual (no admite girar al lado contrario)."""
+        """
+        Evalúa el giro (yaw) de forma robusta frente a espejado horizontal (cv2.flip) o cámara cruda:
+        - En Paso Frontal y Submental: evalúa |yaw| dentro del rango central.
+        - En Paso Perfil Izquierdo: acepta un giro claro (|yaw| en [18°, 72°]) hacia cualquiera de las
+          convenciones de cámara (espejada o directa) y memoriza su signo en _yaw_signo_perfil.
+        - En Paso Perfil Derecho: exige el signo OPUESTO al capturado en Perfil Izquierdo y |yaw| en [18°, 72°].
+        """
         bandas = self._bandas_objetivo()
+        y_val = float(yaw or 0.0)
+        if self._paso in (self.PASO_PERFIL_IZQ, self.PASO_PERFIL_DER):
+            clave_abs = "yaw_absoluto" if estricto else "yaw_absoluto_warn"
+            if not self._en_rango(abs(y_val), bandas[clave_abs]):
+                return False
+            if self._paso == self.PASO_PERFIL_DER and self._yaw_signo_perfil is not None:
+                signo_actual = 1 if y_val > 0.0 else (-1 if y_val < 0.0 else 0)
+                if signo_actual == 0 or signo_actual == self._yaw_signo_perfil:
+                    return False
+            return True
         clave = "yaw" if estricto else "yaw_warn"
-        return self._en_rango(float(yaw), bandas[clave])
+        return self._en_rango(y_val, bandas[clave])
 
     def _alineacion_verde(self, pose: Dict[str, Any]) -> bool:
         bandas = self._bandas_objetivo()
@@ -4287,10 +4583,10 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         estado_dist = "ok" if self._en_rango(dist, bandas["dist"]) else (
             "warn" if self._en_rango(dist, bandas["dist_warn"]) else "bad"
         )
-        self._set_badge_status(self.badge_yaw, f"Yaw: {yaw:+.1f}°", estado_yaw)
-        self._set_badge_status(self.badge_pitch, f"Pitch: {pitch:+.1f}°", estado_pitch)
-        self._set_badge_status(self.badge_roll, f"Roll: {roll:+.1f}°", estado_roll)
-        self._set_badge_status(self.badge_dist, f"Dist: {dist:.1f} cm", estado_dist)
+        self._set_badge_status(self.badge_yaw, f"Giro: {yaw:+.1f}°", estado_yaw)
+        self._set_badge_status(self.badge_pitch, f"Inclinación: {pitch:+.1f}°", estado_pitch)
+        self._set_badge_status(self.badge_roll, f"Ladeo: {roll:+.1f}°", estado_roll)
+        self._set_badge_status(self.badge_dist, f"Distancia: {dist:.1f} cm", estado_dist)
 
     def _get_frame_origen(self) -> Optional[np.ndarray]:
         if self._frozen_frame is not None:
@@ -4362,19 +4658,33 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
             verde = self._alineacion_verde(pose)
             self._actualizar_badges(pose)
         else:
-            self._set_badge_status(self.badge_yaw, "Yaw: Sin rostro", "bad")
-            self._set_badge_status(self.badge_pitch, "Pitch: Sin rostro", "bad")
-            self._set_badge_status(self.badge_roll, "Roll: Sin rostro", "bad")
-            self._set_badge_status(self.badge_dist, "Dist: --", "bad")
+            self._set_badge_status(self.badge_yaw, "Giro: Sin rostro", "bad")
+            self._set_badge_status(self.badge_pitch, "Inclinación: Sin rostro", "bad")
+            self._set_badge_status(self.badge_roll, "Ladeo: Sin rostro", "bad")
+            self._set_badge_status(self.badge_dist, "Distancia: --", "bad")
 
         self._dibujar_marco(canvas, verde, congelado)
         self._dibujar_marcas(canvas, fiduciarios, congelado)
+
+        # Dibujar en vivo los 12 landmarks en la cara durante la vista previa
+        if not congelado and fiduciarios is not None and "puntos_2d_px" in fiduciarios:
+            pts_2d_live = fiduciarios["puntos_2d_px"]
+            for nombre_pt, lm_idx in PUNTOS_TRAZADOS.items():
+                if lm_idx < len(pts_2d_live):
+                    lx, ly = int(pts_2d_live[lm_idx, 0]), int(pts_2d_live[lm_idx, 1])
+                    color_bgr = COLORES_TRAZO_BGR.get(nombre_pt, (204, 255, 0))
+                    cv2.circle(canvas, (lx, ly), 5, color_bgr, -1, cv2.LINE_AA)
+                    cv2.circle(canvas, (lx, ly), 7, (255, 255, 255), 1, cv2.LINE_AA)
 
         if not congelado:
             es_paso_espera = self._paso in (
                 self.PASO_FRONTAL, self.PASO_PERFIL_IZQ, self.PASO_SUBMENTAL, self.PASO_PERFIL_DER
             )
-            ticks_objetivo = max(6, TICKS_VERDE_CAPTURA // 2) if self._paso == self.PASO_SUBMENTAL else TICKS_VERDE_CAPTURA
+            ticks_objetivo = (
+                TICKS_VERDE_FRONTAL
+                if self._paso == self.PASO_FRONTAL
+                else (max(45, int(TICKS_VERDE_CAPTURA * 1.1)) if self._paso == self.PASO_SUBMENTAL else TICKS_VERDE_CAPTURA)
+            )
             if verde and es_paso_espera and fiduciarios is not None:
                 self._frames_verde += 1
                 if self._frames_verde >= ticks_objetivo:
@@ -4420,7 +4730,8 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         elif congelado:
             estado_banner = "Marcado de electrodos sobre la foto congelada"
         elif verde and es_paso_espera:
-            restante_s = max(TICKS_VERDE_CAPTURA - self._frames_verde, 0) * 0.05
+            t_obj_b = TICKS_VERDE_FRONTAL if self._paso == self.PASO_FRONTAL else TICKS_VERDE_CAPTURA
+            restante_s = max(t_obj_b - self._frames_verde, 0) * 0.05
             estado_banner = f"Semaforo verde: mantenga la pose, auto captura en {restante_s:0.1f} s"
         elif es_paso_espera:
             estado_banner = "Alinee el rostro hasta que el semaforo quede en verde"
@@ -4461,6 +4772,15 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
             )
             else set(self._pares_por_canal.keys())
         )
+        if not congelado:
+            # Durante los pasos de espera en vivo de poses laterales o submentales,
+            # no proyectar los electrodos marcados en el rostro de frente para evitar
+            # que floten distorsionados fuera de lugar o se superpongan con la cara.
+            if self._paso in (self.PASO_PERFIL_IZQ, self.PASO_SUBMENTAL, self.PASO_PERFIL_DER):
+                canales_visibles = set()
+            else:
+                canales_visibles = set(self._canales_frontal)
+
         for pos_canal, par in sorted(self._pares_por_canal.items()):
             if pos_canal not in canales_visibles:
                 continue
@@ -4490,10 +4810,14 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
             cv2.circle(canvas, (neg_x, neg_y), 9, (255, 255, 255), 1, cv2.LINE_AA)
             cv2.putText(canvas, "-", (neg_x - 3, neg_y + 3), cv2.FONT_HERSHEY_SIMPLEX, 0.4,
                         (255, 255, 255), 1, cv2.LINE_AA)
-            etiqueta = f"Canal {par['canal_fisico']} - {par['nombre']}"
+            etiqueta = f"Canal {par['canal_fisico']}: {par['nombre']}"
             mid_x, mid_y = (pos_x + neg_x) // 2, (pos_y + neg_y) // 2
-            cv2.putText(canvas, etiqueta, (mid_x + 10, mid_y - 6), cv2.FONT_HERSHEY_SIMPLEX,
-                        0.46, color, 2, cv2.LINE_AA)
+            # Desplazar verticalmente las etiquetas según el canal para evitar que se pisen
+            offset_y = -12 - (pos_canal * 16)
+            cv2.putText(canvas, etiqueta, (mid_x + 12, mid_y + offset_y), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.44, (0, 0, 0), 3, cv2.LINE_AA) # Sombra negra para legibilidad
+            cv2.putText(canvas, etiqueta, (mid_x + 12, mid_y + offset_y), cv2.FONT_HERSHEY_SIMPLEX,
+                        0.44, color, 1, cv2.LINE_AA)
 
         if congelado and self._pend_pos_pole is not None:
             pend_x, pend_y = int(round(self._pend_pos_pole[0])), int(round(self._pend_pos_pole[1]))
@@ -4655,7 +4979,12 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
             if not isinstance(info, dict):
                 continue
             foto_origen = str(info.get("foto", ""))
-            pose_ref = "perfil_izq" if foto_origen.startswith("02") else "frontal"
+            if foto_origen.startswith("02"):
+                pose_ref = "perfil_izq"
+            elif foto_origen.startswith("03") or "submental" in foto_origen.lower():
+                pose_ref = "submental"
+            else:
+                pose_ref = "frontal"
             referencia[str(clave)] = {
                 "musculo": str(info.get("musculo", "")),
                 "pose": pose_ref,
@@ -4699,7 +5028,8 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         else:
             banda_min, banda_max = 30.0, 70.0
         dist_ok = banda_min <= dist_cm <= banda_max
-        pose_ok = abs(pitch) <= 16.0 and abs(roll) <= 11.0
+        es_paso_submental = self._paso in (self.PASO_SUBMENTAL, self.PASO_MARCA_SUBMENTAL)
+        pose_ok = (8.0 <= pitch <= 68.0 if es_paso_submental else abs(pitch) <= 16.0) and abs(roll) <= 18.0
         if not (dist_ok and pose_ok):
             if not dist_ok:
                 aviso = (
@@ -4722,9 +5052,11 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         for clave, info in self._montaje_referencia.items():
             pose_ref = info.get("pose", "frontal")
             if pose_ref in ("perfil_izq", "perfil_der"):
-                compatible = 20.0 <= abs(yaw) <= 65.0
+                compatible = 20.0 <= abs(yaw) <= 65.0 and not es_paso_submental
+            elif pose_ref == "submental":
+                compatible = es_paso_submental or (pitch >= 12.0 and abs(yaw) <= 30.0)
             else:
-                compatible = abs(yaw) <= 15.0
+                compatible = abs(yaw) <= 15.0 and not es_paso_submental
             if not compatible:
                 continue
             gel_mm = float(info.get("gel", 10.0))
@@ -4862,6 +5194,11 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
                 "ied_mm": round(float(par["ied_mm"]), 2) if par.get("ied_mm") is not None else None,
                 "angulo_deg": round(float(par["angulo_deg"]), 2),
                 "dip_px_foto": round(float(par.get("dip_px_foto") or 0.0), 2),
+                "escala_mm_px": round(float(par["escala_mm_px"]), 5) if par.get("escala_mm_px") is not None else None,
+                "dist_nariz_pronasale_mm": par.get("dist_nariz_pronasale_mm"),
+                "dist_menton_gnathion_mm": par.get("dist_menton_gnathion_mm"),
+                "dist_comisura_labial_mm": par.get("dist_comisura_labial_mm"),
+                "dist_oreja_trago_mm": par.get("dist_oreja_trago_mm"),
                 "polo_positivo": self._polo_del_par(par, "anchor_positivo", "polo_positivo"),
                 "polo_negativo": self._polo_del_par(par, "anchor_negativo", "polo_negativo"),
             }
@@ -4899,8 +5236,15 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
                 "polo_negativo": polo_neg_info,
                 "ied_px": round(float(par["ied_px"]), 2),
                 "ied_mm": round(float(par["ied_mm"]), 2) if par.get("ied_mm") is not None else None,
+                "distancia_interelectrodo_mm": round(float(par["ied_mm"]), 2) if par.get("ied_mm") is not None else None,
                 "angulo_deg": round(float(par["angulo_deg"]), 2),
+                "angulo_orientacion_deg": round(float(par["angulo_deg"]), 2),
                 "diametro_gel_mm": round(gel, 2),
+                "escala_mm_px": round(float(par["escala_mm_px"]), 5) if par.get("escala_mm_px") is not None else None,
+                "dist_nariz_pronasale_mm": par.get("dist_nariz_pronasale_mm"),
+                "dist_menton_gnathion_mm": par.get("dist_menton_gnathion_mm"),
+                "dist_comisura_labial_mm": par.get("dist_comisura_labial_mm"),
+                "dist_oreja_trago_mm": par.get("dist_oreja_trago_mm"),
             }
             pares_lista.append(par_entry)
             electrodos_lista.append({
@@ -4910,7 +5254,12 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
                 "canal": f"ai{fisico}",
                 "polo": "+",
                 "musculo": nombre,
+                "musculo_asignado": nombre,
                 "foto_origen": foto_canal,
+                "dist_nariz_pronasale_mm": par.get("dist_nariz_pronasale_mm"),
+                "dist_menton_gnathion_mm": par.get("dist_menton_gnathion_mm"),
+                "dist_comisura_labial_mm": par.get("dist_comisura_labial_mm"),
+                "dist_oreja_trago_mm": par.get("dist_oreja_trago_mm"),
                 **polo_pos_info,
             })
             electrodos_lista.append({
@@ -4920,7 +5269,12 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
                 "canal": f"ai{fisico}",
                 "polo": "-",
                 "musculo": nombre,
+                "musculo_asignado": nombre,
                 "foto_origen": foto_canal,
+                "dist_nariz_pronasale_mm": par.get("dist_nariz_pronasale_mm"),
+                "dist_menton_gnathion_mm": par.get("dist_menton_gnathion_mm"),
+                "dist_comisura_labial_mm": par.get("dist_comisura_labial_mm"),
+                "dist_oreja_trago_mm": par.get("dist_oreja_trago_mm"),
                 **polo_neg_info,
             })
 
@@ -5160,6 +5514,10 @@ class WebcamPhotometryManager(QtCore.QObject):
         self._take_t0_perf: float = time.perf_counter()
         self._session_label: str = ""
         self._temp_video_path: Optional[str] = None
+        self._continuous_tracker: Optional[TrazadorVideoPuntos] = None
+        self._continuous_thread: Optional[threading.Thread] = None
+        self._continuous_stop_event: Optional[threading.Event] = None
+        self._continuous_cap: Optional[cv2.VideoCapture] = None
 
     @property
     def record_video_clip(self) -> bool:
@@ -5215,6 +5573,7 @@ class WebcamPhotometryManager(QtCore.QObject):
 
     def stop_worker(self) -> None:
         """Detiene de forma segura el hilo de captura evitando QThread::~QThread() abort si el driver tarda en liberar."""
+        self.stop_continuous_recording_tracker()
         if hasattr(self, "_retired_threads") and self._retired_threads:
             self._retired_threads = [t for t in self._retired_threads if t is not None and t.isRunning()]
         if self.capture_thread is not None:
@@ -5404,28 +5763,34 @@ class WebcamPhotometryManager(QtCore.QObject):
         return False
 
     def guardar_fotometria_inmediata(
-        self, sujeto: str, prueba: str, es_continua: bool = False
+        self, sujeto: str, prueba: str, es_continua: bool = False, target_dir: Optional[str] = None
     ) -> Optional[str]:
         """
         Persiste de inmediato el montaje confirmado del asistente lineal en la
-        carpeta activa de la sesion, replicando el esquema de nombres del DAQ:
-          - Autograbado: base_de_datos_electrodos/fecha/prueba_sujeto
-          - Secuencia Continua: base_de_datos_electrodos/fecha/SecuenciaContinua_prueba_sujeto
+        carpeta activa de la sesion (target_dir si fue pre-asignada por el DAQ, o
+        resolviendo un directorio sin colision con sufijo incremental _01, _02...).
 
         Retorna la carpeta de sesion o None si no hay montaje pendiente.
         """
         if not self.fotometria_sesion:
             return None
-        fecha = datetime.now().strftime("%Y-%m-%d")
-        nombre_carpeta = (
-            f"SecuenciaContinua_{prueba}_{sujeto}" if es_continua else f"{prueba}_{sujeto}"
-        )
-        carpeta_sesion = os.path.join(
-            resolver_directorio_proyecto(),
-            "base_de_datos_electrodos",
-            fecha,
-            nombre_carpeta,
-        )
+        if target_dir:
+            carpeta_sesion = str(target_dir)
+        else:
+            fecha = datetime.now().strftime("%Y-%m-%d")
+            nombre_base = (
+                f"SecuenciaContinua_{prueba}_{sujeto}" if es_continua else f"{prueba}_{sujeto}"
+            )
+            raiz_fecha = os.path.join(
+                resolver_directorio_proyecto(),
+                "base_de_datos_electrodos",
+                fecha,
+            )
+            carpeta_sesion = os.path.join(raiz_fecha, nombre_base)
+            reintento = 0
+            while os.path.exists(carpeta_sesion) and os.listdir(carpeta_sesion):
+                reintento += 1
+                carpeta_sesion = os.path.join(raiz_fecha, f"{nombre_base}_{reintento:02d}")
         if self.guardar_fotometria_en_carpeta(carpeta_sesion):
             return carpeta_sesion
         return None
@@ -5482,24 +5847,10 @@ class WebcamPhotometryManager(QtCore.QObject):
                 json.dump(metadata, handle, indent=2, ensure_ascii=False)
 
             # CORRECCION (v6.2): exportar la trayectoria de puntos faciales del
-            # asistente (labios/menton) como CSV al lado del resto del montaje.
+            # asistente (labios/menton) y biomarcadores cinematicos como CSV al lado del resto del montaje.
             datos_trazado = datos.get("trayectoria_puntos")
             if datos_trazado and datos_trazado.get("n_muestras", 0) > 0:
-                destino_trazado = os.path.join(str(output_dir), "trayectoria_puntos.csv")
-                with open(destino_trazado, "w", encoding="utf-8", newline="") as f_csv_tr:
-                    writer_tr = csv.writer(f_csv_tr)
-                    encabezado_tr = ["t_s", "rostro_ok"]
-                    for nombre_tr in PUNTOS_TRAZADOS:
-                        encabezado_tr.extend(
-                            [f"{nombre_tr}_x_px", f"{nombre_tr}_y_px", f"{nombre_tr}_z_rel"]
-                        )
-                    writer_tr.writerow(encabezado_tr)
-                    for fila_tr in datos_trazado.get("muestras", []):
-                        writer_tr.writerow([fila_tr[0], 1] + list(fila_tr[1:]))
-                print(
-                    f"[FotometriaWebcam] Trayectoria de puntos exportada: {destino_trazado} "
-                    f"({datos_trazado.get('n_muestras', 0)} muestras)"
-                )
+                self.exportar_trayectoria_continua_csv(output_dir)
 
             # Garantizar también fotometria/calibracion_espacial.json con la ubicación exacta de los electrodos
             dir_fotometria = os.path.join(str(output_dir), "fotometria")
@@ -5522,6 +5873,234 @@ class WebcamPhotometryManager(QtCore.QObject):
                 f"[FotometriaWebcam] Error al escribir metadata_fotometria: {exc}\n"
             )
             return False
+
+    def exportar_trayectoria_continua_csv(self, output_dir: str) -> Optional[str]:
+        """
+        Exporta trayectoria_puntos.csv dentro de output_dir con las columnas de fiduciarios 3D
+        y biomarcadores cinematicos (vocal, pulso, apertura_vertical_mm, ancho_comisuras_mm, descenso_menton_mm).
+        """
+        datos = self.fotometria_sesion or {}
+        datos_trazado = datos.get("trayectoria_puntos")
+        if not datos_trazado or datos_trazado.get("n_muestras", 0) <= 0:
+            return None
+        try:
+            os.makedirs(str(output_dir), exist_ok=True)
+            destino_trazado = os.path.join(str(output_dir), "trayectoria_puntos.csv")
+            with open(destino_trazado, "w", encoding="utf-8", newline="") as f_csv_tr:
+                writer_tr = csv.writer(f_csv_tr)
+                encabezado_tr = ["t_s", "rostro_ok"]
+                for nombre_tr in PUNTOS_TRAZADOS:
+                    encabezado_tr.extend(
+                        [f"{nombre_tr}_x_px", f"{nombre_tr}_y_px", f"{nombre_tr}_z_rel"]
+                    )
+                encabezado_tr.extend(
+                    [
+                        "vocal",
+                        "pulso",
+                        "apertura_vertical_mm",
+                        "ancho_comisuras_mm",
+                        "descenso_menton_mm",
+                    ] + COLUMNAS_EXTENDIDAS_RIGIDO
+                )
+                writer_tr.writerow(encabezado_tr)
+                for fila_tr in datos_trazado.get("muestras", []):
+                    valores = list(fila_tr[1:])
+                    if len(valores) == len(PUNTOS_TRAZADOS) * 3:
+                        valores.extend(["", -1, 0.0, 0.0, 0.0] + [0.0] * len(COLUMNAS_EXTENDIDAS_RIGIDO))
+                    elif len(valores) == len(PUNTOS_TRAZADOS) * 3 + 5:
+                        valores.extend([0.0] * len(COLUMNAS_EXTENDIDAS_RIGIDO))
+                    writer_tr.writerow([fila_tr[0], 1] + valores)
+            print(
+                f"[FotometriaWebcam] Trayectoria de puntos exportada: {destino_trazado} "
+                f"({datos_trazado.get('n_muestras', 0)} muestras)"
+            )
+            return destino_trazado
+        except Exception as exc:
+            sys.stderr.write(f"[FotometriaWebcam] Error al exportar trayectoria continua: {exc}\n")
+            return None
+
+    def start_continuous_recording_tracker(
+        self,
+        t0_perf: float,
+        parent_plotter: Any = None,
+    ) -> None:
+        """
+        Inicia un hilo ligero en segundo plano a ~15 Hz para registrar la trayectoria
+        continua de fiduciarios 3D y biomarcadores sincronizados con el DAQ.
+        """
+        self.stop_continuous_recording_tracker()
+
+        tracker = TrazadorVideoPuntos(historial_muestras=18000)
+        tracker.iniciar_grabacion_sincronizada(float(t0_perf))
+        self._continuous_tracker = tracker
+
+        stop_event = threading.Event()
+        self._continuous_stop_event = stop_event
+
+        def _bucle_tracker():
+            cap_hilo: Optional[cv2.VideoCapture] = None
+            usar_capture_thread = (
+                self.capture_thread is not None
+                and self.capture_thread.isRunning()
+                and self.capture_thread.is_camera_open
+            )
+            if not usar_capture_thread:
+                try:
+                    if sys.platform.startswith("linux"):
+                        cap_hilo = cv2.VideoCapture(self.camera_index, cv2.CAP_V4L2)
+                        if cap_hilo is None or not cap_hilo.isOpened():
+                            if cap_hilo is not None:
+                                cap_hilo.release()
+                            cap_hilo = cv2.VideoCapture(self.camera_index)
+                    elif sys.platform.startswith("win"):
+                        cap_hilo = cv2.VideoCapture(self.camera_index, cv2.CAP_DSHOW)
+                    else:
+                        cap_hilo = cv2.VideoCapture(self.camera_index)
+                    if cap_hilo is None or not cap_hilo.isOpened():
+                        if cap_hilo is not None:
+                            cap_hilo.release()
+                        print(
+                            f"[FotometriaWebcam] Camara {self.camera_index} no disponible "
+                            "para tracking continuo (Modo Prueba o camara ocupada)."
+                        )
+                        return
+                    try:
+                        cap_hilo.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                        cap_hilo.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+                        cap_hilo.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                        cap_hilo.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                        cap_hilo.set(cv2.CAP_PROP_FPS, 60.0)
+                    except Exception:
+                        pass
+                    self._continuous_cap = cap_hilo
+                except Exception as exc_cam:
+                    print(f"[FotometriaWebcam] Aviso al abrir camara para tracking continuo: {exc_cam}")
+                    return
+
+            try:
+                while not stop_event.is_set():
+                    t_ahora = time.perf_counter()
+                    frame = None
+                    if usar_capture_thread and self.capture_thread is not None:
+                        frame, _ = self.capture_thread.get_latest_frame(copy=True)
+                    elif self._continuous_cap is not None and self._continuous_cap.isOpened():
+                        ret, f_read = self._continuous_cap.read()
+                        if ret and f_read is not None:
+                            frame = f_read
+
+                    fiduciarios = None
+                    if frame is not None and self.agent is not None:
+                        try:
+                            with self._agent_lock:
+                                fiduciarios = self.agent.extraer_malla_facial_3d(frame)
+                        except Exception:
+                            fiduciarios = None
+
+                    vocal = str(getattr(parent_plotter, "_current_autoforge_word", "") or "")
+                    pulso = int(getattr(parent_plotter, "metro_beat_count", -1))
+                    if parent_plotter is not None:
+                        if getattr(parent_plotter, "is_recording_final_noise", False):
+                            vocal = "RUIDO_FINAL"
+                            pulso = -2
+                        elif not vocal and getattr(parent_plotter, "is_recording", False):
+                            if getattr(parent_plotter, "is_cvm_active", False):
+                                vocal = "CVM"
+                            elif pulso <= 0:
+                                vocal = "RUIDO_BASAL"
+                                pulso = 0
+                            elif getattr(parent_plotter, "is_autoforge_continuo", False):
+                                full_s = getattr(parent_plotter, "autoforge_full_sequence", None) or []
+                                if full_s and pulso >= 1:
+                                    vocal = str(full_s[(pulso - 1) % len(full_s)]).upper()
+                            else:
+                                words_p = getattr(parent_plotter, "autoforge_words", None) or []
+                                w_idx_p = int(getattr(parent_plotter, "autoforge_word_idx", 0))
+                                if 0 <= w_idx_p < len(words_p):
+                                    vocal = str(words_p[w_idx_p]).upper()
+                    if fiduciarios is not None:
+                        tracker.registrar(
+                            fiduciarios,
+                            t_ahora,
+                            vocal_activa=vocal,
+                            pulso_idx=pulso,
+                        )
+                    else:
+                        tracker.marcar_rostro_perdido(t_ahora)
+
+                    time.sleep(0.016) # Muestreo hasta 60 Hz nativos (16.6 ms para capturar transitorios de 60-100 ms)
+            except Exception as exc_run:
+                sys.stderr.write(f"[FotometriaWebcam] Aviso en tracker continuo: {exc_run}\n")
+            finally:
+                if self._continuous_cap is not None:
+                    try:
+                        self._continuous_cap.release()
+                    except Exception:
+                        pass
+                    self._continuous_cap = None
+
+        hilo = threading.Thread(target=_bucle_tracker, daemon=True, name="FotometriaContinuousTracker")
+        self._continuous_thread = hilo
+        hilo.start()
+
+    def reanchor_continuous_tracker(
+        self,
+        nuevo_t0_perf: float,
+        parent_plotter: Any = None,
+    ) -> None:
+        """
+        Actualiza el ancla temporal t0 del tracker continuo en curso sin borrar
+        las muestras previas de ruido basal ni reabrir la camara. Si el tracker
+        no estaba corriendo, lo inicia normalmente.
+        """
+        if (
+            self._continuous_tracker is not None
+            and self._continuous_thread is not None
+            and self._continuous_thread.is_alive()
+        ):
+            self._continuous_tracker.reanclar_t0(float(nuevo_t0_perf))
+        else:
+            self.start_continuous_recording_tracker(float(nuevo_t0_perf), parent_plotter=parent_plotter)
+
+    def stop_continuous_recording_tracker(
+        self,
+        output_dir: Optional[str] = None,
+    ) -> Optional[str]:
+        """
+        Detiene el hilo de tracking continuo, cierra la captura abierta por el hilo,
+        guarda los datos en self.fotometria_sesion['trayectoria_puntos'] y, si se indico
+        output_dir, exporta trayectoria_puntos.csv.
+        """
+        if self._continuous_stop_event is not None:
+            self._continuous_stop_event.set()
+
+        if self._continuous_thread is not None and self._continuous_thread.is_alive():
+            self._continuous_thread.join(timeout=1.5)
+            self._continuous_thread = None
+
+        if self._continuous_cap is not None:
+            try:
+                self._continuous_cap.release()
+            except Exception:
+                pass
+            self._continuous_cap = None
+
+        paquete = None
+        if self._continuous_tracker is not None:
+            try:
+                paquete = self._continuous_tracker.paquete_para_sesion()
+                if self.fotometria_sesion is None:
+                    self.fotometria_sesion = {}
+                self.fotometria_sesion["trayectoria_puntos"] = paquete
+            except Exception as exc_pack:
+                sys.stderr.write(f"[FotometriaWebcam] Error al empaquetar trayectoria continua: {exc_pack}\n")
+
+        self._continuous_tracker = None
+        self._continuous_stop_event = None
+
+        if output_dir is not None and paquete is not None and paquete.get("n_muestras", 0) > 0:
+            return self.exportar_trayectoria_continua_csv(output_dir)
+
+        return None
 
     def start_take_session(
         self,

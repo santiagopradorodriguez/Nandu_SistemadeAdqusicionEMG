@@ -1064,6 +1064,316 @@ def plot_analisis_errores_3d_proyecciones_2d(X_proj, Y, title, output_path, vari
     plt.close()
 
 
+def plot_scatter_3d_proyecciones_limpias(X_proj, Y, title, output_path, variance_ratios=None, **kwargs):
+    """
+    Genera la figura de las 3 proyecciones 2D (PC1-PC2, PC1-PC3, PC2-PC3)
+    puras, sin fronteras de decisión ni sombreados artificiales de fondo.
+    """
+    plt.style.use('default')
+    fig, axes = plt.subplots(1, 3, figsize=(26, 8.5), facecolor='white')
+    
+    vocales = sorted(list(set(Y)))
+    palette = sns.color_palette("Set1", n_colors=len(vocales))
+    
+    comp_labels = kwargs.get('axis_labels', ['PC1', 'PC2', 'PC3'])
+    projections = [(0, 1), (0, 2), (1, 2)]
+    labels = [
+        (f'{comp_labels[0]} ({variance_ratios[0]*100:.1f}%)' if variance_ratios is not None else comp_labels[0],
+         f'{comp_labels[1]} ({variance_ratios[1]*100:.1f}%)' if variance_ratios is not None else comp_labels[1]),
+        (f'{comp_labels[0]} ({variance_ratios[0]*100:.1f}%)' if variance_ratios is not None else comp_labels[0],
+         f'{comp_labels[2]} ({variance_ratios[2]*100:.1f}%)' if variance_ratios is not None else comp_labels[2]),
+        (f'{comp_labels[1]} ({variance_ratios[1]*100:.1f}%)' if variance_ratios is not None else comp_labels[1],
+         f'{comp_labels[2]} ({variance_ratios[2]*100:.1f}%)' if variance_ratios is not None else comp_labels[2])
+    ]
+    
+    for ax, proj, (xl, yl) in zip(axes, projections, labels):
+        ax.set_facecolor('white')
+        ax.grid(color='#d3d3d3', linestyle='--', linewidth=0.6, alpha=0.7)
+        
+        X_2d = X_proj[:, [proj[0], proj[1]]]
+        for i, vocal in enumerate(vocales):
+            idx = np.where(np.array(Y) == vocal)[0]
+            color = palette[i % len(palette)]
+            ax.scatter(
+                X_2d[idx, 0], X_2d[idx, 1],
+                label=vocal, color=color, alpha=0.9, s=80,
+                edgecolors='black', linewidth=0.5, zorder=3
+            )
+            
+        ax.set_xlabel(xl, color='black', fontsize=16, fontweight='bold')
+        ax.set_ylabel(yl, color='black', fontsize=16, fontweight='bold')
+        ax.tick_params(colors='black', labelsize=12)
+        for spine in ax.spines.values():
+            spine.set_color('#333333')
+            
+    fig.suptitle(title, color='black', fontsize=24, fontweight='bold', y=0.98)
+    if not kwargs.get('ocultar_leyenda', False):
+        axes[2].legend(frameon=True, facecolor='white', edgecolor='gray', labelcolor='black', fontsize=15, loc='upper right')
+        
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=300, facecolor=fig.get_facecolor(), edgecolor='none', bbox_inches='tight')
+    plt.close()
+
+
+def extraer_formantes_lpc_pulso(audio_segmento, fs):
+    """
+    Extrae los primeros dos formantes acústicos (F1 y F2) mediante
+    predicción lineal (LPC) con Toeplitz y filtrado de formantes válidos.
+    """
+    if len(audio_segmento) < int(0.035 * fs):
+        return np.nan, np.nan
+    try:
+        from scipy.linalg import solve_toeplitz
+        seg_pre = np.append(audio_segmento[0], audio_segmento[1:] - 0.96 * audio_segmento[:-1])
+        seg_win = seg_pre * np.hamming(len(seg_pre))
+        
+        p_lpc = int(round(2 + fs / 1000.0))
+        p_lpc = max(6, min(p_lpc, 12))
+        
+        r = np.correlate(seg_win, seg_win, mode='full')
+        r = r[len(seg_win)-1 : len(seg_win) + p_lpc]
+        
+        a_lpc = solve_toeplitz((r[:-1], r[:-1]), r[1:])
+        poly = np.concatenate(([1], -a_lpc))
+        raices = np.roots(poly)
+        raices = [rc for rc in raices if np.imag(rc) > 0]
+        angulos = np.arctan2(np.imag(raices), np.real(raices))
+        freqs = angulos * (fs / (2.0 * np.pi))
+        bws = -0.5 * (fs / (2.0 * np.pi)) * np.log(np.maximum(np.abs(raices), 1e-9))
+        
+        cands = [(f_v, bw_v) for f_v, bw_v in zip(freqs, bws) if 180 < f_v < min(2800.0, fs * 0.48) and bw_v < 400]
+        cands.sort(key=lambda x: x[0])
+        if len(cands) >= 2:
+            return float(cands[0][0]), float(cands[1][0])
+    except Exception:
+        pass
+    return np.nan, np.nan
+
+
+def procesar_y_graficar_formantes_acusticos(base_dir, mediciones, out_dir, tomas_validas=None):
+    """
+    Lee las pistas acústicas de canal_3 (micrófono), filtra exclusivamente los
+    pulsos limpios aprobados por la purga (Isolation Forest + SNR) si se pasan
+    en tomas_validas, calcula F1 y F2 por LPC para cada pulso de vocal, y genera
+    el plano fonético canónico F1 vs F2 explicitando la frecuencia maestra de muestreo (fs).
+    """
+    import soundfile as sf
+    import pandas as pd
+    
+    PALETA_VOCALES_OFICIAL = {
+        'A': '#E63946',
+        'E': '#1F77B4',
+        'I': '#2CA02C',
+        'O': '#9D4EDD',
+        'U': '#E7A61A'
+    }
+    
+    set_validas = set(tomas_validas) if tomas_validas is not None else None
+    registros_formantes = []
+    fs_maestra_detectada = None
+    
+    for rel_path in mediciones:
+        med_path = os.path.join(base_dir, rel_path)
+        med_name = os.path.basename(rel_path)
+        partes = med_name.split('_')
+        vocal = partes[0].upper() if len(partes) > 0 and partes[0].upper() in ['A', 'E', 'I', 'O', 'U'] else None
+        
+        ch3_dir = os.path.join(med_path, "canal_3")
+        wav_mic = os.path.join(ch3_dir, "grabacion.wav")
+        if not os.path.isfile(wav_mic):
+            wav_mic = os.path.join(ch3_dir, " Crudo.wav")
+            
+        if not os.path.isfile(wav_mic):
+            continue
+            
+        try:
+            audio, fs = sf.read(wav_mic)
+            if fs_maestra_detectada is None:
+                fs_maestra_detectada = fs
+        except Exception:
+            continue
+            
+        meta_ch3 = os.path.join(ch3_dir, "metadata.json")
+        timestamps = []
+        if os.path.isfile(meta_ch3):
+            try:
+                with open(meta_ch3, "r", encoding="utf-8") as fm:
+                    mdata = json.load(fm)
+                    timestamps = mdata.get("pulse_timestamps") or mdata.get("beat_timestamps_s") or []
+                    if mdata.get("daq_sample_rate"):
+                        fs_maestra_detectada = int(mdata["daq_sample_rate"])
+                    elif mdata.get("sample_rate"):
+                        fs_maestra_detectada = int(mdata["sample_rate"])
+                        
+                    # Soporte para tomas periódicas regulares (bpm + noise_seconds + pulse_count)
+                    if not timestamps and mdata.get("bpm") and mdata.get("pulse_count"):
+                        bpm_v = float(mdata["bpm"])
+                        tau_p = 60.0 / bpm_v
+                        n_pul = int(mdata["pulse_count"])
+                        noise_sec = float(mdata.get("noise_seconds", 0.0))
+                        
+                        # Buscar picos acústicos reales de fonación en el canal 3 en zona fonatoria (> noise_sec)
+                        from scipy.signal import find_peaks
+                        w_rms = max(3, int(0.05 * fs))
+                        rms_audio = np.sqrt(np.convolve(audio**2, np.ones(w_rms)/w_rms, mode='same'))
+                        idx_start_fono = int(noise_sec * fs)
+                        rms_fono = rms_audio[idx_start_fono:]
+                        
+                        if len(rms_fono) > 0 and np.max(rms_fono) > 0:
+                            dist_min = int(0.6 * tau_p * fs)
+                            h_min = np.percentile(rms_fono, 75)
+                            pks_fono, _ = find_peaks(rms_fono, height=h_min, distance=dist_min)
+                            if len(pks_fono) >= 1:
+                                timestamps = [(idx_start_fono + p) / float(fs) for p in pks_fono[:n_pul]]
+                        
+                        if not timestamps:
+                            first_beat = float(mdata.get("first_beat_s") or (noise_sec + tau_p))
+                            timestamps = [first_beat + k * tau_p for k in range(n_pul)]
+            except Exception:
+                pass
+                
+        if not timestamps:
+            continue
+            
+        dur_samples = int(round(0.120 * fs))
+        for idx_p, t_s in enumerate(timestamps):
+            toma_id_0 = f"{med_name}_Win{idx_p}_{vocal}"
+            
+            # Purga estricta: verificar coincidencia exacta 1 a 1 con tomas_validas del PCA (base 0)
+            if set_validas is not None:
+                if toma_id_0 not in set_validas:
+                    continue
+                    
+            idx_c = int(round(t_s * fs))
+            seg = audio[max(0, idx_c - dur_samples//2) : min(len(audio), idx_c + dur_samples//2)]
+            f1, f2 = extraer_formantes_lpc_pulso(seg, fs)
+            if np.isnan(f1) or np.isnan(f2):
+                # Si falló la ventana de 120 ms, reintentar con ventana acústica de 80 ms
+                seg_alt = audio[max(0, idx_c - int(0.040 * fs)) : min(len(audio), idx_c + int(0.040 * fs))]
+                f1, f2 = extraer_formantes_lpc_pulso(seg_alt, fs)
+                
+            if not np.isnan(f1) and not np.isnan(f2):
+                registros_formantes.append({
+                    "Medicion": med_name,
+                    "Vocal": vocal or "A",
+                    "Pulso": idx_p,
+                    "Tiempo_s": round(t_s, 4),
+                    "F1_Hz": round(f1, 2),
+                    "F2_Hz": round(f2, 2),
+                    "Fs_Hz": fs
+                })
+                
+    if not registros_formantes:
+        print("    [Formantes] No se detectaron suficientes señales acústicas válidas en canal_3.")
+        return
+        
+    df_f = pd.DataFrame(registros_formantes)
+    df_f['F2_menos_F1_Hz'] = df_f['F2_Hz'] - df_f['F1_Hz']
+    csv_out = os.path.join(out_dir, "formantes_F1_F2.csv")
+    df_f.to_csv(csv_out, index=False)
+    print(f"=> Formantes exportados a CSV: {csv_out}")
+    
+    fs_val = fs_maestra_detectada if fs_maestra_detectada is not None else 6000
+    
+    plt.style.use('default')
+    fig, ax = plt.subplots(figsize=(10, 8), dpi=300, facecolor='white')
+    ax.set_facecolor('white')
+    ax.grid(True, color='#d3d3d3', linestyle='--', linewidth=0.6, alpha=0.7)
+    
+    aviso_aliasing = ""
+    if fs_val <= 2000:
+        aviso_aliasing = f" (Alerta: Nyquist = {fs_val//2} Hz; solapamiento espectral en formantes agudos F2 > 1000 Hz)"
+    
+    vocales_presentes = sorted(df_f['Vocal'].unique())
+    for voc in vocales_presentes:
+        sub = df_f[df_f['Vocal'] == voc]
+        col = PALETA_VOCALES_OFICIAL.get(voc, '#333333')
+        
+        ax.scatter(
+            sub['F2_Hz'], sub['F1_Hz'],
+            c=col, alpha=0.75, s=50, edgecolors='black', linewidth=0.4,
+            label=f"/{voc.lower()}/ (N={len(sub)})"
+        )
+        
+        f1_m, f2_m = sub['F1_Hz'].mean(), sub['F2_Hz'].mean()
+        ax.scatter(
+            [f2_m], [f1_m],
+            c=col, s=200, edgecolors='black', linewidth=1.5, zorder=5
+        )
+        ax.text(
+            f2_m, f1_m - 20,
+            f"/{voc.lower()}/",
+            color='black', fontsize=12, fontweight='bold', ha='center', va='top', zorder=6
+        )
+        
+    f2_max = max(1800.0, df_f['F2_Hz'].max() + 100)
+    f2_min = min(800.0, df_f['F2_Hz'].min() - 100)
+    f1_max = max(1000.0, df_f['F1_Hz'].max() + 80)
+    f1_min = min(250.0, df_f['F1_Hz'].min() - 50)
+    
+    ax.set_xlim(f2_max, f2_min)
+    ax.set_ylim(f1_max, f1_min)
+    
+    ax.set_xlabel("Frecuencia del Segundo Formante F2 [Hz] (Escala Invertida)", fontsize=13, fontweight='bold', color='black', labelpad=10)
+    ax.set_ylabel("Frecuencia del Primer Formante F1 [Hz] (Escala Invertida)", fontsize=13, fontweight='bold', color='black', labelpad=10)
+    
+    titulo_grafico = f"Plano Acústico de Formantes F1 - F2\nFrecuencia Maestra: {fs_val} Hz{aviso_aliasing}"
+    ax.set_title(titulo_grafico, fontsize=14, fontweight='bold', color='black', pad=15)
+    
+    ax.legend(loc='lower left', frameon=True, facecolor='white', edgecolor='#999999', fontsize=11)
+    
+    plt.tight_layout()
+    png_out = os.path.join(out_dir, "plano_formantes_F1_F2.png")
+    plt.savefig(png_out, dpi=300, facecolor=fig.get_facecolor(), bbox_inches='tight')
+    plt.close()
+    print(f"=> Gráfico de Formantes exportado: {png_out}")
+
+    # --- GRÁFICO COMPLEMENTARIO FONÉTICO: F1 vs (F2 - F1) ---
+    fig_f21, ax_f21 = plt.subplots(figsize=(10, 8), dpi=300, facecolor='white')
+    ax_f21.set_facecolor('white')
+    ax_f21.grid(True, color='#d3d3d3', linestyle='--', linewidth=0.6, alpha=0.7)
+    
+    for voc in vocales_presentes:
+        sub = df_f[df_f['Vocal'] == voc]
+        col = PALETA_VOCALES_OFICIAL.get(voc, '#333333')
+        
+        ax_f21.scatter(
+            sub['F2_menos_F1_Hz'], sub['F1_Hz'],
+            c=col, alpha=0.75, s=50, edgecolors='black', linewidth=0.4,
+            label=f"/{voc.lower()}/ (N={len(sub)})"
+        )
+        
+        f1_m, diff_m = sub['F1_Hz'].mean(), sub['F2_menos_F1_Hz'].mean()
+        ax_f21.scatter(
+            [diff_m], [f1_m],
+            c=col, s=200, edgecolors='black', linewidth=1.5, zorder=5
+        )
+        ax_f21.text(
+            diff_m, f1_m - 20,
+            f"/{voc.lower()}/",
+            color='black', fontsize=12, fontweight='bold', ha='center', va='top', zorder=6
+        )
+        
+    d_max = max(1500.0, df_f['F2_menos_F1_Hz'].max() + 100)
+    d_min = min(0.0, df_f['F2_menos_F1_Hz'].min() - 50)
+    
+    ax_f21.set_xlim(d_max, d_min)
+    ax_f21.set_ylim(f1_max, f1_min)
+    
+    ax_f21.set_xlabel("(F2 - F1) [Hz] - Anterioridad / Posterioridad (Escala Invertida)", fontsize=13, fontweight='bold', color='black', labelpad=10)
+    ax_f21.set_ylabel("Frecuencia del Primer Formante F1 [Hz] (Escala Invertida: Boca Abierta Abajo)", fontsize=13, fontweight='bold', color='black', labelpad=10)
+    
+    titulo_f21 = f"Plano Articulatorio Fonético: F1 vs (F2 - F1)\nFrecuencia Maestra: {fs_val} Hz{aviso_aliasing}"
+    ax_f21.set_title(titulo_f21, fontsize=14, fontweight='bold', color='black', pad=15)
+    ax_f21.legend(loc='lower left', frameon=True, facecolor='white', edgecolor='#999999', fontsize=11)
+    
+    plt.tight_layout()
+    png_f21_out = os.path.join(out_dir, "plano_formantes_F1_vs_F2_menos_F1.png")
+    plt.savefig(png_f21_out, dpi=300, facecolor=fig_f21.get_facecolor(), bbox_inches='tight')
+    plt.close()
+    print(f"=> Gráfico Articulatorio F1 vs (F2-F1) exportado: {png_f21_out}")
+
+
 def plot_scatter_3d_multi_angle(X_proj, Y, title, output_path, variance_ratios=None, **kwargs):
     plt.style.use('default')
     fig = plt.figure(figsize=(26, 8.5), facecolor='white')
@@ -2087,7 +2397,12 @@ def ejecutar_procesamiento(
             var_ratios_3d = [pca_3d.explained_variance_ratio_[idx_x_3d], pca_3d.explained_variance_ratio_[idx_y_3d], pca_3d.explained_variance_ratio_[idx_z_3d]]
             
             plot_scatter_3d_multi_angle(X_pca_3d, Y_3d, f"PCA 3D ({comp_x_3d_str}, {comp_y_3d_str}, {comp_z_3d_str}) - Vocales EMG", os.path.join(out_dir, "PCA_3D.png"), variance_ratios=var_ratios_3d, axis_labels=[comp_x_3d_str, comp_y_3d_str, comp_z_3d_str])
+            plot_scatter_3d_proyecciones_limpias(X_pca_3d, Y_3d, f"PCA 3D ({comp_x_3d_str}, {comp_y_3d_str}, {comp_z_3d_str}) - Proyecciones 2D - Vocales EMG", os.path.join(out_dir, "PCA_3D_3_Proyecciones.png"), variance_ratios=var_ratios_3d, axis_labels=[comp_x_3d_str, comp_y_3d_str, comp_z_3d_str])
             plot_analisis_errores_3d_proyecciones_2d(X_pca_3d, Y_3d, f"Análisis de Aciertos y Errores (PCA 3D: {comp_x_3d_str}-{comp_y_3d_str}-{comp_z_3d_str}) - {algoritmo_clustering_pca}", os.path.join(out_dir, "PCA_3D_Analisis_Errores.png"), variance_ratios=var_ratios_3d, algoritmo=algoritmo_clustering_pca, axis_labels=[comp_x_3d_str, comp_y_3d_str, comp_z_3d_str])
+            try:
+                procesar_y_graficar_formantes_acusticos(base_dir, mediciones, out_dir, tomas_validas=Tomas_3d)
+            except Exception as e_f:
+                print(f"    [Aviso Formantes] No se pudo generar el plano de formantes: {e_f}")
             acc_pca_3d, acc_vocales_pca_3d, voc_pca_3d, df_cm_pca_3d, mapeo_pca_3d = evaluar_clustering_no_supervisado(X_pca_3d, Y_3d, "PCA 3D", algoritmo_clustering_pca, X_features=X_3d_proc)
             print(f"=> TOTAL Accuracy Clustering No Supervisado (PCA 3D) : {acc_pca_3d:.2f}%")
             plot_confusion_matrix_heatmap(df_cm_pca_3d, "Matriz de Confusión - PCA 3D", os.path.join(out_dir, "heatmap_confusion_pca_3d.png"))

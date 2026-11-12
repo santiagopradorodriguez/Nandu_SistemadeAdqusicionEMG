@@ -1,0 +1,4 @@
+# Ignorar PDFs y archivos pesados generados externamente
+*.pdf
+*.zip
+

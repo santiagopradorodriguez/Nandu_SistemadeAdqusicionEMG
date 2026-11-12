@@ -1,0 +1,855 @@
+SECUENCIA CONTINUA - REGISTRO DE ORDEN DE VOCALES Y PROTOCOLO COMPLETO
+Fecha y Hora: 2026-11-09 18:08:26
+Carpeta de Sesion: SecuenciaContinua_Pruebaconnuevoslandrmaksfacial_Sujeto1
+Sujeto: Sujeto1 | Prueba: Pruebaconnuevoslandrmaksfacial
+Fuente de la Verdad: pulsos_metronomo.csv y metadata.json (valid_words)
+Orden Base de Vocales: U -> O -> A -> I -> E
+Repeticiones (Ciclos): 50
+Total de Pulsos Ejecutados: 250
+
+Secuencia detallada pulso a pulso (sincronizada con pulsos_metronomo.csv):
+  Pulso 001 | Ciclo 01 | Pos 1: /I/
+  Pulso 002 | Ciclo 01 | Pos 2: /O/
+  Pulso 003 | Ciclo 01 | Pos 3: /A/
+  Pulso 004 | Ciclo 01 | Pos 4: /E/
+  Pulso 005 | Ciclo 01 | Pos 5: /U/
+  Pulso 006 | Ciclo 02 | Pos 1: /A/
+  Pulso 007 | Ciclo 02 | Pos 2: /I/
+  Pulso 008 | Ciclo 02 | Pos 3: /E/
+  Pulso 009 | Ciclo 02 | Pos 4: /O/
+  Pulso 010 | Ciclo 02 | Pos 5: /U/
+  Pulso 011 | Ciclo 03 | Pos 1: /I/
+  Pulso 012 | Ciclo 03 | Pos 2: /A/
+  Pulso 013 | Ciclo 03 | Pos 3: /U/
+  Pulso 014 | Ciclo 03 | Pos 4: /E/
+  Pulso 015 | Ciclo 03 | Pos 5: /O/
+  Pulso 016 | Ciclo 04 | Pos 1: /I/
+  Pulso 017 | Ciclo 04 | Pos 2: /U/
+  Pulso 018 | Ciclo 04 | Pos 3: /O/
+  Pulso 019 | Ciclo 04 | Pos 4: /E/
+  Pulso 020 | Ciclo 04 | Pos 5: /A/
+  Pulso 021 | Ciclo 05 | Pos 1: /O/
+  Pulso 022 | Ciclo 05 | Pos 2: /U/
+  Pulso 023 | Ciclo 05 | Pos 3: /I/
+  Pulso 024 | Ciclo 05 | Pos 4: /A/
+  Pulso 025 | Ciclo 05 | Pos 5: /E/
+  Pulso 026 | Ciclo 06 | Pos 1: /I/
+  Pulso 027 | Ciclo 06 | Pos 2: /O/
+  Pulso 028 | Ciclo 06 | Pos 3: /E/
+  Pulso 029 | Ciclo 06 | Pos 4: /A/
+  Pulso 030 | Ciclo 06 | Pos 5: /U/
+  Pulso 031 | Ciclo 07 | Pos 1: /A/
+  Pulso 032 | Ciclo 07 | Pos 2: /O/
+  Pulso 033 | Ciclo 07 | Pos 3: /I/
+  Pulso 034 | Ciclo 07 | Pos 4: /E/
+  Pulso 035 | Ciclo 07 | Pos 5: /U/
+  Pulso 036 | Ciclo 08 | Pos 1: /E/
+  Pulso 037 | Ciclo 08 | Pos 2: /I/
+  Pulso 038 | Ciclo 08 | Pos 3: /U/
+  Pulso 039 | Ciclo 08 | Pos 4: /O/
+  Pulso 040 | Ciclo 08 | Pos 5: /A/
+  Pulso 041 | Ciclo 09 | Pos 1: /I/
+  Pulso 042 | Ciclo 09 | Pos 2: /E/
+  Pulso 043 | Ciclo 09 | Pos 3: /O/
+  Pulso 044 | Ciclo 09 | Pos 4: /U/
+  Pulso 045 | Ciclo 09 | Pos 5: /A/
+  Pulso 046 | Ciclo 10 | Pos 1: /E/
+  Pulso 047 | Ciclo 10 | Pos 2: /U/
+  Pulso 048 | Ciclo 10 | Pos 3: /O/
+  Pulso 049 | Ciclo 10 | Pos 4: /I/
+  Pulso 050 | Ciclo 10 | Pos 5: /A/
+  Pulso 051 | Ciclo 11 | Pos 1: /O/
+  Pulso 052 | Ciclo 11 | Pos 2: /E/
+  Pulso 053 | Ciclo 11 | Pos 3: /A/
+  Pulso 054 | Ciclo 11 | Pos 4: /U/
+  Pulso 055 | Ciclo 11 | Pos 5: /I/
+  Pulso 056 | Ciclo 12 | Pos 1: /U/
+  Pulso 057 | Ciclo 12 | Pos 2: /E/
+  Pulso 058 | Ciclo 12 | Pos 3: /I/
+  Pulso 059 | Ciclo 12 | Pos 4: /O/
+  Pulso 060 | Ciclo 12 | Pos 5: /A/
+  Pulso 061 | Ciclo 13 | Pos 1: /I/
+  Pulso 062 | Ciclo 13 | Pos 2: /A/
+  Pulso 063 | Ciclo 13 | Pos 3: /O/
+  Pulso 064 | Ciclo 13 | Pos 4: /E/
+  Pulso 065 | Ciclo 13 | Pos 5: /U/
+  Pulso 066 | Ciclo 14 | Pos 1: /O/
+  Pulso 067 | Ciclo 14 | Pos 2: /U/
+  Pulso 068 | Ciclo 14 | Pos 3: /I/
+  Pulso 069 | Ciclo 14 | Pos 4: /E/
+  Pulso 070 | Ciclo 14 | Pos 5: /A/
+  Pulso 071 | Ciclo 15 | Pos 1: /U/
+  Pulso 072 | Ciclo 15 | Pos 2: /E/
+  Pulso 073 | Ciclo 15 | Pos 3: /I/
+  Pulso 074 | Ciclo 15 | Pos 4: /O/
+  Pulso 075 | Ciclo 15 | Pos 5: /A/
+  Pulso 076 | Ciclo 16 | Pos 1: /E/
+  Pulso 077 | Ciclo 16 | Pos 2: /O/
+  Pulso 078 | Ciclo 16 | Pos 3: /I/
+  Pulso 079 | Ciclo 16 | Pos 4: /U/
+  Pulso 080 | Ciclo 16 | Pos 5: /A/
+  Pulso 081 | Ciclo 17 | Pos 1: /I/
+  Pulso 082 | Ciclo 17 | Pos 2: /E/
+  Pulso 083 | Ciclo 17 | Pos 3: /O/
+  Pulso 084 | Ciclo 17 | Pos 4: /A/
+  Pulso 085 | Ciclo 17 | Pos 5: /U/
+  Pulso 086 | Ciclo 18 | Pos 1: /A/
+  Pulso 087 | Ciclo 18 | Pos 2: /E/
+  Pulso 088 | Ciclo 18 | Pos 3: /I/
+  Pulso 089 | Ciclo 18 | Pos 4: /O/
+  Pulso 090 | Ciclo 18 | Pos 5: /U/
+  Pulso 091 | Ciclo 19 | Pos 1: /O/
+  Pulso 092 | Ciclo 19 | Pos 2: /E/
+  Pulso 093 | Ciclo 19 | Pos 3: /U/
+  Pulso 094 | Ciclo 19 | Pos 4: /I/
+  Pulso 095 | Ciclo 19 | Pos 5: /A/
+  Pulso 096 | Ciclo 20 | Pos 1: /I/
+  Pulso 097 | Ciclo 20 | Pos 2: /U/
+  Pulso 098 | Ciclo 20 | Pos 3: /E/
+  Pulso 099 | Ciclo 20 | Pos 4: /A/
+  Pulso 100 | Ciclo 20 | Pos 5: /O/
+  Pulso 101 | Ciclo 21 | Pos 1: /I/
+  Pulso 102 | Ciclo 21 | Pos 2: /E/
+  Pulso 103 | Ciclo 21 | Pos 3: /O/
+  Pulso 104 | Ciclo 21 | Pos 4: /A/
+  Pulso 105 | Ciclo 21 | Pos 5: /U/
+  Pulso 106 | Ciclo 22 | Pos 1: /A/
+  Pulso 107 | Ciclo 22 | Pos 2: /O/
+  Pulso 108 | Ciclo 22 | Pos 3: /I/
+  Pulso 109 | Ciclo 22 | Pos 4: /U/
+  Pulso 110 | Ciclo 22 | Pos 5: /E/
+  Pulso 111 | Ciclo 23 | Pos 1: /I/
+  Pulso 112 | Ciclo 23 | Pos 2: /O/
+  Pulso 113 | Ciclo 23 | Pos 3: /U/
+  Pulso 114 | Ciclo 23 | Pos 4: /E/
+  Pulso 115 | Ciclo 23 | Pos 5: /A/
+  Pulso 116 | Ciclo 24 | Pos 1: /E/
+  Pulso 117 | Ciclo 24 | Pos 2: /U/
+  Pulso 118 | Ciclo 24 | Pos 3: /O/
+  Pulso 119 | Ciclo 24 | Pos 4: /A/
+  Pulso 120 | Ciclo 24 | Pos 5: /I/
+  Pulso 121 | Ciclo 25 | Pos 1: /A/
+  Pulso 122 | Ciclo 25 | Pos 2: /I/
+  Pulso 123 | Ciclo 25 | Pos 3: /U/
+  Pulso 124 | Ciclo 25 | Pos 4: /O/
+  Pulso 125 | Ciclo 25 | Pos 5: /E/
+  Pulso 126 | Ciclo 26 | Pos 1: /U/
+  Pulso 127 | Ciclo 26 | Pos 2: /I/
+  Pulso 128 | Ciclo 26 | Pos 3: /A/
+  Pulso 129 | Ciclo 26 | Pos 4: /O/
+  Pulso 130 | Ciclo 26 | Pos 5: /E/
+  Pulso 131 | Ciclo 27 | Pos 1: /I/
+  Pulso 132 | Ciclo 27 | Pos 2: /E/
+  Pulso 133 | Ciclo 27 | Pos 3: /A/
+  Pulso 134 | Ciclo 27 | Pos 4: /U/
+  Pulso 135 | Ciclo 27 | Pos 5: /O/
+  Pulso 136 | Ciclo 28 | Pos 1: /I/
+  Pulso 137 | Ciclo 28 | Pos 2: /O/
+  Pulso 138 | Ciclo 28 | Pos 3: /U/
+  Pulso 139 | Ciclo 28 | Pos 4: /A/
+  Pulso 140 | Ciclo 28 | Pos 5: /E/
+  Pulso 141 | Ciclo 29 | Pos 1: /O/
+  Pulso 142 | Ciclo 29 | Pos 2: /U/
+  Pulso 143 | Ciclo 29 | Pos 3: /I/
+  Pulso 144 | Ciclo 29 | Pos 4: /E/
+  Pulso 145 | Ciclo 29 | Pos 5: /A/
+  Pulso 146 | Ciclo 30 | Pos 1: /E/
+  Pulso 147 | Ciclo 30 | Pos 2: /U/
+  Pulso 148 | Ciclo 30 | Pos 3: /A/
+  Pulso 149 | Ciclo 30 | Pos 4: /O/
+  Pulso 150 | Ciclo 30 | Pos 5: /I/
+  Pulso 151 | Ciclo 31 | Pos 1: /A/
+  Pulso 152 | Ciclo 31 | Pos 2: /I/
+  Pulso 153 | Ciclo 31 | Pos 3: /U/
+  Pulso 154 | Ciclo 31 | Pos 4: /E/
+  Pulso 155 | Ciclo 31 | Pos 5: /O/
+  Pulso 156 | Ciclo 32 | Pos 1: /E/
+  Pulso 157 | Ciclo 32 | Pos 2: /I/
+  Pulso 158 | Ciclo 32 | Pos 3: /O/
+  Pulso 159 | Ciclo 32 | Pos 4: /A/
+  Pulso 160 | Ciclo 32 | Pos 5: /U/
+  Pulso 161 | Ciclo 33 | Pos 1: /I/
+  Pulso 162 | Ciclo 33 | Pos 2: /U/
+  Pulso 163 | Ciclo 33 | Pos 3: /E/
+  Pulso 164 | Ciclo 33 | Pos 4: /O/
+  Pulso 165 | Ciclo 33 | Pos 5: /A/
+  Pulso 166 | Ciclo 34 | Pos 1: /E/
+  Pulso 167 | Ciclo 34 | Pos 2: /U/
+  Pulso 168 | Ciclo 34 | Pos 3: /A/
+  Pulso 169 | Ciclo 34 | Pos 4: /I/
+  Pulso 170 | Ciclo 34 | Pos 5: /O/
+  Pulso 171 | Ciclo 35 | Pos 1: /U/
+  Pulso 172 | Ciclo 35 | Pos 2: /I/
+  Pulso 173 | Ciclo 35 | Pos 3: /A/
+  Pulso 174 | Ciclo 35 | Pos 4: /O/
+  Pulso 175 | Ciclo 35 | Pos 5: /E/
+  Pulso 176 | Ciclo 36 | Pos 1: /I/
+  Pulso 177 | Ciclo 36 | Pos 2: /E/
+  Pulso 178 | Ciclo 36 | Pos 3: /A/
+  Pulso 179 | Ciclo 36 | Pos 4: /U/
+  Pulso 180 | Ciclo 36 | Pos 5: /O/
+  Pulso 181 | Ciclo 37 | Pos 1: /I/
+  Pulso 182 | Ciclo 37 | Pos 2: /E/
+  Pulso 183 | Ciclo 37 | Pos 3: /O/
+  Pulso 184 | Ciclo 37 | Pos 4: /U/
+  Pulso 185 | Ciclo 37 | Pos 5: /A/
+  Pulso 186 | Ciclo 38 | Pos 1: /E/
+  Pulso 187 | Ciclo 38 | Pos 2: /I/
+  Pulso 188 | Ciclo 38 | Pos 3: /A/
+  Pulso 189 | Ciclo 38 | Pos 4: /O/
+  Pulso 190 | Ciclo 38 | Pos 5: /U/
+  Pulso 191 | Ciclo 39 | Pos 1: /I/
+  Pulso 192 | Ciclo 39 | Pos 2: /O/
+  Pulso 193 | Ciclo 39 | Pos 3: /A/
+  Pulso 194 | Ciclo 39 | Pos 4: /U/
+  Pulso 195 | Ciclo 39 | Pos 5: /E/
+  Pulso 196 | Ciclo 40 | Pos 1: /A/
+  Pulso 197 | Ciclo 40 | Pos 2: /I/
+  Pulso 198 | Ciclo 40 | Pos 3: /U/
+  Pulso 199 | Ciclo 40 | Pos 4: /O/
+  Pulso 200 | Ciclo 40 | Pos 5: /E/
+  Pulso 201 | Ciclo 41 | Pos 1: /U/
+  Pulso 202 | Ciclo 41 | Pos 2: /E/
+  Pulso 203 | Ciclo 41 | Pos 3: /A/
+  Pulso 204 | Ciclo 41 | Pos 4: /O/
+  Pulso 205 | Ciclo 41 | Pos 5: /I/
+  Pulso 206 | Ciclo 42 | Pos 1: /E/
+  Pulso 207 | Ciclo 42 | Pos 2: /U/
+  Pulso 208 | Ciclo 42 | Pos 3: /O/
+  Pulso 209 | Ciclo 42 | Pos 4: /A/
+  Pulso 210 | Ciclo 42 | Pos 5: /I/
+  Pulso 211 | Ciclo 43 | Pos 1: /U/
+  Pulso 212 | Ciclo 43 | Pos 2: /I/
+  Pulso 213 | Ciclo 43 | Pos 3: /A/
+  Pulso 214 | Ciclo 43 | Pos 4: /E/
+  Pulso 215 | Ciclo 43 | Pos 5: /O/
+  Pulso 216 | Ciclo 44 | Pos 1: /E/
+  Pulso 217 | Ciclo 44 | Pos 2: /I/
+  Pulso 218 | Ciclo 44 | Pos 3: /O/
+  Pulso 219 | Ciclo 44 | Pos 4: /U/
+  Pulso 220 | Ciclo 44 | Pos 5: /A/
+  Pulso 221 | Ciclo 45 | Pos 1: /U/
+  Pulso 222 | Ciclo 45 | Pos 2: /A/
+  Pulso 223 | Ciclo 45 | Pos 3: /O/
+  Pulso 224 | Ciclo 45 | Pos 4: /I/
+  Pulso 225 | Ciclo 45 | Pos 5: /E/
+  Pulso 226 | Ciclo 46 | Pos 1: /A/
+  Pulso 227 | Ciclo 46 | Pos 2: /E/
+  Pulso 228 | Ciclo 46 | Pos 3: /I/
+  Pulso 229 | Ciclo 46 | Pos 4: /U/
+  Pulso 230 | Ciclo 46 | Pos 5: /O/
+  Pulso 231 | Ciclo 47 | Pos 1: /I/
+  Pulso 232 | Ciclo 47 | Pos 2: /A/
+  Pulso 233 | Ciclo 47 | Pos 3: /U/
+  Pulso 234 | Ciclo 47 | Pos 4: /E/
+  Pulso 235 | Ciclo 47 | Pos 5: /O/
+  Pulso 236 | Ciclo 48 | Pos 1: /E/
+  Pulso 237 | Ciclo 48 | Pos 2: /U/
+  Pulso 238 | Ciclo 48 | Pos 3: /I/
+  Pulso 239 | Ciclo 48 | Pos 4: /O/
+  Pulso 240 | Ciclo 48 | Pos 5: /A/
+  Pulso 241 | Ciclo 49 | Pos 1: /I/
+  Pulso 242 | Ciclo 49 | Pos 2: /A/
+  Pulso 243 | Ciclo 49 | Pos 3: /E/
+  Pulso 244 | Ciclo 49 | Pos 4: /U/
+  Pulso 245 | Ciclo 49 | Pos 5: /O/
+  Pulso 246 | Ciclo 50 | Pos 1: /I/
+  Pulso 247 | Ciclo 50 | Pos 2: /U/
+  Pulso 248 | Ciclo 50 | Pos 3: /A/
+  Pulso 249 | Ciclo 50 | Pos 4: /O/
+  Pulso 250 | Ciclo 50 | Pos 5: /E/
+
+========================================================================================
+INFORME COMPLETO DEL PROTOCOLO Y EXPERIMENTO — ÑANDÚ LSD v6.0.0
+========================================================================================
+Fecha y Hora Guardado : 2026-11-09T18:08:26.243780
+Modo de Ejecución     : Secuencia Continua
+Sujeto                : Sujeto1
+Prueba                : Pruebaconnuevoslandrmaksfacial
+Letra / Etiqueta      : SecuenciaContinua
+Ancla t0_epoch        : 1794258127.313545
+Ancla t0_perf_counter : 31909.302104392
+
+----------------------------------------------------------------------------------------
+1. CONFIGURACIÓN DE AUDIO / SPEAKING Y SONIDO
+----------------------------------------------------------------------------------------
+¿Se usó Audio Speaking?      : SÍ (Voz activa)
+Estado Botón Speaking        : ACTIVO (SPEAKING: ON)
+Modo de Locución             : solo_fases
+Beeps del Metrónomo Activos  : SÍ
+Comandos de Voz Emitidos     : 3 de 252 registrados
+Detalle cronológico de locuciones (Speaking):
+  [01] t_rel= +0.000s | Fase=ruido_basal_inicial        | Clave=haz_silencio   | Texto='Haz silencio, grabando ruido basal' (EMITIDO)
+  [02] t_rel= +5.254s | Fase=preparacion_sincronizada   | Clave=di_u           | Texto='Prepárate, di U' (EMITIDO)
+  [03] t_rel= +0.895s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [04] t_rel= +2.656s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [05] t_rel= +4.085s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [06] t_rel= +5.843s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [07] t_rel= +7.600s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [08] t_rel= +9.165s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [09] t_rel=+11.009s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [10] t_rel=+12.533s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [11] t_rel=+13.896s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [12] t_rel=+15.215s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [13] t_rel=+17.004s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [14] t_rel=+18.955s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [15] t_rel=+20.325s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [16] t_rel=+21.496s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [17] t_rel=+22.774s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [18] t_rel=+24.567s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [19] t_rel=+25.881s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [20] t_rel=+27.094s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [21] t_rel=+28.528s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [22] t_rel=+29.742s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [23] t_rel=+31.160s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [24] t_rel=+32.494s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [25] t_rel=+33.711s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [26] t_rel=+34.938s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [27] t_rel=+36.182s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [28] t_rel=+37.378s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [29] t_rel=+38.503s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [30] t_rel=+39.721s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [31] t_rel=+41.065s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [32] t_rel=+42.227s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [33] t_rel=+43.594s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [34] t_rel=+45.413s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [35] t_rel=+47.182s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [36] t_rel=+48.764s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [37] t_rel=+50.019s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [38] t_rel=+51.570s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [39] t_rel=+52.821s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [40] t_rel=+54.016s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [41] t_rel=+55.144s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [42] t_rel=+56.650s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [43] t_rel=+57.881s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [44] t_rel=+58.974s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [45] t_rel=+60.683s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [46] t_rel=+62.205s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [47] t_rel=+63.768s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [48] t_rel=+65.170s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [49] t_rel=+66.542s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [50] t_rel=+67.964s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [51] t_rel=+69.151s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [52] t_rel=+70.392s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [53] t_rel=+72.176s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [54] t_rel=+73.655s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [55] t_rel=+74.875s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [56] t_rel=+76.404s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [57] t_rel=+77.950s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [58] t_rel=+79.311s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [59] t_rel=+80.789s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [60] t_rel=+82.101s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [61] t_rel=+83.344s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [62] t_rel=+84.507s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [63] t_rel=+85.861s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [64] t_rel=+87.227s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [65] t_rel=+88.600s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [66] t_rel=+89.924s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [67] t_rel=+91.135s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [68] t_rel=+92.700s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [69] t_rel=+93.957s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [70] t_rel=+95.238s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [71] t_rel=+97.035s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [72] t_rel=+98.920s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [73] t_rel=+100.819s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [74] t_rel=+102.521s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [75] t_rel=+104.159s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [76] t_rel=+105.725s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [77] t_rel=+107.095s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [78] t_rel=+108.329s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [79] t_rel=+109.464s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [80] t_rel=+110.686s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [81] t_rel=+111.900s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [82] t_rel=+113.282s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [83] t_rel=+114.512s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [84] t_rel=+116.256s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [85] t_rel=+117.678s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [86] t_rel=+119.229s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [87] t_rel=+120.493s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [88] t_rel=+121.778s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [89] t_rel=+123.091s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [90] t_rel=+124.769s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [91] t_rel=+126.530s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [92] t_rel=+127.993s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [93] t_rel=+129.789s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [94] t_rel=+131.135s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [95] t_rel=+132.254s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [96] t_rel=+133.918s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [97] t_rel=+135.331s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [98] t_rel=+136.475s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [99] t_rel=+138.132s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [100] t_rel=+139.396s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [101] t_rel=+140.724s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [102] t_rel=+142.076s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [103] t_rel=+143.426s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [104] t_rel=+144.590s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [105] t_rel=+146.346s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [106] t_rel=+148.290s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [107] t_rel=+150.230s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [108] t_rel=+151.702s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [109] t_rel=+152.936s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [110] t_rel=+154.704s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [111] t_rel=+156.662s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [112] t_rel=+158.612s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [113] t_rel=+160.554s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [114] t_rel=+162.476s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [115] t_rel=+164.116s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [116] t_rel=+165.632s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [117] t_rel=+167.404s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [118] t_rel=+169.078s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [119] t_rel=+170.480s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [120] t_rel=+172.277s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [121] t_rel=+174.206s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [122] t_rel=+176.109s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [123] t_rel=+178.037s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [124] t_rel=+179.523s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [125] t_rel=+181.140s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [126] t_rel=+182.605s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [127] t_rel=+184.404s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [128] t_rel=+185.853s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [129] t_rel=+187.126s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [130] t_rel=+188.329s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [131] t_rel=+189.725s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [132] t_rel=+191.309s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [133] t_rel=+192.704s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [134] t_rel=+193.988s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [135] t_rel=+195.711s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [136] t_rel=+197.123s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [137] t_rel=+198.364s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [138] t_rel=+199.743s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [139] t_rel=+201.388s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [140] t_rel=+203.278s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [141] t_rel=+204.830s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [142] t_rel=+206.526s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [143] t_rel=+207.932s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [144] t_rel=+209.535s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [145] t_rel=+211.425s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [146] t_rel=+213.076s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [147] t_rel=+214.316s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [148] t_rel=+215.839s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [149] t_rel=+217.553s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [150] t_rel=+218.860s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [151] t_rel=+220.614s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [152] t_rel=+222.332s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [153] t_rel=+223.924s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [154] t_rel=+225.790s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [155] t_rel=+227.671s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [156] t_rel=+229.108s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [157] t_rel=+230.366s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [158] t_rel=+231.826s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [159] t_rel=+233.669s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [160] t_rel=+235.356s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [161] t_rel=+236.733s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [162] t_rel=+238.210s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [163] t_rel=+239.720s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [164] t_rel=+241.379s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [165] t_rel=+242.684s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [166] t_rel=+243.871s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [167] t_rel=+245.422s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [168] t_rel=+246.775s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [169] t_rel=+248.013s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [170] t_rel=+249.123s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [171] t_rel=+250.237s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [172] t_rel=+251.696s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [173] t_rel=+253.552s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [174] t_rel=+254.866s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [175] t_rel=+256.621s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [176] t_rel=+257.940s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [177] t_rel=+259.373s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [178] t_rel=+260.778s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [179] t_rel=+262.582s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [180] t_rel=+264.322s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [181] t_rel=+266.185s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [182] t_rel=+267.656s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [183] t_rel=+268.940s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [184] t_rel=+270.721s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [185] t_rel=+272.287s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [186] t_rel=+273.604s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [187] t_rel=+275.365s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [188] t_rel=+277.315s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [189] t_rel=+278.658s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [190] t_rel=+279.858s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [191] t_rel=+281.646s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [192] t_rel=+283.587s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [193] t_rel=+285.516s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [194] t_rel=+286.866s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [195] t_rel=+288.599s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [196] t_rel=+289.944s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [197] t_rel=+291.199s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [198] t_rel=+292.788s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [199] t_rel=+294.102s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [200] t_rel=+295.646s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [201] t_rel=+297.035s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [202] t_rel=+298.827s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [203] t_rel=+300.586s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [204] t_rel=+302.472s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [205] t_rel=+303.870s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [206] t_rel=+305.042s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [207] t_rel=+306.250s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [208] t_rel=+308.020s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [209] t_rel=+309.759s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [210] t_rel=+311.638s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [211] t_rel=+312.972s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [212] t_rel=+314.727s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [213] t_rel=+316.344s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [214] t_rel=+317.776s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [215] t_rel=+319.124s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [216] t_rel=+320.543s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [217] t_rel=+321.744s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [218] t_rel=+322.826s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [219] t_rel=+323.947s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [220] t_rel=+325.072s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [221] t_rel=+326.191s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [222] t_rel=+327.682s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [223] t_rel=+329.003s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [224] t_rel=+330.376s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [225] t_rel=+331.584s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [226] t_rel=+333.281s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [227] t_rel=+334.721s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [228] t_rel=+335.866s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [229] t_rel=+337.530s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [230] t_rel=+338.919s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [231] t_rel=+340.695s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [232] t_rel=+342.327s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [233] t_rel=+343.804s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [234] t_rel=+345.409s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [235] t_rel=+346.684s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [236] t_rel=+347.924s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [237] t_rel=+349.215s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [238] t_rel=+350.772s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [239] t_rel=+352.608s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [240] t_rel=+354.109s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [241] t_rel=+355.822s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [242] t_rel=+357.311s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [243] t_rel=+359.109s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [244] t_rel=+360.543s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [245] t_rel=+362.151s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [246] t_rel=+363.894s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [247] t_rel=+365.447s | Fase=pulso_continua             | Clave=di_i           | Texto='Di I' (MUTEADO/OMITIDO)
+  [248] t_rel=+367.312s | Fase=pulso_continua             | Clave=di_u           | Texto='Di U' (MUTEADO/OMITIDO)
+  [249] t_rel=+369.187s | Fase=pulso_continua             | Clave=di_a           | Texto='Di A' (MUTEADO/OMITIDO)
+  [250] t_rel=+370.753s | Fase=pulso_continua             | Clave=di_o           | Texto='Di O' (MUTEADO/OMITIDO)
+  [251] t_rel=+372.016s | Fase=pulso_continua             | Clave=di_e           | Texto='Di E' (MUTEADO/OMITIDO)
+  [252] t_rel=+374.164s | Fase=ruido_basal_final          | Clave=haz_silencio   | Texto='Haz silencio, grabando ruido final' (EMITIDO)
+
+----------------------------------------------------------------------------------------
+2. HARDWARE, FUENTE DE DATOS Y CANALES ACTIVOS
+----------------------------------------------------------------------------------------
+Fuente de Datos              : Micrófono PC
+Modo Prueba Activo           : NO
+Micrófono PC Activo          : SÍ
+Dispositivo DAQ / Terminal   : Dev1 | Terminal: RSE
+Frecuencia de Muestreo (SR)  : 44100 Hz
+Pre-Roll / Offset Ancla      : 1.0 s (229320 muestras previas en WAV)
+Canales Activos (1)         :
+  - Canal lógico 0: Dev1/ai0 (ai0) | Músculo: Anterior Belly of Digastric | Ganancia: 495.0 | Tipo: EMG MUSCULAR
+
+----------------------------------------------------------------------------------------
+3. FILTROS DIGITALES Y PROCESAMIENTO EN TIEMPO REAL
+----------------------------------------------------------------------------------------
+Filtro Notch 50 Hz           : DESACTIVADO (Señal cruda sin Notch) (Q=2.0, Comb=NO)
+Filtro Pasa-Banda Butterworth: ACTIVO (20.0 Hz - 500.0 Hz, Orden 4)
+Envolvente RMS               : DESACTIVADA (Ventana=100.0 ms)
+Umbral Picos SNR             : 10.177414159399767 µV | Trigger Activo: NO
+
+----------------------------------------------------------------------------------------
+4. METRÓNOMO, RITMO Y MODO JITTER ANTI-SINCRONIZACIÓN
+----------------------------------------------------------------------------------------
+Metrónomo Activo             : SÍ
+BPM Nominal / Intervalo Base : 40 BPM (tau_0 = 1.5 s)
+Subdivisiones Configuradas   : 4 (Efectivas en fonación: 1)
+Modo Jitter Anti-Sync        : ACTIVO
+Parámetros Jitter            : +/- 30.0% | Perfil: exponential_hazard
+Duración Ruido Basal Config. : 5.0 s
+
+----------------------------------------------------------------------------------------
+5. CÁMARA Y FOTOMETRÍA FACIAL 3D
+----------------------------------------------------------------------------------------
+Módulo de Cámara Disponible  : SÍ
+Montaje Fotométrico en Sesión: CONFIRMADO Y ACTIVO
+
+----------------------------------------------------------------------------------------
+6. RUIDO BASAL (INICIAL Y FINAL) Y RUIDO DE LÍNEA 50 HZ
+----------------------------------------------------------------------------------------
+Ruido Inicial — Media (µV)   : [np.float64(11.718313116315185)]
+Ruido Inicial — Desv.Std (µV): [np.float64(2.0354828318799534)]
+Ruido Inicial — 50 Hz (µV)   : [0.0]
+Ruido Final   — Media (µV)   : [102.80223524039285]
+Ruido Final   — Desv.Std (µV): [2.9768837199196936]
+Ruido Final   — 50 Hz (µV)   : [3.9340668373275745]
+
+----------------------------------------------------------------------------------------
+7. CALIBRACIÓN DE CONTRACCIÓN MUSCULAR MÁXIMA (CVM)
+----------------------------------------------------------------------------------------
+CVM Calibrado en Sesión      : NO
+Supremo Global Pico / P95    : 0.00 µV | P95: 0.00 µV | RMS: 0.00 µV
+
+----------------------------------------------------------------------------------------
+8. SECUENCIA DE VOCALES (DE BRUIJN), FATIGA MUSCULAR (MDF) Y SINCRONIZACIÓN
+----------------------------------------------------------------------------------------
+Orden Base de Vocales        : U -> O -> A -> I -> E
+Balanceo De Bruijn Activo    : SÍ (Transiciones v_i -> v_j equilibradas)
+Repeticiones / Ciclos        : 50
+Pulsos Inválidos (Manual)    : []
+Semáforo Contacto Electrodos : ÓPTIMO
+Resumen Fatiga Muscular (MDF): {'canal_0': {'mdf_inicial_hz': 81.11, 'mdf_final_hz': 81.11, 'variacion_mdf_pct': 0.0, 'rms_medio_uV': 18.0, 'estado_fatiga': 'ESTABLE'}}
+Total Eventos Vocales        : 250
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+  Pulso 000 | Ciclo 01 | Vocal: // | t_rel=   0.000s | sample=0 | tau=0.000s | jitter=NO
+
+Carpetas generadas en la sesión:
+  - /home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/EMG_desarrollo/base_de_datos_electrodos/2026-11-09/SecuenciaContinua_Pruebaconnuevoslandrmaksfacial_Sujeto1
+
+----------------------------------------------------------------------------------------
+9. NOTAS DEL EXPERIMENTO
+----------------------------------------------------------------------------------------
+(Sin notas adicionales escritas por el operador)
+========================================================================================

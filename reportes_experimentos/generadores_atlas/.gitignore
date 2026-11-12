@@ -1,0 +1,4 @@
+# Ignorar completamente esta carpeta para GitHub
+*
+!.gitignore
+

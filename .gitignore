@@ -46,5 +46,15 @@ respaldos_atlas_seguridad/
 *.tar.gz
 *.zip
 reportes_experimentos/*.pdf
+reportes_experimentos/**/*.pdf
 reportes_experimentos/auditoria_biometrica_atlas/
 EMG_desarrollo/deep_learning/pca_umap_clustering/resultados_pca_umap/
+
+# 5. Informes compilados, tesis y grabaciones crudas (no subir a GitHub)
+reportes_experimentos/**/*.aux
+reportes_experimentos/**/*.out
+reportes_experimentos/**/*.toc
+reportes_experimentos/tesis_modular_latex/
+reportes_experimentos/capitulo_trackeo_cinetico/test/
+reportes_experimentos/capitulo_trackeo_cinetico/train/
+auditoria_tiempo_real/ventanas_en_vivo/

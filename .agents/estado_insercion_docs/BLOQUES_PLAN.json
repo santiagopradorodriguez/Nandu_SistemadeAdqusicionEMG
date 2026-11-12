@@ -1,0 +1,110 @@
+[
+  {
+    "id": 1,
+    "titulo": "7. Análisis de Variedades Motoras y Fase Pre-Fono",
+    "subtitulo": "7.1. Integración del Extractor Canónico Oficial en el Método Solla-Hopfield-Mindlin",
+    "md_file": "01_resultado_shm_extractor_oficial.md",
+    "image_file": "figuras/01_shm_6paneles_2026_09_15.png",
+    "figura_num": "Figura 7.1",
+    "epigrafe": "Figura 7.1: Comparativa del Método Solla-Hopfield-Mindlin sobre la medición del 2026-09-15 alimentado con el extractor oficial (Notch Q=30, Isolation Forest 10%, smooth 125 ms). Se observa la preservación de la paleta canónica y la comparación de separabilidad entre PCA clásico (85.22% Atlas, 74.91% CV) y SHM con Procrustes SO(3) (82.78% CV)."
+  },
+  {
+    "id": 2,
+    "titulo": "7.2. Dinámica Articular Muscular: Pre-Fono vs Post-Fono (2026-09-15)",
+    "subtitulo": null,
+    "md_file": "02_comparativa_pre_vs_post_fono.md",
+    "image_file": "figuras/02_energia_2d_pre_vs_post_2026_09_15.png",
+    "figura_num": "Figura 7.2",
+    "epigrafe": "Figura 7.2: Dispersión física 2D en Ch0 Digástrico vs Ch1 Cigomático con tamaño modular por Ch2 Orbicular. A la izquierda, la ventana Pre-Fono exhibe ortogonalidad limpia y alta separabilidad por intención articulatoria. A la derecha, la fase Post-Fono muestra el colapso elástico hacia el reposo con pérdida de diferenciación."
+  },
+  {
+    "id": 3,
+    "titulo": "7.3. Espacio Físico Muscular Tridimensional Directo (Tríada Canónica)",
+    "subtitulo": null,
+    "md_file": "03_espacio_fisico_3d_pre_vs_post_fono.md",
+    "image_file": "figuras/03_energia_3d_pre_vs_post_2026_09_15.png",
+    "figura_num": "Figura 7.3",
+    "epigrafe": "Figura 7.3: Espacio físico muscular 3D (X: Digástrico, Y: Cigomático, Z: Orbicular) para la Tríada Canónica (2026-09-15). En Pre-Fono se forma un trípode ortogonal perfecto que alcanza 86.21% de exactitud lineal sin necesidad de PCA. En Post-Fono, el volumen se comprime drásticamente hacia el origen."
+  },
+  {
+    "id": 4,
+    "titulo": "7.4. Análisis de Ortogonalidad con Microelectrodos y Risorio (2026-09-01)",
+    "subtitulo": null,
+    "md_file": "04_espacio_fisico_3d_2026_09_01.md",
+    "image_file": "figuras/04_energia_3d_2026_09_01.png",
+    "figura_num": "Figura 7.4",
+    "epigrafe": "Figura 7.4: Espacio físico 3D en la medición del 2026-09-01 (Microelectrodos 5x5 mm: Digástrico, Risorio, Orbicular). A diferencia del Cigomático a 45°, el Risorio horizontal comparte plano con el Orbicular provocando que /E/ pierda su vértice y quede atrapada en el centro de la nube."
+  },
+  {
+    "id": 5,
+    "titulo": "7.5. Dinámica 2D con Risorio: El Colapso de la Vocal /E/",
+    "subtitulo": null,
+    "md_file": "05_dinamica_2d_2026_09_01.md",
+    "image_file": "figuras/05_energia_2d_2026_09_01.png",
+    "figura_num": "Figura 7.5",
+    "epigrafe": "Figura 7.5: Proyección 2D (Digástrico vs Risorio) en 2026-09-01. El Risorio actúa de forma casi binaria aislando /I/ pero comprimiendo /E/, /O/, /U/ en la línea de base inferior, lo que confirma que el trípode ortogonal es mérito exclusivo del Cigomático a 45°."
+  },
+  {
+    "id": 6,
+    "titulo": "7.6. Origen Biomecánico de la Pérdida de Separabilidad (2026-10-28)",
+    "subtitulo": null,
+    "md_file": "06_separabilidad_10_28_pre_fono.md",
+    "image_file": "figuras/06_energia_3d_1028_exp1_vs_exp2.png",
+    "figura_num": "Figura 7.6",
+    "epigrafe": "Figura 7.6: Demostración en 3D de la pérdida y recuperación de separabilidad motora (2026-10-28). En Exp1 (izquierda), el habla horizontal relajada desactiva el Digástrico en /A/ (X aprox 0) y desvía la energía al Cigomático colapsando a 56.5%. En Exp2 (derecha, 4 min después con mismos electrodos), la apertura vertical forzada reactiva el Digástrico y recupera 75.5% LDA de inmediato."
+  },
+  {
+    "id": 7,
+    "titulo": "7.7. Optimización de PCA mediante Descarte de la Fase Post-Fono",
+    "subtitulo": null,
+    "md_file": "07_pca_pre_fono_vs_completo.md",
+    "image_file": "figuras/07_pca_completo_vs_prefono_2026_09_15.png",
+    "figura_num": "Figura 7.7",
+    "epigrafe": "Figura 7.7: Comparativa de PCA sobre pulso completo (60 features temporales) vs recorte exclusivo Pre-Fono (30 features) en 2026-09-15. Descartar el rebote mecánico post-fono eleva la varianza acumulada (88.1% vs 85.9%) y la exactitud 2D en +3.0 pp (79.8% vs 76.8%), compactando visiblemente los cúmulos de /O/ y /U/."
+  },
+  {
+    "id": 8,
+    "titulo": "7.8. Evaluación Post-Fono en Mediciones Inseparables y Efecto del Masetero",
+    "subtitulo": null,
+    "md_file": "08_evaluacion_post_fono_1028_y_masetero.md",
+    "image_file": "figuras/08_evaluacion_post_fono_1028_y_masetero.png",
+    "figura_num": "Figura 7.8",
+    "epigrafe": "Figura 7.8: Evaluación 3D de la fase Post-Fono. En 10-28 Exp1 la exactitud colapsa aún más (34.7% en CV), demostrando que el post-fono es colapso elástico pasivo. En 09-23 con Masetero, Pre-Fono supera a Post-Fono por +16.7 pp, confirmando que la oclusión mandibular tardía no diferencia fonemas globales."
+  },
+  {
+    "id": 9,
+    "titulo": "7.9. Confirmación Fisiológica: El Masetero Post-Fono como Detector de /A/",
+    "subtitulo": null,
+    "md_file": "09_masetero_post_fono_2d_aislamiento_a.md",
+    "image_file": "figuras/09_masetero_post_fono_2d_aislamiento_a.png",
+    "figura_num": "Figura 7.9",
+    "epigrafe": "Figura 7.9: Proyección 2D (Ch0 Masetero vs Ch1 Orbicular Vertical) en Post-Fono (2026-09-23). La vocal /A/ se separa nítidamente a la derecha (0.35 norm.) debido al gran esfuerzo mecánico de elevación mandibular requerido tras la apertura máxima, actuando como firma cinemática específica de /A/."
+  },
+  {
+    "id": 10,
+    "titulo": "7.10. Dinámica Pre vs Post Fono en Secuencias Continuas De Bruijn (2026-10-30)",
+    "subtitulo": null,
+    "md_file": "10_secuencias_continuas_1030_pre_vs_post_fono.md",
+    "image_file": "figuras/10_secuencias_continuas_1030_pre_vs_post_fono.png",
+    "figura_num": "Figura 7.10",
+    "epigrafe": "Figura 7.10: Secuencias continuas con jittering temporal (10-30). En Serie 1 (arriba) y Serie 2 con segunda serie (abajo), Pre-Fono resiste la co-articulación anticipatoria (~60% CV), mientras que Post-Fono se degrada drásticamente (hasta 29.0% CV por mezcla con el fonema siguiente)."
+  },
+  {
+    "id": 11,
+    "titulo": "7.11. Secuencias Continuas De Bruijn Juntas (N=286): Pre vs Post Fono",
+    "subtitulo": null,
+    "md_file": "11_secuencias_continuas_1030_JUNTAS_pre_vs_post_fono.md",
+    "image_file": "figuras/11_secuencias_continuas_1030_JUNTAS_pre_vs_post_fono.png",
+    "figura_num": "Figura 7.11",
+    "epigrafe": "Figura 7.11: Dataset consolidado de secuencias continuas (Series 1 y 2 combinadas, N=286 pulsos). Pre-Fono (izquierda) afianza su estructura (61.9% CV), mientras que Post-Fono (derecha) colapsa a 34.3% CV, evidenciando una brecha de +27.6 pp a favor de la ventana pre-fonatoria."
+  },
+  {
+    "id": 12,
+    "titulo": "7.12. Secuencias Continuas Juntas: Las 3 Proyecciones Ortogonales 2D",
+    "subtitulo": null,
+    "md_file": "12_secuencias_continuas_1030_JUNTAS_3proyecciones.md",
+    "image_file": "figuras/12_secuencias_continuas_1030_JUNTAS_3proyecciones.png",
+    "figura_num": "Figura 7.12",
+    "epigrafe": "Figura 7.12: Las 3 proyecciones ortogonales 2D para las secuencias continuas unificadas (N=286). Fila superior: Pre-Fono conserva la 'L' y la apertura en los 3 planos. Fila inferior: Post-Fono muestra la compresión simultánea de todos los planos hacia el origen por co-articulación continua."
+  }
+]

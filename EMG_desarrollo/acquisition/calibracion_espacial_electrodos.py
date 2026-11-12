@@ -61,6 +61,22 @@ from typing import Dict, List, Tuple, Optional, Any, Union
 import cv2
 import numpy as np
 try:
+    from realtime_facial_decoder_engine import OneEuroLandmarkFilter3D, ProcrustesKabschHeadFrame
+except ImportError:
+    try:
+        from EMG_desarrollo.deep_learning.realtime_facial_decoder_engine import OneEuroLandmarkFilter3D, ProcrustesKabschHeadFrame
+    except ImportError:
+        try:
+            # Fallback relativo a la raiz del repositorio cuando se ejecuta como script suelto
+            _repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            _dl_path = os.path.join(_repo_root, "deep_learning")
+            if _dl_path not in sys.path:
+                sys.path.insert(0, _dl_path)
+            from realtime_facial_decoder_engine import OneEuroLandmarkFilter3D, ProcrustesKabschHeadFrame
+        except Exception:
+            OneEuroLandmarkFilter3D = None
+            ProcrustesKabschHeadFrame = None
+try:
     import mediapipe as mp
 except ImportError:
     mp = None
@@ -83,6 +99,7 @@ INDICE_IRIS_CENTRO_IZQ: int = 468
 INDICE_IRIS_CENTRO_DER: int = 473
 
 # Índices anatómicos adicionales para pose craneal 3D y biometría labial/mandibular
+INDICE_PUENTE_NASAL: int = 4
 INDICE_GLABELA: int = 10
 INDICE_MENTON_GNATHION: int = 152
 INDICE_LABIO_SUP_INTERNO: int = 13
@@ -258,6 +275,17 @@ class AntigravityAgent:
         self.modo_moderno = False
         self._modo_api: Optional[str] = None
         self.detector = None
+        # Filtros adaptativos One-Euro 3D y estabilizador Procrustes Kabsch para eliminar jitter de 2-5 px en reposo
+        self._lm3d_one_euro = (
+            OneEuroLandmarkFilter3D(f_min=0.85, beta=0.055, f_d=1.0)
+            if OneEuroLandmarkFilter3D is not None
+            else None
+        )
+        self._procrustes_hf = (
+            ProcrustesKabschHeadFrame()
+            if ProcrustesKabschHeadFrame is not None
+            else None
+        )
 
         if ruta_modelo_valida:
             try:
@@ -446,8 +474,13 @@ class AntigravityAgent:
             puntos_3d[i, 0] = lm.x
             puntos_3d[i, 1] = lm.y
             puntos_3d[i, 2] = lm.z
-            puntos_2d_px[i, 0] = lm.x * ancho
-            puntos_2d_px[i, 1] = lm.y * alto
+
+        # Aplicar filtro adaptativo One-Euro sobre las coordenadas 3D normalizadas ANTES de escalar a píxeles
+        if getattr(self, "_lm3d_one_euro", None) is not None:
+            puntos_3d = self._lm3d_one_euro.filter(puntos_3d)
+
+        puntos_2d_px[:, 0] = puntos_3d[:, 0] * ancho
+        puntos_2d_px[:, 1] = puntos_3d[:, 1] * alto
 
         # Origen de coordenadas: punta de la nariz (pronasale)
         punta_nariz_3d = puntos_3d[INDICE_NARIZ_PUNTA].copy()
@@ -495,9 +528,58 @@ class AntigravityAgent:
         ancho_biauricular_px = float(np.linalg.norm(trago_der_px - trago_izq_px))
         ancho_biauricular_3d = float(np.linalg.norm(trago_der_3d - trago_izq_3d))
 
+        glabela_3d = puntos_3d[INDICE_GLABELA].copy() if num_puntos > INDICE_GLABELA else punta_nariz_3d.copy()
+        glabela_px = puntos_2d_px[INDICE_GLABELA].copy() if num_puntos > INDICE_GLABELA else punta_nariz_px.copy()
+
+        # Sistema de Coordenadas Local del Cráneo (Head Frame Procrustes Kabsch Óseo):
+        # Desacople de rotación y traslación rígida 3D respecto al anclaje frontal-nasal estable
+        if getattr(self, "_procrustes_hf", None) is not None:
+            info_proc = self._procrustes_hf.project(
+                puntos_2d_px, puntos_3d, d_ip_nominal_mm=63.0, ancho_img=float(ancho)
+            )
+            puntos_locales_craneo_mm = info_proc["r_local_mm"]
+            c_craneo_m = info_proc["c_craneo_mm"]
+            R_craneo = info_proc["R_craneo"]
+            escala_mm_px = info_proc["escala_mm_px"]
+        else:
+            dist_ip_3d_px = float(np.hypot(dist_ip_px, (ojo_der_3d[2] - ojo_izq_3d[2]) * ancho))
+            escala_mm_px = 63.0 / max(dist_ip_3d_px, 1.0)
+            pts_metric_3d = np.column_stack([
+                puntos_2d_px[:, 0] * escala_mm_px,
+                puntos_2d_px[:, 1] * escala_mm_px,
+                puntos_3d[:, 2] * ancho * escala_mm_px,
+            ])
+            p_nariz_m = pts_metric_3d[INDICE_NARIZ_PUNTA]
+            p_oizq_m = np.array([ojo_izq_px[0] * escala_mm_px, ojo_izq_px[1] * escala_mm_px, ojo_izq_3d[2] * ancho * escala_mm_px], dtype=np.float64)
+            p_oder_m = np.array([ojo_der_px[0] * escala_mm_px, ojo_der_px[1] * escala_mm_px, ojo_der_3d[2] * ancho * escala_mm_px], dtype=np.float64)
+            p_glab_m = pts_metric_3d[INDICE_GLABELA] if num_puntos > INDICE_GLABELA else (0.5 * (p_oizq_m + p_oder_m))
+
+            c_craneo_m = (p_nariz_m + p_oizq_m + p_oder_m) / 3.0
+            v_x = p_oder_m - p_oizq_m
+            u_x = v_x / max(float(np.linalg.norm(v_x)), 1e-6)
+            v_up = p_glab_m - p_nariz_m
+            v_y = v_up - np.dot(v_up, u_x) * u_x
+            norm_vy = float(np.linalg.norm(v_y))
+            if norm_vy < 1e-6:
+                u_y = np.array([0.0, -1.0, 0.0], dtype=np.float64)
+            else:
+                u_y = v_y / norm_vy
+            u_z = np.cross(u_x, u_y)
+            norm_uz = float(np.linalg.norm(u_z))
+            if norm_uz > 1e-6:
+                u_z = u_z / norm_uz
+            R_craneo = np.column_stack([u_x, u_y, u_z])
+            puntos_locales_craneo_mm = (pts_metric_3d - c_craneo_m[None, :]) @ R_craneo
+
         return {
             "puntos_3d": puntos_3d,
             "puntos_2d_px": puntos_2d_px,
+            "puntos_locales_craneo_mm": puntos_locales_craneo_mm,
+            "centro_craneo_mm": c_craneo_m,
+            "matriz_rotacion_craneo": R_craneo,
+            "escala_mm_px": escala_mm_px,
+            "glabela_3d": glabela_3d,
+            "glabela_px": glabela_px,
             "punta_nariz_3d": punta_nariz_3d,
             "punta_nariz_px": punta_nariz_px,
             "distancia_interpupilar_3d": dist_ip_3d,
@@ -716,6 +798,71 @@ class AntigravityAgent:
             "ancho_biauricular_cm": round(ancho_biauricular_cm, 2),
         }
 
+    @staticmethod
+    def calcular_marco_craneal_y_proyeccion_local(
+        puntos_2d_px: np.ndarray,
+        puntos_3d: Optional[np.ndarray] = None,
+        d_ip_nominal_mm: float = 63.0,
+        ancho_img: float = 640.0,
+    ) -> Dict[str, Any]:
+        """
+        Calcula el Sistema de Coordenadas Local del Cráneo (Head Frame):
+          - C_craneo(t) = 1/3 * (P_nariz + P_ojo_izq + P_ojo_der)
+          - u_x = (P_ojo_der - P_ojo_izq) / ||P_ojo_der - P_ojo_izq||
+          - u_y = componente de (P_glabela - P_nariz) ortogonal a u_x
+          - u_z = u_x x u_y
+          - r_{k, local}(t) = R(t)^T (P_k(t) - C_craneo(t)) en milímetros reales invariantes a la escala.
+        """
+        p2d = np.asarray(puntos_2d_px, dtype=np.float64)
+        n_pts = len(p2d)
+        if n_pts >= 478:
+            o_izq_2d = p2d[INDICE_IRIS_CENTRO_IZQ]
+            o_der_2d = p2d[INDICE_IRIS_CENTRO_DER]
+        else:
+            o_izq_2d = 0.5 * (p2d[INDICE_CANTO_EXTERNO_OJO_IZQ] + p2d[INDICE_CANTO_INTERNO_OJO_IZQ])
+            o_der_2d = 0.5 * (p2d[INDICE_CANTO_EXTERNO_OJO_DER] + p2d[INDICE_CANTO_INTERNO_OJO_DER])
+        dip_2d = float(np.linalg.norm(o_der_2d - o_izq_2d))
+        dz_ojos_px = float((puntos_3d[INDICE_IRIS_CENTRO_DER if n_pts >= 478 else INDICE_CANTO_EXTERNO_OJO_DER, 2] - puntos_3d[INDICE_IRIS_CENTRO_IZQ if n_pts >= 478 else INDICE_CANTO_EXTERNO_OJO_IZQ, 2]) * ancho_img) if (puntos_3d is not None and len(puntos_3d) == n_pts) else 0.0
+        dip_px = max(float(np.hypot(dip_2d, dz_ojos_px)), 1.0)
+        escala = float(d_ip_nominal_mm) / dip_px
+
+        if puntos_3d is not None and len(puntos_3d) == n_pts:
+            p3d = np.asarray(puntos_3d, dtype=np.float64)
+            z_mm = p3d[:, 2] * float(ancho_img) * escala
+        else:
+            z_mm = np.zeros(n_pts, dtype=np.float64)
+
+        pts_m = np.column_stack([p2d[:, 0] * escala, p2d[:, 1] * escala, z_mm])
+        p_nariz = pts_m[INDICE_NARIZ_PUNTA]
+        if n_pts >= 478:
+            p_oizq = pts_m[INDICE_IRIS_CENTRO_IZQ]
+            p_oder = pts_m[INDICE_IRIS_CENTRO_DER]
+        else:
+            p_oizq = 0.5 * (pts_m[INDICE_CANTO_EXTERNO_OJO_IZQ] + pts_m[INDICE_CANTO_INTERNO_OJO_IZQ])
+            p_oder = 0.5 * (pts_m[INDICE_CANTO_EXTERNO_OJO_DER] + pts_m[INDICE_CANTO_INTERNO_OJO_DER])
+        p_glab = pts_m[INDICE_GLABELA] if n_pts > INDICE_GLABELA else 0.5 * (p_oizq + p_oder)
+
+        c_craneo = (p_nariz + p_oizq + p_oder) / 3.0
+        vx = p_oder - p_oizq
+        ux = vx / max(float(np.linalg.norm(vx)), 1e-6)
+        v_up = p_glab - p_nariz
+        vy = v_up - np.dot(v_up, ux) * ux
+        n_vy = float(np.linalg.norm(vy))
+        uy = (vy / n_vy) if n_vy > 1e-6 else np.array([0.0, -1.0, 0.0], dtype=np.float64)
+        uz = np.cross(ux, uy)
+        n_uz = float(np.linalg.norm(uz))
+        if n_uz > 1e-6:
+            uz = uz / n_uz
+        R = np.column_stack([ux, uy, uz])
+        r_local = (pts_m - c_craneo[None, :]) @ R
+        return {
+            "r_local_mm": r_local,
+            "c_craneo_mm": c_craneo,
+            "R_craneo": R,
+            "escala_mm_px": escala,
+            "dip_px": dip_px,
+        }
+
     def proyectar_referencia_fantasma(
         self,
         fiduciarios: Dict[str, Any],
@@ -742,6 +889,31 @@ class AntigravityAgent:
 
         proyecciones: List[Dict[str, Any]] = []
         for idx, el in enumerate(electrodos_ref):
+            # 1. Proyección exacta anclada a vértice MediaPipe (formato canónico del Asistente Lineal)
+            v_idx = el.get("v_idx")
+            if v_idx is not None and int(v_idx) < len(puntos_2d_px):
+                v_i = int(v_idx)
+                dx_ref = float(el.get("dx") or 0.0)
+                dy_ref = float(el.get("dy") or 0.0)
+                dip_ref = float(el.get("dip_px") or 0.0)
+                dip_act = float(fiduciarios.get("distancia_interpupilar_px", 0.0))
+                factor_escala = (dip_act / dip_ref) if (dip_ref > 1.0 and dip_act > 1.0) else 1.0
+                px_final = (
+                    float(puntos_2d_px[v_i, 0] + dx_ref * factor_escala),
+                    float(puntos_2d_px[v_i, 1] + dy_ref * factor_escala),
+                )
+                proyecciones.append({
+                    "id": el.get("id_electrodo", idx),
+                    "canal": el.get("canal", f"Canal {idx}"),
+                    "musculo": el.get("musculo_asignado") or el.get("musculo") or "",
+                    "polo": el.get("polo", ""),
+                    "target_2d_px": [round(px_final[0], 2), round(px_final[1], 2)],
+                    "vertice_malla_3d": v_i,
+                    "vector_norm_dip": [0.0, 0.0, 0.0],
+                })
+                continue
+
+            # 2. Proyección por vector 3D normalizado (formato legacy triangulado)
             vec_norm = (
                 el.get("vector_norm_dip")
                 or el.get("vector_3d_relativo_normalizado")
@@ -753,11 +925,10 @@ class AntigravityAgent:
             vec_arr = np.asarray(vec_norm[:3], dtype=np.float64)
             target_3d = nariz_3d + vec_arr * d_ip_3d
 
-            # Coordenadas proyectadas directas y vértice actual más cercano en 3D
             dist_malla = np.linalg.norm(puntos_3d - target_3d, axis=1)
-            v_idx = int(np.argmin(dist_malla))
+            v_idx_leg = int(np.argmin(dist_malla))
             px_directo = (float(target_3d[0] * ancho), float(target_3d[1] * alto))
-            px_vertice = (float(puntos_2d_px[v_idx, 0]), float(puntos_2d_px[v_idx, 1]))
+            px_vertice = (float(puntos_2d_px[v_idx_leg, 0]), float(puntos_2d_px[v_idx_leg, 1]))
             px_final = (
                 0.5 * px_directo[0] + 0.5 * px_vertice[0],
                 0.5 * px_directo[1] + 0.5 * px_vertice[1],
@@ -767,8 +938,9 @@ class AntigravityAgent:
                 "id": el.get("id", idx),
                 "canal": el.get("canal", f"Canal {idx}"),
                 "musculo": el.get("musculo_asignado") or el.get("musculo_estimado") or el.get("musculo", ""),
+                "polo": el.get("polo", ""),
                 "target_2d_px": [round(px_final[0], 2), round(px_final[1], 2)],
-                "vertice_malla_3d": v_idx,
+                "vertice_malla_3d": v_idx_leg,
                 "vector_norm_dip": [round(float(v), 6) for v in vec_arr],
             })
 

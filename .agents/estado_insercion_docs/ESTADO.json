@@ -1,0 +1,80 @@
+{
+  "doc_id": "1ebZMc3PY3vjjbICRaGE17ADTD1tpMuZ3vNjdEw-zroA",
+  "bloque_actual": 12,
+  "total_bloques": 12,
+  "ultimo_bloque_exitoso": 12,
+  "historial": [
+    {
+      "id": 1,
+      "titulo": "7. An\u00e1lisis de Variedades Motoras y Fase Pre-Fono",
+      "figura": "Figura 7.1",
+      "timestamp": "2026-11-07 21:26:10"
+    },
+    {
+      "id": 2,
+      "titulo": "7.2. Din\u00e1mica Articular Muscular: Pre-Fono vs Post-Fono (2026-09-15)",
+      "figura": "Figura 7.2",
+      "timestamp": "2026-11-07 21:26:25"
+    },
+    {
+      "id": 3,
+      "titulo": "7.3. Espacio F\u00edsico Muscular Tridimensional Directo (Tr\u00edada Can\u00f3nica)",
+      "figura": "Figura 7.3",
+      "timestamp": "2026-11-07 21:26:45"
+    },
+    {
+      "id": 4,
+      "titulo": "7.4. An\u00e1lisis de Ortogonalidad con Microelectrodos y Risorio (2026-09-01)",
+      "figura": "Figura 7.4",
+      "timestamp": "2026-11-07 21:27:03"
+    },
+    {
+      "id": 5,
+      "titulo": "7.5. Din\u00e1mica 2D con Risorio: El Colapso de la Vocal /E/",
+      "figura": "Figura 7.5",
+      "timestamp": "2026-11-07 21:27:27"
+    },
+    {
+      "id": 6,
+      "titulo": "7.6. Origen Biomec\u00e1nico de la P\u00e9rdida de Separabilidad (2026-10-28)",
+      "figura": "Figura 7.6",
+      "timestamp": "2026-11-07 21:27:43"
+    },
+    {
+      "id": 7,
+      "titulo": "7.7. Optimizaci\u00f3n de PCA mediante Descarte de la Fase Post-Fono",
+      "figura": "Figura 7.7",
+      "timestamp": "2026-11-07 21:27:59"
+    },
+    {
+      "id": 8,
+      "titulo": "7.8. Evaluaci\u00f3n Post-Fono en Mediciones Inseparables y Efecto del Masetero",
+      "figura": "Figura 7.8",
+      "timestamp": "2026-11-07 21:28:17"
+    },
+    {
+      "id": 9,
+      "titulo": "7.9. Confirmaci\u00f3n Fisiol\u00f3gica: El Masetero Post-Fono como Detector de /A/",
+      "figura": "Figura 7.9",
+      "timestamp": "2026-11-07 21:28:34"
+    },
+    {
+      "id": 10,
+      "titulo": "7.10. Din\u00e1mica Pre vs Post Fono en Secuencias Continuas De Bruijn (2026-10-30)",
+      "figura": "Figura 7.10",
+      "timestamp": "2026-11-07 21:28:52"
+    },
+    {
+      "id": 11,
+      "titulo": "7.11. Secuencias Continuas De Bruijn Juntas (N=286): Pre vs Post Fono",
+      "figura": "Figura 7.11",
+      "timestamp": "2026-11-07 21:29:08"
+    },
+    {
+      "id": 12,
+      "titulo": "7.12. Secuencias Continuas Juntas: Las 3 Proyecciones Ortogonales 2D",
+      "figura": "Figura 7.12",
+      "timestamp": "2026-11-07 21:29:24"
+    }
+  ]
+}

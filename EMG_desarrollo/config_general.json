@@ -64,6 +64,8 @@
         "modo_transmision": "usb_adb_o_monitor2",
         "puerto": 8765,
         "token": "",
+        "tailscale_ip_pc": "100.118.12.94",
+        "tailscale_ip_celu": "100.102.47.75",
         "auto_adb_reverse": true,
         "modo_sujeto_ciego_ocultar_visor_local": false
     },

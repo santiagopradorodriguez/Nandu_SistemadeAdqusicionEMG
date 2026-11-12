@@ -51,6 +51,25 @@
 
 ---
 
+## 5. Cuaderno de Tesis: Sección 7 de Variedades Motoras y Fase Pre-Fono
+- **Documento:** Google Doc oficial `Cuaderno Tesis` (`1ebZMc3PY3vjjbICRaGE17ADTD1tpMuZ3vNjdEw-zroA`).
+- **Estado:** 12 de 12 bloques insertados de forma no destructiva al final del documento con figuras en alta resolución y epígrafes formales:
+  - 7.1 SHM Extractor Canónico Oficial (Fig 7.1)
+  - 7.2 Dinámica Pre vs Post Fono 2026-09-15 (Fig 7.2)
+  - 7.3 Espacio Físico 3D Tríada Canónica (Fig 7.3)
+  - 7.4 Ortogonalidad con Risorio 2026-09-01 (Fig 7.4)
+  - 7.5 Dinámica 2D Risorio y Colapso de /E/ (Fig 7.5)
+  - 7.6 Pérdida y Recuperación de Separabilidad 2026-10-28 (Fig 7.6)
+  - 7.7 Optimización PCA Pre-Fono vs Completo (Fig 7.7)
+  - 7.8 Evaluación Post-Fono en Masetero y 10-28 (Fig 7.8)
+  - 7.9 Aislamiento Post-Fono de /A/ en Masetero (Fig 7.9)
+  - 7.10 Secuencias Continuas De Bruijn Individual (Fig 7.10)
+  - 7.11 Secuencias Continuas De Bruijn Juntas N=286 (Fig 7.11)
+  - 7.12 Las 3 Proyecciones Ortogonales 2D Juntas (Fig 7.12)
+- **Tracking:** Control de estado persistente en `.agents/estado_insercion_docs/ESTADO.json`.
+
+---
+
 ## 5. Alineación con CCA, Tríadas Musculares y Hoja de Ruta
 - **Límites de SO(d) y Marco de Bach y Jordan (2005):** La rotación rígida en SO(d) o Procrustes asume isometría pura y fracasa ante distorsiones afines (impedancia y colocación). Se adoptó CCA probabilístico ($x_i = W_i z + \epsilon_i$), reconociendo la naturaleza hipotética del comando motor común $z$ debido a la equivalencia motora de Bernstein.
 - **Ángulos de Jordan y Validación de Tríada Canónica:** 
@@ -270,3 +289,19 @@
 - **Compilación Completa:** PyInstaller 6.20.0 y launcher nativo C# empaquetaron 23.565 archivos (2.11 GB) en `build_windows/NanduLsd/NanduLsd.exe` y `NanduLsd_Core.exe`.
 - **Smoke Tests Congelados:** Verificación exitosa de arranque e importación en el ejecutable de `theme`, `fotometria_webcam`, `RealTimePlotter` (AutoForge experimental y estable), `extractor_pulsos_vocales` y `autoforge_daq_decodificador`.
 - **Publicación Oficial:** Generado `build_windows/NanduLsd_Windows_v6.2.zip` (912.52 MB) y subido exitosamente a GitHub Releases en el tag oficial `v6.2-estable`.
+
+---
+
+## 10. Decodificador Facial en Vivo y Calibración Sara Solla (Hito 29, 2026-11-11)
+- **Infraestructura de Inferencia y GUI:**
+  - Panel de Test en Vivo reubicado en la parte superior de `autoforge_daq_decodificador_facial.py`, siempre visible sin scroll.
+  - Scrollbars visibles en decodificador y DAQ; conmutación de modelos forzada a Vista 2D nativa (PyQtGraph) evitando congelamientos de Matplotlib 3D.
+  - Eliminado `stop_event.set()` espurio en `finally` de `WebcamAudioLiveThread` y suprimida la adaptación continua de reposo (`alpha_rest = 0.015`) para erradicar el hundimiento de canales cinemáticos.
+  - Controles interactivos de umbral del Gate en panel (`spin_u_alto`, `spin_u_bajo`) y líneas arrastrables en osciloscopio.
+- **Rendimiento Empírico en Vivo:**
+  - **73.33% exactitud (11/15 aciertos)** en test con gate cinemático en tiempo real (0 pulsos sin respuesta: /A/ 3/3, /I/ 3/3, /E/ 2/3, /O/ 2/3, /U/ 1/3).
+  - Almacenamiento automático y discriminado de ventanas en `auditoria_tiempo_real/ventanas_en_vivo/gate/` (294 ventanas acumuladas; 96 etiquetadas: 17 /A/, 17 /E/, 21 /I/, 21 /O/, 20 /U/).
+- **Plan para la Próxima Sesión (Calibración Sara Solla / Procrustes Afín):**
+  - Implementar rutina de alineación Procrustes/CCA en `realtime_facial_decoder_engine.py` usando las ventanas de la sesión de hoy vs centroides canónicos del modelo campeón (`campeon_geosup_conv_ortho_4d`).
+  - Incorporar botón `[ ALINEAR VARIEDAD (SARA SOLLA) ]` en la GUI para proyectar $z_{\text{hoy}} \mapsto R(z - \bar{z}) + \mu_{\text{ref}}$ y evaluar directamente con el clasificador LDA canónico en vivo sin reentrenar la red.
+

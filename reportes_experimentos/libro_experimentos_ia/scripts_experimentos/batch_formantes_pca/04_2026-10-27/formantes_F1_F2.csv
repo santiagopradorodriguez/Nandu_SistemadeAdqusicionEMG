@@ -1,0 +1,6 @@
+Medicion,Vocal,Pulso,Tiempo_s,F1_Hz,F2_Hz,Fs_Hz,F2_menos_F1_Hz
+A_pruebasonido_2_Candela,A,0,4.1377,946.26,1154.42,6000,208.16000000000008
+E_pruebasonido_Candela,E,0,3.8255,527.19,1744.73,6000,1217.54
+I_pruebasonido_Candela,I,0,4.3165,378.63,1725.21,6000,1346.58
+O_pruebasonido_2_Candela,O,0,3.9897,685.52,1186.42,6000,500.9000000000001
+U_pruebasonido_2_Candela,U,0,4.1073,502.44,1607.07,6000,1104.6299999999999

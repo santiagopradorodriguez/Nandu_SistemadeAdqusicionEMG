@@ -127,6 +127,8 @@ if getattr(sys, 'frozen', False) and len(sys.argv) > 1:
                 import acquisition.autoforge_daq_experimental as module
             elif module_name == 'acquisition.autoforge_daq_decodificador':
                 import acquisition.autoforge_daq_decodificador as module
+            elif module_name == 'acquisition.autoforge_daq_decodificador_facial':
+                import acquisition.autoforge_daq_decodificador_facial as module
             elif module_name == 'acquisition.metronomo_visual':
                 import acquisition.metronomo_visual as module
             elif module_name == 'acquisition.ventana_palabras':
@@ -1194,6 +1196,13 @@ class ReaperStyleHub(QMainWindow):
     self.btn_decoder_beta.setCursor(Qt.PointingHandCursor)
     self.btn_decoder_beta.clicked.connect(lambda: self._launch_external("acquisition/autoforge_daq_decodificador.py"))
     vbox_btn.addWidget(self.btn_decoder_beta)
+
+    self.btn_decoder_facial = QPushButton("  DECODIFICADOR CINEMÁTICO\n  FACIAL (6 CANALES)")
+    self.btn_decoder_facial.setMinimumHeight(78)
+    self.btn_decoder_facial.setCursor(Qt.PointingHandCursor)
+    self.btn_decoder_facial.setToolTip("Decodificador facial en tiempo real por MediaPipe 3D Procrustes + Reloj Maestro Acústico (RMS 250 ms) y Gate Cinemático")
+    self.btn_decoder_facial.clicked.connect(lambda: self._launch_external("acquisition/autoforge_daq_decodificador_facial.py"))
+    vbox_btn.addWidget(self.btn_decoder_facial)
 
     vbox_btn.addStretch(1)
     lyt_daq.addLayout(vbox_btn, stretch=3)
@@ -4366,6 +4375,16 @@ finally:
         P["btn_dec_fg"],
         P["btn_dec_border"],
         14,
+      ),
+      (
+        getattr(self, "btn_decoder_facial", None),
+        "target",
+        "#111827",
+        "#1F2937",
+        "#66FCF1",
+        "#66FCF1",
+        "#45A29E",
+        13,
       ),
     ]
     for btn_w, ic_kind, bg0, bg1, bdr, fg, glow_hex, fsize in btn_specs:

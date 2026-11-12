@@ -144,18 +144,22 @@ def _synthesize_beep_wave(freq: float, duration_ms: float, sr: int = 44100) -> n
   if f_base >= 1400:
     f1_chime = 587.33
     f2_chime = 880.00
-    amp = 0.32
+    amp = 0.30
     tau_decay = dur_s * 0.48
     mid = n_samples // 2
+    trans = max(4, min(int(0.008 * sr), mid // 2))
     f_vec = np.empty(n_samples, dtype=np.float64)
-    f_vec[:mid] = f1_chime
-    f_vec[mid:] = f2_chime
+    f_vec[:mid - trans] = f1_chime
+    # Transición coseno suave de frecuencia para evitar discontinuidad de derivada en la mitad del chime
+    ramp_f = 0.5 * (1.0 - np.cos(np.pi * np.linspace(0.0, 1.0, 2 * trans)))
+    f_vec[mid - trans:mid + trans] = f1_chime + (f2_chime - f1_chime) * ramp_f
+    f_vec[mid + trans:] = f2_chime
     phase = 2.0 * np.pi * np.cumsum(f_vec) / float(sr)
-    wave = np.sin(phase) + 0.30 * np.sin(2.0 * phase)
+    wave = np.sin(phase) + 0.22 * np.sin(2.0 * phase)
   else:
     if f_base >= 1100:
       f0 = 659.25
-      amp = 0.26
+      amp = 0.25
       tau_decay = dur_s * 0.42
     elif f_base >= 750:
       f0 = 523.25
@@ -165,20 +169,20 @@ def _synthesize_beep_wave(freq: float, duration_ms: float, sr: int = 44100) -> n
       f0 = max(260.0, f_base * 0.75)
       amp = 0.14
       tau_decay = dur_s * 0.32
-    wave = np.sin(2.0 * np.pi * f0 * t) + 0.25 * np.sin(2.0 * np.pi * (f0 * 2.0) * t)
-  # CORRECCION ETAPA 1 - Envolvente completa sin chasquido:
-  # - Ataque con rampa cosena suave de ~4 ms (media ventana Hann).
-  attack_samples = max(1, min(int(0.004 * sr), n_samples // 2))
-  env = np.exp(-t / max(0.015, tau_decay))
-  env[:attack_samples] *= 0.5 * (1.0 - np.cos(np.pi * np.arange(attack_samples) / float(attack_samples)))
-  # - Desvanecimiento coseno de ~10 ms (media ventana Hann): elimina la
-  #   discontinuidad de alta frecuencia (click/chasquido) al fin del pulso.
-  tail_fade = max(2, min(int(0.010 * sr), n_samples))
-  env[-tail_fade:] *= 0.5 * (1.0 + np.cos(np.pi * np.arange(tail_fade) / float(tail_fade)))
-  env[-1] *= 0.0
-  # Padding de silencio al final (18 ms, dentro del rango pedido 15-20 ms) para
-  # drenar el buffer de reproduccion ALSA/PipeWire sin recorte abrupto.
-  pad_zeros = np.zeros(int(0.018 * sr), dtype=np.float32)
+    wave = np.sin(2.0 * np.pi * f0 * t) + 0.20 * np.sin(2.0 * np.pi * (f0 * 2.0) * t)
+  # Envolvente libre de clics de alta frecuencia:
+  # 1) Ataque Hann suave de 6 ms con derivada nula en t=0
+  attack_samples = max(2, min(int(0.006 * sr), n_samples // 3))
+  env = np.exp(-t / max(0.018, tau_decay))
+  env[:attack_samples] *= 0.5 * (1.0 - np.cos(np.pi * np.linspace(0.0, 1.0, attack_samples)))
+  # 2) Cola de desvanecimiento Hann/coseno de 10 ms con derivada nula al llegar exactamente a 0.0
+  tail_fade = max(4, min(int(0.010 * sr), n_samples // 2))
+  fade_curve = 0.5 * (1.0 + np.cos(np.pi * np.linspace(0.0, 1.0, tail_fade)))
+  env[-tail_fade:] *= fade_curve
+  env[-1] = 0.0
+  # 3) Cola de drenaje DMA (45 ms de silencio estricto) para vaciar por completo el buffer
+  #    de hardware de ALSA/PipeWire/PortAudio antes de liberar o reutilizar el stream.
+  pad_zeros = np.zeros(int(0.045 * sr), dtype=np.float32)
   audio_out = np.concatenate(((amp * wave * env).astype(np.float32), pad_zeros))
   _BEEP_WAVE_CACHE[key] = audio_out
   return audio_out
@@ -192,22 +196,37 @@ for _f_pre, _d_pre in ((400, 35), (660, 80), (800, 100), (800, 200), (1200, 120)
     pass
 
 
+def _drain_and_play_beep_sync(audio_out: np.ndarray, sr: int = 44100):
+  """Reproduce el buffer completo con rampa Hann + cola de drenaje garantizando flush total del stream DMA."""
+  global _ACTIVE_BEEP_REF
+  _ACTIVE_BEEP_REF = audio_out
+  import sounddevice as _sd
+  try:
+    arr_col = np.ascontiguousarray(audio_out.reshape(-1, 1), dtype=np.float32)
+    with _sd.OutputStream(samplerate=sr, channels=1, dtype='float32', blocksize=512) as b_stream:
+      b_stream.write(arr_col)
+    return
+  except Exception:
+    with _PORTAUDIO_LOCK:
+      _sd.play(audio_out, samplerate=sr, blocking=False)
+    dur_total_s = float(len(audio_out)) / float(sr) + 0.015
+    time.sleep(max(0.04, min(dur_total_s, 0.38)))
+    try:
+      _sd.wait()
+    except Exception:
+      pass
+
+
 def play_beep(freq=660, duration_ms=80, async_play=True):
   global _ACTIVE_BEEP_REF
   try:
-    import sounddevice as _sd
     sr = 44100
     audio_out = _synthesize_beep_wave(freq, duration_ms, sr=sr)
-    # CORRECCION ETAPA 1: mantener viva la referencia al buffer en memoria
-    # mientras el stream lo reproduce (evita liberacion por GC = click final).
     _ACTIVE_BEEP_REF = audio_out
-    # CORRECCIÓN 04: Nunca retener _PORTAUDIO_LOCK durante blocking=True para no bloquear VoiceCuePlayer ni el metrónomo
-    with _PORTAUDIO_LOCK:
-      _sd.play(audio_out, samplerate=sr, blocking=False)
-    if not async_play:
-      # Drain/flush: la espera cubre el cuerpo del beep mas el padding final
-      # de silencio (~18 ms) y una guarda, para no cortar el drenaje del stream.
-      time.sleep(max(0.02, min(float(duration_ms) / 1000.0 + 0.036, 0.30)))
+    if async_play:
+      threading.Thread(target=_drain_and_play_beep_sync, args=(audio_out, sr), daemon=True).start()
+    else:
+      _drain_and_play_beep_sync(audio_out, sr)
     return
   except Exception:
     if _raw_play_beep is not None:
@@ -4688,15 +4707,23 @@ class RealTimePlotter(QtWidgets.QWidget):
       print(f"[Error] No se pudo lanzar calibracion espacial: {e}")
 
   def abrir_asistente_fotometria(self):
-    """Abre el Asistente de Fotometria Facial 3D y Triangulacion de Electrodos."""
+    """Abre el Asistente Interactivo 3D (Ghost Overlay / Espejo AR para ubicar electrodos)."""
     if getattr(self, 'photometry_mgr', None) is None:
-      QtWidgets.QMessageBox.warning(
-        self,
-        "Fotometria No Disponible",
-        "El modulo de fotometria o la camara web no se encuentran disponibles.",
-      )
-      return
-    sujeto = getattr(self, "autoforge_sujeto", "") or getattr(self, "autoforge_base_name", "") or "Sujeto_0"
+      if WebcamPhotometryManager is not None:
+        try:
+          self.photometry_mgr = WebcamPhotometryManager(parent=self, camera_index=0)
+        except Exception as _e_init:
+          print(f"[Fotometria] Error al instanciar gestor de webcam: {_e_init}")
+      if getattr(self, 'photometry_mgr', None) is None:
+        QtWidgets.QMessageBox.warning(
+          self,
+          "Fotometria No Disponible",
+          "El modulo de fotometria o la camara web no se encuentran disponibles.\n\n"
+          "Verifique los permisos de /dev/video0 o que otra aplicacion no este usando la camara.",
+        )
+        return
+
+    sujeto = getattr(self, "autoforge_sujeto", "") or getattr(self, "autoforge_base_name", "") or "Sujeto1"
     prueba = getattr(self, "autoforge_prueba", "") or "Autoforge"
     canales_activos = [i for i, chk in enumerate(getattr(self, "channel_checkboxes", [])) if chk.isChecked()]
     if not canales_activos:
@@ -4706,15 +4733,19 @@ class RealTimePlotter(QtWidgets.QWidget):
       for i in canales_activos
     ]
     try:
-      self.photometry_mgr.open_alignment_dialog(
+      # Abrir el Asistente de Alineacion 3D con espejo y Ghost Overlay para mirarse y colocar electrodos
+      confirmado = self.photometry_mgr.open_alignment_dialog(
         parent_widget=self,
         nombres_musculos=nombres_canales,
         active_channel_indices=canales_activos,
         sujeto=sujeto,
         prueba=prueba,
       )
+      if confirmado:
+        self._photometry_session_active = True
+        print("[Fotometria] Alineacion 3D confirmada por el usuario.")
     except Exception as exc:
-      print(f"[FOTOMETRIA-AVISO] No se pudo abrir el asistente de fotometría 3D: {exc}")
+      print(f"[FOTOMETRIA-AVISO] Excepcion al abrir alineacion 3D: {exc}")
 
   def _construir_resumen_protocolo_dict(self, modo_ejecucion: str = None) -> dict:
     """
@@ -5247,7 +5278,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     # NUEVO (Bug 1.4): leyenda reubicada en la esquina SUPERIOR DERECHA (offset x negativo = anclaje
     # desde la derecha) para que no tape la senal activa ni los picos de contraccion.
     self.plot.addLegend(offset=(-12, 10), labelTextColor='#e2e8f0', brush=pg.mkBrush(36, 12, 22, 220), pen=pg.mkPen('#7f1d1d', width=1))
-    self.plot.showGrid(x=True, y=True, alpha=0.28)
+    self.plot.showGrid(x=True, y=True, alpha=0.62)
     self.plot.setClipToView(True)
     self.plot.setDownsampling(auto=True, mode='peak')
     self.plot.autoBtn.setVisible(True)
@@ -5403,7 +5434,7 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     self.pca_live_plot = pg.PlotWidget()
     self.pca_live_plot.setBackground(T['bg0'])
-    self.pca_live_plot.showGrid(x=True, y=True, alpha=0.25)
+    self.pca_live_plot.showGrid(x=True, y=True, alpha=0.60)
     self.pca_live_plot.setMouseEnabled(x=False, y=False)
     self.pca_live_plot.hideButtons()
     for _ax_name_m2 in ('bottom', 'left'):
@@ -6622,7 +6653,7 @@ class RealTimePlotter(QtWidgets.QWidget):
                 except Exception:
                     break
             freq, duration = item
-            play_beep(freq, duration, async_play=True)
+            play_beep(freq, duration, async_play=False)
     self.beep_thread = threading.Thread(target=beep_worker, daemon=True)
     self.beep_thread.start()
 
@@ -6858,6 +6889,7 @@ class RealTimePlotter(QtWidgets.QWidget):
   def _disparar_destello_vocal(self, palabra_actual: str, pulso_actual: int, total_pulsos: int,
                                palabra_siguiente: str = "", ciclo_actual: int = 1, total_ciclos: int = 1):
     """Activa el destello intenso durante 200 ms cuando suena el pulso del metrónomo y luego vuelve al estado normal."""
+    self._current_autoforge_word = str(palabra_actual or "").upper()
     self._ultimo_estado_visor = (palabra_actual, pulso_actual, total_pulsos, palabra_siguiente, ciclo_actual, total_ciclos)
     self._renderizar_visor_vocal(
       palabra_actual, pulso_actual, total_pulsos,
@@ -7030,6 +7062,7 @@ class RealTimePlotter(QtWidgets.QWidget):
                 else:
                     w_idx = getattr(self, 'autoforge_word_idx', 0)
                     palabra_actual = words[w_idx].upper() if words and w_idx < len(words) else ""
+                self._current_autoforge_word = str(palabra_actual or "").upper()
                 
                 self.metro_lbl_title.setText(f"VOCAL /{palabra_actual}/ (P{self.metro_beat_count})")
                 self.metro_lbl_title.setStyleSheet(f"font-size: 15px; color: {T['accent']}; font-weight: bold;")
@@ -7261,11 +7294,16 @@ class RealTimePlotter(QtWidgets.QWidget):
       sample_daq = None
       offset = int(getattr(self, "_offset_muestras_ancla", 0) or 0)
       sr = float(getattr(self, "SAMPLE_RATE", 0) or 0)
-      if getattr(self, "is_recording", False) and getattr(self, "recording_start_time", None) is not None:
-        t_daq_s = float(t_perf - self.recording_start_time)
-        if sr > 0:
-          sample_daq = int(round(t_daq_s * sr)) + offset
-          t_wav_s = sample_daq / sr
+      if sr <= 0:
+        sr = 44100.0  # Fallback a Fs del microfono/audio si no hay hardware DAQ conectado
+      ref_t0 = getattr(self, "recording_start_time", None)
+      if ref_t0 is None and getattr(self, "_autoforge_start_time", None) is not None:
+        ref_t0 = getattr(self, "_autoforge_start_time", None)
+
+      if ref_t0 is not None:
+        t_daq_s = float(t_perf - ref_t0)
+        sample_daq = int(round(t_daq_s * sr)) + offset
+        t_wav_s = sample_daq / sr
         if es_principal and int(getattr(self, "metro_beat_count", 0)) >= 1:
           if sample_daq is not None:
             self.metro_beat_sample_indices.append(int(sample_daq))
@@ -7591,6 +7629,11 @@ class RealTimePlotter(QtWidgets.QWidget):
       # --- EMPEZAR A GRABAR MANUALMENTE ---
       self.is_recording = True
       self.recording_start_time = time.perf_counter()
+      try:
+        if getattr(self, 'photometry_mgr', None) is not None and hasattr(self.photometry_mgr, 'start_continuous_recording_tracker'):
+          self.photometry_mgr.start_continuous_recording_tracker(self.recording_start_time, parent_plotter=self)
+      except Exception as _e_tr:
+        print(f"[FotometriaTracker] Aviso al iniciar tracker continuo: {_e_tr}")
       self.raw_noise_accumulated = [[] for _ in range(self.NUM_CANALES)]
       self.final_raw_noise_accumulated = [[] for _ in range(self.NUM_CANALES)]
       self._metro_pulsos = []
@@ -7669,6 +7712,11 @@ class RealTimePlotter(QtWidgets.QWidget):
     else:
       # --- DETENER GRABAR MANUALMENTE ---
       self.is_recording = False
+      try:
+        if getattr(self, 'photometry_mgr', None) is not None and hasattr(self.photometry_mgr, 'stop_continuous_recording_tracker'):
+          self.photometry_mgr.stop_continuous_recording_tracker()
+      except Exception:
+        pass
       if hasattr(self, 'btn_record'):
         self.btn_record.setText("GRABAR LIBRE (Manual)")
         self.btn_record.setStyleSheet(self.BTN_REC_START_STYLE)
@@ -7721,6 +7769,10 @@ class RealTimePlotter(QtWidgets.QWidget):
     today_str = datetime.now().strftime('%Y-%m-%d')
     date_dir = os.path.join(base_dir, today_str)
     output_dir = os.path.join(date_dir, measurement_name)
+    reintento_man = 0
+    while os.path.exists(output_dir) and os.listdir(output_dir):
+      reintento_man += 1
+      output_dir = os.path.join(date_dir, f"{measurement_name}_{reintento_man:02d}")
     try:
       os.makedirs(output_dir, exist_ok=True)
     except Exception as e:
@@ -7825,6 +7877,11 @@ class RealTimePlotter(QtWidgets.QWidget):
       "calibracion_cvm": calib_cvm_dict
     }
     photo_meta = self._safe_photometry_export(str(output_dir))
+    try:
+      if getattr(self, 'photometry_mgr', None) is not None and hasattr(self.photometry_mgr, 'exportar_trayectoria_continua_csv'):
+        self.photometry_mgr.exportar_trayectoria_continua_csv(str(output_dir))
+    except Exception:
+      pass
     if photo_meta is not None:
       metadata["fotometria_espacial"] = photo_meta
     if hasattr(self, 'last_separability_metrics') and self.last_separability_metrics is not None:
@@ -8294,12 +8351,12 @@ class RealTimePlotter(QtWidgets.QWidget):
               except Exception:
                 pass
       self.check_for_trigger(processed_data, total_muestras_leidas)
-      # CORRECCIÓN 04: Desacoplar cálculos auxiliares de etiquetas/espectrograma/detector a ~5 Hz (cada 200 ms)
+      # CORRECCIÓN 04: Desacoplar cálculos auxiliares de etiquetas/detector a ~5 Hz (cada 200 ms)
       # y solo correr pulse_detector / PCA si están habilitados explícitamente para eliminar micro-lags de CPU.
+      # (Se removió el cálculo del espectrograma en tiempo real para máxima fluidez).
       if (now_perf_ui - getattr(self, '_last_aux_dsp_ui_t', 0.0)) >= 0.20:
         self._last_aux_dsp_ui_t = now_perf_ui
         self.actualizar_mediciones(processed_data, self.env_buffer_datos)
-        self.actualizar_espectrograma(processed_data)
         pca_exp_on = bool(getattr(self, 'chk_pca_experimental', None) and self.chk_pca_experimental.isChecked())
         det_win_on = bool(getattr(self, 'chk_show_detection_window', None) and self.chk_show_detection_window.isChecked())
         if (pca_exp_on or det_win_on) and hasattr(self, 'pulse_detector') and self.pulse_detector is not None:
@@ -8704,6 +8761,11 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.is_cvm_recording_take = False
     self.is_recording_final_noise = False
     self.is_recording = False
+    try:
+      if getattr(self, 'photometry_mgr', None) is not None and hasattr(self.photometry_mgr, 'stop_continuous_recording_tracker'):
+        self.photometry_mgr.stop_continuous_recording_tracker()
+    except Exception:
+      pass
     self.is_finishing_sequence = False
     self.is_paused = False
 
@@ -8768,6 +8830,7 @@ class RealTimePlotter(QtWidgets.QWidget):
   def reset_autoforge_buttons(self):
     """Restaura los botones de autoforge a su estado normal - Cyberpunk."""
     self._autoforge_token = getattr(self, '_autoforge_token', 0) + 1
+    self._current_autoforge_word = ""
     self.is_autoforge_running = False
     self.is_autoforge_continuo = False
     self.is_cvm_active = False
@@ -8787,6 +8850,38 @@ class RealTimePlotter(QtWidgets.QWidget):
       print(f"[FOTOMETRIA] Asistente lineal confirmado en {modo}: montaje guardado con metadata_fotometria.json")
     else:
       print(f"[FOTOMETRIA] Asistente lineal omitido o cancelado en {modo}: la grabación continúa sin montaje fotométrico")
+
+  def _allocate_unique_session_dir(self, folder_base_name: str, check_marker_files: bool = False) -> str:
+    """
+    Reserva y devuelve una carpeta de sesión única dentro de base_de_datos_electrodos/<fecha>/.
+    Si ya existe una carpeta con ese nombre y contiene archivos de una toma previa, añade un
+    sufijo incremental (_01, _02, ...) para evitar cualquier sobreescritura o mezcla de corridas.
+    """
+    from pathlib import Path
+    from datetime import datetime
+    fecha_str = datetime.now().strftime("%Y-%m-%d")
+    if getattr(sys, 'frozen', False):
+      root_dir = os.path.dirname(os.path.abspath(sys.executable))
+      if os.path.basename(root_dir) == "_internal":
+        root_dir = os.path.dirname(root_dir)
+    else:
+      root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    base_dir = Path(root_dir) / "base_de_datos_electrodos" / fecha_str / folder_base_name
+    reintento = 0
+
+    def _dir_ocupada(d_path: Path) -> bool:
+      if not d_path.exists():
+        return False
+      if check_marker_files:
+        return (d_path / "grabacion.csv").exists() or (d_path / "grabacion.wav").exists()
+      return any(d_path.iterdir())
+
+    while _dir_ocupada(base_dir):
+      reintento += 1
+      nuevo_folder = f"{folder_base_name}_{reintento:02d}"
+      base_dir = Path(root_dir) / "base_de_datos_electrodos" / fecha_str / nuevo_folder
+    os.makedirs(base_dir, exist_ok=True)
+    return str(base_dir)
 
   def _safe_photometry_open_assistant(self, es_continua: bool = False) -> bool:
     """Ejecuta el asistente lineal de fotometría de forma aislada; si no hay cámara o se omite, desactiva hooks de cámara para esta sesión."""
@@ -8811,6 +8906,14 @@ class RealTimePlotter(QtWidgets.QWidget):
     if res_foto:
       self._photometry_session_active = True
       try:
+        target_prealloc = getattr(self, '_current_session_target_dir', None)
+        pm.guardar_fotometria_inmediata(
+          sujeto=self.autoforge_sujeto,
+          prueba=self.autoforge_prueba,
+          es_continua=bool(es_continua),
+          target_dir=target_prealloc,
+        )
+      except TypeError:
         pm.guardar_fotometria_inmediata(
           sujeto=self.autoforge_sujeto,
           prueba=self.autoforge_prueba,
@@ -8871,9 +8974,21 @@ class RealTimePlotter(QtWidgets.QWidget):
       print(f"[FOTOMETRIA-AVISO] Snapshot omitido en fase '{fase}': {exc}")
 
   def _safe_photometry_export(self, output_dir: str):
-    """Exporta metadatos fotométricos sólo si hubo sesión activa de cámara."""
+    """Exporta trayectoria continua siempre que el tracker haya corrido, y metadatos fotométricos si hubo sesión activa."""
     pm = getattr(self, 'photometry_mgr', None)
-    if pm is None or not getattr(self, '_photometry_session_active', False):
+    if pm is None:
+      return None
+    try:
+      if hasattr(pm, 'stop_continuous_recording_tracker'):
+        pm.stop_continuous_recording_tracker()
+    except Exception:
+      pass
+    try:
+      if hasattr(pm, 'exportar_trayectoria_continua_csv'):
+        pm.exportar_trayectoria_continua_csv(str(output_dir))
+    except Exception:
+      pass
+    if not getattr(self, '_photometry_session_active', False):
       return None
     try:
       return pm.export_take_photometry(str(output_dir))
@@ -8936,6 +9051,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.is_cvm_active = False
         self.is_recording_final_noise = False
         self.autoforge_session_dirs = []
+        self._current_session_target_dir = None
         self._autoforge_token = getattr(self, '_autoforge_token', 0) + 1
         bpm = dialog.spin_bpm.value()
         
@@ -9098,6 +9214,9 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.is_cvm_active = False
         self.is_recording_final_noise = False
         self.autoforge_session_dirs = []
+        self._current_session_target_dir = self._allocate_unique_session_dir(
+          f"SecuenciaContinua_{self.autoforge_prueba}_{self.autoforge_sujeto}"
+        )
         self._autoforge_token = getattr(self, '_autoforge_token', 0) + 1
         bpm = dialog.spin_bpm.value()
         
@@ -9569,19 +9688,18 @@ class RealTimePlotter(QtWidgets.QWidget):
         prueba_actual = getattr(self, 'autoforge_prueba', 'Prueba1')
         sujeto_actual = getattr(self, 'autoforge_sujeto', 'Sujeto1')
         
-        if getattr(self, 'is_autoforge_continuo', False):
-          folder_name = f"SecuenciaContinua_{prueba_actual}_{sujeto_actual}"
+        prealloc_dir = getattr(self, '_current_session_target_dir', None)
+        if prealloc_dir and os.path.exists(prealloc_dir) and not os.path.exists(os.path.join(prealloc_dir, "calibracion.csv")):
+          base_dir = Path(prealloc_dir)
+          os.makedirs(base_dir, exist_ok=True)
         else:
-          folder_name = f"{prueba_actual}_{sujeto_actual}"
-          
-        if getattr(sys, 'frozen', False):
-          root_dir = os.path.dirname(os.path.abspath(sys.executable))
-          if os.path.basename(root_dir) == "_internal":
-            root_dir = os.path.dirname(root_dir)
-        else:
-          root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        base_dir = Path(root_dir) / "base_de_datos_electrodos" / fecha_str / folder_name
-        os.makedirs(base_dir, exist_ok=True)
+          if getattr(self, 'is_autoforge_continuo', False) or (prealloc_dir and "SecuenciaContinua_" in str(prealloc_dir)):
+            folder_name = f"SecuenciaContinua_{prueba_actual}_{sujeto_actual}"
+            base_dir = Path(self._allocate_unique_session_dir(folder_name, check_marker_files=True))
+            self._current_session_target_dir = str(base_dir)
+          else:
+            folder_name = f"CVM_{prueba_actual}_{sujeto_actual}"
+            base_dir = Path(self._allocate_unique_session_dir(folder_name))
         
         # 1. Guardar calibracion.csv con desglose multiparamétrico de cada toma y resumen final
         calibracion_csv_path = os.path.join(base_dir, "calibracion.csv")
@@ -9644,6 +9762,7 @@ class RealTimePlotter(QtWidgets.QWidget):
   def estado_grabar_ruido_final(self, target_post_noise):
     if not getattr(self, 'is_autoforge_running', False): return
     self._post_final_noise_target_method = target_post_noise
+    self._current_autoforge_word = "RUIDO_FINAL"
     self.is_recording = False
     self.label_rec_time.setText("GRABANDO RUIDO FINAL...")
     self.lbl_recording_space.setText(f"<div align='center' style='font-size: 50px; font-weight: 900; color: {T['warn']};'>GRABANDO RUIDO FINAL...</div>")
@@ -9666,7 +9785,13 @@ class RealTimePlotter(QtWidgets.QWidget):
   def estado_finalizar_ruido_final(self):
     if not getattr(self, 'is_autoforge_running', False): return
     self.is_recording_final_noise = False
+    self._current_autoforge_word = ""
     self.final_noise_completed = True
+    try:
+      if getattr(self, 'photometry_mgr', None) is not None and hasattr(self.photometry_mgr, 'stop_continuous_recording_tracker'):
+        self.photometry_mgr.stop_continuous_recording_tracker()
+    except Exception:
+      pass
     self.autoforge_overlay.hide()
     
     self.final_noise_mean = [0.0] * self.NUM_CANALES
@@ -9762,7 +9887,14 @@ class RealTimePlotter(QtWidgets.QWidget):
     
     import time
     self.recording_start_time = time.perf_counter() 
+    self._current_autoforge_word = "RUIDO_BASAL"
+    self.metro_beat_count = 0
     self.is_recording = True
+    try:
+      if getattr(self, 'photometry_mgr', None) is not None and hasattr(self.photometry_mgr, 'start_continuous_recording_tracker'):
+        self.photometry_mgr.start_continuous_recording_tracker(self.recording_start_time, parent_plotter=self)
+    except Exception as _e_tr:
+      print(f"[FotometriaTracker] Aviso al iniciar tracker continuo: {_e_tr}")
 
     # Hook fotometria: captura segura de ruido basal continuo
     self._safe_photometry_snapshot(fase="ruido_basal", palabra="ruido_inicial", pulso=0)
@@ -9863,7 +9995,17 @@ class RealTimePlotter(QtWidgets.QWidget):
     
     import time
     self.recording_start_time = float(anchor_perf) if anchor_perf is not None else time.perf_counter()
+    full_seq_start = getattr(self, 'autoforge_full_sequence', None) or getattr(self, 'autoforge_words', ["A"])
+    self._current_autoforge_word = str(full_seq_start[0]).upper() if full_seq_start else "A"
     self.is_recording = True
+    try:
+      if getattr(self, 'photometry_mgr', None) is not None:
+        if hasattr(self.photometry_mgr, 'reanchor_continuous_tracker'):
+          self.photometry_mgr.reanchor_continuous_tracker(self.recording_start_time, parent_plotter=self)
+        elif hasattr(self.photometry_mgr, 'start_continuous_recording_tracker'):
+          self.photometry_mgr.start_continuous_recording_tracker(self.recording_start_time, parent_plotter=self)
+    except Exception as _e_tr:
+      print(f"[FotometriaTracker] Aviso al reanclar tracker continuo: {_e_tr}")
     self.is_finishing_sequence = False
     
     self.current_recording = getattr(self, 'autoforge_ruido_guardado', []).copy()
@@ -9902,6 +10044,11 @@ class RealTimePlotter(QtWidgets.QWidget):
     if not getattr(self, 'final_noise_completed', False):
       self.estado_grabar_ruido_final(target_post_noise=self.estado_guardar_secuencia_continua)
       return
+    try:
+      if getattr(self, 'photometry_mgr', None) is not None and hasattr(self.photometry_mgr, 'stop_continuous_recording_tracker'):
+        self.photometry_mgr.stop_continuous_recording_tracker()
+    except Exception:
+      pass
       
     if hasattr(self, 'word_window_process') and self.word_window_process:
       try: self.word_window_process.kill()
@@ -9939,18 +10086,37 @@ class RealTimePlotter(QtWidgets.QWidget):
           root_dir = os.path.dirname(root_dir)
       else:
         root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-      base_dir = Path(root_dir) / "base_de_datos_electrodos" / fecha_str / folder_name
+
+      prealloc_dir = getattr(self, '_current_session_target_dir', None)
+      if prealloc_dir and os.path.exists(prealloc_dir) and not os.path.exists(os.path.join(prealloc_dir, "grabacion.csv")):
+        base_dir = Path(prealloc_dir)
+      else:
+        base_dir = Path(self._allocate_unique_session_dir(folder_name, check_marker_files=True))
+        self._current_session_target_dir = str(base_dir)
+
       os.makedirs(base_dir, exist_ok=True)
       if hasattr(self, 'autoforge_session_dirs'):
         self.autoforge_session_dirs.append(str(base_dir))
-      
-      full_seq_saved = list(getattr(self, 'autoforge_full_sequence', None) or [])
-      if not full_seq_saved:
-        total_pulsos = len(self.autoforge_words) * self.autoforge_target_reps
-        full_word_sequence = [self.autoforge_words[i % len(self.autoforge_words)] for i in range(total_pulsos)]
-      else:
-        full_word_sequence = full_seq_saved
+
+      # FUENTE ÚNICA DE LA VERDAD para el orden de vocales ejecutado:
+      # Extraer la secuencia directamente de los pulsos principales ejecutados en local_pulsos_metro (pulsos_metronomo.csv)
+      pulsos_principales_ejecutados = [
+        str(p.get("palabra", "")).strip()
+        for p in local_pulsos_metro
+        if int(p.get("principal", 0) or 0) == 1 and int(p.get("idx", 0) or 0) > 0 and str(p.get("palabra", "")).strip()
+      ]
+      if pulsos_principales_ejecutados:
+        full_word_sequence = pulsos_principales_ejecutados
         total_pulsos = len(full_word_sequence)
+        self.autoforge_full_sequence = list(full_word_sequence)
+      else:
+        full_seq_saved = list(getattr(self, 'autoforge_full_sequence', None) or [])
+        if not full_seq_saved:
+          total_pulsos = len(self.autoforge_words) * self.autoforge_target_reps
+          full_word_sequence = [self.autoforge_words[i % len(self.autoforge_words)] for i in range(total_pulsos)]
+        else:
+          full_word_sequence = full_seq_saved
+          total_pulsos = len(full_word_sequence)
           
       now = datetime.now()
       muscles_list = [self.nombres_musculos[i % len(self.nombres_musculos)] for i in range(self.NUM_CANALES)]
@@ -10027,6 +10193,11 @@ class RealTimePlotter(QtWidgets.QWidget):
         "calibracion_cvm": calib_cvm_dict
       }
       photo_meta = self._safe_photometry_export(str(base_dir))
+      try:
+        if getattr(self, 'photometry_mgr', None) is not None and hasattr(self.photometry_mgr, 'exportar_trayectoria_continua_csv'):
+          self.photometry_mgr.exportar_trayectoria_continua_csv(str(base_dir))
+      except Exception:
+        pass
       if photo_meta is not None:
         metadata["fotometria_espacial"] = photo_meta
       if hasattr(self, 'last_separability_metrics') and self.last_separability_metrics is not None:
@@ -10043,18 +10214,20 @@ class RealTimePlotter(QtWidgets.QWidget):
         try:
           with open(metadata_path, 'w', encoding='utf-8') as f:
             json.dump(ch_metadata, f, indent=4)
-        except: pass
+        except Exception as e_meta_ch:
+          print(f"[ERROR Guardado] No se pudo escribir {metadata_path}: {e_meta_ch}")
 
       try:
         base_meta_path = os.path.join(base_dir, "metadata.json")
         with open(base_meta_path, 'w', encoding='utf-8') as f:
           json.dump(metadata, f, indent=4)
-      except: pass
+      except Exception as e_meta_root:
+        print(f"[ERROR Guardado] No se pudo escribir {base_meta_path}: {e_meta_root}")
 
       try:
         escribir_pulsos_metronomo_csv(local_pulsos_metro, str(base_dir))
       except Exception as e:
-        print(f"[Aviso] No se pudieron guardar los pulsos del metronomo: {e}")
+        print(f"[ERROR Guardado] No se pudieron guardar los pulsos del metronomo: {e}")
 
       try:
         emg_chs = [c for c in range(self.NUM_CANALES) if not self._is_mic_channel(c)]
@@ -10086,44 +10259,56 @@ class RealTimePlotter(QtWidgets.QWidget):
       except Exception as e:
         print(f"[Aviso Dataset] No se pudo exportar segmentos_dataset.csv en continua: {e}")
 
-      try: guardar_grabacion_csv(local_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion", canales_daq=self.CANALES_DAQ)
-      except: pass
+      try:
+        guardar_grabacion_csv(local_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion", canales_daq=self.CANALES_DAQ)
+      except Exception as e_csv:
+        print(f"[ERROR Guardado] Falló guardar_grabacion_csv en {base_dir}: {e_csv}")
       
-      try: guardar_grabacion_wav(local_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion")
-      except: pass
+      try:
+        guardar_grabacion_wav(local_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion")
+      except Exception as e_wav:
+        print(f"[ERROR Guardado] Falló guardar_grabacion_wav en {base_dir}: {e_wav}")
       
       try:
         generar_grafico_grabacion(local_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, self.CANALES_DAQ)
         ruta_photo = os.path.join(str(base_dir), "photo.png")
         if os.path.exists(ruta_photo):
           self.mostrar_preview_signal.emit(ruta_photo)
-      except: pass
+      except Exception as e_plot:
+        print(f"[ERROR Guardado] Falló generar_grafico_grabacion en {base_dir}: {e_plot}")
       
-      try: generar_grafico_estadisticas(local_stats_time, local_stats_snr, local_stats_noise_mean, local_stats_noise_std, str(base_dir), self.NUM_CANALES, self.CANALES_DAQ)
-      except: pass
+      try:
+        generar_grafico_estadisticas(local_stats_time, local_stats_snr, local_stats_noise_mean, local_stats_noise_std, str(base_dir), self.NUM_CANALES, self.CANALES_DAQ)
+      except Exception as e_stat:
+        print(f"[ERROR Guardado] Falló generar_grafico_estadisticas en {base_dir}: {e_stat}")
       
-      # 5. Guardar archivo de texto con el registro del orden ejecutado y todo el protocolo
+      # 5. Guardar archivo de texto con el registro del orden ejecutado (sincronizado con pulsos_metronomo.csv y metadata.json)
       try:
         orden_txt_path = os.path.join(str(base_dir), "registro_orden_secuencia.txt")
         with open(orden_txt_path, 'w', encoding='utf-8') as f_ord:
           f_ord.write("SECUENCIA CONTINUA - REGISTRO DE ORDEN DE VOCALES Y PROTOCOLO COMPLETO\n")
           f_ord.write(f"Fecha y Hora: {now.strftime('%Y-%m-%d %H:%M:%S')}\n")
+          f_ord.write(f"Carpeta de Sesion: {os.path.basename(str(base_dir))}\n")
           f_ord.write(f"Sujeto: {self.autoforge_sujeto} | Prueba: {self.autoforge_prueba}\n")
+          f_ord.write(f"Fuente de la Verdad: pulsos_metronomo.csv y metadata.json (valid_words)\n")
           f_ord.write(f"Orden Base de Vocales: {' -> '.join(self.autoforge_words)}\n")
           f_ord.write(f"Repeticiones (Ciclos): {self.autoforge_target_reps}\n")
-          f_ord.write(f"Total de Pulsos: {total_pulsos}\n\n")
-          f_ord.write("Secuencia detallada pulso a pulso:\n")
+          f_ord.write(f"Total de Pulsos Ejecutados: {total_pulsos}\n\n")
+          f_ord.write("Secuencia detallada pulso a pulso (sincronizada con pulsos_metronomo.csv):\n")
+          n_base_w = max(1, len(self.autoforge_words))
           for idx_p, w_p in enumerate(full_word_sequence, 1):
-            ciclo_p = ((idx_p - 1) // len(self.autoforge_words)) + 1
-            pos_p = ((idx_p - 1) % len(self.autoforge_words)) + 1
+            ciclo_p = ((idx_p - 1) // n_base_w) + 1
+            pos_p = ((idx_p - 1) % n_base_w) + 1
             f_ord.write(f"  Pulso {idx_p:03d} | Ciclo {ciclo_p:02d} | Pos {pos_p}: /{w_p}/\n")
           f_ord.write("\n" + self._formatear_informe_protocolo_completo_txt(metadata_dict=metadata, modo_ejecucion="Secuencia Continua"))
-      except Exception: pass
+      except Exception as e_ord:
+        print(f"[ERROR Guardado] Falló escritura de registro_orden_secuencia.txt en {base_dir}: {e_ord}")
 
       # 6. Persistir notas de experimento en metadata.json y archivo de texto
       try:
         self.persistir_notas_experimento(str(base_dir), metadata_base=metadata)
-      except Exception: pass
+      except Exception as e_not:
+        print(f"[ERROR Guardado] Falló persistir_notas_experimento en {base_dir}: {e_not}")
 
       # 7. Generar automaticamente resumen_rapido_toma.txt (uV reales, ratios y separabilidad)
       try:
@@ -10172,14 +10357,20 @@ class RealTimePlotter(QtWidgets.QWidget):
     ]
 
     if modo == "Secuencia Continua":
-      total_pulsos = len(words) * reps
-      for i in range(total_pulsos):
-        w = words[i % len(words)]
-        ciclo = (i // len(words)) + 1
-        pos_en_ciclo = (i % len(words)) + 1
+      pulsos_metro_exec = [
+        str(p.get("palabra", "")).strip()
+        for p in (getattr(self, '_metro_pulsos', None) or [])
+        if int(p.get("principal", 0) or 0) == 1 and int(p.get("idx", 0) or 0) > 0 and str(p.get("palabra", "")).strip()
+      ]
+      seq_real = pulsos_metro_exec or list(getattr(self, 'autoforge_full_sequence', None) or [words[i % len(words)] for i in range(len(words) * reps)])
+      total_pulsos = len(seq_real)
+      n_w = max(1, len(words))
+      for i, w in enumerate(seq_real):
+        ciclo = (i // n_w) + 1
+        pos_en_ciclo = (i % n_w) + 1
         banner.append(f"  Pulso {i+1:03d} | Ciclo {ciclo:02d}/{reps:02d} | Pos {pos_en_ciclo}: /{w}/")
       banner.append("-" * 72)
-      banner.append(f"Total de pulsos continuos: {total_pulsos}")
+      banner.append(f"Total de pulsos continuos (sincronizado con pulsos_metronomo.csv): {total_pulsos}")
     else:
       for idx, w in enumerate(words, 1):
         banner.append(f"  Toma {idx:02d}/{len(words):02d} | Vocal: /{w}/ ({reps} repeticiones)")
@@ -10209,7 +10400,8 @@ class RealTimePlotter(QtWidgets.QWidget):
       directorio_base = os.path.join(root_dir, "base_de_datos_electrodos", fecha_str)
       os.makedirs(directorio_base, exist_ok=True)
       modo_nom = modo.lower().replace(" ", "_")
-      nombre_archivo = f"registro_orden_{modo_nom}_{prueba}_{sujeto}.txt"
+      ts_tag = now.strftime("%Y%m%d_%H%M%S")
+      nombre_archivo = f"registro_orden_{modo_nom}_{prueba}_{sujeto}_{ts_tag}.txt"
       ruta_archivo = os.path.join(directorio_base, nombre_archivo)
       with open(ruta_archivo, 'w', encoding='utf-8') as f:
         f.write(texto_final + "\n")
@@ -10415,7 +10607,14 @@ class RealTimePlotter(QtWidgets.QWidget):
     
     import time
     self.recording_start_time = time.perf_counter() 
+    self._current_autoforge_word = "RUIDO_BASAL"
+    self.metro_beat_count = 0
     self.is_recording = True
+    try:
+      if getattr(self, 'photometry_mgr', None) is not None and hasattr(self.photometry_mgr, 'start_continuous_recording_tracker'):
+        self.photometry_mgr.start_continuous_recording_tracker(self.recording_start_time, parent_plotter=self)
+    except Exception as _e_tr:
+      print(f"[FotometriaTracker] Aviso al iniciar tracker continuo: {_e_tr}")
 
     # Hook fotometria: captura segura de ruido basal
     self._safe_photometry_snapshot(fase="ruido_basal", palabra="ruido_inicial", pulso=0)
@@ -10558,7 +10757,16 @@ class RealTimePlotter(QtWidgets.QWidget):
     # --- REACTIVAMOS LA GRABACIÓN: AQUÍ EMPIEZA LA PALABRA REAL ---
     import time
     self.recording_start_time = float(anchor_perf) if anchor_perf is not None else time.perf_counter()
+    self._current_autoforge_word = str(palabra or "").upper()
     self.is_recording = True
+    try:
+      if getattr(self, 'photometry_mgr', None) is not None:
+        if hasattr(self.photometry_mgr, 'reanchor_continuous_tracker'):
+          self.photometry_mgr.reanchor_continuous_tracker(self.recording_start_time, parent_plotter=self)
+        elif hasattr(self.photometry_mgr, 'start_continuous_recording_tracker'):
+          self.photometry_mgr.start_continuous_recording_tracker(self.recording_start_time, parent_plotter=self)
+    except Exception as _e_tr:
+      print(f"[FotometriaTracker] Aviso al reanclar tracker continuo: {_e_tr}")
     
     # --- NUEVO: Limpiamos los buffers de guardado y estadísticas para cada palabra ---
     self.current_recording = getattr(self, 'autoforge_ruido_guardado', []).copy()
@@ -10608,6 +10816,11 @@ class RealTimePlotter(QtWidgets.QWidget):
       Any: Resultado de la ejecución de la función.
     """
     self.is_recording = False
+    try:
+      if getattr(self, 'photometry_mgr', None) is not None and hasattr(self.photometry_mgr, 'stop_continuous_recording_tracker'):
+        self.photometry_mgr.stop_continuous_recording_tracker()
+    except Exception:
+      pass
     palabra = self.autoforge_words[self.autoforge_word_idx]
     if hasattr(self, 'countdown_text'): self.countdown_text.hide()
     
@@ -10763,6 +10976,11 @@ class RealTimePlotter(QtWidgets.QWidget):
         "calibracion_cvm": calib_cvm_dict
       }
       photo_meta = self._safe_photometry_export(str(base_dir))
+      try:
+        if getattr(self, 'photometry_mgr', None) is not None and hasattr(self.photometry_mgr, 'exportar_trayectoria_continua_csv'):
+          self.photometry_mgr.exportar_trayectoria_continua_csv(str(base_dir))
+      except Exception:
+        pass
       if photo_meta is not None:
         metadata["fotometria_espacial"] = photo_meta
       if hasattr(self, 'last_separability_metrics') and self.last_separability_metrics is not None:
@@ -10780,13 +10998,15 @@ class RealTimePlotter(QtWidgets.QWidget):
         try:
           with open(metadata_path, 'w', encoding='utf-8') as f:
             json.dump(ch_metadata, f, indent=4)
-        except: pass
+        except Exception as e_mch:
+          print(f"[ERROR Guardado Discreto] No se pudo escribir {metadata_path}: {e_mch}")
 
       try:
         base_meta_path = os.path.join(base_dir, "metadata.json")
         with open(base_meta_path, 'w', encoding='utf-8') as f:
           json.dump(metadata, f, indent=4)
-      except: pass
+      except Exception as e_mroot:
+        print(f"[ERROR Guardado Discreto] No se pudo escribir {base_meta_path}: {e_mroot}")
 
       # 3. Guardar Datos Raw CSV, Pulsos del Metrónomo, Segmentos Dataset y WAV
       try:
@@ -10821,11 +11041,15 @@ class RealTimePlotter(QtWidgets.QWidget):
         metadata["semaforo_contacto_electrodos"] = getattr(self, 'diagnostico_contacto_electrodos', {})
       except Exception as e:
         print(f"[Aviso Dataset] No se pudo exportar segmentos_dataset.csv en discreto: {e}")
-      try: guardar_grabacion_csv(local_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion", canales_daq=self.CANALES_DAQ)
-      except: pass
+      try:
+        guardar_grabacion_csv(local_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion", canales_daq=self.CANALES_DAQ)
+      except Exception as e_dcsv:
+        print(f"[ERROR Guardado Discreto] Falló guardar_grabacion_csv en {base_dir}: {e_dcsv}")
       
-      try: guardar_grabacion_wav(local_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion")
-      except: pass
+      try:
+        guardar_grabacion_wav(local_recording, self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "grabacion")
+      except Exception as e_dwav:
+        print(f"[ERROR Guardado Discreto] Falló guardar_grabacion_wav en {base_dir}: {e_dwav}")
       
       # 4. Generar Gráficos
       try:
@@ -10833,9 +11057,12 @@ class RealTimePlotter(QtWidgets.QWidget):
         ruta_photo = os.path.join(str(base_dir), "photo.png")
         if os.path.exists(ruta_photo):
           self.mostrar_preview_signal.emit(ruta_photo)
-      except: pass
-      try: generar_grafico_estadisticas(local_stats_time, local_stats_snr, local_stats_noise_mean, local_stats_noise_std, str(base_dir), self.NUM_CANALES, self.CANALES_DAQ)
-      except: pass
+      except Exception as e_dplot:
+        print(f"[ERROR Guardado Discreto] Falló generar_grafico_grabacion en {base_dir}: {e_dplot}")
+      try:
+        generar_grafico_estadisticas(local_stats_time, local_stats_snr, local_stats_noise_mean, local_stats_noise_std, str(base_dir), self.NUM_CANALES, self.CANALES_DAQ)
+      except Exception as e_dstat:
+        print(f"[ERROR Guardado Discreto] Falló generar_grafico_estadisticas en {base_dir}: {e_dstat}")
       
       # 5. Guardar archivo con el orden completo de la sesión y todo el protocolo
       try:
@@ -10843,17 +11070,20 @@ class RealTimePlotter(QtWidgets.QWidget):
         with open(orden_txt_path, 'w', encoding='utf-8') as f_ord:
           f_ord.write("AUTOGRABADO DISCRETO - REGISTRO DE ORDEN DE VOCALES Y PROTOCOLO COMPLETO\n")
           f_ord.write(f"Fecha y Hora: {now.strftime('%Y-%m-%d %H:%M:%S')}\n")
+          f_ord.write(f"Carpeta de Sesion: {os.path.basename(str(base_dir))}\n")
           f_ord.write(f"Sujeto: {self.autoforge_sujeto} | Prueba: {prueba_actual}\n")
           f_ord.write(f"Vocal Actual: /{palabra}/ (Toma {self.autoforge_word_idx + 1} de {len(self.autoforge_words)})\n")
           f_ord.write(f"Orden Completo de Sesión: {' -> '.join(self.autoforge_words)}\n")
           f_ord.write(f"Repeticiones por toma: {self.autoforge_target_reps}\n\n")
           f_ord.write(self._formatear_informe_protocolo_completo_txt(metadata_dict=metadata, modo_ejecucion="Autograbado Discreto"))
-      except Exception: pass
+      except Exception as e_dord:
+        print(f"[ERROR Guardado Discreto] Falló registro_orden_sesion.txt en {base_dir}: {e_dord}")
 
       # 6. Persistir notas de experimento en metadata.json y archivo de texto
       try:
         self.persistir_notas_experimento(str(base_dir), metadata_base=metadata)
-      except Exception: pass
+      except Exception as e_dnot:
+        print(f"[ERROR Guardado Discreto] Falló persistir_notas_experimento en {base_dir}: {e_dnot}")
 
       # 7. Generar automaticamente resumen_rapido_toma.txt (uV reales, ratios y separabilidad)
       try:
@@ -11075,10 +11305,10 @@ class RealTimePlotter(QtWidgets.QWidget):
 
   def _on_toggle_oscilloscope_grid(self, checked: bool):
     show_g = bool(checked)
-    self.plot.showGrid(x=show_g, y=show_g, alpha=0.28 if show_g else 0.0)
+    self.plot.showGrid(x=show_g, y=show_g, alpha=0.62 if show_g else 0.0)
     for sp in getattr(self, 'sub_plots', []):
       try:
-        sp.showGrid(x=show_g, y=show_g, alpha=0.28 if show_g else 0.0)
+        sp.showGrid(x=show_g, y=show_g, alpha=0.62 if show_g else 0.0)
       except Exception:
         pass
 
@@ -11298,7 +11528,7 @@ class RealTimePlotter(QtWidgets.QWidget):
       # Crear un sub_plot nativo con su propia curva dedicada para cada canal 1..N
       for i in range(1, self.NUM_CANALES):
         sp = self.plot_widget.addPlot(row=i, col=0)
-        sp.showGrid(x=True, y=True, alpha=0.28)
+        sp.showGrid(x=True, y=True, alpha=0.62)
         # NUEVO (Bug 1.1): ancho fijo 48 y etiqueta corta 'uV' (eje que no se solapa nunca)
         sp.getAxis('left').setWidth(48)
         sp.setLabel('left', 'uV', color=T['text_dim'])
@@ -11316,8 +11546,8 @@ class RealTimePlotter(QtWidgets.QWidget):
           sp.setLabel('bottom', 'Tiempo (s)')
         
         pen_color = self.colores_curvas[i % len(self.colores_curvas)] if hasattr(self, 'colores_curvas') and self.colores_curvas else pg.intColor(i)
-        # NUEVO (Bug 1.4): trazo crudo width=1.15, igual que la capa superpuesta
-        sub_c = sp.plot(pen=pg.mkPen(pg.mkColor(pen_color) if isinstance(pen_color, str) else pen_color, width=1.15), name=musc_name)
+        # sub_c = sp.plot(pen=pg.mkPen(pg.mkColor(pen_color) if isinstance(pen_color, str) else pen_color, width=1), name=musc_name)
+        sub_c = sp.plot(pen=pg.mkPen(pg.mkColor(pen_color) if isinstance(pen_color, str) else pen_color, width=1), name=musc_name)
         sub_c.setClipToView(True)
         sub_c.setZValue(10 + i)
         if i < len(self.viz_checkboxes):
@@ -11616,7 +11846,12 @@ class RealTimePlotter(QtWidgets.QWidget):
     fecha_str = datetime.now().strftime("%Y-%m-%d")
     prueba = getattr(self, 'autoforge_prueba', 'Prueba1')
     sujeto = getattr(self, 'autoforge_sujeto', 'Sujeto1')
-    if modo == "Secuencia Continua":
+    ses_dirs = getattr(self, 'autoforge_session_dirs', None) or []
+    if ses_dirs:
+      med_folder = os.path.basename(str(ses_dirs[-1]))
+    elif getattr(self, '_current_session_target_dir', None):
+      med_folder = os.path.basename(str(self._current_session_target_dir))
+    elif modo == "Secuencia Continua":
       med_folder = f"SecuenciaContinua_{prueba}_{sujeto}"
     else:
       med_folder = f"{prueba}_{sujeto}"
@@ -11803,7 +12038,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     self._pca_scatter_todos = None
     self._pca_scatter_halo = None
     self.pca_live_plot.setAspectLocked(False)
-    self.pca_live_plot.showGrid(x=True, y=True, alpha=0.25)
+    self.pca_live_plot.showGrid(x=True, y=True, alpha=0.60)
     for _ax_name_m3 in ('bottom', 'left'):
       _ax_m3 = self.pca_live_plot.getAxis(_ax_name_m3)
       _fnt_ax_m3 = QtGui.QFont("Courier New")
@@ -12871,7 +13106,13 @@ class PhonatoryPulseDetector:
             noise_bases.append(lvl)
         noise_bases_arr = np.array(noise_bases, dtype=np.float64)[:, None]
         clean_emg_env = np.maximum(0.0, emg_env - noise_bases_arr)
-        s_emg = np.sqrt(np.sum(clean_emg_env ** 2, axis=0))
+        # Pesos biomecánicos en la Norma S_emg: realzar Canal 2 (Protrusión/Constricción Orbicular de /o/ y /u/)
+        w_tricanal = np.ones((len(emg_indices), 1), dtype=np.float64)
+        if len(emg_indices) >= 3:
+            w_tricanal[0, 0] = 1.00  # CH0: Apertura (/a/)
+            w_tricanal[1, 0] = 1.15  # CH1: Retracción/Sonrisa (/i/, /e/)
+            w_tricanal[2, 0] = 2.25  # CH2: Protrusión/Constricción Orbicular (/o/, /u/)
+        s_emg = np.sqrt(np.sum(w_tricanal * (clean_emg_env ** 2), axis=0))
 
         # Piso de ruido basal robusto (primeros segundos + descansos inter-pulso).
         # u_bajo marca el cruce ascendente fisiologico y u_alto confirma el burst
