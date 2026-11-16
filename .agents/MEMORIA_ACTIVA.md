@@ -299,8 +299,11 @@
   - Eliminado `stop_event.set()` espurio en `finally` de `WebcamAudioLiveThread` y suprimida la adaptación continua de reposo (`alpha_rest = 0.015`) para erradicar el hundimiento de canales cinemáticos.
   - Controles interactivos de umbral del Gate en panel (`spin_u_alto`, `spin_u_bajo`) y líneas arrastrables en osciloscopio.
 - **Rendimiento Empírico en Vivo:**
-  - **73.33% exactitud (11/15 aciertos)** en test con gate cinemático en tiempo real (0 pulsos sin respuesta: /A/ 3/3, /I/ 3/3, /E/ 2/3, /O/ 2/3, /U/ 1/3).
+  - **Récords Absolutos en Vivo (Hito 29):**
+    - **93.3% de exactitud (14/15 aciertos, 0 sin respuesta):** /a/ 3/3, /e/ 2/3, /i/ 3/3, /o/ 3/3, /u/ 3/3.
+    - **86.7% de exactitud (13/15 aciertos, 0 sin respuesta):** /a/ 3/3, /e/ 2/3, /i/ 3/3, /o/ 2/3, /u/ 3/3.
   - Almacenamiento automático y discriminado de ventanas en `auditoria_tiempo_real/ventanas_en_vivo/gate/` (294 ventanas acumuladas; 96 etiquetadas: 17 /A/, 17 /E/, 21 /I/, 21 /O/, 20 /U/).
+  - Diagnóstico empírico clave: La iluminación estable de la cámara fija el landmark tracking y elimina el corrimiento de la variedad latente.
 - **Plan para la Próxima Sesión (Calibración Sara Solla / Procrustes Afín):**
   - Implementar rutina de alineación Procrustes/CCA en `realtime_facial_decoder_engine.py` usando las ventanas de la sesión de hoy vs centroides canónicos del modelo campeón (`campeon_geosup_conv_ortho_4d`).
   - Incorporar botón `[ ALINEAR VARIEDAD (SARA SOLLA) ]` en la GUI para proyectar $z_{\text{hoy}} \mapsto R(z - \bar{z}) + \mu_{\text{ref}}$ y evaluar directamente con el clasificador LDA canónico en vivo sin reentrenar la red.

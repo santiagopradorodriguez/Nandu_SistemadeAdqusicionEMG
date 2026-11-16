@@ -1,0 +1,91 @@
+{
+  "fecha_inicio": "2026-11-12 18:24:48",
+  "fecha_fin": "2026-11-12 18:26:04",
+  "modelo": "Campeón Facial 6Ch GeoSupConvOrtho 4D (Pose-Ortogonal + Margen Focal) - 97.2% (243/250)",
+  "secuencia": [
+    "A",
+    "I",
+    "O",
+    "E",
+    "U",
+    "A",
+    "I",
+    "O",
+    "U",
+    "E",
+    "E",
+    "U",
+    "A",
+    "O",
+    "I"
+  ],
+  "total_pulsos": 15,
+  "aciertos": 9,
+  "sin_respuesta": 1,
+  "exactitud_pct": 60.0,
+  "por_vocal": {
+    "A": {
+      "ok": 3,
+      "tot": 3
+    },
+    "E": {
+      "ok": 1,
+      "tot": 3
+    },
+    "I": {
+      "ok": 0,
+      "tot": 3
+    },
+    "O": {
+      "ok": 2,
+      "tot": 3
+    },
+    "U": {
+      "ok": 3,
+      "tot": 3
+    }
+  },
+  "matriz_confusion": {
+    "A": {
+      "A": 3,
+      "E": 0,
+      "I": 0,
+      "O": 0,
+      "U": 0,
+      "SIN": 0
+    },
+    "E": {
+      "A": 2,
+      "E": 1,
+      "I": 0,
+      "O": 0,
+      "U": 0,
+      "SIN": 0
+    },
+    "I": {
+      "A": 2,
+      "E": 0,
+      "I": 0,
+      "O": 0,
+      "U": 0,
+      "SIN": 1
+    },
+    "O": {
+      "A": 0,
+      "E": 0,
+      "I": 0,
+      "O": 2,
+      "U": 1,
+      "SIN": 0
+    },
+    "U": {
+      "A": 0,
+      "E": 0,
+      "I": 0,
+      "O": 0,
+      "U": 3,
+      "SIN": 0
+    }
+  },
+  "archivo_csv": "/home/santiago/repositorios/Nandu_SistemadeAdqusicionEMG/reportes_experimentos/decodificacion_facial/tests_en_vivo/registro_test_vivo_20261112_182448.csv"
+}

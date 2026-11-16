@@ -1016,7 +1016,7 @@ class VoiceCuePlayer:
 
 class PreRollRecordingBuffer:
   """Buffer circular autocontenido para rescatar los ultimos N segundos antes de grabar."""
-  def __init__(self, sample_rate: int = 2000, preroll_seconds: float = 1.0, num_channels: int = 0):
+  def __init__(self, sample_rate: int = 6000, preroll_seconds: float = 1.0, num_channels: int = 0):
     self.sample_rate = int(sample_rate)
     self.preroll_seconds = max(0.0, float(preroll_seconds))
     self._num_channels = int(num_channels)
@@ -3082,7 +3082,8 @@ class VentanaEstimulosExterna(QtWidgets.QWidget):
   """
   Ventana dedicada de estímulos para un 2do Monitor HDMI/VGA (Modo Sujeto Ciego sin red).
   Replica la estética de cliente_estimulos.html (#00FFFF sobre #050505) para que la persona
-  vea únicamente la vocal actual, la próxima vocal, el contador y el destello del pulso,
+  vea únicamente la vocal actual, el contador y el destello del pulso (en Secuencia Continua la
+  vocal aparece en el pulso, desaparece y no se anuncia la próxima),
   sin ver las señales EMG ni el PCA en la pantalla del operador.
   """
   def __init__(self, parent=None):
@@ -3156,8 +3157,12 @@ class VentanaEstimulosExterna(QtWidgets.QWidget):
   def actualizar_estimulo(self, palabra="", palabra_siguiente="", pulso_actual=0, total_pulsos=0,
                           flash=False, count_in=None, sesion="", bpm=30, instruccion_fase="",
                           subtitulo_fase="", tira_html="", ciclo_actual=1, total_ciclos=1,
-                          sub_actual=1, subdiv=4, pre_cambio=False):
-    p_txt = str(palabra or "ESPERANDO...").upper()
+                          sub_actual=1, subdiv=4, pre_cambio=False, grabando=False):
+    p_txt = str(palabra or "").upper()
+    if not p_txt:
+      # Con sesión activa la vocal queda oculta entre pulsos (Secuencia Continua);
+      # sin sesión se muestra el estado de espera.
+      p_txt = "" if grabando else "ESPERANDO..."
     sig_txt = str(palabra_siguiente or "").upper()
     vocal_colores = {'A': '#FF3355', 'E': '#00B4D8', 'I': '#39FF14', 'O': '#C77DFF', 'U': '#FFD166'}
     v_col = vocal_colores.get(p_txt, '#00FFFF')
@@ -3171,7 +3176,7 @@ class VentanaEstimulosExterna(QtWidgets.QWidget):
       self.lbl_countin.setText(str(instruccion_fase or "SIGUE EL RITMO DEL METRÓNOMO"))
       self.lbl_countin.setStyleSheet("color: #00FFCC; font-size: 24px; font-weight: 900;")
 
-    self.lbl_palabra.setText(f"/{p_txt}/" if len(p_txt) <= 3 else p_txt)
+    self.lbl_palabra.setText(f"/{p_txt}/" if (p_txt and len(p_txt) <= 3) else p_txt)
     if flash:
       self.lbl_palabra.setStyleSheet("color: #FFFFFF; background-color: rgba(0, 255, 255, 0.22); border: 3px solid #FFFFFF; border-radius: 12px; font-size: 150px; font-weight: 900;")
       self.frame_pulso.setStyleSheet("background-color: #96FFFF; border: 3px solid #FFFFFF; border-radius: 10px;")
@@ -3428,7 +3433,7 @@ class AutoForgeDialog(QtWidgets.QDialog):
     self.spin_bpm.setValue(int(bpm_init))
     self.spin_subdivs = QtWidgets.QSpinBox()
     self.spin_subdivs.setRange(1, 8)
-    subdiv_init = getattr(parent, 'spin_metro_subdivs', None).value() if hasattr(parent, 'spin_metro_subdivs') else 4
+    subdiv_init = getattr(parent, 'spin_metro_subdivs', None).value() if hasattr(parent, 'spin_metro_subdivs') else 1
     self.spin_subdivs.setValue(int(subdiv_init))
     
     self.layout.addRow("Prueba:", self.edit_prueba)
@@ -3732,7 +3737,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.BTN_REC_STOP_STYLE = BTN_REC_STOP_CYBER
 
     # --- Estado interno ---
-    self.preroll_buffer = PreRollRecordingBuffer(sample_rate=2000, preroll_seconds=1.0)
+    self.preroll_buffer = PreRollRecordingBuffer(sample_rate=6000, preroll_seconds=1.0)
     self.spoken_audio_log = []
     self._last_spoken_continuo_word = None
     self._pre_announced_continuo_beat = -1
@@ -3781,9 +3786,9 @@ class RealTimePlotter(QtWidgets.QWidget):
     # --- Propiedades iniciales seguras (evita SAMPLE_RATE=0 antes de iniciar adquisición) ---
     self.NUM_CANALES = 0
     self.CANALES_DAQ = []
-    self.SAMPLE_RATE = 2000
+    self.SAMPLE_RATE = 6000  # Consigna 11-2026: frecuencia de muestreo obligatoria
     self.PLOT_DURATION_S = 10
-    self.PLOT_SAMPLES = 20000
+    self.PLOT_SAMPLES = 60000
     self.CHUNK_DURATION_S = 0.05
     self._photometry_session_active = False
     
@@ -3910,7 +3915,9 @@ class RealTimePlotter(QtWidgets.QWidget):
     """
     adq_cfg = self.config_mgr.get("adquisicion") or {}
     bpm = int(adq_cfg.get("bpm", 25))
-    subdivs = int(adq_cfg.get("subdivisiones", 4))
+    # Consigna 11-2026: ya no hay subpulsos activados por defecto.
+    # Se ignora el valor guardado en configs previas (subdivisiones / subdivisions) y arranca en 1.
+    subdivs = 1
     notch_enabled = bool(adq_cfg.get("notch_50hz_activo", False))
     noise_s = float(adq_cfg.get("ruido_segundos", 3.0))
     if os.path.exists(METRONOME_CONFIG_PATH):
@@ -3919,8 +3926,6 @@ class RealTimePlotter(QtWidgets.QWidget):
           m_cfg = json.load(f)
           if 'last_bpm' in m_cfg:
             bpm = int(m_cfg['last_bpm'])
-          if 'subdivisions' in m_cfg:
-            subdivs = int(m_cfg['subdivisions'])
       except Exception:
         pass
     self.spin_bpm.setValue(max(10, min(240, bpm)))
@@ -4051,7 +4056,10 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.label_sample_rate = QtWidgets.QLabel("Sample Rate (S/s):")
     self.cmb_sample_rate = QtWidgets.QComboBox()
     self.cmb_sample_rate.addItems(["2000", "6000", "10000", "20000", "44100", "50000"])
-    self.cmb_sample_rate.setCurrentText("2000")
+    # Consigna 11-2026: frecuencia de muestreo obligatoria = 6000 Hz (selector bloqueado)
+    self.cmb_sample_rate.setCurrentText("6000")
+    self.cmb_sample_rate.setEnabled(False)
+    self.cmb_sample_rate.setToolTip("Frecuencia de muestreo FIJA en 6000 Hz (obligatoria).")
 
     self.label_plot_duration = QtWidgets.QLabel("Duracion Plot (s):")
     self.spin_plot_duration = SpinBox(value=10, step=1, bounds=(1, 60), int=True)
@@ -4135,9 +4143,16 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.spin_bpm.setFixedWidth(54)
     self.spin_bpm.setFixedHeight(22)
     self.spin_bpm.setToolTip("BPM del metrónomo (editable en cualquier momento, incluso durante Autograbado o Secuencia Continua)")
-    self.spin_metro_subdivs = SpinBox(value=4, int=True, bounds=(1, 8), step=1)
+    self.spin_metro_subdivs = SpinBox(value=1, int=True, bounds=(1, 8), step=1)
     self.spin_metro_subdivs.setFixedWidth(44)
     self.spin_metro_subdivs.setFixedHeight(22)
+    self.spin_metro_subdivs.setToolTip("Subdivisiones / subpulsos por pulso. Por defecto 1 = SIN subpulsos activados.")
+    self.chk_metro_beep = QtWidgets.QCheckBox("Beep")
+    self.chk_metro_beep.setChecked(True)
+    self.chk_metro_beep.setToolTip(
+        "Beep audible del metrónomo. Desmarcalo para silenciar TODOS los beeps del metrónomo\n"
+        "(cuenta regresiva, pulsos y subpulsos) manteniendo el ritmo visual. Útil especialmente con Jitter Anti-Sync."
+    )
     self.spin_bpm.valueChanged.connect(self._on_live_bpm_or_subdiv_changed)
     self.spin_metro_subdivs.valueChanged.connect(self._on_live_bpm_or_subdiv_changed)
 
@@ -4343,6 +4358,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     bpm_sub_layout.setSpacing(4)
     bpm_sub_layout.addWidget(self.spin_bpm)
     bpm_sub_layout.addWidget(self.spin_metro_subdivs)
+    bpm_sub_layout.addWidget(self.chk_metro_beep)
 
     self.filter_layout.addWidget(self.chk_use_metronome, 3, 0)
     self.filter_layout.addWidget(self.label_bpm, 3, 1)
@@ -4799,7 +4815,7 @@ class RealTimePlotter(QtWidgets.QWidget):
       })
 
     bpm_val = int(self.spin_bpm.value()) if hasattr(self, 'spin_bpm') else 30
-    subdiv_val = int(self.spin_metro_subdivs.value()) if hasattr(self, 'spin_metro_subdivs') else 4
+    subdiv_val = int(self.spin_metro_subdivs.value()) if hasattr(self, 'spin_metro_subdivs') else 1
     jitter_on = bool(hasattr(self, 'chk_metro_jitter') and self.chk_metro_jitter.isChecked())
     jitter_pct = float(self.spin_metro_jitter_pct.value()) if hasattr(self, 'spin_metro_jitter_pct') else 0.0
     jitter_mode = str(self.cmb_metro_jitter_mode.currentText()) if hasattr(self, 'cmb_metro_jitter_mode') else "exponential_hazard"
@@ -4853,7 +4869,7 @@ class RealTimePlotter(QtWidgets.QWidget):
         "speaking_habilitado_en_config": bool(not speaking_muted),
         "speaking_muteado": speaking_muted,
         "modo_locucion": speaking_mode,
-        "beeps_metronomo_activos": bool(hasattr(self, 'chk_use_metronome') and self.chk_use_metronome.isChecked()),
+        "beeps_metronomo_activos": bool(hasattr(self, 'chk_metro_beep') and self.chk_metro_beep.isChecked() and hasattr(self, 'chk_use_metronome') and self.chk_use_metronome.isChecked()),
         "total_comandos_voz_emitidos": len(cues_emitidos),
         "total_comandos_voz_registrados": len(spoken_log),
         "historial_comandos_voz": spoken_log,
@@ -5955,7 +5971,8 @@ class RealTimePlotter(QtWidgets.QWidget):
       device = self.cmb_device.currentText()
       
       # Leer nuevos parámetros de la GUI
-      self.SAMPLE_RATE = int(self.cmb_sample_rate.currentText())
+      # Consigna 11-2026: la frecuencia de muestreo es obligatoria = 6000 Hz
+      self.SAMPLE_RATE = 6000
       
       # --- NUEVO: Si se usa el micrófono, forzar el sample rate correcto ANTES de crear el búfer visual ---
       if getattr(self, 'chk_use_mic', None) and self.chk_use_mic.isChecked():
@@ -6094,7 +6111,7 @@ class RealTimePlotter(QtWidgets.QWidget):
       estado = {
         "adquisicion": {
           "bpm": int(self.spin_bpm.value()) if hasattr(self, 'spin_bpm') else 25,
-          "subdivisiones": int(self.spin_metro_subdivs.value()) if hasattr(self, 'spin_metro_subdivs') else 4,
+          "subdivisiones": int(self.spin_metro_subdivs.value()) if hasattr(self, 'spin_metro_subdivs') else 1,
           "ruido_segundos": float(self.spin_noise_duration.value()) if hasattr(self, 'spin_noise_duration') else 3.0,
           "notch_50hz_activo": bool(self.chk_notch_enable.isChecked()) if hasattr(self, 'chk_notch_enable') else False,
           "pasabanda_low_hz": float(self.spin_low_cut.value()) if hasattr(self, 'spin_low_cut') else 20.0,
@@ -6134,7 +6151,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     self._persistir_preferencias_en_config_local()
     '''Permite cambiar el BPM o las subdivisiones en vivo (incluso durante Autograbado o Secuencia Continua).'''
     bpm_val = max(10, int(self.spin_bpm.value())) if hasattr(self, 'spin_bpm') else 30
-    sub_val = max(1, int(self.spin_metro_subdivs.value())) if hasattr(self, 'spin_metro_subdivs') else 4
+    sub_val = max(1, int(self.spin_metro_subdivs.value())) if hasattr(self, 'spin_metro_subdivs') else 1
     self.current_beat_tau_s = 60.0 / float(bpm_val)
     if hasattr(self, 'chk_metro_jitter') and self.chk_metro_jitter.isChecked() and not getattr(self, 'is_cvm_active', False):
       n_sched = max(60, int(getattr(self, 'autoforge_target_reps', 30)) * max(1, len(getattr(self, 'autoforge_words', [1]))))
@@ -6786,12 +6803,20 @@ class RealTimePlotter(QtWidgets.QWidget):
     """
     Actualiza el visor de vocales (lbl_recording_space) con:
     - Destello visual (flash=True) sincronizado al golpe del metrónomo para que el sujeto perciba el pulso en la propia letra.
-    - Tira de secuencia y cartel de PRÓXIMA VOCAL para que nunca se pierda en Secuencia Continua ni Discreta.
+    - En Secuencia Continua (consigna 11-2026): la pantalla dice la vocal en el pulso, luego desaparece y
+      NO anuncia la próxima vocal (sin tira de secuencia, sin cartel SIGUIENTE ni pre-aviso).
     """
     if not hasattr(self, 'lbl_recording_space'):
       return
     p_act = str(palabra_actual or "").upper()
     p_sig = str(palabra_siguiente or "").upper()
+    if getattr(self, 'is_autoforge_continuo', False):
+      # Consigna Secuencia Continua: mostrar la vocal sólo en el pulso (flash), ocultarla entre pulsos
+      # y suprimir todo aviso de la vocal siguiente.
+      p_sig = ""
+      pre_cambio = False
+      if not flash:
+        p_act = ""
     vocal_colores = {'A': T['err'], 'E': '#00B4D8', 'I': T['ok'], 'O': T['purple'], 'U': T['warn']}
     vocal_rgb = {'A': '255, 51, 85', 'E': '0, 180, 216', 'I': '57, 255, 20', 'O': '199, 125, 255', 'U': '255, 209, 102'}
     v_col = vocal_colores.get(p_act, T['accent'])
@@ -6800,9 +6825,7 @@ class RealTimePlotter(QtWidgets.QWidget):
 
     words = getattr(self, 'autoforge_words', []) or [p_act]
     if getattr(self, 'is_autoforge_continuo', False):
-      full_seq = getattr(self, 'autoforge_full_sequence', None) or (words * max(1, getattr(self, 'autoforge_target_reps', 1)))
-      active_seq_idx = max(0, pulso_actual - 1) % max(1, len(full_seq))
-      tira_html = self._construir_tira_secuencia_html(full_seq, active_seq_idx)
+      tira_html = ""  # Sin tira de secuencia: no se anuncia qué vocal viene
     else:
       active_seq_idx = int(getattr(self, 'autoforge_word_idx', 0))
       tira_html = self._construir_tira_secuencia_html(words, active_seq_idx)
@@ -6822,8 +6845,10 @@ class RealTimePlotter(QtWidgets.QWidget):
       )
       if pre_cambio and p_sig:
         badge_top = f"<span style='color:{T['warn']}; font-size:14px; font-weight:bold;'>ATENCIÓN: PRÓXIMO PULSO CAMBIA A /{p_sig}/ &mdash; PULSO {pulso_actual}/{total_pulsos}</span>"
-      else:
+      elif p_act:
         badge_top = f"<span style='color:{T['text_dim']}; font-size:14px; font-weight:bold;'>MANTÉN LA VOCAL &mdash; PULSO {pulso_actual}/{total_pulsos} (CICLO {ciclo_actual}/{total_ciclos})</span>"
+      else:
+        badge_top = f"<span style='color:{T['text_dim']}; font-size:14px; font-weight:bold;'>PULSO {pulso_actual}/{total_pulsos} (CICLO {ciclo_actual}/{total_ciclos})</span>"
       letra_style = f"font-size: 68px; font-weight: 900; color: {v_col};"
 
     sig_html = (
@@ -6841,7 +6866,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     else:
       # Anillo circular radial de ritmo / cuenta regresiva
       sub_p = getattr(self, 'metro_subdiv_index', 0)
-      n_sub = max(1, getattr(self, 'spin_metro_subdivs', None).value() if hasattr(self, 'spin_metro_subdivs') else 4)
+      n_sub = max(1, getattr(self, 'spin_metro_subdivs', None).value() if hasattr(self, 'spin_metro_subdivs') else 1)
       prog_compas = max(0.0, min(1.0, (sub_p + 1) / float(n_sub)))
       circ = 188.5
       offset_circ = circ * (1.0 - prog_compas)
@@ -6854,21 +6879,26 @@ class RealTimePlotter(QtWidgets.QWidget):
         f"</svg>"
       )
 
+      letra_celda = f"<td><span style='{letra_style}'>/{p_act}/</span></td>" if p_act else ""
       html = (
         f"<div align='center' style='line-height:1.05;'>"
         f"{badge_top}<br>"
         f"<table align='center' style='margin:0 auto;'><tr>"
         f"<td>{ring_svg}</td>"
-        f"<td><span style='{letra_style}'>/{p_act}/</span></td>"
+        f"{letra_celda}"
         f"</tr></table>"
         f"<span>{tira_html}{sig_html}</span>"
         f"</div>"
       )
     self.lbl_recording_space.setText(html)
-    inst_txt = (
-      f"¡PRONUNCIA /{p_act}/ AHORA!" if flash
-      else (f"ATENCIÓN: PRÓXIMO PULSO CAMBIA A /{p_sig}/" if (pre_cambio and p_sig) else f"MANTÉN LA VOCAL /{p_act}/ AL RITMO DEL METRÓNOMO")
-    )
+    if flash:
+      inst_txt = f"¡PRONUNCIA /{p_act}/ AHORA!"
+    elif pre_cambio and p_sig:
+      inst_txt = f"ATENCIÓN: PRÓXIMO PULSO CAMBIA A /{p_sig}/"
+    elif p_act:
+      inst_txt = f"MANTÉN LA VOCAL /{p_act}/ AL RITMO DEL METRÓNOMO"
+    else:
+      inst_txt = "SIGUE EL RITMO DEL METRÓNOMO"
     sub_txt = f"Pulso {pulso_actual} de {total_pulsos} — Ciclo {ciclo_actual} de {total_ciclos}"
     self._publicar_estado_display_remoto(
       palabra=p_act,
@@ -6907,6 +6937,10 @@ class RealTimePlotter(QtWidgets.QWidget):
           flash=False, pre_cambio=False
         )
     QtCore.QTimer.singleShot(200, _apagar_destello)
+
+  def _metronomo_beep_activo(self) -> bool:
+    """True si el beep audible del metrónomo está habilitado (chk_metro_beep)."""
+    return bool(hasattr(self, 'chk_metro_beep') and self.chk_metro_beep.isChecked())
 
   def on_metro_beat(self):
     if not self.metro_is_running:
@@ -6992,12 +7026,14 @@ class RealTimePlotter(QtWidgets.QWidget):
                   self._pre_announced_continuo_beat = 1
                   self.voice_cue_player.say(f"di_{primera_v.lower()}", f"Prepárate, di {primera_v}", fase="preparacion_sincronizada")
             self.metro_count_in_remaining -= 1
-            self.beep_queue.put((800, 200))
+            if self._metronomo_beep_activo():
+                self.beep_queue.put((800, 200))
         else:
             if self.metro_count_in_remaining == 1:
                 self.metro_beat_count = 1
                 self.metro_count_in_remaining = 0
-                self.beep_queue.put((1200, 400))
+                if self._metronomo_beep_activo():
+                    self.beep_queue.put((1200, 400))
                 cb_start = getattr(self, '_on_count_in_finished_cb', None)
                 self._on_count_in_finished_cb = None
                 if callable(cb_start):
@@ -7046,10 +7082,11 @@ class RealTimePlotter(QtWidgets.QWidget):
                         es_cambio_vocal = (self.metro_beat_count == 1) or (cur_v != prev_v)
                     else:
                         es_cambio_vocal = (self.metro_beat_count == 1)
-                if es_cambio_vocal:
-                    self.beep_queue.put((1480, 130))  # Doble tono ascendente de cambio de vocal
-                else:
-                    self.beep_queue.put((1200, 100))  # Pulso cálido de continuación
+                if self._metronomo_beep_activo():
+                    if es_cambio_vocal:
+                        self.beep_queue.put((1480, 130))  # Doble tono ascendente de cambio de vocal
+                    else:
+                        self.beep_queue.put((1200, 100))  # Pulso cálido de continuación
 
             palabra_actual = ""
             if getattr(self, 'is_autoforge_running', False):
@@ -7187,7 +7224,8 @@ class RealTimePlotter(QtWidgets.QWidget):
 
         if self.metro_count_in_remaining > 0:
             self.metro_pulse_frame.setStyleSheet(f"background-color: #660000; border: 2px solid {T['err']};")
-            self.beep_queue.put((freq_sub, dur_sub))
+            if self._metronomo_beep_activo():
+                self.beep_queue.put((freq_sub, dur_sub))
         else:
             if es_ultimo_sub:
                 # Último sub-pulso antes del golpe principal: color ámbar de pre-aviso
@@ -7197,7 +7235,8 @@ class RealTimePlotter(QtWidgets.QWidget):
                 self.metro_pulse_frame.setStyleSheet(f"background-color: #006677; border: 2px solid {T['accent']};")
                 self.metro_lbl_count.setStyleSheet("font-size: 28px; color: #00AAAA; font-weight: bold;")
             self.metro_lbl_count.setText(str(sub_num))
-            self.beep_queue.put((freq_sub, dur_sub))
+            if self._metronomo_beep_activo():
+                self.beep_queue.put((freq_sub, dur_sub))
             # Actualizar el anillo circular radial en cada sub-pulso
             st_ring = getattr(self, '_ultimo_estado_visor', None)
             if st_ring and getattr(self, 'is_recording', False) and not es_ultimo_sub:
@@ -12711,20 +12750,22 @@ class RealTimePlotter(QtWidgets.QWidget):
                                       tira_secuencia=None, tira_html=""):
     '''Sincroniza el estímulo actual, las instrucciones de fase y la tira de secuencia con la Pantalla Externa (Web y 2do Monitor).'''
     bpm_val = float(self.spin_bpm.value()) if hasattr(self, 'spin_bpm') else 30.0
-    sub_val = int(self.spin_metro_subdivs.value()) if hasattr(self, 'spin_metro_subdivs') else 4
+    sub_val = int(self.spin_metro_subdivs.value()) if hasattr(self, 'spin_metro_subdivs') else 1
     sub_act = int(getattr(self, 'metro_subdiv_index', 0)) + 1
     sesion_str = f"{getattr(self, 'autoforge_prueba', '')}_{getattr(self, 'autoforge_sujeto', '')}".strip("_") or "S1"
     is_rec = bool(getattr(self, 'is_recording', False) or getattr(self, 'is_autoforge_running', False)) if grabando is None else bool(grabando)
     jit_on = bool(hasattr(self, 'chk_metro_jitter') and self.chk_metro_jitter.isChecked())
 
     if tira_secuencia is None:
-      words = getattr(self, 'autoforge_words', []) or []
-      if getattr(self, 'is_autoforge_continuo', False):
-        full_seq = getattr(self, 'autoforge_full_sequence', None) or words
+      if getattr(self, 'is_autoforge_continuo', False) and is_rec:
+        # Consigna Secuencia Continua: sin tira de secuencia ni próxima vocal en pantalla remota
+        tira_secuencia = []
       else:
-        full_seq = words
-      tira_secuencia = []
-      if full_seq:
+        words = getattr(self, 'autoforge_words', []) or []
+        if getattr(self, 'is_autoforge_continuo', False):
+          full_seq = getattr(self, 'autoforge_full_sequence', None) or words
+        else:
+          full_seq = words
         n_w = len(full_seq)
         act_i = (max(0, int(pulso_actual) - 1) % n_w) if getattr(self, 'is_autoforge_continuo', False) else int(getattr(self, 'autoforge_word_idx', 0)) % n_w
         idxs = list(range(n_w)) if n_w <= 8 else [(act_i + off) % n_w for off in range(-1, 6)]
@@ -12785,6 +12826,7 @@ class RealTimePlotter(QtWidgets.QWidget):
           sub_actual=sub_act,
           subdiv=sub_val,
           pre_cambio=pre_cambio,
+          grabando=is_rec,
         )
       except Exception:
         pass

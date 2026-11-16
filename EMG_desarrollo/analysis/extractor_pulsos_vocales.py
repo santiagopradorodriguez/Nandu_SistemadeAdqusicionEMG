@@ -380,7 +380,14 @@ def _leer_eventos_vocales(secuencia_dir: str, fs_hint: float = 2000.0):
         cand_valid_words = meta.get("valid_words")
         if isinstance(cand_valid_words, list) and cand_valid_words:
             secuencia_real = cand_valid_words
-    if isinstance(secuencia_real, list) and len(secuencia_real) >= len(eventos_by_idx) and len(eventos_by_idx) > 0:
+    # Solo sobrescribir etiquetas si eventos_by_idx carece de etiquetas válidas o variadas
+    # (en algunas sesiones protocolo_experimento_completo conserva una secuencia de plantilla vieja
+    # mientras pulsos_metronomo.csv / eventos_vocales_metronomo registraron la secuencia real ejecutada).
+    vocales_previas = {ev.get("vocal") for ev in eventos_by_idx.values() if ev.get("vocal") in VOCALES_ESTANDAR}
+    tiene_etiquetas_vivas = len(eventos_by_idx) > 0 and len(vocales_previas) >= 2 and all(
+        ev.get("vocal") in VOCALES_ESTANDAR for ev in eventos_by_idx.values()
+    )
+    if (not tiene_etiquetas_vivas) and isinstance(secuencia_real, list) and len(secuencia_real) >= len(eventos_by_idx) and len(eventos_by_idx) > 0:
         for k_idx in sorted(eventos_by_idx.keys()):
             if 1 <= k_idx <= len(secuencia_real):
                 v_real = str(secuencia_real[k_idx - 1]).strip().upper().replace("/", "")
@@ -516,7 +523,7 @@ def _detectar_ancla_acustica_y_emg(
 
     # Ventana de búsqueda de la emisión vocal alrededor del beat del metrónomo
     s_search_ini = max(0, int(round((t_beat - 0.20 * tau_s) * fs)))
-    s_search_fin = min(n_samples, int(round((t_beat + 0.65 * tau_s) * fs)))
+    s_search_fin = min(n_samples, int(round((t_beat + 0.95 * tau_s) * fs)))
     if s_search_fin - s_search_ini < int(0.15 * fs):
         return t_beat, 0.0, False
 
@@ -535,7 +542,7 @@ def _detectar_ancla_acustica_y_emg(
                 above = np.where(mic_env[:idx_max_mic + 1] >= th_onset)[0]
                 idx_onset = int(above[0]) if len(above) > 0 else idx_max_mic
                 t_cand = (s_search_ini + idx_onset) / float(fs)
-                t_anchor = float(np.clip(t_cand, t_beat - 0.15 * tau_s, t_beat + 0.55 * tau_s))
+                t_anchor = float(np.clip(t_cand, t_beat - 0.15 * tau_s, t_beat + 0.85 * tau_s))
                 anclado_por_mic = True
 
         # 2. Si no hubo pico acústico claro, usar t_onset_meta o el pico conjunto normalizado de los 3 canales sEMG
@@ -550,7 +557,7 @@ def _detectar_ancla_acustica_y_emg(
                 idx_emg_peak = int(np.argmax(joint_emg))
                 # Como el pico pre-fonatorio ocurre ~150 ms antes de t=0 acústico, compensamos +0.14s
                 t_cand = (s_search_ini + idx_emg_peak) / float(fs) + 0.14
-                t_anchor = float(np.clip(t_cand, t_beat - 0.15 * tau_s, t_beat + 0.55 * tau_s))
+                t_anchor = float(np.clip(t_cand, t_beat - 0.15 * tau_s, t_beat + 0.85 * tau_s))
 
     # Evaluar SNR muscular en la ventana fisiológica [-350 ms, +400 ms] respecto a t_anchor
     s_burst_ini = max(0, int(round((t_anchor - 0.35) * fs)))

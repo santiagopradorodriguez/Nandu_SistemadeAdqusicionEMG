@@ -20,14 +20,14 @@ from PySide6 import QtCore, QtGui, QtWidgets
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../"))
 CSV_PATH = os.path.join(REPO_ROOT, "reportes_experimentos/libro_experimentos_ia/scripts_experimentos/electrodos_anotados_agente.csv")
 AUDIT_MD_PATH = os.path.join(REPO_ROOT, "reportes_experimentos/libro_experimentos_ia/scripts_experimentos/registro_auditoria_detecciones.md")
-BASE_DRIVE = os.path.join(REPO_ROOT, "Sujeto_Organizado_Drive")
+BASE_DRIVE = os.path.join(REPO_ROOT, "EMG_desarrollo/base_de_datos_electrodos/2026-11-13")
 OUT_DIR = '/home/santiago/.gemini/antigravity/brain/39ced7b1-5efb-4d1f-b72b-7de07df1fc29'
 
 sys.path.append(os.path.join(REPO_ROOT, "EMG_desarrollo", "acquisition"))
 from calibracion_espacial_electrodos import AntigravityAgent
 
 from compilador_maestro_atlas import compilar_diapositiva_maestra
-from ejecutar_lote_atlas_restante import CONFIGS
+from compilar_atlas_2026_11_13 import CONFIGS
 
 COLORES = {
     "CH0": (0, 255, 0),      # Verde
@@ -1380,7 +1380,7 @@ if __name__ == "__main__":
         camp_sub = sys.argv[1].lower()
         foto_sub = sys.argv[2].lower() if len(sys.argv) > 2 else ""
         target_idx = _posicionar_campania_y_foto(camp_sub, foto_sub)
-    else:
+    elif getattr(dialog, "_all_csv_photos", None):
         # Sin argumentos: elegir de TODO el CSV de fotos curadas y posicionar su campania
         opciones = [f"{camp}  -  {foto}" for camp, foto in dialog._all_csv_photos]
         sel, ok = QtWidgets.QInputDialog.getItem(

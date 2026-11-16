@@ -1,0 +1,27 @@
+Campaña,Archivo_Foto,Resolucion_WxH,Vista,Canal,ID_Electrodo,Musculo_Polo,Tipo_Deteccion,X_px,Y_px,X_norm,Y_norm,IED_Bipolar_px,Angulo_Bipolar_deg
+SecuenciaContinua_SegundaParte_HablaForzada_ConMetronomo_Sujeto1,01_frontal.png,640x480,Lateral / Frontal,CH2,,Orbicular - de los Labios,curated,258.4,275.0,0.4037,0.5729,36.4,-7.6
+SecuenciaContinua_SegundaParte_HablaForzada_ConMetronomo_Sujeto1,01_frontal.png,640x480,Lateral / Frontal,CH2,CH2_E2,Orbicular - de los Labios,manual_curated,294.5,270.2,0.4602,0.5629,36.4,-7.6
+SecuenciaContinua_SegundaParte_HablaForzada_ConMetronomo_Sujeto1,01_frontal.png,640x480,Lateral / Frontal,CH1,CH1_E3,Cigomático Mayor - Depresor Anguli Oris,manual_curated,385.6,278.9,0.6025,0.581,22.6,159.8
+SecuenciaContinua_SegundaParte_HablaForzada_ConMetronomo_Sujeto1,01_frontal.png,640x480,Lateral / Frontal,CH1,CH1_E4,Cigomático Mayor - Depresor Anguli Oris,manual_curated,364.4,286.7,0.5694,0.5973,22.6,159.8
+SecuenciaContinua_SegundaParte_HablaForzada_ConMetronomo_Sujeto1,01_frontal.png,640x480,Lateral / Frontal,CH0,CH0_E5,Anterior Belly - Digástrico,manual_curated,292.9,385.7,0.4577,0.8035,,
+SecuenciaContinua_SegundaParte_HablaForzada_ConMetronomo_Sujeto1,02_perfil_izquierdo.png,640x480,Lateral / Frontal,CH1,,Cigomático Mayor - Depresor Anguli Oris,curated,247.4,285.2,0.3866,0.5942,34.6,-13.2
+SecuenciaContinua_SegundaParte_HablaForzada_ConMetronomo_Sujeto1,02_perfil_izquierdo.png,640x480,Lateral / Frontal,CH1,CH1_E2,Cigomático Mayor - Depresor Anguli Oris,manual_curated,281.1,277.3,0.4392,0.5777,34.6,-13.2
+SecuenciaContinua_SegundaParte_HablaForzada_ConMetronomo_Sujeto1,02_perfil_izquierdo.png,640x480,Lateral / Frontal,CH2,CH2_E3,Orbicular - de los Labios,manual_curated,150.8,278.9,0.2356,0.581,18.0,-2.5
+SecuenciaContinua_SegundaParte_HablaForzada_ConMetronomo_Sujeto1,02_perfil_izquierdo.png,640x480,Lateral / Frontal,CH2,CH2_E4,Orbicular - de los Labios,manual_curated,168.8,278.1,0.2638,0.5794,18.0,-2.5
+SecuenciaContinua_SegundaParte_HablaForzada_ConMetronomo_Sujeto1,03_submental.png,640x480,Lateral / Frontal,CH0,,,curated,334.5,315.0,0.5227,0.6562,25.9,-91.8
+SecuenciaContinua_SegundaParte_HablaForzada_ConMetronomo_Sujeto1,03_submental.png,640x480,Lateral / Frontal,CH0,CH0_E2,Anterior Belly - Digástrico,manual_curated,333.7,289.1,0.5214,0.6023,25.9,-91.8
+SecuenciaContinua_SegundaParte_HablaForzada_ConMetronomo_Sujeto1,03_submental.png,640x480,Lateral / Frontal,CH1,CH1_E3,Cigomático Mayor - Depresor Anguli Oris,manual_curated,416.2,207.4,0.6503,0.4321,18.4,-160.0
+SecuenciaContinua_SegundaParte_HablaForzada_ConMetronomo_Sujeto1,03_submental.png,640x480,Lateral / Frontal,CH1,CH1_E4,Cigomático Mayor - Depresor Anguli Oris,manual_curated,398.9,201.1,0.6233,0.419,18.4,-160.0
+SecuenciaContinua_SegundaParte_HablaForzada_ConMetronomo_Sujeto1,03_submental.png,640x480,Lateral / Frontal,CH2,CH2_E5,Orbicular - de los Labios,manual_curated,321.2,158.7,0.5019,0.3306,27.5,-178.3
+SecuenciaContinua_SegundaParte_HablaForzada_ConMetronomo_Sujeto1,03_submental.png,640x480,Lateral / Frontal,CH2,CH2_E6,Orbicular - de los Labios,manual_curated,293.7,157.9,0.4589,0.329,27.5,-178.3
+SecuenciaContinua_SegundaParte_HablaForzada_ConMetronomo_Sujeto1,04_perfil_derecho.png,640x480,Lateral / Frontal,CH2,,Orbicular - de los Labios,curated,424.8,269.5,0.6638,0.5615,,
+SecuenciaContinua_HablaNatural_ConJitter_Sujeto1,01_frontal.png,640x480,Lateral / Frontal,CH2,,Orbicular - de los Labios,curated,327.5,290.7,0.5117,0.6056,23.5,-1.9
+SecuenciaContinua_HablaNatural_ConJitter_Sujeto1,01_frontal.png,640x480,Lateral / Frontal,CH2,CH2_E2,Orbicular - de los Labios,manual_curated,351.0,289.9,0.5484,0.604,23.5,-1.9
+SecuenciaContinua_HablaNatural_ConJitter_Sujeto1,01_frontal.png,640x480,Lateral / Frontal,CH1,CH1_E3,Cigomático Mayor - Depresor Anguli Oris,manual_curated,424.0,286.0,0.6625,0.5958,19.6,163.7
+SecuenciaContinua_HablaNatural_ConJitter_Sujeto1,01_frontal.png,640x480,Lateral / Frontal,CH1,CH1_E4,Cigomático Mayor - Depresor Anguli Oris,manual_curated,405.2,291.5,0.6331,0.6073,19.6,163.7
+SecuenciaContinua_HablaNatural_ConJitter_Sujeto1,02_perfil_izquierdo.png,640x480,Lateral / Frontal,CH1,,Cigomático Mayor - Depresor Anguli Oris,curated,244.2,287.5,0.3816,0.599,34.6,-1.3
+SecuenciaContinua_HablaNatural_ConJitter_Sujeto1,02_perfil_izquierdo.png,640x480,Lateral / Frontal,CH1,CH1_E2,Cigomático Mayor - Depresor Anguli Oris,manual_curated,278.8,286.7,0.4356,0.5973,34.6,-1.3
+SecuenciaContinua_HablaNatural_ConJitter_Sujeto1,02_perfil_izquierdo.png,640x480,Lateral / Frontal,CH2,CH2_E3,Orbicular - de los Labios,manual_curated,161.8,293.8,0.2528,0.6121,16.5,-2.8
+SecuenciaContinua_HablaNatural_ConJitter_Sujeto1,02_perfil_izquierdo.png,640x480,Lateral / Frontal,CH2,CH2_E4,Orbicular - de los Labios,manual_curated,178.3,293.0,0.2786,0.6104,16.5,-2.8
+SecuenciaContinua_HablaNatural_ConJitter_Sujeto1,03_submental.png,640x480,Lateral / Frontal,CH0,,,curated,357.3,262.4,0.5583,0.5467,22.4,108.5
+SecuenciaContinua_HablaNatural_ConJitter_Sujeto1,03_submental.png,640x480,Lateral / Frontal,CH0,CH0_E2,Anterior Belly - Digástrico,manual_curated,350.2,283.6,0.5472,0.5908,22.4,108.5

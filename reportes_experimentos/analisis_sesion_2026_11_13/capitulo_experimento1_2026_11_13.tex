@@ -1,0 +1,183 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{geometry}
+\usepackage{fancyhdr}
+\usepackage{hyperref}
+
+\geometry{margin=2cm}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{Proyecto \~Nand\'u EMG --- LSD UBA}
+\fancyhead[R]{Experimento 1: Sesi\'on 2026-11-13}
+\fancyfoot[C]{\thepage}
+
+\title{Cap\'itulo: An\'alisis del Experimento 1 --- Tr\'iada Cigom\'atico Mayor, Ablaci\'on P95, Varianza Pulso a Pulso y S\'intesis Longitudinal}
+\author{Laboratorio de Se\~nales y Din\'amica --- UBA}
+\date{16 de noviembre de 2026}
+
+\begin{document}
+\maketitle
+
+\section{Contexto, Preguntas de Estudio y Dise\~no Ejecutado}
+
+En campa\~nas previas con montaje de Cigom\'atico Mayor se observ\'o una alta separabilidad geom\'etrica en el espacio latente, atribuible a una posible sobrearticulaci\'on m\'imica. En ensayos posteriores con habla natural a volumen normal, dicha separabilidad disminuy\'o. Aunque originalmente se planificaron dos montajes (Tr\'iada Cigom\'atico superficial y Tr\'iada Milohioideo lateral profundo), en la sesi\'on del 2026-11-13 se ejecut\'o \'unicamente el \textbf{Experimento 1: Tr\'iada Cigom\'atico Mayor} sobre el sujeto experimental:
+\begin{itemize}
+    \item \textbf{Ch0:} Vientre anterior del dig\'astrico --- submentoniano medial, apertura mandibular.
+    \item \textbf{Ch1:} Cigom\'atico mayor --- mejilla, tracci\'on comisural en /e, i/.
+    \item \textbf{Ch2:} Orbicular de la boca superior --- reborde bermell\'on superior, redondeo en /o, u/.
+    \item \textbf{Ch3:} Micr\'ofono ac\'ustico de sincronizaci\'on. Referencia en ap\'ofisis mastoides.
+\end{itemize}
+
+El experimento busca responder dos preguntas centrales:
+\begin{enumerate}
+    \item \textbf{\textquestiondown El montaje superficial mide articulaci\'on fonatoria o gestos faciales?}
+    \item \textbf{\textquestiondown La sincronizaci\'on con un metr\'onomo desacopla el gesto facial de la vocal?}
+\end{enumerate}
+
+Para aislar ambos factores se implement\'o un dise\~no factorial $2 \times 2$ con cuatro protocolos: \textbf{A} habla natural con metr\'onomo, \textbf{B} habla natural con \textit{jitter} o sin ritmo, \textbf{C} habla forzada con metr\'onomo y \textbf{D} habla forzada con \textit{jitter} o sin ritmo. Estos cuatro protocolos se ejecutaron en tres modalidades: Fase 1 secuencia continua ($2000\text{ Hz}$, 4 sub-beeps anticipatorios), Fase 1 autograbado discreto ($2000\text{ Hz}$, 4 sub-beeps) y Fase 2 secuencia continua ($6000\text{ Hz}$, 1 solo beep reactivo sin pre-aviso en A/C y ritmo libre en B/D). En total se procesaron 17 corridas (12 individuales y 5 consolidadas).
+
+\section{An\'alisis Biom\'etrico: Desplazamiento de Electrodos entre Fase 1 y Fase 2}
+
+A partir de los registros fotom\'etricos con escala fija ($\text{IPD} = 63{,}0\text{ mm}$, $L_{TC} = 80{,}0\text{ mm}$), la Tabla~\ref{tab:biometria} compara la posici\'on de los electrodos entre la ma\~nana (Fase 1) y la tarde (Fase 2).
+
+\begin{table}[h!]
+\centering
+\caption{Comparaci\'on biom\'etrica de electrodos entre Fase 1 y Fase 2 (incertidumbre fotom\'etrica $\pm 3{,}5\text{ a }4{,}0\text{ mm}$)}
+\label{tab:biometria}
+\small
+\begin{tabular}{llccc}
+\toprule
+\textbf{Canal} & \textbf{Par\'ametro} & \textbf{Fase 1} & \textbf{Fase 2} & \textbf{$\Delta$ (F2 $-$ F1)} \\
+\midrule
+Ch0 Dig\'astrico $15\times 15\text{ mm}$ & IED entre centros & $14{,}10\text{ mm}$ & $14{,}93\text{ mm}$ & $+0{,}83\text{ mm}$ \\
+\midrule
+Ch1 Cigom\'atico $15\times 15\text{ mm}$ & IED entre centros & $13{,}91\text{ mm}$ & $11{,}30\text{ mm}$ & $-2{,}61\text{ mm}$ \\
+& Distancia a Ment\'on & $76{,}6\text{ mm}$ & $71{,}8\text{ mm}$ & $-4{,}8\text{ mm}$ \\
+& Distancia a Nariz & $51{,}8\text{ mm}$ & $56{,}1\text{ mm}$ & $+4{,}3\text{ mm}$ \\
+& Distancia a Trago & $39{,}7\text{ mm}$ & $40{,}2\text{ mm}$ & $+0{,}5\text{ mm}$ \\
+& Distancia a Comisura & $31{,}5\text{ mm}$ & $29{,}4\text{ mm}$ & $-2{,}1\text{ mm}$ \\
+\midrule
+Ch2 Orbicular $10\times 10\text{ mm}$ & IED entre centros & $17{,}68\text{ mm}$ & $23{,}23\text{ mm}$ & $+5{,}55\text{ mm}$ \\
+& Distancia a Ment\'on & $56{,}3\text{ mm}$ & $60{,}8\text{ mm}$ & $+4{,}5\text{ mm}$ \\
+& Distancia a Nariz & $14{,}9\text{ mm}$ & $12{,}0\text{ mm}$ & $-2{,}9\text{ mm}$ \\
+& Distancia a Trago & $71{,}7\text{ mm}$ & $64{,}7\text{ mm}$ & $-7{,}0\text{ mm}$ \\
+& Distancia a Comisura & $25{,}8\text{ mm}$ & $30{,}5\text{ mm}$ & $+4{,}7\text{ mm}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Conclusi\'on biom\'etrica:} El Dig\'astrico (Ch0) permaneci\'o estable ($\Delta\text{IED} = +0{,}83\text{ mm}$). El corrimiento de IED del Cigom\'atico (Ch1, $-2{,}61\text{ mm}$) cae dentro del error de medici\'on fotom\'etrica ($\pm 3{,}5\text{ mm}$). El \'unico desplazamiento f\'isicamente significativo por encima de la incertidumbre instrumental ocurri\'o en el \textbf{Orbicular superior (Ch2)}, donde el par bipolar se abri\'o $+5{,}55\text{ mm}$ en IED y se desplaz\'o $-7{,}0\text{ mm}$ respecto al trago, consistente con el desprendimiento parcial reportado al final de la jornada. Aun con ese corrimiento, la calibraci\'on inter-sesi\'on (`15\_PCA\_Maestro\_Global\_Calibrado`, $N=772$) conserva un $67{,}4\ \%$ en LDA 5-Fold CV.
+
+\section{Rendimiento Global y Ablaci\'on P95}
+
+La Tabla~\ref{tab:resultados} resume el rendimiento de las 17 corridas con correcci\'on de reposo basal e impedancia P95, su comparaci\'on directa en `LDA 5-Fold CV` sin P95 ($\Delta_{\text{P95}}$) y el desglose por vocal.
+
+\begin{table}[h!]
+\centering
+\caption{Rendimiento global, ablaci\'on P95 en LDA 5-Fold CV y $K$-Vocal por corrida}
+\label{tab:resultados}
+\scriptsize
+\begin{tabular}{lccccccc}
+\toprule
+\textbf{ID An\'alisis} & \textbf{N} & \textbf{GMM 3D} & \textbf{LDA Train} & \textbf{LDA CV (P95)} & \textbf{LDA CV (Sin P95)} & \textbf{$\Delta_{\text{P95}}$} & \textbf{$K$-Vocal LDA CV (A / E / I / O / U \%)} \\
+\midrule
+01\_F1\_ProtoA\_Continua\_NatMet & 75 & 65,3 & 73,3 & 61,3 & 62,0 & $-0{,}7$ & 66,7 / 40,0 / 13,3 / 86,7 / 100,0 \\
+02\_F1\_ProtoB\_Continua\_NatJit & 75 & 64,0 & 73,3 & 73,3 & 54,7 & $+18{,}6$ & 66,7 / 40,0 / 73,3 / 93,3 / 93,3 \\
+03\_F1\_ProtoC\_Continua\_ForzMet & 75 & 57,3 & 74,7 & 68,0 & 70,8 & $-2{,}8$ & 26,7 / 80,0 / 60,0 / 73,3 / 100,0 \\
+04\_F1\_ProtoD\_Continua\_ForzJit & 70 & 44,6 & 77,1 & 70,0 & 53,0 & $+17{,}0$ & 60,0 / 78,6 / 45,5 / 73,3 / 86,7 \\
+05\_F1\_ProtoA\_Auto\_NatMet & 62 & 62,9 & 77,4 & 72,4 & 72,6 & $-0{,}2$ & 41,7 / 76,9 / 58,3 / 83,3 / 100,0 \\
+06\_F1\_ProtoB\_Auto\_NatJit & 61 & 83,6 & 83,6 & 85,1 & 73,7 & $+11{,}4$ & 75,0 / 75,0 / 100,0 / 76,9 / 100,0 \\
+07\_F1\_ProtoC\_Auto\_ForzMet & 60 & 58,3 & 80,0 & 80,0 & 73,3 & $+6{,}7$ & 100,0 / 72,7 / 75,0 / 75,0 / 75,0 \\
+08\_F1\_ProtoD\_Auto\_ForzJit & 61 & 75,4 & 83,6 & 83,5 & 72,3 & $+11{,}2$ & 100,0 / 83,3 / 84,6 / 84,6 / 63,6 \\
+09\_F2\_ProtoA\_Continua\_NatMet & 75 & 44,0 & 69,3 & 61,3 & 60,0 & $+1{,}3$ & 20,0 / 73,3 / 20,0 / 93,3 / 100,0 \\
+10\_F2\_ProtoB\_Continua\_NatSinRitmo & 75 & 66,7 & 70,7 & 66,7 & 72,3 & $-5{,}6$ & 60,0 / 53,3 / 40,0 / 93,3 / 86,7 \\
+11\_F2\_ProtoC\_Continua\_ForzMet & 75 & 78,7 & 88,0 & 89,3 & 83,1 & $+6{,}2$ & 100,0 / 93,3 / 86,7 / 93,3 / 73,3 \\
+12\_F2\_ProtoD\_Continua\_ForzSinRitmo & 75 & 68,0 & \textbf{96,0} & \textbf{93,3} & 83,1 & $+10{,}2$ & 100,0 / 86,7 / 93,3 / 93,3 / 93,3 \\
+13\_Global\_Fase1\_Manana & 502 & 56,4 & 68,9 & 68,7 & 65,3 & $+3{,}4$ & 63,4 / 50,0 / 68,0 / 72,1 / 90,0 \\
+14\_Global\_Fase2\_Tarde & 270 & 67,8 & 68,9 & 68,1 & 70,0 & $-1{,}9$ & 70,4 / 44,4 / 51,9 / 88,9 / 85,2 \\
+15\_PCA\_Maestro\_Global\_Calibrado & 772 & 61,8 & 67,9 & 67,4 & 66,7 & $+0{,}7$ & 59,4 / 48,1 / 60,3 / 83,5 / 85,1 \\
+16\_Global\_Fase1\_SoloForzado & 256 & 51,2 & 65,2 & 64,4 & 73,4 & $-9{,}0$ & 73,6 / 76,0 / 63,3 / 34,0 / 76,5 \\
+17\_Global\_Fase2\_SoloForzado & 135 & 80,7 & 81,5 & 80,7 & 80,0 & $+0{,}7$ & 96,3 / 63,0 / 70,4 / 85,2 / 88,9 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Efecto real de la ablaci\'on P95:} La normalizaci\'on P95 mejora fuertemente corridas individuales sin metr\'onomo fijo (`02`: $+18{,}6\text{ pts}$, `04`: $+17{,}0\text{ pts}$, `06`: $+11{,}4\text{ pts}$, `08`: $+11{,}2\text{ pts}$, `12`: $+10{,}2\text{ pts}$), pero su comportamiento no es mon\'otono: en `10\_F2\_ProtoB` cae $-5{,}6\text{ pts}$, en `16\_Global\_Fase1\_SoloForzado` ($N=256$) cae $-9{,}0\text{ pts}$ ($64{,}4\ \%$ vs.\ $73{,}4\ \%$), y en el consolidado maestro (`15\_PCA\_Maestro`, $N=772$) la diferencia es estad\'isticamente nula ($+0{,}7\text{ pts}$ dentro de un margen binomial de $\pm 3{,}3\ \%$). Asimismo, la normalizaci\'on por \textit{Supremo Tricanal por Pulso} acopla los tres canales dentro de cada ventana, haciendo que variaciones de impedancia en Ch2 aten\'uen la amplitud relativa de Ch0 y Ch1.
+
+\section{An\'alisis de Varianza Pulso a Pulso y Separabilidad Geom\'etrica}
+
+Para evaluar cuantitativamente si el metr\'onomo introduce dispersi\'on temporal o geom\'etrica ajena al fonema, y si `/a, e, i/` poseen estructura de cl\'uster real en habla natural, se midieron sobre las caracter\'isticas exportadas (`20` bines temporales por canal) y las proyecciones PCA 3D: (i) la desviaci\'on est\'andar intra-vocal de la latencia al pico ($\sigma_t$, en bines), (ii) el \'indice de Silueta global ($\text{Sil}_{\text{all}}$) y restringido a las vocales no redondeadas ($\text{Sil}_{a,e,i}$), (iii) la raz\'on de Fisher $S_B / S_W$ y (iv) la distancia eucl\'idea media intra-clase al centroide en PCA 3D (Tabla~\ref{tab:varianza}).
+
+\begin{table}[h!]
+\centering
+\caption{Dispersi\'on temporal pulso a pulso ($\sigma_t$ en bines) y m\'etricas geom\'etricas en PCA 3D}
+\label{tab:varianza}
+\scriptsize
+\begin{tabular}{lccccccc}
+\toprule
+\textbf{Corrida} & \textbf{$\sigma_t$ Ch0} & \textbf{$\sigma_t$ Ch1} & \textbf{$\sigma_t$ Ch2} & \textbf{$\text{Sil}_{\text{all}}$} & \textbf{$\text{Sil}_{a,e,i}$} & \textbf{Fisher ($S_B/S_W$)} & \textbf{Dist. Intra-clase} \\
+\midrule
+01\_F1\_ProtoA\_Continua\_NatMet & 0,594 & 0,464 & 0,643 & 0,102 & $-0{,}004$ & 2,354 & $0{,}839 \pm 0{,}498$ \\
+02\_F1\_ProtoB\_Continua\_NatJit & 0,382 & 0,360 & 0,361 & 0,169 & $+0{,}009$ & 5,359 & $0{,}550 \pm 0{,}284$ \\
+03\_F1\_ProtoC\_Continua\_ForzMet & 0,548 & 0,467 & 0,573 & 0,171 & $+0{,}004$ & 4,527 & $0{,}648 \pm 0{,}315$ \\
+04\_F1\_ProtoD\_Continua\_ForzJit & 3,372 & 3,007 & 4,255 & 0,184 & $+0{,}084$ & 2,769 & $1{,}608 \pm 0{,}995$ \\
+05\_F1\_ProtoA\_Auto\_NatMet & 3,012 & 3,518 & 5,797 & 0,110 & $-0{,}055$ & 1,367 & $2{,}182 \pm 1{,}788$ \\
+06\_F1\_ProtoB\_Auto\_NatJit & 2,350 & 2,466 & 3,775 & 0,323 & $+0{,}287$ & 3,914 & $1{,}471 \pm 0{,}975$ \\
+07\_F1\_ProtoC\_Auto\_ForzMet & 1,571 & 2,319 & 3,205 & 0,196 & $+0{,}281$ & 3,999 & $1{,}433 \pm 1{,}022$ \\
+08\_F1\_ProtoD\_Auto\_ForzJit & 1,086 & 3,633 & 3,604 & 0,260 & $+0{,}324$ & 8,301 & $1{,}064 \pm 0{,}727$ \\
+09\_F2\_ProtoA\_Continua\_NatMet & 1,855 & 1,278 & 1,209 & 0,106 & $-0{,}085$ & 1,398 & $0{,}877 \pm 0{,}858$ \\
+10\_F2\_ProtoB\_Continua\_NatSinRitmo & 0,464 & 0,734 & 0,329 & 0,183 & $-0{,}018$ & 6,439 & $0{,}531 \pm 0{,}321$ \\
+11\_F2\_ProtoC\_Continua\_ForzMet & 0,582 & 0,773 & 0,677 & 0,324 & $+0{,}385$ & 7,981 & $0{,}573 \pm 0{,}304$ \\
+12\_F2\_ProtoD\_Continua\_ForzSinRitmo & 0,518 & 1,106 & 0,589 & 0,360 & $+0{,}324$ & \textbf{11,105} & $0{,}490 \pm 0{,}284$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{S\'intesis Longitudinal (Atlas Completo Candela): Habituaci\'on Motora, Colapso de $\text{CP}_2$ y Secuencia Continua}
+
+Al integrar los 23 experimentos previos del sujeto experimental (`atlas\_oficial\_candela\_completo.pdf`, agosto--octubre 2026) con la sesi\'on `2026-11-13`, se explica por qu\'e durante el primer mes el sujeto separaba las cinco vocales sin consigna de forzado y en las campa\~nas recientes desacopla los gestos faciales de `/a, e, i/` en habla natural:
+\begin{enumerate}
+    \item \textbf{Poda por equivalencia motora y colapso del segundo grado de libertad ($\text{CP}_2$: $42{,}4\ \% \to 5{,}9\ \%$):} En la campa\~na inicial con el mismo montaje Dig\'astrico--Cigom\'atico--Orbicularis (`P05`, `2026-09-15`, $85{,}2\ \%$ global; `/a/ 87,8 %`, `/e/ 78,0 %`, `/i/ 100,0 %`), la varianza en PCA estaba repartida en dos dimensiones activas ($\text{CP}_1 = 43{,}6\ \%$, $\text{CP}_2 = 42{,}4\ \%$), reflejando una co-activaci\'on espont\'anea de tracci\'on comisural y apertura junto con el redondeo labial. Tras decenas de sesiones de habituaci\'on y al retirar el feedback visual en vivo bajo consigna de habla natural (`P20`, `2026-10-28 Exp1 Modo Horizontal Natural`, $57{,}1\ \%$), la corteza motora (M1) y el cerebelo optimizaron el gasto energ\'etico por \textit{equivalencia motora}: podaron el comando redundante hacia el nervio facial (VII par, Cigom\'atico) y resolvieron `/a, e, i/` exclusivamente con la lengua (XII par) y mand\'ibula (V3). Como resultado, $\text{CP}_1$ absorbi\'o el $83{,}0\ \%$ de la varianza y \textbf{$\text{CP}_2$ colaps\'o a $5{,}9\ \%$} (`/i/` cay\'o a $45{,}7\ \%$). Que este fen\'omeno es puramente motor/conductual (e independiente del IED) queda demostrado ese mismo d\'ia en `P21` (`2026-10-28 Exp2 Apertura Vertical Forzada`): con los \textbf{exactos mismos electrodos e IED}, al pedir apertura forzada $\text{CP}_2$ se recuper\'o de inmediato a $25{,}3\ %$, `/i/` volvi\'o a $100{,}0\ \%$ y el global subi\'o a $77{,}8\ \%$. Asimismo, el $85{,}0\ \%$ del primer d\'ia (`P02`, `2026-08-28`) utilizaba el m\'usculo \textbf{Milohioideo} (piso de boca, acoplado a la elevaci\'on lingual) en lugar del Cigom\'atico.
+    \item \textbf{Autograbado discreto ($77{,}1\ \%\text{--}86{,}1\ \%$) vs.\ secuencia continua ($57{,}1\ \%\text{--}68{,}2\ \%$):} En autograbado discreto cada vocal parte desde reposo y facilita el gesto estereotipado; en secuencia continua (`2026-10-28 Exp3`: $66{,}9\ \%$, `2026-10-30 Jitter ±25%`: $68{,}2\ \%$, `2026-10-31 Jitter ±40%`: $58{,}1\ \%$), la coarticulaci\'on encadenada profundiza la supresi\'on m\'imica en `/a, e, i/` mientras los formantes ac\'usticos ($F_1, F_2$ en Fase 2) permanecen perfectamente separados.
+    \item \textbf{Efecto no lineal de la incertidumbre r\'itmica (`±25%` vs.\ `±40%`) e inversi\'on de fase en Ch2:} Un \textit{jitter} moderado (`±25%`, $68{,}2\ \%$) o el ritmo libre (`ProtoB/D`, $66{,}7\ \%\text{--}93{,}3\ \%$) reducen el enganche anticipatorio o reactivo, mientras que un \textit{jitter} excesivo (`±40%`, $58{,}1\ \%$) vuelve impredecible el disparo y degrada la ejecuci\'on. A esto se suma que Ch2 (Orbicular) invierte su fase temporal seg\'un la vocal ($-180$ a $-344\text{ ms}$ pre-fonatorio en `/o, u/` vs.\ $+26$ a $+139\text{ ms}$ post-vocal en `/a, e, i/`), superponiendo el cierre post-vocal con la preparaci\'on de la vocal siguiente bajo presi\'on r\'itmica.
+\end{enumerate}
+
+\section{Conclusiones F\'isicas y Respuesta a las Preguntas del Estudio}
+
+\begin{enumerate}
+    \item \textbf{Respuesta a la Pregunta 1 (M\'imica superficial vs.\ fuente fonatoria):} La evidencia experimental \textbf{confirma} que la tr\'iada superficial sobre mejilla/labios mide principalmente \textbf{gestos faciales m\'imicos} en las vocales no redondeadas (`/a, e, i/`), y articulaci\'on labial obligatoria \'unicamente en `/o, u/`.
+    \begin{itemize}
+        \item En habla natural continua (`01`, `02`, `09`, `10`), el \'indice de Silueta restringido a `/a, e, i/` es nulo o negativo ($\text{Sil}_{a,e,i} \in [-0{,}085, +0{,}009]$), lo que indica solapamiento geom\'etrico completo en PCA 3D a pesar de que los formantes ac\'usticos medidos en Fase 2 ($6000\text{ Hz}$) demuestran una diferenciaci\'on interna limpia del tracto vocal (/a/: $706,1133\text{ Hz}$; /e/: $588,1662\text{ Hz}$; /i/: $379,1675\text{ Hz}$).
+        \item Al forzar la articulaci\'on en Fase 2 (`11\_ProtoC`, `12\_ProtoD`), el Cigom\'atico (Ch1) se recluta activamente entre $-187$ y $-355\text{ ms}$, $\text{Sil}_{a,e,i}$ salta a $+0{,}324\text{--}+0{,}385$ y el `LDA CV` alcanza $89{,}3\ \%\text{--}93{,}3\ \%$. En cambio, `/o/` y `/u/` mantienen $86{,}7\ \%\text{--}100{,}0\ \%$ en habla natural continua gracias al redondeo pre-fonatorio en Ch2 ($-152$ a $-344\text{ ms}$). Queda pendiente el Experimento 2 (Milohioideo) para verificar si la fuente lingual profunda s\'i separa `/a, e, i/` en habla natural.
+    \end{itemize}
+
+    \item \textbf{Respuesta a la Pregunta 2 (Desacoplamiento por metr\'onomo):} Los datos muestran evidencia \textbf{estad\'isticamente significativa} de que el metr\'onomo fijo aumenta la dispersi\'on temporal pulso a pulso y degrada la compacidad geom\'etrica en \textbf{habla natural}, aunque el cambio de est\'imulo entre fases impide aislar por completo anticipaci\'on frente a reacci\'on.
+    \begin{itemize}
+        \item En habla natural continua, eliminar el metr\'onomo reduce de forma significativa la varianza de latencia al pico en Ch0 (test de Levene: `01` $\to$ `02`, $\sigma_t = 0{,}594 \to 0{,}382$ bines, $p < 0{,}001$; `09` $\to$ `10`, $\sigma_t = 1{,}855 \to 0{,}464$ bines, $p = 0{,}007$) y en Ch2 en Fase 2 ($\sigma_t = 1{,}209 \to 0{,}329$ bines, $p = 0{,}013$). Simult\'aneamente, la distancia intra-clase en PCA 3D cae un $\sim 35\text{--}39\ \%$ ($0{,}839 \to 0{,}550$ en F1; $0{,}877 \to 0{,}531$ en F2) y la raz\'on de Fisher $S_B/S_W$ se multiplica por $2{,}3\times$ en Fase 1 ($2{,}35 \to 5{,}36$) y por $4{,}6\times$ en Fase 2 ($1{,}40 \to 6{,}44$).
+        \item En habla forzada de Fase 2 (`11` $\to$ `12`), la dispersi\'on temporal ya no difiere significativamente ($p = 0{,}773$ en Ch0, $p = 0{,}616$ en Ch2), aunque el ritmo libre alcanza el techo de Fisher ($11{,}105$) y `LDA CV` ($93{,}3\ \%$). Como entre Fase 1 y Fase 2 variaron simult\'aneamente la frecuencia de muestreo ($2000 \to 6000\text{ Hz}$), el tipo de metr\'onomo (4 sub-beeps anticipatorios vs.\ 1 beep reactivo) y el corrimiento de Ch2, la comparaci\'on inter-fase entre ambos mecanismos neurofisiol\'ogicos debe interpretarse con cautela.
+    \end{itemize}
+
+    \item \textbf{Limitaciones t\'ecnicas para un decodificador sEMG aut\'onomo:}
+    \begin{itemize}
+        \item \textit{Dependencia del micr\'ofono:} La exactitud m\'axima ($91{,}4\ \%$ en `12\_ProtoD` y $85{,}7\ \%$ en `03\_ProtoC`) requiere alineaci\'on ac\'ustica ($t=0$). Al disparar mediante gate doble puramente mioel\'ectrico (`gate\_doble\_Semg`), el rendimiento cae $-20{,}0$ a $-25{,}7$ puntos ($65{,}7\ \%$) debido al retardo electromec\'anico variable ($217{,}8\text{--}307{,}5\text{ ms}$) y a la inversi\'on de fase de Ch2.
+        \item \textit{Aliasing ac\'ustico en Fase 1:} A $F_s = 2000\text{ Hz}$ (Nyquist $= 1000\text{ Hz}$), los formantes $F_2$ de `/e/` e `/i/` ($\sim 1640\text{--}1775\text{ Hz}$) sufren aliasing severo ($473\text{--}651\text{ Hz}$), por lo que solo Fase 2 ($F_s = 6000\text{ Hz}$) provee referencias form\'anticas v\'alidas.
+    \end{itemize}
+\end{enumerate}
+
+\section{Protocolo Propuesto para Re-acoplar el Gesto Facial sin Mueca Forzada}
+
+Dado que la p\'erdida de separabilidad en `/a, e, i/` proviene de la poda cerebelosa y cortical (M1) del comando redundante hacia el nervio facial (VII par) por equivalencia motora, se dise\~n\'o un protocolo experimental de $\sim 20\text{ minutos}$ en una sola sesi\'on (sin despegar electrodos, a $F_s = 6000\text{ Hz}$, en \textbf{ritmo libre auto-espaciado} y con $N=100$ pulsos por bloque en secuencia continua De Bruijn) para evaluar si es posible restaurar $\text{CP}_2$ sin recurrir a sobrearticulaci\'on artificial:
+
+\begin{enumerate}
+    \item \textbf{Bloque 0 --- L\'inea de base natural y ajuste PCA no supervisado ($100$ pulsos, $\sim 4\text{ min}$):} Ejecuci\'on en habla natural sin pantalla ni est\'imulo auditivo. Con los $100$ pulsos crudos (sin usar etiquetas $y$) se ajusta el proyector `PCA 3D` no supervisado de referencia y se miden la varianza explicada por $\text{CP}_2$, $\text{Sil}_{a,e,i}$ y la raz\'on de Fisher $S_B / S_W$.
+    \item \textbf{Bloque 1 --- Inducci\'on ecol\'ogica de \textit{Clear Speech} por Efecto Lombard ($100$ pulsos, $\sim 4\text{ min}$):} Se aplica ruido rosa/blanco en auriculares cerrados ($\sim 65\text{--}70\text{ dB SPL}$) con la consigna comunicativa de articular claro para lectura labial a distancia, sin mencionar sonrisa ni fuerza facial, activando de forma refleja la v\'ia auditivo-motora y premotora ventral.
+    \item \textbf{Bloque 2 --- Biofeedback en lazo cerrado sobre el plano latente ($\text{CP}_1, \text{CP}_2$) ($100$ pulsos, $\sim 4\text{ min}$):} Sin auriculares, se proyecta cada pulso en tiempo real sobre el plano $(\text{CP}_1, \text{CP}_2)$ no supervisado fijado en el Bloque 0. La consigna es ubicar `/a, e, i/` en regiones separadas de $\text{CP}_2$ con el m\'inimo esfuerzo facial posible, convirtiendo la separabilidad latente en la se\~nal de error de tarea para el cerebelo.
+    \item \textbf{Bloque 3 --- Prueba de retenci\'on sin feedback (\textit{Washout}, $100$ pulsos, $\sim 4\text{ min}$):} Se apaga inmediatamente el monitor y se repite la secuencia en habla natural a ritmo libre para verificar si el re-acoplamiento neuromuscular se retiene a corto plazo o si requiere pasar definitivamente al sensado profundo (Experimento 2: Milohioideo) para habla natural no entrenada.
+    \item \textbf{Criterio cuantitativo de \'exito:} Se considerar\'a recuperado el acoplamiento gestual si en el Bloque 1 o en el Bloque 3 (retenci\'on) la varianza explicada por $\text{CP}_2$ supera el $20\ \%$, $\text{Sil}_{a,e,i} > +0{,}15$ y la exactitud de `/a, e, i/` en `LDA 5-Fold CV` supera el $75\ \%$ manteniendo estables los formantes $(F_1, F_2)$.
+\end{enumerate}
+
+\end{document}

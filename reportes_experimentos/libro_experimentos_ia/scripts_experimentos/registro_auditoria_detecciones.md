@@ -94,3 +94,13 @@
 | 2026-09-25_Exploracion_Modiolo_Digastrico_Mentoniano_Candela | 02_marcas_digastrico_cuello.png | Aprobada Curada | Corregida y aprobada interactivamente |
 | 2026-09-25_Exploracion_Modiolo_Digastrico_Mentoniano_Candela | 03_detalle_marcas_digastrico_cuello.png | Mala | Desplazada o descartada |
 | 2026-10-20_Control_Experimental_Candela | (varias fotos) | Correccion de Canales | Reasignacion CH0<->CH2: el mapeo fisico real es Canal 0=Orbicular, Canal 1=Modiolo, Canal 2=Masetero (segun DESCRIPCION_EXPERIMENTO.txt y metadata.json) |
+| SecuenciaContinua_HablaNatural_ConJitter_Sujeto1 | 01_frontal.png | Aprobada Curada | Corregida y aprobada interactivamente |
+| SecuenciaContinua_HablaNatural_ConJitter_Sujeto1 | 02_perfil_izquierdo.png | Aprobada Curada | Corregida y aprobada interactivamente |
+| SecuenciaContinua_HablaNatural_ConJitter_Sujeto1 | 03_submental.png | Aprobada Curada | Corregida y aprobada interactivamente |
+| SecuenciaContinua_HablaNatural_ConJitter_Sujeto1 | 04_perfil_derecho.png | Aprobada Curada | Corregida y aprobada interactivamente |
+| SecuenciaContinua_SegundaParte_HablaForzada_ConMetronomo_Sujeto1 | 01_frontal.png | Aprobada Curada | Corregida y aprobada interactivamente |
+| SecuenciaContinua_SegundaParte_HablaForzada_ConMetronomo_Sujeto1 | 02_perfil_izquierdo.png | Aprobada Curada | Corregida y aprobada interactivamente |
+| SecuenciaContinua_SegundaParte_HablaForzada_ConMetronomo_Sujeto1 | 03_submental.png | Aprobada Curada | Corregida y aprobada interactivamente |
+| SecuenciaContinua_HablaNatural_ConJitter_Sujeto1 | 01_frontal.png | Aprobada Curada | Corregida y aprobada interactivamente |
+| SecuenciaContinua_HablaNatural_ConJitter_Sujeto1 | 02_perfil_izquierdo.png | Aprobada Curada | Corregida y aprobada interactivamente |
+| SecuenciaContinua_HablaNatural_ConJitter_Sujeto1 | 03_submental.png | Aprobada Curada | Corregida y aprobada interactivamente |

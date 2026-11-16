@@ -415,7 +415,10 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, gate_ra
         # refinamos cada pulso alrededor de su propio anchor y período local tau_samples (soportando Jitter)
         pulsos_a_extraer = []
         if anclas_v6 and len(anclas_v6) > 0:
-            env_align_src = canales_data[ch_target]["env_recortada"] if ch_target in canales_data else canales_data[canales_features[0]]["env_recortada"]
+            if es_modo_gate_doble and 'S_emg' in locals():
+                env_align_src = S_emg
+            else:
+                env_align_src = canales_data[ch_target]["env_recortada"] if ch_target in canales_data else canales_data[canales_features[0]]["env_recortada"]
             for idx_a, anc in enumerate(anclas_v6):
                 if not anc.get("valido", True):
                     continue
@@ -435,6 +438,8 @@ def extraer_features_concatenadas(base_dir, mediciones, alpha_ruido=1.0, gate_ra
                     continue
                 sub_env = env_align_src[c_ini:c_fin]
                 pico_local = c_ini + int(np.argmax(sub_env))
+                if es_modo_gate_doble:
+                    pico_local = min(len(env_align_src) - 1, pico_local + int(0.251 * sr_canal))
                 if modo_alineacion == "Pico Derivada Micrófono (Onset)" and "canal_3" in canales_data:
                     deriv_local = np.gradient(sub_env)
                     r_end = max(1, int(np.argmax(sub_env)))
@@ -1144,7 +1149,12 @@ def extraer_formantes_lpc_pulso(audio_segmento, fs):
         cands = [(f_v, bw_v) for f_v, bw_v in zip(freqs, bws) if 180 < f_v < min(2800.0, fs * 0.48) and bw_v < 400]
         cands.sort(key=lambda x: x[0])
         if len(cands) >= 2:
-            return float(cands[0][0]), float(cands[1][0])
+            f1_v, f2_v = float(cands[0][0]), float(cands[1][0])
+            if f1_v < 550.0 and f2_v > 1400.0:
+                debiles = sorted([f_v for f_v, bw_v in zip(freqs, bws) if 600.0 < f_v < 1300.0 and bw_v < 650])
+                if debiles:
+                    f2_v = float(debiles[0])
+            return f1_v, f2_v
     except Exception:
         pass
     return np.nan, np.nan
@@ -1235,6 +1245,10 @@ def procesar_y_graficar_formantes_acusticos(base_dir, mediciones, out_dir, tomas
         if not timestamps:
             continue
             
+        # Envolvente RMS maestra (250 ms) del micrófono para ubicar el pico sostenido real
+        # de cada vocal y evitar que la ventana LPC caiga sobre un beep breve del metrónomo.
+        w_rms_form = max(5, int(round(0.250 * fs)))
+        rms_mic_250 = np.sqrt(np.convolve(audio.astype(np.float64)**2, np.ones(w_rms_form)/w_rms_form, mode='same'))
         dur_samples = int(round(0.120 * fs))
         for idx_p, t_s in enumerate(timestamps):
             toma_id_0 = f"{med_name}_Win{idx_p}_{vocal}"
@@ -1244,7 +1258,17 @@ def procesar_y_graficar_formantes_acusticos(base_dir, mediciones, out_dir, tomas
                 if toma_id_0 not in set_validas:
                     continue
                     
-            idx_c = int(round(t_s * fs))
+            idx_beat = int(round(t_s * fs))
+            prev_t = timestamps[idx_p - 1] if idx_p > 0 else max(0.0, t_s - 0.8)
+            next_t = timestamps[idx_p + 1] if idx_p + 1 < len(timestamps) else (t_s + 1.2)
+            w_left = min(0.35, 0.45 * max(0.0, t_s - prev_t))
+            w_right = min(1.20, 0.70 * max(0.2, next_t - t_s))
+            i_ini = max(0, int(round((t_s - w_left) * fs)))
+            i_fin = min(len(audio), int(round((t_s + w_right) * fs)))
+            if i_fin > i_ini and np.max(rms_mic_250[i_ini:i_fin]) > 0:
+                idx_c = i_ini + int(np.argmax(rms_mic_250[i_ini:i_fin]))
+            else:
+                idx_c = idx_beat
             seg = audio[max(0, idx_c - dur_samples//2) : min(len(audio), idx_c + dur_samples//2)]
             f1, f2 = extraer_formantes_lpc_pulso(seg, fs)
             if np.isnan(f1) or np.isnan(f2):
@@ -1268,6 +1292,19 @@ def procesar_y_graficar_formantes_acusticos(base_dir, mediciones, out_dir, tomas
         return
         
     df_f = pd.DataFrame(registros_formantes)
+    # Limpieza de outliers acústicos (saltos de formante) por vocal usando MAD 2D
+    keep_idx = []
+    for _, grp in df_f.groupby('Vocal'):
+        if len(grp) < 4:
+            keep_idx.extend(grp.index.tolist())
+            continue
+        coords = grp[['F1_Hz', 'F2_Hz']].values
+        med = np.median(coords, axis=0)
+        dists = np.linalg.norm(coords - med, axis=1)
+        mad = max(float(np.median(dists)), 1e-6)
+        z_mad = dists / (1.4826 * mad)
+        keep_idx.extend(grp.index[z_mad <= 2.5].tolist())
+    df_f = df_f.loc[sorted(keep_idx)].reset_index(drop=True)
     df_f['F2_menos_F1_Hz'] = df_f['F2_Hz'] - df_f['F1_Hz']
     csv_out = os.path.join(out_dir, "formantes_F1_F2.csv")
     df_f.to_csv(csv_out, index=False)
