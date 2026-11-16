@@ -15,6 +15,7 @@ def generar_spec():
     runtime_hook_qt = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'runtime_hook_qt_paths.py')
     build_dir = os.path.join(base_dir, "EMG_Ejecutable_Build")
     repo_root = os.path.dirname(base_dir)
+    runtime_hook_rel = os.path.relpath(runtime_hook_qt, repo_root).replace('\\', '/')
     
     if not os.path.exists(build_dir):
         os.makedirs(build_dir, exist_ok=True)
@@ -77,9 +78,16 @@ def generar_spec():
         elif os.path.exists(root_path):
             resolved_src = root_path
         if resolved_src is not None and (resolved_src, dst) not in seen_pairs:
-            clean_src = resolved_src.replace('\\', '/')
             clean_dst = dst.replace('\\', '/')
-            datas_tuples.append(f"('{clean_src}', '{clean_dst}')")
+            if os.path.isabs(resolved_src):
+                # Recurso externo al entorno de build (vive en el repo): se emite como
+                # os.path.join(PROJ_ROOT, rel) para que el MISMO spec sea portable
+                # entre Windows y Linux, sin rutas absolutas fijas por máquina.
+                rel_to_root = os.path.relpath(resolved_src, repo_root).replace('\\', '/')
+                datas_tuples.append(f"(os.path.join(PROJ_ROOT, '{rel_to_root}'), '{clean_dst}')")
+            else:
+                clean_src = resolved_src.replace('\\', '/')
+                datas_tuples.append(f"('{clean_src}', '{clean_dst}')")
             seen_pairs.add((resolved_src, dst))
             
     datas_str = ",\n        ".join(datas_tuples)
@@ -128,6 +136,22 @@ mne_datas, mne_binaries, mne_hiddenimports = _safe_collect('mne')
 llvmlite_datas, llvmlite_binaries, llvmlite_hiddenimports = _safe_collect('llvmlite')
 sklearn_datas, sklearn_binaries, sklearn_hiddenimports = _safe_collect('sklearn')
 nitypes_metadata = _safe_metadata('nitypes')
+
+def _find_repo_root():
+    # Resuelve la raiz del repositorio a partir de SPECPATH (directorio del spec)
+    # buscando hacia arriba el .git o la carpeta EMG_desarrollo. Asi el mismo spec
+    # funciona identico en Windows y en Linux sin rutas absolutas fijas.
+    _d = SPECPATH
+    for _ in range(6):
+        if os.path.isdir(os.path.join(_d, '.git')) or os.path.isdir(os.path.join(_d, 'EMG_desarrollo')):
+            return _d
+        _parent = os.path.dirname(_d)
+        if _parent == _d:
+            break
+        _d = _parent
+    return os.path.dirname(SPECPATH)
+
+PROJ_ROOT = _find_repo_root()
 
 block_cipher = None
 
@@ -281,7 +305,7 @@ a = Analysis(
     hiddenimports=hidden_imports,
     hookspath=[],
     hooksconfig={{}},
-    runtime_hooks=[{runtime_hook_qt!r}],
+    runtime_hooks=[os.path.join(PROJ_ROOT, '{runtime_hook_rel}')],
     excludes=['torchvision', 'torchaudio'],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,

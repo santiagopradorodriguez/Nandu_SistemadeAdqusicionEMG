@@ -43,6 +43,22 @@ llvmlite_datas, llvmlite_binaries, llvmlite_hiddenimports = _safe_collect('llvml
 sklearn_datas, sklearn_binaries, sklearn_hiddenimports = _safe_collect('sklearn')
 nitypes_metadata = _safe_metadata('nitypes')
 
+def _find_repo_root():
+    # Resuelve la raiz del repositorio a partir de SPECPATH (directorio del spec)
+    # buscando hacia arriba el .git o la carpeta EMG_desarrollo. Asi el mismo spec
+    # funciona identico en Windows y en Linux sin rutas absolutas fijas.
+    _d = SPECPATH
+    for _ in range(6):
+        if os.path.isdir(os.path.join(_d, '.git')) or os.path.isdir(os.path.join(_d, 'EMG_desarrollo')):
+            return _d
+        _parent = os.path.dirname(_d)
+        if _parent == _d:
+            break
+        _d = _parent
+    return os.path.dirname(SPECPATH)
+
+PROJ_ROOT = _find_repo_root()
+
 block_cipher = None
 
 # Lista de módulos adicionales a empaquetar en el ejecutable principal v6.2
@@ -163,7 +179,7 @@ datas = [
         ('palabras.txt', '.'),
         ('palabras.txt', 'acquisition'),
         ('daq_bridge_server.py', '.'),
-        ('C:/Users/MSI/OneDrive/Documentos/DOCUMENTOS SANTIAGO/santiago-prado-repositorio/daq_bridge_client.py', '.'),
+        (os.path.join(PROJ_ROOT, 'daq_bridge_client.py'), '.'),
         ('acquisition/display_remoto_servidor.py', 'acquisition'),
         ('acquisition/cliente_estimulos.html', 'acquisition'),
         ('acquisition/display_remoto', 'acquisition/display_remoto'),
@@ -180,14 +196,14 @@ datas = [
         ('DataConfig', 'DataConfig'),
         ('DataConfig/modelos_vision', 'DataConfig/modelos_vision'),
         ('DataConfig/modelos_vision/face_landmarker.task', 'DataConfig/modelos_vision'),
-        ('C:/Users/MSI/OneDrive/Documentos/DOCUMENTOS SANTIAGO/santiago-prado-repositorio/EMG_desarrollo/DataConfig/modelos_vision/face_landmarker.task', 'DataConfig/modelos_vision'),
+        (os.path.join(PROJ_ROOT, 'EMG_desarrollo/DataConfig/modelos_vision/face_landmarker.task'), 'DataConfig/modelos_vision'),
         ('acquisition', 'acquisition'),
         ('analysis', 'analysis'),
         ('deep_learning', 'deep_learning'),
         ('acquisition/calibracion_espacial_electrodos.py', 'acquisition'),
         ('acquisition/fotometria_webcam.py', 'acquisition'),
-        ('C:/Users/MSI/OneDrive/Documentos/DOCUMENTOS SANTIAGO/santiago-prado-repositorio/EMG_desarrollo/acquisition/calibracion_espacial_electrodos.py', 'acquisition'),
-        ('C:/Users/MSI/OneDrive/Documentos/DOCUMENTOS SANTIAGO/santiago-prado-repositorio/EMG_desarrollo/acquisition/fotometria_webcam.py', 'acquisition'),
+        (os.path.join(PROJ_ROOT, 'EMG_desarrollo/acquisition/calibracion_espacial_electrodos.py'), 'acquisition'),
+        (os.path.join(PROJ_ROOT, 'EMG_desarrollo/acquisition/fotometria_webcam.py'), 'acquisition'),
         ('fotos', 'fotos'),
         ('logo_nandu_lsd.png', '.'),
         ('logo_nandu_lsd.png', 'gui_app/assets'),
@@ -195,7 +211,7 @@ datas = [
         ('usb-621x-manual.pdf', '.'),
         ('modelos', 'modelos'),
         ('resultados', 'resultados'),
-        ('C:/Users/MSI/OneDrive/Documentos/DOCUMENTOS SANTIAGO/santiago-prado-repositorio/EMG_desarrollo/resultados', 'EMG_desarrollo/resultados')
+        (os.path.join(PROJ_ROOT, 'EMG_desarrollo/resultados'), 'EMG_desarrollo/resultados')
 ] + nidaqmx_datas + zmq_datas + sd_datas + sf_datas + umap_datas + sns_datas + tly_datas + numba_datas + pynndescent_datas + tqdm_datas + mp_datas + mp_extra_datas + cv2_datas + torch_datas + mne_datas + llvmlite_datas + sklearn_datas + nitypes_metadata
 
 qt_flat_binaries = []
@@ -233,7 +249,7 @@ a = Analysis(
     hiddenimports=hidden_imports,
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=['C:\\Users\\MSI\\OneDrive\\Documentos\\DOCUMENTOS SANTIAGO\\santiago-prado-repositorio\\EMG_desarrollo\\herramientas_build\\runtime_hook_qt_paths.py'],
+    runtime_hooks=[os.path.join(PROJ_ROOT, 'EMG_desarrollo/herramientas_build/runtime_hook_qt_paths.py')],
     excludes=['torchvision', 'torchaudio'],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
