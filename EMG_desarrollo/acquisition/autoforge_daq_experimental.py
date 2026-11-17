@@ -9035,6 +9035,48 @@ class RealTimePlotter(QtWidgets.QWidget):
       print(f"[FOTOMETRIA-AVISO] Error al exportar fotometría en '{output_dir}': {exc}")
       return None
 
+  def _exportar_fotometria_ruido_final_discreto(self):
+    """
+    Consigna 11-2026: en Autograbado Discreto, exporta el snapshot del Ruido Basal Final
+    a una subcarpeta propia (`fotometria_ruido_final/`) dentro de la carpeta de la última toma.
+
+    En Secuencia Continua el export general ocurre DESPUÉS del ruido final y ya lo incluye,
+    por eso no se toca. En discreto cada palabra se guardó antes del ruido final, de modo
+    que el snapshot de cámara de ese momento quedaba en memoria sin escribirse a disco.
+    """
+    pm = getattr(self, 'photometry_mgr', None)
+    if pm is None or getattr(self, 'is_autoforge_continuo', False):
+      return
+    try:
+      if not (getattr(self, '_photometry_session_active', False) and getattr(pm, 'is_enabled', False)):
+        return
+      if hasattr(pm, 'snapshots_pendientes') and pm.snapshots_pendientes() <= 0:
+        return
+      dirs_sesion = list(getattr(self, 'autoforge_session_dirs', []) or [])
+      destino_ultima_toma = str(dirs_sesion[-1]) if dirs_sesion else ""
+      if not destino_ultima_toma or not os.path.isdir(destino_ultima_toma):
+        print("[Fotometria-RuidoFinal] Sin carpeta de sesión para exportar el snapshot del ruido final")
+        return
+      destino_final = os.path.join(destino_ultima_toma, "fotometria_ruido_final")
+      photo_meta_final = pm.export_take_photometry(destino_final)
+      print(f"[Fotometria-RuidoFinal] Snapshot del ruido basal final exportado a: {destino_final}")
+      if photo_meta_final:
+        meta_path = os.path.join(destino_ultima_toma, "metadata.json")
+        try:
+          if os.path.exists(meta_path):
+            with open(meta_path, 'r', encoding='utf-8') as f:
+              m_data = json.load(f)
+          else:
+            m_data = {}
+          photo_meta_final["carpeta"] = "fotometria_ruido_final"
+          m_data["fotometria_espacial_ruido_final"] = photo_meta_final
+          with open(meta_path, 'w', encoding='utf-8') as f:
+            json.dump(m_data, f, indent=4, ensure_ascii=False)
+        except Exception as e_mrf:
+          print(f"[Fotometria-RuidoFinal] Aviso al actualizar metadata del ruido final: {e_mrf}")
+    except Exception as exc_rf:
+      print(f"[Fotometria-RuidoFinal] Aviso: {exc_rf}")
+
   def iniciar_autoforge(self):
     """
     Ejecuta la funcionalidad de iniciar_autoforge.
@@ -9881,7 +9923,12 @@ class RealTimePlotter(QtWidgets.QWidget):
               json.dump(m_ch, f, indent=4)
       except Exception as e:
         print(f"[Ruido Final] Error actualizando metadata en {session_dir}: {e}")
-    
+
+    # Consigna 11-2026: en Autograbado Discreto el snapshot de cámara del ruido basal
+    # final quedaba huerfano (las palabras ya se guardaron antes del ruido final).
+    # Se exporta ahora a `fotometria_ruido_final/` dentro de la última toma.
+    self._exportar_fotometria_ruido_final_discreto()
+
     target = getattr(self, '_post_final_noise_target_method', None)
     if callable(target):
       target()

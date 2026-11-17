@@ -6209,6 +6209,14 @@ class WebcamPhotometryManager(QtCore.QObject):
             timer.daemon = True
             timer.start()
 
+    def snapshots_pendientes(self) -> int:
+        """Cantidad de snapshots pendientes de exportar (thread-safe)."""
+        try:
+            with self._snapshots_lock:
+                return len(self._take_snapshots)
+        except Exception:
+            return 0
+
     def export_take_photometry(self, output_dir: str) -> Dict[str, Any]:
         """
         Procesa en segundo plano (thread-safe para `guardar_async`) todas las instantáneas
