@@ -6209,6 +6209,10 @@ class WebcamPhotometryManager(QtCore.QObject):
                             cap_hilo = cv2.VideoCapture(self.camera_index)
                     elif sys.platform.startswith("win"):
                         cap_hilo = cv2.VideoCapture(self.camera_index, cv2.CAP_DSHOW)
+                        if cap_hilo is None or not cap_hilo.isOpened():
+                            if cap_hilo is not None:
+                                cap_hilo.release()
+                            cap_hilo = cv2.VideoCapture(self.camera_index)
                     else:
                         cap_hilo = cv2.VideoCapture(self.camera_index)
                     if cap_hilo is None or not cap_hilo.isOpened():

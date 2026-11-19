@@ -308,3 +308,9 @@
   - Implementar rutina de alineación Procrustes/CCA en `realtime_facial_decoder_engine.py` usando las ventanas de la sesión de hoy vs centroides canónicos del modelo campeón (`campeon_geosup_conv_ortho_4d`).
   - Incorporar botón `[ ALINEAR VARIEDAD (SARA SOLLA) ]` en la GUI para proyectar $z_{\text{hoy}} \mapsto R(z - \bar{z}) + \mu_{\text{ref}}$ y evaluar directamente con el clasificador LDA canónico en vivo sin reentrenar la red.
 
+---
+
+## 11. Nota Pendiente Build Windows v6.2 (2026-11-17)
+- **Autograbado (`autoforge_daq_experimental.py`):** Reportado por el usuario que el autograbado no funciona bien en el último ejecutable de Windows (`NanduLsd_Windows_v6.2.zip` / `v6.2-estable`). Revisar y depurar en la próxima sesión.
+
+

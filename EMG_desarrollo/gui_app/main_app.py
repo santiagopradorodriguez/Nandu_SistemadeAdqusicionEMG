@@ -8,11 +8,17 @@
 import sys
 import os
 
-# Añadir carpeta base al path para imports relativos al proyecto SOLO si NO está congelado por PyInstaller
+# Añadir carpeta base y subcarpetas al path
 if not getattr(sys, 'frozen', False):
     root_project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     sys.path.insert(0, root_project_dir)
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+else:
+    _root = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
+    for _sub in ('gui_app', 'views', 'core', 'utils', 'acquisition', 'analysis', 'deep_learning'):
+        _p = os.path.join(_root, _sub)
+        if os.path.isdir(_p) and _p not in sys.path:
+            sys.path.insert(0, _p)
 
 try:
   from terminal_launcher import launch_in_visible_terminal, ensure_running_in_terminal, configure_live_terminal_streams
@@ -86,6 +92,11 @@ if getattr(sys, 'frozen', False) and len(sys.argv) > 1:
         for p in [meipass_dir, exe_dir]:
             if p and p not in sys.path:
                 sys.path.insert(0, p)
+            if p:
+                for _sub in ('gui_app', 'views', 'core', 'utils', 'acquisition', 'analysis', 'deep_learning'):
+                    _ps = os.path.join(p, _sub)
+                    if os.path.isdir(_ps) and _ps not in sys.path:
+                        sys.path.insert(0, _ps)
 
         def _reportar_error_multiplexor(error_msg: str):
             try:

@@ -11,6 +11,10 @@ import ctypes
 
 if sys.platform.startswith("win") and getattr(sys, "frozen", False):
     _root = getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
+    for _sub in ("gui_app", "views", "core", "utils", "acquisition", "analysis", "deep_learning"):
+        _p = os.path.join(_root, _sub)
+        if os.path.isdir(_p) and _p not in sys.path:
+            sys.path.insert(0, _p)
     for _folder in (
         _root,
         os.path.join(_root, "PySide6"),

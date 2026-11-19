@@ -43,8 +43,9 @@ def inyectar_dispatcher_main_app(ruta_main_app):
         return
     with open(ruta_main_app, 'r', encoding='utf-8') as f:
         contenido = f.read()
-    if "DISPATCHER FROZEN" in contenido:
-        return  # ya inyectado (idempotente)
+    if "DISPATCHER FROZEN" in contenido or "# --- MULTIPLEXOR PARA PYINSTALLER" in contenido:
+        print("[OK] main_app ya cuenta con multiplexor nativo --run-script; se omite inyeccion redundante.")
+        return  # ya tiene multiplexor completo (idempotente)
     marca = "# " + "-" * 45
     if marca in contenido:
         contenido = contenido.replace(marca, dispatcher_bloque(), 1)
@@ -147,7 +148,7 @@ def lanzar_script(script_name, args=[]):
     # --- 1. INYECTAR CABECERA EN TODOS LOS ARCHIVOS .PY ---
     print("Inyectando funciones base en todos los archivos .py...")
     for root, dirs, files in os.walk(build_dir):
-        if 'venv' in root: continue
+        if any(x in root for x in ['venv', '.venv', 'dist', 'build', '__pycache__']): continue
         for file in files:
             if file.endswith('.py') and file not in ["crear_entorno_ejecutable.py", "aplicar_parches_ejecutable.py", "refactor_experimental.py", "refactor_experimental2.py", "autoforge_patcher.py", "autoforge_daq_experimental_pc2_referencia.py"]:
                 ruta = os.path.join(root, file)
@@ -248,6 +249,7 @@ def lanzar_script(script_name, args=[]):
         "acquisition/autoforge_daq.py",
         "acquisition/autoforge_daq_experimental.py",
         "acquisition/autoforge_daq_decodificador.py",
+        "acquisition/autoforge_daq_decodificador_facial.py",
         "acquisition/calibracion_espacial_electrodos.py",
         "acquisition/fotometria_webcam.py",
         "acquisition/tracking_facial.py",
@@ -291,7 +293,11 @@ def lanzar_script(script_name, args=[]):
         "deep_learning/soft_dtw.py",
         "deep_learning/autoencoder_no_supervisado_gui.py",
         "deep_learning/realtime_decoder_engine.py",
+        "deep_learning/realtime_facial_decoder_engine.py",
         "deep_learning/decodificador_continuo.py",
+        "deep_learning/decodificador_continuo_facial_6canales.py",
+        "deep_learning/generador_pca_6canales.py",
+        "deep_learning/simulador_rotaciones_sinteticas_3d.py",
     ]
     for archivo in archivos_auxiliares:
         ruta = os.path.join(build_dir, archivo)

@@ -67,6 +67,9 @@ if not exist "%ROOT_DIR%build_windows" mkdir "%ROOT_DIR%build_windows"
 if exist "%ROOT_DIR%build_windows\NanduLsd" rmdir /s /q "%ROOT_DIR%build_windows\NanduLsd"
 xcopy /E /I /Y "EMG_Ejecutable_Build\dist\NanduLsd" "%ROOT_DIR%build_windows\NanduLsd"
 
+echo Sincronizando dependencias y recursos de Windows...
+%PYTHON_EXEC% herramientas_build\post_build_sync_windows.py "%ROOT_DIR%build_windows\NanduLsd"
+
 echo ====================================================
 echo BUILD COMPLETADO. El ejecutable principal esta en %ROOT_DIR%build_windows\NanduLsd\NanduLsd.exe
 echo ====================================================

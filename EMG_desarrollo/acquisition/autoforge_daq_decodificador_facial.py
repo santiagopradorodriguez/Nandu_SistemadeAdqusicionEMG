@@ -53,7 +53,10 @@ try:
 except Exception:
     SOUNDDEVICE_DISPONIBLE = False
 
-from EMG_desarrollo.acquisition.calibracion_espacial_electrodos import AntigravityAgent
+try:
+    from EMG_desarrollo.acquisition.calibracion_espacial_electrodos import AntigravityAgent
+except ModuleNotFoundError:
+    from acquisition.calibracion_espacial_electrodos import AntigravityAgent
 
 # Visualización 3D interactiva con Matplotlib Qt
 import matplotlib
@@ -356,7 +359,12 @@ class WebcamAudioLiveThread(QtCore.QThread):
             print(f"[CAM LIVE ERROR] Error inicializando AntigravityAgent: {e}")
             return
 
-        cap = cv2.VideoCapture(self.camera_index)
+        if sys.platform.startswith("win"):
+            cap = cv2.VideoCapture(self.camera_index, cv2.CAP_DSHOW)
+            if not cap.isOpened():
+                cap = cv2.VideoCapture(self.camera_index)
+        else:
+            cap = cv2.VideoCapture(self.camera_index)
         if not cap.isOpened():
             print(f"[CAM LIVE ERROR] No se pudo abrir la cámara índice {self.camera_index}.")
             return
