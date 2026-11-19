@@ -27,7 +27,8 @@
       transition: background-color 0.08s ease;
     }
     body.flash-active {
-      background-color: rgba(0, 255, 255, 0.22);
+      /* Mantener fondo oscuro permanente: destello suave no epileptico */
+      background-color: var(--bg);
     }
     .top-bar {
       display: flex;
@@ -87,25 +88,29 @@
       position: relative;
     }
     .center-stage.flash-box {
-      border: 4px solid #FFFFFF;
-      background: rgba(255, 255, 255, 0.14);
+      border-width: 3px;
+      background: rgba(10, 22, 34, 0.92);
+      box-shadow: 0 0 18px rgba(0, 255, 255, 0.16);
     }
     .main-row {
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 24px;
+      max-width: 100%;
     }
     .vowel-display {
       font-size: clamp(82px, 20vw, 185px);
       font-weight: 900;
-      line-height: 1.0;
-      text-shadow: 0 0 24px rgba(0, 255, 255, 0.35);
-      transition: transform 0.07s ease, color 0.07s ease;
+      line-height: 1.05;
+      text-align: center;
+      word-break: break-word;
+      text-shadow: 0 0 18px rgba(0, 255, 255, 0.28);
+      transition: transform 0.08s ease;
     }
     .vowel-display.flash-text {
-      color: #FFFFFF !important;
-      transform: scale(1.07);
+      transform: scale(1.03);
+      text-shadow: 0 0 24px currentColor;
     }
     .next-vowel {
       font-size: clamp(18px, 3.2vw, 28px);
@@ -213,8 +218,8 @@
         badge.textContent = `CUENTA REGRESIVA DEL METRÓNOMO: ${st.count_in}`;
         badge.style.color = '#FF4400';
       } else if (isFlash) {
-        badge.textContent = `★ ¡PRONUNCIA AHORA! — PULSO ${st.pulso_actual || 0}/${st.total_pulsos || 0} ★`;
-        badge.style.color = '#FFFFFF';
+        badge.textContent = `¡PRONUNCIA AHORA! — PULSO ${st.pulso_actual || 0}/${st.total_pulsos || 0}`;
+        badge.style.color = col;
       } else if (preCambio && sig) {
         badge.textContent = `ATENCIÓN: PRÓXIMO PULSO CAMBIA A /${sig}/`;
         badge.style.color = '#FFFF00';
@@ -227,15 +232,23 @@
       document.getElementById('instTitle').textContent = st.instruccion_fase || 'Sigue el ritmo del metrónomo';
       document.getElementById('instSub').textContent = st.subtitulo_fase || '';
 
-      // Vocal central
+      // Vocal central o comando de fase
       const vEl = document.getElementById('vowelDisplay');
-      vEl.textContent = palabra ? (palabra.length <= 3 ? `/${palabra}/` : palabra) : '---';
+      const vText = palabra ? (palabra.length <= 3 ? `/${palabra}/` : palabra) : (st.grabando ? '' : '---');
+      vEl.textContent = vText;
+      if (palabra.length > 10) {
+        vEl.style.fontSize = 'clamp(26px, 6.5vw, 56px)';
+      } else if (palabra.length > 3) {
+        vEl.style.fontSize = 'clamp(38px, 9.5vw, 84px)';
+      } else {
+        vEl.style.fontSize = 'clamp(82px, 20vw, 185px)';
+      }
       vEl.style.color = col;
       vEl.classList.toggle('flash-text', isFlash);
 
       const stage = document.getElementById('centerStage');
       stage.classList.toggle('flash-box', isFlash);
-      stage.style.borderColor = isFlash ? '#FFFFFF' : (preCambio ? '#FFFF00' : col);
+      stage.style.borderColor = isFlash ? col : (preCambio ? '#FFFF00' : (palabra ? col : '#1E3A5F'));
       document.body.classList.toggle('flash-active', isFlash);
 
       // Próxima vocal
@@ -277,20 +290,48 @@
       document.getElementById('bpmInfo').textContent = `${st.bpm || 30} BPM`;
     }
 
+    function aplicarEstado(data) {
+      if (!data) return;
+      if (data.secuencia !== lastSeq) {
+        lastSeq = data.secuencia;
+        renderState(data);
+      }
+    }
+
+    let sseActivo = false;
+    function conectarSSE() {
+      if (typeof EventSource === 'undefined') return;
+      try {
+        const q = token ? `?t=${encodeURIComponent(token)}` : '';
+        const es = new EventSource(`/stream${q}`);
+        es.onopen = () => { sseActivo = true; };
+        es.onmessage = (ev) => {
+          sseActivo = true;
+          try {
+            const data = JSON.parse(ev.data);
+            aplicarEstado(data);
+          } catch (e) {}
+        };
+        es.onerror = () => {
+          sseActivo = false;
+        };
+      } catch (e) {
+        sseActivo = false;
+      }
+    }
+
     async function poll() {
       try {
         const q = token ? `?t=${encodeURIComponent(token)}` : '';
         const res = await fetch(`/estado${q}`, { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
-          if (data.secuencia !== lastSeq) {
-            lastSeq = data.secuencia;
-            renderState(data);
-          }
+          aplicarEstado(data);
         }
       } catch (e) {}
-      setTimeout(poll, 70);
+      setTimeout(poll, sseActivo ? 1500 : 70);
     }
+    conectarSSE();
     poll();
   </script>
 </body>

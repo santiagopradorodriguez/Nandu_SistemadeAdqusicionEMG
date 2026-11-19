@@ -766,6 +766,8 @@ class CsvViewerWidget(QWidget):
         self._updating_sliders = False
         self.current_filepath = None
         self.current_medicion_dir = None
+        self.loader = None
+        self._active_loader_threads = []
         
         canales_conf = config_mgr.get("canales")
         self.channel_colors = []
@@ -1074,10 +1076,46 @@ class CsvViewerWidget(QWidget):
         medicion_name = os.path.basename(medicion_dir) if medicion_dir else os.path.basename(os.path.dirname(filepath))
         self.lbl_filename.setText(f"Medición: {medicion_name}")
         self.lbl_status.setText(f"Cargando medición: {medicion_name} ...")
-        self.loader = DataLoaderThread(filepath)
-        self.loader.finished_loading.connect(self._on_csv_loaded)
-        self.loader.error_loading.connect(lambda err: self.lbl_status.setText(f"Error: {err}"))
+
+        prev_loader = getattr(self, 'loader', None)
+        if prev_loader is not None and prev_loader.isRunning():
+            try:
+                prev_loader.finished_loading.disconnect(self._on_csv_loaded)
+            except Exception:
+                pass
+            try:
+                prev_loader.error_loading.disconnect()
+            except Exception:
+                pass
+
+        nuevo_loader = DataLoaderThread(filepath)
+        self._active_loader_threads.append(nuevo_loader)
+        def _retirar_hilo(th=nuevo_loader):
+            try:
+                if th in self._active_loader_threads:
+                    self._active_loader_threads.remove(th)
+                th.deleteLater()
+            except Exception:
+                pass
+        nuevo_loader.finished.connect(_retirar_hilo)
+        nuevo_loader.finished_loading.connect(self._on_csv_loaded)
+        nuevo_loader.error_loading.connect(lambda err: self.lbl_status.setText(f"Error: {err}"))
+        self.loader = nuevo_loader
         self.loader.start()
+
+    def closeEvent(self, event):
+        """Espera limpiamente a hilos DataLoaderThread activos al cerrar para evitar crash de Qt."""
+        try:
+            for th in list(getattr(self, '_active_loader_threads', [])):
+                if th is not None and th.isRunning():
+                    try:
+                        th.finished_loading.disconnect()
+                    except Exception:
+                        pass
+                    th.wait(1500)
+        except Exception:
+            pass
+        super().closeEvent(event)
 
     def _extract_session_notes_and_summary(self, medicion_dir):
         """
@@ -1705,19 +1743,29 @@ class CsvViewerWidget(QWidget):
                     )
                     y_data = e_clean
 
-                # 3. Filtros convencionales
-                if notch and fs > 110:
-                    notch_q = self.spin_notch_q.value()
-                    b, a = signal.iirnotch(50.0, notch_q, fs)
-                    y_data = signal.filtfilt(b, a, y_data)
-                
-                if self.chk_bandpass.isChecked():
-                    if hp > 0 and hp < fs/2:
-                        b, a = signal.butter(4, hp / (0.5 * fs), btype='high')
-                        y_data = signal.filtfilt(b, a, y_data)
-                    if lp > 0 and lp < fs/2:
-                        b, a = signal.butter(4, lp / (0.5 * fs), btype='low')
-                        y_data = signal.filtfilt(b, a, y_data)
+                # 3. Filtros convencionales (protegidos para señales cortas o degeneradas)
+                if len(y_data) > 27 and np.isfinite(fs) and fs > 0:
+                    if notch and fs > 110:
+                        try:
+                            notch_q = self.spin_notch_q.value()
+                            b, a = signal.iirnotch(50.0, notch_q, fs)
+                            y_data = signal.filtfilt(b, a, y_data)
+                        except Exception:
+                            pass
+                    
+                    if self.chk_bandpass.isChecked():
+                        if hp > 0 and hp < fs / 2:
+                            try:
+                                b, a = signal.butter(4, hp / (0.5 * fs), btype='high')
+                                y_data = signal.filtfilt(b, a, y_data)
+                            except Exception:
+                                pass
+                        if lp > 0 and lp < fs / 2:
+                            try:
+                                b, a = signal.butter(4, lp / (0.5 * fs), btype='low')
+                                y_data = signal.filtfilt(b, a, y_data)
+                            except Exception:
+                                pass
                 
                 # 4. Envolvente
                 if tipo_env != "ninguna":
@@ -1811,22 +1859,29 @@ class CsvViewerWidget(QWidget):
 
     def _apply_view_ranges(self):
         if self.df is None or self._updating_sliders: return
-        
-        t_start = self.slider_time.value() / 100.0
-        duracion = self.spin_zoom_x.value()
-        x_rng = (t_start, t_start + duracion)
-        self.plot_widget.setXRange(x_rng[0], x_rng[1], padding=0)
-        self._refresh_visible_curves_resolution(x_range=x_rng)
-        
-        amp_pct = self.slider_zoom_y.value() / 100.0
-        y_span = (self.global_max_y * 2.5) * amp_pct
-        
-        y_center_pct = self.slider_y.value() / 100.0 # 0 a 1
-        y_min_limit = -self.global_max_y * 1.5
-        y_max_limit = self.global_max_y * 1.5
-        y_center = y_min_limit + (y_max_limit - y_min_limit) * y_center_pct
-        
-        self.plot_widget.setYRange(y_center - y_span/2, y_center + y_span/2, padding=0)
+        try:
+            t_start = float(self.slider_time.value()) / 100.0
+            duracion = max(0.05, float(self.spin_zoom_x.value()))
+            if not (np.isfinite(t_start) and np.isfinite(duracion)):
+                return
+            x_rng = (t_start, t_start + duracion)
+            self.plot_widget.setXRange(x_rng[0], x_rng[1], padding=0)
+            self._refresh_visible_curves_resolution(x_range=x_rng)
+            
+            g_max = float(getattr(self, 'global_max_y', 100.0) or 100.0)
+            if not np.isfinite(g_max) or g_max <= 1e-12:
+                g_max = 100.0
+            amp_pct = max(0.01, float(self.slider_zoom_y.value()) / 100.0)
+            y_span = (g_max * 2.5) * amp_pct
+            
+            y_center_pct = float(self.slider_y.value()) / 100.0 # 0 a 1
+            y_min_limit = -g_max * 1.5
+            y_max_limit = g_max * 1.5
+            y_center = y_min_limit + (y_max_limit - y_min_limit) * y_center_pct
+            if np.isfinite(y_center) and np.isfinite(y_span) and y_span > 1e-12:
+                self.plot_widget.setYRange(y_center - y_span/2, y_center + y_span/2, padding=0)
+        except Exception:
+            pass
 
     def _on_time_slider_changed(self):
         self._apply_view_ranges()
@@ -1837,31 +1892,56 @@ class CsvViewerWidget(QWidget):
     def _on_plot_xrange_changed(self, _, range_tuple):
         """Sincronizar slider y resolución de la señal cuando el usuario hace zoom o arrastra en el eje X"""
         if self._updating_sliders or self.df is None: return
-        self._updating_sliders = True
-        self.slider_time.setValue(int(range_tuple[0] * 100))
-        duracion = range_tuple[1] - range_tuple[0]
-        self.spin_zoom_x.setValue(max(0.05, duracion))
-        self._refresh_visible_curves_resolution(x_range=range_tuple)
-        self._updating_sliders = False
+        try:
+            x0, x1 = float(range_tuple[0]), float(range_tuple[1])
+            if not (np.isfinite(x0) and np.isfinite(x1)):
+                return
+            self._updating_sliders = True
+            s_min = self.slider_time.minimum()
+            s_max = self.slider_time.maximum()
+            val_slider = int(round(max(s_min, min(s_max, x0 * 100.0))))
+            self.slider_time.setValue(val_slider)
+            duracion = x1 - x0
+            self.spin_zoom_x.setValue(max(0.05, min(1000.0, duracion)))
+            self._refresh_visible_curves_resolution(x_range=(x0, x1))
+        except Exception:
+            pass
+        finally:
+            self._updating_sliders = False
 
     def _on_plot_yrange_changed(self, _, range_tuple):
         """Sincronizar slider cuando el usuario arrastra el gráfico con el mouse en el eje Y"""
         if self._updating_sliders or self.df is None: return
-        self._updating_sliders = True
-        
-        y_min_limit = -self.global_max_y * 1.5
-        y_max_limit = self.global_max_y * 1.5
-        
-        y_center = (range_tuple[1] + range_tuple[0]) / 2.0
-        y_span = range_tuple[1] - range_tuple[0]
-        
-        y_center_pct = (y_center - y_min_limit) / (y_max_limit - y_min_limit)
-        amp_pct = y_span / (self.global_max_y * 2.5)
-        
-        self.slider_y.setValue(int(np.clip(y_center_pct * 100, 0, 100)))
-        self.slider_zoom_y.setValue(int(np.clip(amp_pct * 100, 1, 100)))
-        
-        self._updating_sliders = False
+        try:
+            y0, y1 = float(range_tuple[0]), float(range_tuple[1])
+            if not (np.isfinite(y0) and np.isfinite(y1)):
+                return
+            g_max = float(getattr(self, 'global_max_y', 100.0) or 100.0)
+            if not np.isfinite(g_max) or g_max <= 1e-12:
+                return
+            self._updating_sliders = True
+            
+            y_min_limit = -g_max * 1.5
+            y_max_limit = g_max * 1.5
+            denom_center = y_max_limit - y_min_limit
+            denom_span = g_max * 2.5
+            if abs(denom_center) <= 1e-12 or abs(denom_span) <= 1e-12:
+                return
+            
+            y_center = (y1 + y0) / 2.0
+            y_span = y1 - y0
+            
+            y_center_pct = (y_center - y_min_limit) / denom_center
+            amp_pct = y_span / denom_span
+            if not (np.isfinite(y_center_pct) and np.isfinite(amp_pct)):
+                return
+            
+            self.slider_y.setValue(int(np.clip(y_center_pct * 100.0, 0, 100)))
+            self.slider_zoom_y.setValue(int(np.clip(amp_pct * 100.0, 1, 100)))
+        except Exception:
+            pass
+        finally:
+            self._updating_sliders = False
 
     def export_png(self):
         filepath, _ = QFileDialog.getSaveFileName(self, "Exportar Gráfico", "export.png", "PNG (*.png)")

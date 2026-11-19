@@ -92,29 +92,63 @@ CLAVES_ESTADO = (
 
 
 
+def _es_ip_cgnat_tailscale(ip_str: str) -> bool:
+    """True si la direccion IPv4 pertenece al bloque CGNAT 100.64.0.0/10 usado por Tailscale."""
+    try:
+        parts = [int(x) for x in str(ip_str).strip().split(".")]
+        return len(parts) == 4 and parts[0] == 100 and (64 <= parts[1] <= 127)
+    except Exception:
+        return False
+
+
 def _ip_tailscale(default_ip=None):
     """
-    Detecta la IP de la interfaz Tailscale (rango CGNAT 100.64.0.0/10, interfaz tailscale0).
-    Si no puede consultarla por comando, devuelve default_ip ().
+    Detecta la IP de la interfaz Tailscale (rango CGNAT 100.64.0.0/10) en Linux y Windows 10/11.
+    Si no puede consultarla, devuelve default_ip o _ip_local().
     """
     import subprocess
     import re
+    import shutil
+    kw_sub = {"capture_output": True, "text": True, "timeout": 1.5}
+    if sys.platform == "win32":
+        kw_sub["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
+
+    candidatos_ts = [shutil.which("tailscale")]
+    if sys.platform == "win32":
+        candidatos_ts.extend([
+            r"C:\Program Files\Tailscale\tailscale.exe",
+            r"C:\Program Files (x86)\Tailscale\tailscale.exe",
+        ])
+    for bin_ts in candidatos_ts:
+        if not bin_ts or (not os.path.isfile(bin_ts) and not shutil.which(str(bin_ts))):
+            continue
+        try:
+            res = subprocess.run([bin_ts, "ip", "-4"], **kw_sub)
+            if res.returncode == 0 and res.stdout.strip():
+                first_ip = res.stdout.strip().splitlines()[0].strip()
+                if _es_ip_cgnat_tailscale(first_ip):
+                    return first_ip
+        except Exception:
+            pass
+
+    if sys.platform != "win32":
+        try:
+            res = subprocess.run(["ip", "-4", "-o", "addr", "show"], **kw_sub)
+            if res.returncode == 0:
+                for line in res.stdout.splitlines():
+                    if "tailscale" in line or "100." in line:
+                        m = re.search(r"inet\s+(100\.\d+\.\d+\.\d+)", line)
+                        if m and _es_ip_cgnat_tailscale(m.group(1)):
+                            return m.group(1)
+        except Exception:
+            pass
+
+    # Fallback multiplataforma (funciona sin CLI en Windows 10/11 y Linux)
     try:
-        res = subprocess.run(["tailscale", "ip", "-4"], capture_output=True, text=True, timeout=1.5)
-        if res.returncode == 0 and res.stdout.strip():
-            first_ip = res.stdout.strip().splitlines()[0].strip()
-            if first_ip.startswith("100."):
-                return first_ip
-    except Exception:
-        pass
-    try:
-        res = subprocess.run(["ip", "-4", "-o", "addr", "show"], capture_output=True, text=True, timeout=1.5)
-        if res.returncode == 0:
-            for line in res.stdout.splitlines():
-                if "tailscale" in line or "100." in line:
-                    m = re.search(r"inet\s+(100\.\d+\.\d+\.\d+)", line)
-                    if m:
-                        return m.group(1)
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            cand = info[4][0]
+            if _es_ip_cgnat_tailscale(cand):
+                return cand
     except Exception:
         pass
     return default_ip or _ip_local()
@@ -226,6 +260,18 @@ def _ip_local():
         sock.close()
 
 
+class _FastThreadingHTTPServer(ThreadingHTTPServer):
+    """Servidor HTTP multihilo con TCP_NODELAY para evitar stalls Nagle/Delayed-ACK en Windows."""
+    allow_reuse_address = True
+
+    def process_request(self, request, client_address):
+        try:
+            request.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except Exception:
+            pass
+        return super().process_request(request, client_address)
+
+
 class ServidorEstimulos(threading.Thread):
     """Servidor HTTP en hilo daemon con el estado del estímulo.
 
@@ -247,6 +293,7 @@ class ServidorEstimulos(threading.Thread):
         self.log_accesos = bool(log_accesos)
 
         self._lock = threading.RLock()
+        self._cond_cambio = threading.Condition(self._lock)
         self._secuencia = 0
         self._estado = {
             "palabra": "",
@@ -286,17 +333,13 @@ class ServidorEstimulos(threading.Thread):
             return self._secuencia
 
     def set_estado(self, **kw):
-        """Actualiza el estado de forma thread-safe.
-
-        Solo se actualizan las claves pasadas; las desconocidas se ignoran.
-        Cada llamada (aunque no traiga claves) incrementa `secuencia` para que
-        el cliente detecte el cambio al hacer polling. Devuelve la secuencia.
-        """
-        with self._lock:
+        """Actualiza el estado de forma thread-safe y despierta inmediatamente a los clientes SSE."""
+        with self._cond_cambio:
             for clave, valor in kw.items():
                 if clave in CLAVES_ESTADO:
                     self._estado[clave] = valor
             self._secuencia += 1
+            self._cond_cambio.notify_all()
             return self._secuencia
 
     def obtener_estado(self):
@@ -309,7 +352,7 @@ class ServidorEstimulos(threading.Thread):
     # --- Ciclo de vida ---------------------------------------------------
     def run(self):
         try:
-            httpd = ThreadingHTTPServer((self.host, self.puerto), _ManejadorHTTP)
+            httpd = _FastThreadingHTTPServer((self.host, self.puerto), _ManejadorHTTP)
             httpd.daemon_threads = True
             httpd.estimulos = self
             httpd.log_accesos = self.log_accesos
@@ -340,8 +383,10 @@ class ServidorEstimulos(threading.Thread):
         return self.is_alive() and self.error is None and self._httpd is not None
 
     def detener(self, timeout=3.0):
-        """Cierre limpio: corta serve_forever, cierra el socket y hace join."""
+        """Cierre limpio: corta serve_forever, despierta SSE, cierra el socket y hace join."""
         self._parar.set()
+        with self._cond_cambio:
+            self._cond_cambio.notify_all()
         if self._httpd is not None:
             self._listo.wait(timeout)
             try:
@@ -440,6 +485,8 @@ class _ManejadorHTTP(BaseHTTPRequestHandler):
             self._servir_cliente()
         elif ruta == "/estado":
             self._servir_estado(consulta)
+        elif ruta == "/stream":
+            self._servir_stream(consulta)
         elif ruta == "/sync":
             self._servir_sync(consulta)
         elif ruta == "/favicon.ico":
@@ -475,6 +522,59 @@ class _ManejadorHTTP(BaseHTTPRequestHandler):
         estado = servidor.obtener_estado()
         estado["ts_epoch"] = _epoch_ms()
         self._json(200, estado)
+
+    def _servir_stream(self, consulta):
+        """Push de cambios en tiempo real por Server-Sent Events (SSE) para latencia < 5 ms."""
+        servidor = self.server.estimulos
+        token = servidor.token
+        if token:
+            recibido = consulta.get("t", [""])[0]
+            try:
+                valido = hmac.compare_digest(str(recibido), str(token))
+            except TypeError:
+                valido = recibido == token
+            if not valido:
+                self._json(403, {"error": "token inválido"})
+                return
+
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+            self.send_header("Connection", "keep-alive")
+            self.send_header("X-Accel-Buffering", "no")
+            self.end_headers()
+            if self.command == "HEAD":
+                return
+
+            last_seq = -1
+            idle_ticks = 0
+            while not servidor._parar.is_set():
+                estado = servidor.obtener_estado()
+                seq_cur = estado.get("secuencia", 0)
+                if seq_cur != last_seq:
+                    estado["ts_epoch"] = _epoch_ms()
+                    payload = "data: {}\n\n".format(json.dumps(estado, ensure_ascii=False)).encode("utf-8")
+                    self.wfile.write(payload)
+                    self.wfile.flush()
+                    last_seq = seq_cur
+                    idle_ticks = 0
+
+                with servidor._cond_cambio:
+                    while servidor._secuencia == last_seq and not servidor._parar.is_set():
+                        notified = servidor._cond_cambio.wait(timeout=1.0)
+                        if not notified:
+                            break
+                if servidor._parar.is_set():
+                    break
+                if servidor.secuencia == last_seq:
+                    idle_ticks += 1
+                    if idle_ticks >= 14:
+                        self.wfile.write(b": keepalive\n\n")
+                        self.wfile.flush()
+                        idle_ticks = 0
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+            pass
 
     def _servir_sync(self, consulta):
         # Eco del reloj del cliente para estimar el offset (NTP-lite).

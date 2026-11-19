@@ -196,13 +196,71 @@ for _f_pre, _d_pre in ((400, 35), (660, 80), (800, 100), (800, 200), (1200, 120)
     pass
 
 
+_BEEP_STREAM_LOCK = threading.RLock()
+_PERSISTENT_BEEP_STREAM = None
+_PERSISTENT_BEEP_SR = 44100
+
+
+def _cerrar_stream_beep_persistente():
+  global _PERSISTENT_BEEP_STREAM
+  with _BEEP_STREAM_LOCK:
+    st = _PERSISTENT_BEEP_STREAM
+    _PERSISTENT_BEEP_STREAM = None
+    if st is not None:
+      try:
+        st.stop()
+      except Exception:
+        pass
+      try:
+        st.close()
+      except Exception:
+        pass
+
+
+def _obtener_stream_beep_persistente(sr: int = 44100):
+  global _PERSISTENT_BEEP_STREAM, _PERSISTENT_BEEP_SR
+  import sounddevice as _sd
+  with _BEEP_STREAM_LOCK:
+    if _PERSISTENT_BEEP_STREAM is not None and _PERSISTENT_BEEP_SR == sr:
+      try:
+        if _PERSISTENT_BEEP_STREAM.active:
+          return _PERSISTENT_BEEP_STREAM
+      except Exception:
+        pass
+      _cerrar_stream_beep_persistente()
+    try:
+      st = _sd.OutputStream(samplerate=sr, channels=1, dtype='float32', blocksize=512, latency='low')
+      st.start()
+      _PERSISTENT_BEEP_STREAM = st
+      _PERSISTENT_BEEP_SR = sr
+      return st
+    except Exception:
+      try:
+        st = _sd.OutputStream(samplerate=sr, channels=1, dtype='float32', blocksize=512)
+        st.start()
+        _PERSISTENT_BEEP_STREAM = st
+        _PERSISTENT_BEEP_SR = sr
+        return st
+      except Exception:
+        _PERSISTENT_BEEP_STREAM = None
+        return None
+
+
 def _drain_and_play_beep_sync(audio_out: np.ndarray, sr: int = 44100):
-  """Reproduce el buffer completo con rampa Hann + cola de drenaje garantizando flush total del stream DMA."""
+  """Reproduce el buffer usando un OutputStream persistente para eliminar lag en Windows 10/11 y Linux."""
   global _ACTIVE_BEEP_REF
   _ACTIVE_BEEP_REF = audio_out
   import sounddevice as _sd
+  arr_col = np.ascontiguousarray(audio_out.reshape(-1, 1), dtype=np.float32)
+  with _BEEP_STREAM_LOCK:
+    st = _obtener_stream_beep_persistente(sr=sr)
+    if st is not None:
+      try:
+        st.write(arr_col)
+        return
+      except Exception:
+        _cerrar_stream_beep_persistente()
   try:
-    arr_col = np.ascontiguousarray(audio_out.reshape(-1, 1), dtype=np.float32)
     with _sd.OutputStream(samplerate=sr, channels=1, dtype='float32', blocksize=512) as b_stream:
       b_stream.write(arr_col)
     return
@@ -978,7 +1036,10 @@ class VoiceCuePlayer:
           try:
             if sys.platform == "win32":
               import winsound
-              winsound.PlaySound(wav_path, winsound.SND_FILENAME)
+              winsound.PlaySound(
+                wav_path,
+                winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT
+              )
               reproducido = True
             elif SD_AVAILABLE and data_w is not None and sr_w > 0:
               # Usar OutputStream dedicado con cola de silencio (120 ms) en vez de sd.play() global
@@ -1068,22 +1129,56 @@ class PreRollRecordingBuffer:
 
 
 class _TeeLogStream(QtCore.QObject):
-  """Intercepta stdout y stderr hacia la consola integrada sin perder la salida original."""
+  """Intercepta stdout y stderr hacia la consola integrada y guarda un log persistente en disco."""
   text_written = QtCore.Signal(str, bool)
 
-  def __init__(self, original_stream, is_err=False):
+  def __init__(self, original_stream, is_err=False, log_file_path=None, file_lock=None, shared_history=None):
     super().__init__()
     self._orig = original_stream
     self._is_err = is_err
+    self._log_file_path = log_file_path
+    self._file_lock = file_lock or threading.Lock()
+    if shared_history is not None:
+      self.history_buffer = shared_history
+    else:
+      from collections import deque as _tee_deque
+      self.history_buffer = _tee_deque(maxlen=6000)
+    self.encoding = getattr(original_stream, "encoding", "utf-8") or "utf-8"
+
+  def isatty(self):
+    return False
+
+  def fileno(self):
+    if self._orig is not None and hasattr(self._orig, "fileno"):
+      return self._orig.fileno()
+    raise OSError("Stream sin fileno")
 
   def write(self, text):
+    if not text:
+      return
+    s_txt = str(text)
     if self._orig is not None:
       try:
-        self._orig.write(text)
+        self._orig.write(s_txt)
       except Exception:
         pass
-    if text:
-      self.text_written.emit(str(text), self._is_err)
+    with self._file_lock:
+      self.history_buffer.append(s_txt)
+      if self._log_file_path:
+        try:
+          with open(self._log_file_path, "a", encoding="utf-8", errors="replace") as fh:
+            fh.write(s_txt)
+            fh.flush()
+        except Exception:
+          pass
+    try:
+      self.text_written.emit(s_txt, self._is_err)
+    except Exception:
+      pass
+
+  def get_full_text(self) -> str:
+    with self._file_lock:
+      return "".join(self.history_buffer)
 
   def flush(self):
     if self._orig is not None:
@@ -1094,16 +1189,19 @@ class _TeeLogStream(QtCore.QObject):
 
 
 class DiagnosticTerminalDialog(QtWidgets.QDialog):
-  """Ventana de Terminal / Consola de Errores integrada con acceso a shell del sistema."""
-  def __init__(self, parent=None):
+  """Ventana de Terminal / Consola de Errores integrada con seleccion libre, throttling y guardado a .txt."""
+  def __init__(self, parent=None, session_log_path=None):
     super().__init__(parent)
+    self.session_log_path = session_log_path
+    self._recent_err_msgs = {}
     self.setWindowTitle("Ñandú LSD - Consola de Diagnostico y Registro de Errores")
-    self.resize(900, 520)
+    self.resize(940, 560)
     self.setStyleSheet(f"""
       QDialog {{ background-color: {T['bg0']}; color: {T['ok']}; border: 2px solid {T['accent']}; font-family: 'Courier New', monospace; }}
-      QTextEdit {{ background-color: #080808; color: {T['ok']}; border: 1px solid {T['line']}; font-family: 'Consolas', 'Courier New', monospace; font-size: 12px; }}
+      QTextEdit {{ background-color: #080808; color: {T['ok']}; border: 1px solid {T['line']}; font-family: 'Consolas', 'Courier New', monospace; font-size: 12px; selection-background-color: #0ea5e9; selection-color: #ffffff; }}
       QPushButton {{ background-color: {T['bg1']}; color: {T['accent']}; border: 1px solid {T['accent']}; padding: 6px 14px; font-weight: bold; border-radius: 3px; }}
       QPushButton:hover {{ background-color: {T['accent']}; color: {T['bg0']}; }}
+      QCheckBox {{ color: {T['warn']}; font-weight: bold; }}
     """)
     layout = QtWidgets.QVBoxLayout(self)
 
@@ -1112,16 +1210,38 @@ class DiagnosticTerminalDialog(QtWidgets.QDialog):
     lbl_info.setStyleSheet(f"color: {T['accent']}; font-weight: bold; font-size: 13px;")
     hdr_layout.addWidget(lbl_info)
     hdr_layout.addStretch()
+    self.chk_pausar_scroll = QtWidgets.QCheckBox("Pausar Auto-Scroll")
+    self.chk_pausar_scroll.setChecked(False)
+    self.chk_pausar_scroll.setToolTip("Mantiene la vista fija para leer y seleccionar errores sin saltos.")
+    hdr_layout.addWidget(self.chk_pausar_scroll)
     layout.addLayout(hdr_layout)
+
+    if self.session_log_path:
+      lbl_path = QtWidgets.QLabel(f"Archivo de sesion en tiempo real: {self.session_log_path}")
+      lbl_path.setStyleSheet(f"color: {T['text_dim']}; font-size: 10.5px;")
+      lbl_path.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+      layout.addWidget(lbl_path)
 
     self.txt_log = QtWidgets.QTextEdit()
     self.txt_log.setReadOnly(True)
+    self.txt_log.setTextInteractionFlags(
+      QtCore.Qt.TextSelectableByMouse | QtCore.Qt.TextSelectableByKeyboard
+    )
+    if hasattr(self.txt_log.document(), "setMaximumBlockCount"):
+      try:
+        self.txt_log.document().setMaximumBlockCount(5000)
+      except Exception:
+        pass
     layout.addWidget(self.txt_log, stretch=1)
 
     btn_row = QtWidgets.QHBoxLayout()
-    self.btn_open_os_term = QtWidgets.QPushButton("Abrir Terminal del Sistema (Shell)")
+    self.btn_open_os_term = QtWidgets.QPushButton("Abrir Terminal del Sistema - Shell")
     self.btn_open_os_term.setStyleSheet(f"background-color: {T['bg2']}; color: {T['purple']}; border: 1px solid {T['purple']}; padding: 6px 14px; font-weight: bold;")
     self.btn_open_os_term.clicked.connect(self.launch_system_terminal)
+
+    self.btn_save_txt = QtWidgets.QPushButton("Guardar Log (.txt)")
+    self.btn_save_txt.setStyleSheet(f"background-color: {T['ok_bg']}; color: {T['ok']}; border: 1px solid {T['ok']}; padding: 6px 14px; font-weight: bold;")
+    self.btn_save_txt.clicked.connect(self.save_log_txt)
 
     self.btn_copy = QtWidgets.QPushButton("Copiar Todo")
     self.btn_copy.clicked.connect(self.copy_all)
@@ -1134,30 +1254,90 @@ class DiagnosticTerminalDialog(QtWidgets.QDialog):
 
     btn_row.addWidget(self.btn_open_os_term)
     btn_row.addStretch()
+    btn_row.addWidget(self.btn_save_txt)
     btn_row.addWidget(self.btn_copy)
     btn_row.addWidget(self.btn_clear)
     btn_row.addWidget(self.btn_close)
     layout.addLayout(btn_row)
 
-  def append_log(self, text: str, is_error: bool = False):
-    cursor = self.txt_log.textCursor()
-    cursor.movePosition(QtGui.QTextCursor.End)
+  def _format_for_line(self, text: str, is_error: bool) -> QtGui.QTextCharFormat:
     fmt = QtGui.QTextCharFormat()
     upper = text.upper()
-    if is_error or "ERROR" in upper or "TRACEBACK" in upper or "EXCEPTION" in upper:
-      fmt.setForeground(QtGui.QColor("#FF3333"))
-    elif "ADVERTENCIA" in upper or "WARN" in upper:
+    if is_error or "ERROR" in upper or "TRACEBACK" in upper or "EXCEPTION" in upper or "INDEXERROR" in upper:
+      fmt.setForeground(QtGui.QColor("#FF4D6D"))
+    elif "ADVERTENCIA" in upper or "WARN" in upper or "AVISO" in upper:
       fmt.setForeground(QtGui.QColor(T['warn']))
     elif "[SIMULADOR]" in upper or "[DEBUG" in upper or "[OK]" in upper:
       fmt.setForeground(QtGui.QColor(T['accent']))
     else:
       fmt.setForeground(QtGui.QColor(T['ok']))
-    cursor.insertText(text, fmt)
-    self.txt_log.setTextCursor(cursor)
-    self.txt_log.ensureCursorVisible()
+    return fmt
+
+  def append_log(self, text: str, is_error: bool = False):
+    if not text:
+      return
+    upper = text.upper()
+    es_linea_error = bool(
+      is_error or "ERROR" in upper or "TRACEBACK" in upper or "EXCEPTION" in upper or 'FILE "' in upper
+    )
+    msg_norm = text.strip()
+    ahora = time.monotonic()
+
+    # Deduplicacion / throttling de tracebacks repetidos en loop (ej. 20 Hz) para no trabar la UI ni romper seleccion
+    if es_linea_error and len(msg_norm) >= 4:
+      entry = self._recent_err_msgs.get(msg_norm)
+      if entry is not None and (ahora - entry["last_t"]) < 2.0:
+        entry["count"] += 1
+        entry["last_t"] = ahora
+        if entry["count"] % 25 == 0:
+          snippet = msg_norm[:110]
+          text = f"\n[Consola - Error repetido x{entry['count']}] {snippet}\n"
+        else:
+          return
+      else:
+        if len(self._recent_err_msgs) > 24:
+          self._recent_err_msgs.clear()
+        self._recent_err_msgs[msg_norm] = {"first_t": ahora, "last_t": ahora, "count": 1}
+
+    cursor_actual = self.txt_log.textCursor()
+    tiene_seleccion = cursor_actual.hasSelection()
+    sb = self.txt_log.verticalScrollBar()
+    old_scroll = sb.value()
+    estaba_abajo = (old_scroll >= sb.maximum() - 15)
+
+    doc_cursor = QtGui.QTextCursor(self.txt_log.document())
+    doc_cursor.movePosition(QtGui.QTextCursor.End)
+    doc_cursor.insertText(text, self._format_for_line(text, is_error))
+
+    # Nunca tocar self.txt_log.setTextCursor(...) para preservar seleccion activa de mouse o teclado
+    if not tiene_seleccion and not self.chk_pausar_scroll.isChecked() and estaba_abajo:
+      sb.setValue(sb.maximum())
+    else:
+      sb.setValue(old_scroll)
 
   def copy_all(self):
-    QtWidgets.QApplication.clipboard().setText(self.txt_log.toPlainText())
+    texto = self.txt_log.toPlainText()
+    cb = QtWidgets.QApplication.clipboard()
+    cb.setText(texto, QtGui.QClipboard.Clipboard)
+    if cb.supportsSelection():
+      cb.setText(texto, QtGui.QClipboard.Selection)
+    self.btn_copy.setText("Copiado al Portapapeles")
+    QtCore.QTimer.singleShot(1500, lambda: self.btn_copy.setText("Copiar Todo"))
+
+  def save_log_txt(self):
+    sugerido = f"autoforge_daq_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+    ruta, _ = QtWidgets.QFileDialog.getSaveFileName(
+      self, "Guardar Log de Consola", sugerido, "Archivos de texto (*.txt);;Archivos log (*.log);;Todos (*.*)"
+    )
+    if not ruta:
+      return
+    try:
+      contenido = self.txt_log.toPlainText()
+      with open(ruta, "w", encoding="utf-8") as fh:
+        fh.write(contenido)
+      QtWidgets.QMessageBox.information(self, "Log Guardado", f"Log guardado correctamente en:\n{ruta}")
+    except Exception as exc:
+      QtWidgets.QMessageBox.warning(self, "Error al Guardar Log", f"No se pudo guardar el archivo:\n{exc}")
 
   def launch_system_terminal(self):
     import shutil
@@ -1321,10 +1501,36 @@ class DAQThread(QThread):
         finally:
             self._is_running = False
 
-from numba import jit
+try:
+    from numba import jit
+    _NUMBA_DISPONIBLE = True
+except Exception:
+    _NUMBA_DISPONIBLE = False
+    def jit(*args, **kwargs):
+        def _decorador(func):
+            return func
+        return _decorador
 
-@jit(nopython=True, nogil=True)
-def calculate_rms_envelope(buffer: np.ndarray, window_size: int) -> np.ndarray:
+
+def _calculate_rms_envelope_numpy(buffer: np.ndarray, window_size: int) -> np.ndarray:
+    """Fallback vectorizado en NumPy puro si Numba no puede compilar en Windows."""
+    arr = np.asarray(buffer, dtype=np.float64)
+    n = len(arr)
+    out = np.zeros(n, dtype=np.float64)
+    if n == 0 or window_size <= 0:
+        return out
+    arr_clean = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
+    sq = arr_clean * arr_clean
+    cs = np.cumsum(sq, dtype=np.float64)
+    k = min(int(window_size), n)
+    out[:k] = np.sqrt(np.maximum(0.0, cs[:k] / np.arange(1, k + 1, dtype=np.float64)))
+    if n > k:
+        win_sums = cs[k:] - cs[:-k]
+        out[k:] = np.sqrt(np.maximum(0.0, win_sums / float(k)))
+    return out
+
+
+def _calculate_rms_envelope_jit_impl(buffer: np.ndarray, window_size: int) -> np.ndarray:
     """
     Calcula la envolvente RMS sobre un buffer continuo usando una ventana deslizante.
     """
@@ -1353,8 +1559,15 @@ def calculate_rms_envelope(buffer: np.ndarray, window_size: int) -> np.ndarray:
         
     return out
 
-# --- NUEVO: Pre-compilar Numba para evitar lag al activarlo por primera vez ---
-_dummy = calculate_rms_envelope(np.zeros(10, dtype=np.float64), 5)
+
+if _NUMBA_DISPONIBLE:
+    try:
+        calculate_rms_envelope = jit(nopython=True, nogil=True)(_calculate_rms_envelope_jit_impl)
+        _dummy = calculate_rms_envelope(np.zeros(10, dtype=np.float64), 5)
+    except Exception:
+        calculate_rms_envelope = _calculate_rms_envelope_numpy
+else:
+    calculate_rms_envelope = _calculate_rms_envelope_numpy
 
 
 # =============================================================================
@@ -1584,10 +1797,10 @@ def exportar_segmentos_dataset_y_fatiga(
       gain = float(factores_calibracion[ch]) if (factores_calibracion and ch < len(factores_calibracion) and factores_calibracion[ch] > 0) else 495.0
       uV_matrix[ch, :] = (raw_concat[ch, :] / gain) * 1e6
 
-    # Indexar sincronización por número de pulso
+    # Indexar sincronización por número de pulso (compatible con ambas convenciones de clave)
     sync_by_pulse = {}
     for s_ev in (sync_evaluation_log or []):
-      p_num = int(s_ev.get("pulso_asociado", 0) or 0)
+      p_num = int(s_ev.get("pulso_asociado", s_ev.get("cue_pulso_idx", 0)) or 0)
       if p_num > 0:
         sync_by_pulse[p_num] = s_ev
 
@@ -1596,18 +1809,25 @@ def exportar_segmentos_dataset_y_fatiga(
     rms_history_per_ch = {ch: [] for ch in emg_chs}
 
     rows = []
-    for ev in vocal_cue_log:
-      pulso_id = int(ev.get("pulso", 0) or 0)
+    for idx_ev, ev in enumerate(vocal_cue_log, 1):
+      pulso_id = int(ev.get("pulso", ev.get("pulso_vocal_idx", idx_ev)) or idx_ev)
       ciclo = int(ev.get("ciclo", 1) or 1)
-      vocal = str(ev.get("vocal", "")).upper()
-      sample_beat = int(ev.get("sample_idx", 0) or 0)
-      tau_s = float(ev.get("tau_s", 2.0) or 2.0)
-      t_beat_s = float(ev.get("t_rel_s", 0.0) or 0.0)
+      vocal = str(ev.get("vocal", ev.get("palabra", "")) or "").upper()
+      tau_s = float(ev.get("tau_s", ev.get("intervalo_s", 2.0)) or 2.0)
+      t_beat_raw = ev.get("t_rel_s", ev.get("t_wav_s", ev.get("t_daq_s", 0.0)))
+      t_beat_s = float(t_beat_raw if t_beat_raw is not None else 0.0)
+      sample_beat_raw = ev.get("sample_idx", ev.get("sample_daq", None))
+      if sample_beat_raw is not None:
+        sample_beat = int(sample_beat_raw)
+      else:
+        sample_beat = int(round(t_beat_s * float(sample_rate)))
 
       s_info = sync_by_pulse.get(pulso_id, {})
       t_onset_s = s_info.get("t_onset_s", None)
-      delta_sync_ms = s_info.get("delta_sync_ms", None)
-      clasif_sync = str(s_info.get("clasificacion", "SIN_DETECCION_ONSET"))
+      delta_sync_ms = s_info.get("delta_sync_ms", s_info.get("sync_latency_ms", None))
+      if t_onset_s is None and delta_sync_ms is not None:
+        t_onset_s = t_beat_s + (float(delta_sync_ms) / 1000.0)
+      clasif_sync = str(s_info.get("clasificacion", "ONSET_DETECTADO" if t_onset_s is not None else "SIN_DETECCION_ONSET"))
 
       if t_onset_s is not None:
         sample_onset = int(round((float(t_onset_s) - t_beat_s) * sample_rate)) + sample_beat
@@ -3165,7 +3385,9 @@ class VentanaEstimulosExterna(QtWidgets.QWidget):
       p_txt = "" if grabando else "ESPERANDO..."
     sig_txt = str(palabra_siguiente or "").upper()
     vocal_colores = {'A': '#FF3355', 'E': '#00B4D8', 'I': '#39FF14', 'O': '#C77DFF', 'U': '#FFD166'}
+    vocal_rgb = {'A': '255, 51, 85', 'E': '0, 180, 216', 'I': '57, 255, 20', 'O': '199, 125, 255', 'U': '255, 209, 102'}
     v_col = vocal_colores.get(p_txt, '#00FFFF')
+    v_rgb = vocal_rgb.get(p_txt, '0, 255, 255')
     if count_in is not None and int(count_in) > 0:
       self.lbl_countin.setText(f"CUENTA REGRESIVA: {int(count_in)} — {instruccion_fase or 'PREPÁRATE'}")
       self.lbl_countin.setStyleSheet("color: #FF8800; font-size: 28px; font-weight: 900;")
@@ -3176,12 +3398,23 @@ class VentanaEstimulosExterna(QtWidgets.QWidget):
       self.lbl_countin.setText(str(instruccion_fase or "SIGUE EL RITMO DEL METRÓNOMO"))
       self.lbl_countin.setStyleSheet("color: #00FFCC; font-size: 24px; font-weight: 900;")
 
+    self.lbl_palabra.setWordWrap(True)
     self.lbl_palabra.setText(f"/{p_txt}/" if (p_txt and len(p_txt) <= 3) else p_txt)
-    if flash:
-      self.lbl_palabra.setStyleSheet("color: #FFFFFF; background-color: rgba(0, 255, 255, 0.22); border: 3px solid #FFFFFF; border-radius: 12px; font-size: 150px; font-weight: 900;")
-      self.frame_pulso.setStyleSheet("background-color: #96FFFF; border: 3px solid #FFFFFF; border-radius: 10px;")
+    if len(p_txt) <= 3:
+      fsize = 148 if flash else 140
+    elif len(p_txt) <= 12:
+      fsize = 68
     else:
-      self.lbl_palabra.setStyleSheet(f"color: {v_col}; background-color: transparent; border: none; font-size: 140px; font-weight: 900;")
+      fsize = 44
+    if flash:
+      # Destello no epileptico: mantener fondo oscuro y resaltar suavemente con color canonico
+      self.lbl_palabra.setStyleSheet(
+        f"color: {v_col}; background-color: rgba({v_rgb}, 0.14); "
+        f"border: 2px solid {v_col}; border-radius: 14px; font-size: {fsize}px; font-weight: 900; padding: 8px 20px;"
+      )
+      self.frame_pulso.setStyleSheet(f"background-color: rgba({v_rgb}, 0.28); border: 2px solid {v_col}; border-radius: 10px;")
+    else:
+      self.lbl_palabra.setStyleSheet(f"color: {v_col}; background-color: transparent; border: none; font-size: {fsize}px; font-weight: 900; padding: 8px 20px;")
       self.frame_pulso.setStyleSheet("background-color: #0d1414; border: 2px solid #004444; border-radius: 10px;")
     prox_line = f"PRÓXIMA VOCAL: /{sig_txt}/" if sig_txt else ""
     if subtitulo_fase:
@@ -4026,15 +4259,68 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.measure_layout.setContentsMargins(6, 3, 6, 3)
     self.measure_layout.setSpacing(6)
 
-    # Inicializar Consola de Diagnostico Integrada
+    # Inicializar Consola de Diagnostico Integrada con log persistente en disco y captura de excepciones no manejadas
     self._error_count = 0
-    self.terminal_dialog = DiagnosticTerminalDialog(self)
-    self._stdout_tee = _TeeLogStream(sys.stdout, is_err=False)
-    self._stderr_tee = _TeeLogStream(sys.stderr, is_err=True)
+    self._session_log_path = None
+    try:
+      _logs_dir = os.path.join(str(get_project_root()), "logs")
+      os.makedirs(_logs_dir, exist_ok=True)
+      self._session_log_path = os.path.join(
+        _logs_dir, f"autoforge_daq_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+      )
+    except Exception:
+      self._session_log_path = None
+    from collections import deque as _log_deque
+    self._shared_log_history = _log_deque(maxlen=6000)
+    self._log_file_lock = threading.Lock()
+    self.terminal_dialog = DiagnosticTerminalDialog(self, session_log_path=self._session_log_path)
+    self._stdout_tee = _TeeLogStream(
+      sys.stdout, is_err=False, log_file_path=self._session_log_path,
+      file_lock=self._log_file_lock, shared_history=self._shared_log_history
+    )
+    self._stderr_tee = _TeeLogStream(
+      sys.stderr, is_err=True, log_file_path=self._session_log_path,
+      file_lock=self._log_file_lock, shared_history=self._shared_log_history
+    )
     self._stdout_tee.text_written.connect(self._on_log_captured)
     self._stderr_tee.text_written.connect(self._on_log_captured)
     sys.stdout = self._stdout_tee
     sys.stderr = self._stderr_tee
+
+    self._orig_sys_excepthook = sys.excepthook
+    def _nandu_excepthook(exc_type, exc_val, exc_tb):
+      import traceback as _tb
+      msg = "".join(_tb.format_exception(exc_type, exc_val, exc_tb))
+      try:
+        self._stderr_tee.write(f"\n[EXCEPCION NO CAPTURADA]\n{msg}\n")
+      except Exception:
+        pass
+      if callable(self._orig_sys_excepthook):
+        try:
+          self._orig_sys_excepthook(exc_type, exc_val, exc_tb)
+        except Exception:
+          pass
+    sys.excepthook = _nandu_excepthook
+
+    if hasattr(threading, "excepthook"):
+      self._orig_thread_excepthook = threading.excepthook
+      def _nandu_thread_excepthook(args):
+        import traceback as _tb
+        msg = "".join(_tb.format_exception(args.exc_type, args.exc_value, args.exc_traceback))
+        t_name = getattr(args.thread, "name", "Thread")
+        try:
+          self._stderr_tee.write(f"\n[EXCEPCION EN HILO {t_name}]\n{msg}\n")
+        except Exception:
+          pass
+        if callable(self._orig_thread_excepthook):
+          try:
+            self._orig_thread_excepthook(args)
+          except Exception:
+            pass
+      threading.excepthook = _nandu_thread_excepthook
+
+    if self._session_log_path:
+      print(f"[Consola] Log de sesion activo en: {self._session_log_path}")
 
   def _setup_ui_config_panel(self):
     """Puebla el Panel 1 (Hardware y Canales) y crea el Metronomo fijo lateral."""
@@ -4749,19 +5035,28 @@ class RealTimePlotter(QtWidgets.QWidget):
       for i in canales_activos
     ]
     try:
-      # Abrir el Asistente de Alineacion 3D con espejo y Ghost Overlay para mirarse y colocar electrodos
-      confirmado = self.photometry_mgr.open_alignment_dialog(
-        parent_widget=self,
-        nombres_musculos=nombres_canales,
-        active_channel_indices=canales_activos,
-        sujeto=sujeto,
-        prueba=prueba,
-      )
+      # Unificar con el Asistente Lineal de Fotometria 3D (4 fotos primero + marcado libre de electrodos)
+      if hasattr(self.photometry_mgr, 'open_asistente_lineal'):
+        confirmado = self.photometry_mgr.open_asistente_lineal(
+          parent_widget=self,
+          nombres_musculos=nombres_canales,
+          active_channel_indices=canales_activos,
+          sujeto=sujeto,
+          prueba=prueba,
+        )
+      else:
+        confirmado = self.photometry_mgr.open_alignment_dialog(
+          parent_widget=self,
+          nombres_musculos=nombres_canales,
+          active_channel_indices=canales_activos,
+          sujeto=sujeto,
+          prueba=prueba,
+        )
       if confirmado:
         self._photometry_session_active = True
-        print("[Fotometria] Alineacion 3D confirmada por el usuario.")
+        print("[Fotometria] Asistente 3D confirmado por el usuario.")
     except Exception as exc:
-      print(f"[FOTOMETRIA-AVISO] Excepcion al abrir alineacion 3D: {exc}")
+      print(f"[FOTOMETRIA-AVISO] Excepcion al abrir asistente de fotometria 3D: {exc}")
 
   def _construir_resumen_protocolo_dict(self, modo_ejecucion: str = None) -> dict:
     """
@@ -5027,23 +5322,34 @@ class RealTimePlotter(QtWidgets.QWidget):
       f"Resumen Fatiga Muscular (MDF): {sec.get('resumen_dataset_y_fatiga', {}).get('fatiga_muscular_por_canal', {})}",
       f"Total Eventos Vocales        : {len(meta.get('eventos_vocales_metronomo', []) or [])}",
     ])
-    ev_vocales = meta.get("eventos_vocales_metronomo", []) or []
-    for ev in ev_vocales:
+    ev_vocales = meta.get("eventos_vocales_metronomo") or list(getattr(self, "vocal_cue_log", []) or [])
+    for idx_ev, ev in enumerate(ev_vocales, 1):
+      p_ev = int(ev.get('pulso', ev.get('pulso_vocal_idx', idx_ev)) or idx_ev)
+      v_ev = ev.get('vocal', ev.get('palabra', ''))
+      t_r = float(ev.get('t_rel_s', ev.get('t_wav_s', ev.get('t_daq_s', 0.0))) or 0.0)
+      s_i = ev.get('sample_idx', ev.get('sample_daq', 0))
+      tau_v = float(ev.get('tau_s', ev.get('intervalo_s', 0.0)) or 0.0)
+      jit_v = ev.get('jitter_enabled', ev.get('jitter_activo', False))
       lines.append(
-        f"  Pulso {int(ev.get('pulso', 0)):03d} | Ciclo {int(ev.get('ciclo', 1)):02d} | "
-        f"Vocal: /{ev.get('vocal', '')}/ | t_rel={float(ev.get('t_rel_s', 0.0)):8.3f}s | "
-        f"sample={ev.get('sample_idx', 0)} | tau={float(ev.get('tau_s', 0.0)):.3f}s | "
-        f"jitter={'SÍ' if ev.get('jitter_enabled') else 'NO'}"
+        f"  Pulso {p_ev:03d} | Ciclo {int(ev.get('ciclo', 1) or 1):02d} | "
+        f"Vocal: /{v_ev}/ | t_rel={t_r:8.3f}s | "
+        f"sample={s_i} | tau={tau_v:.3f}s | "
+        f"jitter={'SÍ' if jit_v else 'NO'}"
       )
 
-    sync_list = meta.get("sincronizacion_sujeto_vs_metronomo", []) or []
+    sync_list = meta.get("sincronizacion_sujeto_vs_metronomo") or list(getattr(self, "sync_evaluation_log", []) or [])
     if sync_list:
       lines.append("\nEvaluación de Sincronización Fonatoria (Onset Sujeto vs. Pulso Metrónomo):")
       for s_ev in sync_list:
+        p_as = int(s_ev.get('pulso_asociado', s_ev.get('cue_pulso_idx', 0)) or 0)
+        v_s = s_ev.get('vocal', s_ev.get('palabra', ''))
+        t_b = float(s_ev.get('t_beat_s', s_ev.get('cue_t_wav_s', 0.0)) or 0.0)
+        t_o = float(s_ev.get('t_onset_s', t_b) or t_b)
+        d_ms = float(s_ev.get('delta_sync_ms', s_ev.get('sync_latency_ms', 0.0)) or 0.0)
         lines.append(
-          f"  Pulso {int(s_ev.get('pulso_asociado', 0)):03d} (/{s_ev.get('vocal', '')}/) | "
-          f"t_beat={float(s_ev.get('t_beat_s', 0.0)):7.3f}s | t_onset={float(s_ev.get('t_onset_s', 0.0)):7.3f}s | "
-          f"Delta={float(s_ev.get('delta_sync_ms', 0.0)):+7.1f} ms [{s_ev.get('clasificacion', '')}]"
+          f"  Pulso {p_as:03d} (/{v_s}/) | "
+          f"t_beat={t_b:7.3f}s | t_onset={t_o:7.3f}s | "
+          f"Delta={d_ms:+7.1f} ms [{s_ev.get('clasificacion', '')}]"
         )
 
     if sec.get("directorios_sesion"):
@@ -5889,6 +6195,14 @@ class RealTimePlotter(QtWidgets.QWidget):
   def set_controls_enabled(self, enabled):
     """Habilita o deshabilita todos los controles excepto el de Start/Stop Acq."""
     self.btn_record.setEnabled(enabled)
+    if hasattr(self, 'btn_pause'):
+      if not enabled:
+        self.btn_pause.blockSignals(True)
+        self.btn_pause.setChecked(False)
+        self.btn_pause.blockSignals(False)
+        self.btn_pause.setText("PAUSAR")
+        self.is_paused = False
+      self.btn_pause.setEnabled(bool(enabled))
     # btn_export se maneja por separado
     self.chk_autoscroll.setEnabled(enabled)
     self.chk_trigger.setEnabled(enabled)
@@ -6186,8 +6500,57 @@ class RealTimePlotter(QtWidgets.QWidget):
     except Exception as e:
       print(f"Advertencia: No se pudo guardar config para el metrónomo. Error: {e}")
 
+  def _asegurar_dimension_arreglos_canales(self):
+    """Garantiza que todos los arreglos indexados por canal tengan longitud >= self.NUM_CANALES."""
+    n = max(0, int(getattr(self, 'NUM_CANALES', 0) or 0))
+    list_attrs = (
+      'rt_peaks', 'stats_time', 'stats_snr', 'stats_noise_mean', 'stats_noise_std',
+      'noise_data_accumulated', 'raw_noise_accumulated', 'final_raw_noise_accumulated'
+    )
+    for attr in list_attrs:
+      cur = getattr(self, attr, None)
+      if not isinstance(cur, list):
+        setattr(self, attr, [[] for _ in range(n)])
+      elif len(cur) < n:
+        cur.extend([[] for _ in range(n - len(cur))])
+
+    float_attrs = (
+      'rt_last_noise_eval', 'initial_noise_mean', 'initial_noise_std',
+      'noise_levels', 'line_noise_50hz_uV', 'global_snr_acumulado'
+    )
+    for attr in float_attrs:
+      cur = getattr(self, attr, None)
+      if not isinstance(cur, list):
+        setattr(self, attr, [0.0] * n)
+      elif len(cur) < n:
+        cur.extend([0.0] * (n - len(cur)))
+
+    cnt = getattr(self, 'global_snr_count', None)
+    if not isinstance(cnt, list):
+      self.global_snr_count = [0] * n
+    elif len(cnt) < n:
+      cnt.extend([0] * (n - len(cnt)))
+
+  def _guardar_log_consola_en_medicion(self, output_dir: str):
+    """Guarda una copia completa del log de la consola DAQ dentro de la carpeta de medicion."""
+    if not output_dir or not os.path.isdir(str(output_dir)):
+      return
+    try:
+      contenido = ""
+      if hasattr(self, '_stdout_tee') and hasattr(self._stdout_tee, 'get_full_text'):
+        contenido = self._stdout_tee.get_full_text()
+      elif hasattr(self, 'terminal_dialog') and hasattr(self.terminal_dialog, 'txt_log'):
+        contenido = self.terminal_dialog.txt_log.toPlainText()
+      if contenido:
+        log_path = os.path.join(str(output_dir), "consola_daq_log.txt")
+        with open(log_path, "w", encoding="utf-8", errors="replace") as fh:
+          fh.write(contenido)
+    except Exception as exc_log:
+      print(f"[Consola] Aviso al guardar consola_daq_log.txt: {exc_log}")
+
   def setup_gui_for_channels(self):
     """Limpia y re-crea los elementos de la GUI que dependen del número de canales."""
+    self._asegurar_dimension_arreglos_canales()
     # Limpiar curvas, núcleos neón, labels de medida y combo de trigger
     for curva in self.curvas: self.plot.removeItem(curva)
     for c_core in getattr(self, 'curvas_neon_core', []): self.plot.removeItem(c_core)
@@ -6659,12 +7022,14 @@ class RealTimePlotter(QtWidgets.QWidget):
         while True:
             item = self.beep_queue.get()
             if item is None:
+                _cerrar_stream_beep_persistente()
                 break
             # Si hay beeps viejos encolados por jitter del SO, saltar al más reciente para mantener fase exacta
             while not self.beep_queue.empty():
                 try:
                     nxt = self.beep_queue.get_nowait()
                     if nxt is None:
+                        _cerrar_stream_beep_persistente()
                         return
                     item = nxt
                 except Exception:
@@ -6799,23 +7164,28 @@ class RealTimePlotter(QtWidgets.QWidget):
 
   def _renderizar_visor_vocal(self, palabra_actual: str, pulso_actual: int, total_pulsos: int,
                               palabra_siguiente: str = "", ciclo_actual: int = 1, total_ciclos: int = 1,
-                              flash: bool = False, pre_cambio: bool = False):
+                              flash: bool = False, pre_cambio: bool = False, mostrar_vocal=None):
     """
     Actualiza el visor de vocales (lbl_recording_space) con:
-    - Destello visual (flash=True) sincronizado al golpe del metrónomo para que el sujeto perciba el pulso en la propia letra.
-    - En Secuencia Continua (consigna 11-2026): la pantalla dice la vocal en el pulso, luego desaparece y
-      NO anuncia la próxima vocal (sin tira de secuencia, sin cartel SIGUIENTE ni pre-aviso).
+    - Destello suave no epileptico (flash=True) al inicio del pulso sin flashear toda la pantalla de blanco.
+    - En Secuencia Continua: la vocal permanece visible durante el 65% del periodo tau
+      (flash=False, mostrar_vocal=True) y luego desaparece el 35% restante antes del siguiente pulso,
+      sin anunciar la proxima vocal.
     """
     if not hasattr(self, 'lbl_recording_space'):
       return
     p_act = str(palabra_actual or "").upper()
     p_sig = str(palabra_siguiente or "").upper()
-    if getattr(self, 'is_autoforge_continuo', False):
-      # Consigna Secuencia Continua: mostrar la vocal sólo en el pulso (flash), ocultarla entre pulsos
-      # y suprimir todo aviso de la vocal siguiente.
+    if mostrar_vocal is None:
+      mostrar_vocal = bool(getattr(self, '_visor_mostrar_vocal', True))
+    else:
+      mostrar_vocal = bool(mostrar_vocal)
+    if getattr(self, 'is_autoforge_continuo', False) and getattr(self, 'is_recording', False):
+      # Consigna Secuencia Continua: sin tira de secuencia ni vocal siguiente;
+      # mostrar la vocal por 65% del periodo y ocultarla luego hasta el proximo beat.
       p_sig = ""
       pre_cambio = False
-      if not flash:
+      if not mostrar_vocal:
         p_act = ""
     vocal_colores = {'A': T['err'], 'E': '#00B4D8', 'I': T['ok'], 'O': T['purple'], 'U': T['warn']}
     vocal_rgb = {'A': '255, 51, 85', 'E': '0, 180, 216', 'I': '57, 255, 20', 'O': '199, 125, 255', 'U': '255, 209, 102'}
@@ -6831,14 +7201,15 @@ class RealTimePlotter(QtWidgets.QWidget):
       tira_html = self._construir_tira_secuencia_html(words, active_seq_idx)
 
     if flash:
+      # Highlight suave no epileptico en el color canonico de la vocal, manteniendo fondo oscuro
       self.lbl_recording_space.setStyleSheet(
-        f"background-color: rgba({v_rgb}, 0.38); color: {T['white']}; font-family: 'Courier New', monospace; "
-        f"border: 4px solid {T['white']}; border-radius: 8px; padding: 4px;"
+        f"background-color: #050510; color: {v_col}; font-family: 'Courier New', monospace; "
+        f"border: 3px solid {v_col}; border-radius: 8px; padding: 4px;"
       )
-      badge_top = f"<span style='background-color:{T['white']}; color:{T['bg0']}; font-size:15px; font-weight:900; padding:1px 10px; border-radius:3px;'>&#9733; ¡PRONUNCIA AHORA! &mdash; PULSO {pulso_actual}/{total_pulsos} &#9733;</span>"
-      letra_style = f"font-size: 76px; font-weight: 900; color: {T['white']};"
+      badge_top = f"<span style='background-color: rgba({v_rgb}, 0.22); color:{v_col}; border: 1px solid {v_col}; font-size:15px; font-weight:900; padding:2px 12px; border-radius:4px;'>¡PRONUNCIA AHORA! &mdash; PULSO {pulso_actual}/{total_pulsos}</span>"
+      letra_style = f"font-size: 74px; font-weight: 900; color: {v_col}; background-color: rgba({v_rgb}, 0.14); border: 1px solid {v_col}; border-radius: 8px; padding: 0 12px;"
     else:
-      b_col = T['warn'] if pre_cambio else v_col
+      b_col = T['warn'] if pre_cambio else (v_col if p_act else T['border'])
       self.lbl_recording_space.setStyleSheet(
         f"background-color: #050510; color: {v_col}; font-family: 'Courier New', monospace; "
         f"border: 2px solid {b_col}; border-radius: 6px; padding: 4px;"
@@ -6848,7 +7219,7 @@ class RealTimePlotter(QtWidgets.QWidget):
       elif p_act:
         badge_top = f"<span style='color:{T['text_dim']}; font-size:14px; font-weight:bold;'>MANTÉN LA VOCAL &mdash; PULSO {pulso_actual}/{total_pulsos} (CICLO {ciclo_actual}/{total_ciclos})</span>"
       else:
-        badge_top = f"<span style='color:{T['text_dim']}; font-size:14px; font-weight:bold;'>PULSO {pulso_actual}/{total_pulsos} (CICLO {ciclo_actual}/{total_ciclos})</span>"
+        badge_top = f"<span style='color:{T['text_dim']}; font-size:14px; font-weight:bold;'>ESPERA EL PRÓXIMO PULSO &mdash; {pulso_actual}/{total_pulsos} (CICLO {ciclo_actual}/{total_ciclos})</span>"
       letra_style = f"font-size: 68px; font-weight: 900; color: {v_col};"
 
     sig_html = (
@@ -6870,7 +7241,7 @@ class RealTimePlotter(QtWidgets.QWidget):
       prog_compas = max(0.0, min(1.0, (sub_p + 1) / float(n_sub)))
       circ = 188.5
       offset_circ = circ * (1.0 - prog_compas)
-      ring_col = T['white'] if flash else T['accent']
+      ring_col = v_col if (flash and p_act) else T['accent']
       ring_svg = (
         f"<svg width='64' height='64' viewBox='0 0 70 70' style='vertical-align:middle; margin-right:12px;'>"
         f"<circle stroke='#122323' stroke-width='6' fill='transparent' r='30' cx='35' cy='35'/>"
@@ -6892,13 +7263,13 @@ class RealTimePlotter(QtWidgets.QWidget):
       )
     self.lbl_recording_space.setText(html)
     if flash:
-      inst_txt = f"¡PRONUNCIA /{p_act}/ AHORA!"
+      inst_txt = f"¡PRONUNCIA /{p_act}/ AHORA!" if p_act else "¡PRONUNCIA AHORA!"
     elif pre_cambio and p_sig:
       inst_txt = f"ATENCIÓN: PRÓXIMO PULSO CAMBIA A /{p_sig}/"
     elif p_act:
       inst_txt = f"MANTÉN LA VOCAL /{p_act}/ AL RITMO DEL METRÓNOMO"
     else:
-      inst_txt = "SIGUE EL RITMO DEL METRÓNOMO"
+      inst_txt = "SIGUE EL RITMO DEL METRÓNOMO (ESPERA EL PRÓXIMO PULSO)"
     sub_txt = f"Pulso {pulso_actual} de {total_pulsos} — Ciclo {ciclo_actual} de {total_ciclos}"
     self._publicar_estado_display_remoto(
       palabra=p_act,
@@ -6918,32 +7289,56 @@ class RealTimePlotter(QtWidgets.QWidget):
 
   def _disparar_destello_vocal(self, palabra_actual: str, pulso_actual: int, total_pulsos: int,
                                palabra_siguiente: str = "", ciclo_actual: int = 1, total_ciclos: int = 1):
-    """Activa el destello intenso durante 200 ms cuando suena el pulso del metrónomo y luego vuelve al estado normal."""
+    """Activa el highlight por 200 ms al pulso y mantiene la vocal visible 65% de tau en Secuencia Continua."""
     self._current_autoforge_word = str(palabra_actual or "").upper()
+    self._flash_beat_token = int(getattr(self, '_flash_beat_token', 0)) + 1
+    beat_token = self._flash_beat_token
+    self._visor_mostrar_vocal = True
     self._ultimo_estado_visor = (palabra_actual, pulso_actual, total_pulsos, palabra_siguiente, ciclo_actual, total_ciclos)
     self._renderizar_visor_vocal(
       palabra_actual, pulso_actual, total_pulsos,
       palabra_siguiente=palabra_siguiente, ciclo_actual=ciclo_actual, total_ciclos=total_ciclos,
-      flash=True, pre_cambio=False
+      flash=True, pre_cambio=False, mostrar_vocal=True
     )
     def _apagar_destello():
-      if not getattr(self, 'is_recording', False):
+      if getattr(self, 'is_paused', False) or not getattr(self, 'is_recording', False):
+        return
+      if int(getattr(self, '_flash_beat_token', 0)) != beat_token:
         return
       st = getattr(self, '_ultimo_estado_visor', None)
       if st and st[1] == pulso_actual:
         self._renderizar_visor_vocal(
           st[0], st[1], st[2],
           palabra_siguiente=st[3], ciclo_actual=st[4], total_ciclos=st[5],
-          flash=False, pre_cambio=False
+          flash=False, pre_cambio=False, mostrar_vocal=bool(getattr(self, '_visor_mostrar_vocal', True))
         )
     QtCore.QTimer.singleShot(200, _apagar_destello)
+
+    if getattr(self, 'is_autoforge_continuo', False) and getattr(self, 'is_recording', False):
+      bpm_cur = float(self.spin_bpm.value()) if hasattr(self, 'spin_bpm') else 30.0
+      tau_s = float(getattr(self, 'current_beat_tau_s', 60.0 / max(1.0, bpm_cur)) or (60.0 / max(1.0, bpm_cur)))
+      dur_visible_ms = int(max(450.0, min(0.65 * tau_s * 1000.0, tau_s * 1000.0 - 250.0)))
+      def _ocultar_vocal_fin_ventana():
+        if getattr(self, 'is_paused', False) or not getattr(self, 'is_recording', False):
+          return
+        if int(getattr(self, '_flash_beat_token', 0)) != beat_token:
+          return
+        self._visor_mostrar_vocal = False
+        st = getattr(self, '_ultimo_estado_visor', None)
+        if st and st[1] == pulso_actual:
+          self._renderizar_visor_vocal(
+            st[0], st[1], st[2],
+            palabra_siguiente=st[3], ciclo_actual=st[4], total_ciclos=st[5],
+            flash=False, pre_cambio=False, mostrar_vocal=False
+          )
+      QtCore.QTimer.singleShot(dur_visible_ms, _ocultar_vocal_fin_ventana)
 
   def _metronomo_beep_activo(self) -> bool:
     """True si el beep audible del metrónomo está habilitado (chk_metro_beep)."""
     return bool(hasattr(self, 'chk_metro_beep') and self.chk_metro_beep.isChecked())
 
   def on_metro_beat(self):
-    if not self.metro_is_running:
+    if not self.metro_is_running or getattr(self, 'is_paused', False):
         return
 
     # Instante exacto del disparo del pulso: se captura antes de cualquier
@@ -6994,9 +7389,16 @@ class RealTimePlotter(QtWidgets.QWidget):
             # Mostrar también en el visor superior la cuenta regresiva y la primera vocal que viene
             if getattr(self, 'is_autoforge_running', False) and not getattr(self, 'is_cvm_active', False):
                 words = getattr(self, 'autoforge_words', []) or ["A"]
-                w_idx_prep = 0 if getattr(self, 'is_autoforge_continuo', False) else int(getattr(self, 'autoforge_word_idx', 0))
-                primera_v = words[w_idx_prep % len(words)].upper()
-                tira_prep = self._construir_tira_secuencia_html(words, w_idx_prep)
+                if getattr(self, 'is_autoforge_continuo', False):
+                    full_seq_prep = getattr(self, 'autoforge_full_sequence', None) or (words * max(1, int(getattr(self, 'autoforge_target_reps', 1))))
+                    primera_v = str(full_seq_prep[0]).upper() if full_seq_prep else "A"
+                    tira_prep = ""
+                    total_p_prep = len(full_seq_prep)
+                else:
+                    w_idx_prep = int(getattr(self, 'autoforge_word_idx', 0))
+                    primera_v = str(words[w_idx_prep % len(words)]).upper()
+                    tira_prep = self._construir_tira_secuencia_html(words, w_idx_prep)
+                    total_p_prep = int(getattr(self, 'autoforge_target_reps', 1))
                 self.lbl_recording_space.setStyleSheet(
                   f"background-color: #1A0808; color: {T['warn']}; font-family: 'Courier New', monospace; "
                   "border: 3px solid #FF4400; border-radius: 6px; padding: 4px;"
@@ -7012,7 +7414,7 @@ class RealTimePlotter(QtWidgets.QWidget):
                   palabra=primera_v,
                   palabra_siguiente=primera_v,
                   pulso_actual=0,
-                  total_pulsos=len(getattr(self, 'autoforge_full_sequence', words)),
+                  total_pulsos=total_p_prep,
                   count_in=cnt_val,
                   grabando=False,
                   fase=f"CUENTA REGRESIVA: {cnt_val}",
@@ -7055,7 +7457,8 @@ class RealTimePlotter(QtWidgets.QWidget):
                     and not getattr(self, 'is_cvm_active', False)
                     and getattr(self, 'is_recording', False)
                 ):
-                    total_pulsos_cont = len(self.autoforge_words) * self.autoforge_target_reps
+                    full_seq_end = getattr(self, 'autoforge_full_sequence', None) or []
+                    total_pulsos_cont = len(full_seq_end) if full_seq_end else (len(self.autoforge_words) * self.autoforge_target_reps)
                     if self.metro_beat_count > total_pulsos_cont:
                         if not getattr(self, 'is_finishing_sequence', False):
                             self.is_finishing_sequence = True
@@ -7146,6 +7549,17 @@ class RealTimePlotter(QtWidgets.QWidget):
                     )
                     self.lbl_recording_space.setText(f"<div align='center'><span style='color:{T['warn']}; font-size:40px; font-weight:bold;'>PREPÁRATE: /{vocal}/</span></div>")
                     self.autoforge_overlay.show()
+                    self._publicar_estado_display_remoto(
+                        palabra=f"PREP /{vocal}/",
+                        palabra_siguiente=vocal,
+                        pulso_actual=self.cvm_step_idx + 1,
+                        total_pulsos=len(self.cvm_sequence),
+                        flash=False,
+                        grabando=False,
+                        fase="CALIBRACIÓN CVM — PREPÁRATE",
+                        instruccion_fase=f"PREPÁRATE PARA SOSTENER /{vocal}/ (Toma {self.cvm_step_idx+1}/9)",
+                        subtitulo_fase=desc,
+                    )
                     # En CVM sólo anunciar en la preparación de la Toma 1 de cada vocal nueva (evita repetir "A, A, A")
                     if int(toma) == 1 and hasattr(self, 'voice_cue_player'):
                         self.voice_cue_player.say(f"di_{vocal.lower()}", f"Prepárate, di {vocal} con fuerza", fase="cvm_preparacion")
@@ -7160,6 +7574,17 @@ class RealTimePlotter(QtWidgets.QWidget):
                     )
                     self.lbl_recording_space.setText(f"<div align='center'><span style='color:{T['white']}; background-color:{T['err']}; font-size:70px; font-weight:bold; padding:4px 20px; border:3px solid {T['white']};'>/{vocal}/</span></div>")
                     self.autoforge_overlay.show()
+                    self._publicar_estado_display_remoto(
+                        palabra=vocal,
+                        palabra_siguiente="",
+                        pulso_actual=self.cvm_step_idx + 1,
+                        total_pulsos=len(self.cvm_sequence),
+                        flash=True,
+                        grabando=True,
+                        fase="CALIBRACIÓN CVM — ¡CONTRAE AHORA!",
+                        instruccion_fase=f"¡CONTRAE AHORA /{vocal}/ CON FUERZA! (Toma {self.cvm_step_idx+1}/9)",
+                        subtitulo_fase="Mantén la contracción muscular máxima durante el pulso",
+                    )
                     
                     self.cvm_current_take_chunks = []
                     self.is_cvm_recording_take = True
@@ -7298,8 +7723,13 @@ class RealTimePlotter(QtWidgets.QWidget):
         siguiente = ahora
         restante = 0.0
       self._metro_next_perf = siguiente
+      ms_wait = max(0, int(round(restante * 1000.0)))
+      if getattr(self, 'is_paused', False):
+        self._paused_metro_remaining_ms = max(10, ms_wait)
+        self.metro_timer.stop()
+        return
       self.metro_timer.setSingleShot(True)
-      self.metro_timer.start(max(0, int(round(restante * 1000.0))))
+      self.metro_timer.start(ms_wait)
     except Exception as e:
       print(f"[Metronomo] Error al programar el proximo pulso: {e}")
 
@@ -7340,25 +7770,35 @@ class RealTimePlotter(QtWidgets.QWidget):
         ref_t0 = getattr(self, "_autoforge_start_time", None)
 
       if ref_t0 is not None:
-        t_daq_s = float(t_perf - ref_t0)
+        t_daq_s = max(0.0, float(t_perf - ref_t0))
         sample_daq = int(round(t_daq_s * sr)) + offset
         t_wav_s = sample_daq / sr
-        if es_principal and int(getattr(self, "metro_beat_count", 0)) >= 1:
-          if sample_daq is not None:
-            self.metro_beat_sample_indices.append(int(sample_daq))
-          if t_wav_s is not None:
-            self.metro_beat_timestamps_s.append(round(float(t_wav_s), 6))
-          self.metro_applied_intervals_s.append(round(float(getattr(self, "current_beat_tau_s", 60.0 / max(1, bpm))), 6))
+      else:
+        t_daq_s = 0.0
+        sample_daq = int(offset)
+        t_wav_s = sample_daq / sr
+      if es_principal and int(getattr(self, "metro_beat_count", 0)) >= 1:
+        self.metro_beat_sample_indices.append(int(sample_daq))
+        self.metro_beat_timestamps_s.append(round(float(t_wav_s), 6))
+        self.metro_applied_intervals_s.append(round(float(getattr(self, "current_beat_tau_s", 60.0 / max(1, bpm))), 6))
       palabra = ""
+      ciclo_cur = 1
+      beat_cnt = int(getattr(self, "metro_beat_count", 0))
       if getattr(self, "is_autoforge_running", False):
         words = getattr(self, "autoforge_words", []) or []
         if getattr(self, "is_autoforge_continuo", False):
           full_seq = getattr(self, "autoforge_full_sequence", None) or words
-          idx_w = (self.metro_beat_count - 1) % len(full_seq) if full_seq else 0
-          palabra = full_seq[idx_w].upper() if full_seq and 0 <= idx_w < len(full_seq) else ""
+          if beat_cnt >= 1 and full_seq:
+            idx_w = (beat_cnt - 1) % len(full_seq)
+            palabra = str(full_seq[idx_w]).upper()
+            ciclo_cur = ((beat_cnt - 1) // max(1, len(words))) + 1
+          elif full_seq:
+            palabra = str(full_seq[0]).upper()
+            ciclo_cur = 0
         else:
           idx_w = int(getattr(self, "autoforge_word_idx", 0))
-          palabra = words[idx_w].upper() if words and 0 <= idx_w < len(words) else ""
+          palabra = str(words[idx_w]).upper() if words and 0 <= idx_w < len(words) else ""
+          ciclo_cur = idx_w + 1
       jit_enabled = bool(hasattr(self, "chk_metro_jitter") and self.chk_metro_jitter.isChecked())
       jit_mode = self.cmb_metro_jitter_mode.currentText() if (jit_enabled and hasattr(self, "cmb_metro_jitter_mode")) else "off"
       intervalo_actual = round(float(getattr(self, "current_beat_tau_s", 60.0 / max(1, bpm))), 6)
@@ -7370,10 +7810,10 @@ class RealTimePlotter(QtWidgets.QWidget):
         "count_in": int(count_in) if count_in is not None else int(getattr(self, "metro_count_in_remaining", 0)),
         "t_epoch": round(float(t_epoch), 6),
         "t_perf": round(float(t_perf), 6),
-        "t_daq_s": None if t_daq_s is None else round(t_daq_s, 6),
-        "t_wav_s": None if t_wav_s is None else round(t_wav_s, 6),
-        "sample_daq": sample_daq,
-        "offset_muestras": offset if sample_daq is not None else None,
+        "t_daq_s": round(float(t_daq_s), 6),
+        "t_wav_s": round(float(t_wav_s), 6),
+        "sample_daq": int(sample_daq),
+        "offset_muestras": int(offset),
         "bpm": int(bpm),
         "subdiv": int(num_subdivs),
         "intervalo_s": intervalo_actual,
@@ -7382,20 +7822,28 @@ class RealTimePlotter(QtWidgets.QWidget):
         "palabra": palabra,
       }
       # Si es un pulso principal donde suena una vocal durante grabación (con o sin Jitter),
-      # guardarlo en vocal_cue_log para medir exactamente cuán sincronizado le pegó el sujeto.
+      # guardarlo en vocal_cue_log con ambas convenciones de clave para compatibilidad total.
       if es_principal and getattr(self, "is_recording", False) and int(getattr(self, "metro_beat_count", 0)) >= 1:
         if not hasattr(self, "vocal_cue_log") or self.vocal_cue_log is None:
           self.vocal_cue_log = []
+        p_idx_val = int(self.metro_beat_count)
         self.vocal_cue_log.append({
-          "pulso_vocal_idx": int(self.metro_beat_count),
+          "pulso_vocal_idx": p_idx_val,
+          "pulso": p_idx_val,
+          "ciclo": int(ciclo_cur),
           "palabra": palabra,
+          "vocal": palabra,
           "t_epoch": registro["t_epoch"],
           "t_perf": registro["t_perf"],
           "t_daq_s": registro["t_daq_s"],
           "t_wav_s": registro["t_wav_s"],
-          "sample_daq": sample_daq,
+          "t_rel_s": registro["t_wav_s"],
+          "sample_daq": int(sample_daq),
+          "sample_idx": int(sample_daq),
           "intervalo_s": intervalo_actual,
+          "tau_s": intervalo_actual,
           "jitter_activo": bool(jit_enabled),
+          "jitter_enabled": bool(jit_enabled),
           "jitter_mode": jit_mode,
         })
       pulsos = getattr(self, "_metro_pulsos", None)
@@ -7660,12 +8108,13 @@ class RealTimePlotter(QtWidgets.QWidget):
     if not self.is_recording:
       # --- HOMOLOGACIÓN CON MANUAL_DAQ: Si no está adquiriendo, iniciar adquisición automáticamente ---
       if not getattr(self, 'is_acquiring', False):
-        self.start_acquisition()
+        self.on_start_acq_click(start_metronome=False)
         QtWidgets.QApplication.processEvents()
         if not getattr(self, 'is_acquiring', False):
           return
 
       # --- EMPEZAR A GRABAR MANUALMENTE ---
+      self._asegurar_dimension_arreglos_canales()
       self.is_recording = True
       self.recording_start_time = time.perf_counter()
       try:
@@ -7677,7 +8126,19 @@ class RealTimePlotter(QtWidgets.QWidget):
       self.final_raw_noise_accumulated = [[] for _ in range(self.NUM_CANALES)]
       self._metro_pulsos = []
       self.vocal_cue_log = []
+      self.sync_evaluation_log = []
       self._safe_photometry_start_session("grabacion_manual")
+      self._publicar_estado_display_remoto(
+        palabra="GRABANDO RUIDO",
+        palabra_siguiente="",
+        pulso_actual=0,
+        total_pulsos=0,
+        flash=False,
+        grabando=True,
+        fase="GRABANDO RUIDO BASAL",
+        instruccion_fase="HAZ SILENCIO — GRABANDO RUIDO BASAL",
+        subtitulo_fase="Relaja el rostro y evita moverte",
+      )
 
       if hasattr(self, 'btn_record'):
         self.btn_record.setText("■ DETENER Y GUARDAR (Manual)")
@@ -7760,9 +8221,12 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.btn_record.setText("GRABAR LIBRE (Manual)")
         self.btn_record.setStyleSheet(self.BTN_REC_START_STYLE)
       if hasattr(self, 'btn_pause'):
-        self.btn_pause.setEnabled(False)
-        if self.btn_pause.isChecked():
-          self.btn_pause.setChecked(False)
+        self.btn_pause.blockSignals(True)
+        self.btn_pause.setChecked(False)
+        self.btn_pause.blockSignals(False)
+        self.btn_pause.setText("PAUSAR")
+        self.btn_pause.setEnabled(bool(getattr(self, 'is_acquiring', False)))
+      self.is_paused = False
       self.cmb_terminal_config.setEnabled(True)
       self.stop_native_metronome()
       self.config_stack.setCurrentIndex(0)
@@ -7992,22 +8456,66 @@ class RealTimePlotter(QtWidgets.QWidget):
     except Exception as exc_res:
       print(f"[Resumen Rapido] Error al guardar resumen en Grabacion Manual: {exc_res}")
 
+    # 7. Guardar log completo de consola DAQ dentro de la medicion
+    self.last_saved_metadata = metadata
+    self._guardar_log_consola_en_medicion(str(output_dir))
+
     print("--- EXPORTACIÓN FINALIZADA ---")
 
   def on_pause_toggled(self, paused: bool):
     """Pausa o reanuda la grabacion, el metronomo y las fases de AutoForge sin emojis."""
-    self.is_paused = paused
+    self.is_paused = bool(paused)
     if paused:
       self.pause_start_perf = time.perf_counter()
-      self.btn_pause.setText("REANUDAR")
+      if hasattr(self, 'btn_pause'):
+        self.btn_pause.setText("REANUDAR")
       if hasattr(self, '_phase_timer') and self._phase_timer.isActive():
         self._paused_phase_remaining_ms = max(50, self._phase_timer.remainingTime())
         self._phase_timer.stop()
+      else:
+        self._paused_phase_remaining_ms = 0
       if hasattr(self, 'metro_timer') and self.metro_timer.isActive():
         self._paused_metro_remaining_ms = max(10, self.metro_timer.remainingTime())
         self.metro_timer.stop()
+      elif getattr(self, 'metro_is_running', False) and getattr(self, '_metro_next_perf', None) is not None:
+        self._paused_metro_remaining_ms = max(10, int(round((self._metro_next_perf - time.perf_counter()) * 1000.0)))
+        if hasattr(self, 'metro_timer'):
+          self.metro_timer.stop()
+      else:
+        self._paused_metro_remaining_ms = 0
       if hasattr(self, 'session_timer') and self.session_timer.isActive():
         self.session_timer.stop()
+
+      if hasattr(self, 'beep_queue') and self.beep_queue is not None:
+        while not self.beep_queue.empty():
+          try:
+            self.beep_queue.get_nowait()
+          except Exception:
+            break
+      if hasattr(self, 'voice_cue_player') and getattr(self.voice_cue_player, '_queue', None) is not None:
+        while not self.voice_cue_player._queue.empty():
+          try:
+            self.voice_cue_player._queue.get_nowait()
+          except Exception:
+            break
+
+      if hasattr(self, 'label_rec_time'):
+        self._saved_rec_time_text = self.label_rec_time.text()
+        self._saved_rec_time_style = self.label_rec_time.styleSheet()
+        self.label_rec_time.setText("EN PAUSA — PRESIONA REANUDAR")
+        self.label_rec_time.setStyleSheet(f"font-weight: bold; color: {T['warn']}; font-size: 14px;")
+      if hasattr(self, 'lbl_recording_space'):
+        self._saved_rec_space_text = self.lbl_recording_space.text()
+        self._saved_rec_space_style = self.lbl_recording_space.styleSheet()
+        self.lbl_recording_space.setStyleSheet(
+          f"background-color: #141205; color: {T['warn']}; font-family: 'Courier New', monospace; "
+          f"border: 2px solid {T['warn']}; border-radius: 6px; padding: 4px;"
+        )
+        self.lbl_recording_space.setText(
+          f"<div align='center' style='color:{T['warn']}; font-size:32px; font-weight:900;'>"
+          f"EN PAUSA — PRESIONA REANUDAR<br>"
+          f"<span style='font-size:18px; color:{T['accent']};'>Adquisición en espera de reanudación</span></div>"
+        )
       if hasattr(self, 'autoforge_overlay'):
         self._saved_overlay_html = self.autoforge_overlay.text()
         self._saved_overlay_vis = self.autoforge_overlay.isVisible()
@@ -8016,20 +8524,81 @@ class RealTimePlotter(QtWidgets.QWidget):
           f"<span style='font-size:24px; color:{T['accent']};'>Presiona REANUDAR para continuar</span></div>"
         )
         self.autoforge_overlay.show()
+      try:
+        self._publicar_estado_display_remoto(
+          palabra="EN PAUSA",
+          palabra_siguiente="",
+          pulso_actual=0,
+          total_pulsos=0,
+          flash=False,
+          grabando=False,
+          fase="EN PAUSA",
+          instruccion_fase="EN PAUSA — PRESIONA REANUDAR",
+          subtitulo_fase="Grabación y metrónomo pausados temporalmente",
+        )
+      except Exception:
+        pass
     else:
-      if self.pause_start_perf > 0:
+      if getattr(self, 'pause_start_perf', 0.0) > 0:
         paused_delta = time.perf_counter() - self.pause_start_perf
         self.total_paused_duration += paused_delta
-        if self.recording_start_time is not None:
+        if getattr(self, 'recording_start_time', None) is not None:
           self.recording_start_time += paused_delta
+        if getattr(self, 'acq_start_time', None) is not None:
+          self.acq_start_time += paused_delta
         self.pause_start_perf = 0.0
-      self.btn_pause.setText("PAUSAR")
+      if hasattr(self, 'btn_pause'):
+        self.btn_pause.setText("PAUSAR")
       if hasattr(self, 'autoforge_overlay'):
         if getattr(self, '_saved_overlay_vis', False):
           self.autoforge_overlay.setText(getattr(self, '_saved_overlay_html', ''))
           self.autoforge_overlay.show()
         else:
           self.autoforge_overlay.hide()
+      if hasattr(self, 'lbl_recording_space') and hasattr(self, '_saved_rec_space_text'):
+        self.lbl_recording_space.setStyleSheet(getattr(self, '_saved_rec_space_style', ''))
+        self.lbl_recording_space.setText(getattr(self, '_saved_rec_space_text', ''))
+      if hasattr(self, 'label_rec_time') and hasattr(self, '_saved_rec_time_text'):
+        self.label_rec_time.setStyleSheet(getattr(self, '_saved_rec_time_style', ''))
+        self.label_rec_time.setText(getattr(self, '_saved_rec_time_text', 'LISTO'))
+
+      if getattr(self, 'is_autoforge_running', False) and getattr(self, 'is_recording', False) and getattr(self, '_ultimo_estado_visor', None):
+        st_v = self._ultimo_estado_visor
+        try:
+          self._renderizar_visor_vocal(*st_v, flash=False)
+        except Exception:
+          pass
+      elif not getattr(self, 'is_autoforge_running', False) and getattr(self, 'is_recording', False):
+        try:
+          self._publicar_estado_display_remoto(
+            palabra="GRABANDO",
+            palabra_siguiente="",
+            pulso_actual=0,
+            total_pulsos=0,
+            flash=False,
+            grabando=True,
+            fase="GRABANDO SEÑAL",
+            instruccion_fase="GRABANDO SEÑAL EN CURSO",
+            subtitulo_fase="Grabación manual reanudada",
+          )
+        except Exception:
+          pass
+      elif getattr(self, 'is_autoforge_running', False):
+        try:
+          self._publicar_estado_display_remoto(
+            palabra=str(getattr(self, 'autoforge_estado_actual_str', 'EN CURSO') or 'EN CURSO'),
+            palabra_siguiente="",
+            pulso_actual=0,
+            total_pulsos=0,
+            flash=False,
+            grabando=bool(getattr(self, 'is_recording', False)),
+            fase="SESIÓN REANUDADA",
+            instruccion_fase="SESIÓN REANUDADA — SIGUE LAS INDICACIONES",
+            subtitulo_fase="Continuando protocolo experimental",
+          )
+        except Exception:
+          pass
+
       if getattr(self, '_scheduled_phase_cb', None) is not None and getattr(self, '_paused_phase_remaining_ms', 0) > 0:
         self._phase_timer.start(self._paused_phase_remaining_ms)
       if hasattr(self, 'metro_is_running') and self.metro_is_running:
@@ -8257,9 +8826,9 @@ class RealTimePlotter(QtWidgets.QWidget):
                   if window_size < 1: window_size = 1
                   all_noise_env = calculate_rms_envelope(all_noise, window_size)
                   
-                  self.noise_levels[i] = np.mean(all_noise_env)
-                  self.initial_noise_mean[i] = self.noise_levels[i]
-                  self.initial_noise_std[i] = np.std(all_noise_env)
+                  self.noise_levels[i] = float(np.mean(all_noise_env))
+                  self.initial_noise_mean[i] = float(self.noise_levels[i])
+                  self.initial_noise_std[i] = float(np.std(all_noise_env))
                   
                   is_rms = hasattr(self, 'chk_rms_env') and self.chk_rms_env.isChecked()
                   show_noise = self.chk_show_noise.isChecked()
@@ -8285,6 +8854,18 @@ class RealTimePlotter(QtWidgets.QWidget):
 
               self.noise_initialized = True
               self.noise_calculated = True
+              if not getattr(self, 'is_autoforge_running', False):
+                self._publicar_estado_display_remoto(
+                  palabra="GRABANDO",
+                  palabra_siguiente="",
+                  pulso_actual=0,
+                  total_pulsos=0,
+                  flash=False,
+                  grabando=True,
+                  fase="GRABANDO SEÑAL",
+                  instruccion_fase="¡GO! — GRABANDO SEÑAL EN CURSO",
+                  subtitulo_fase="Realiza la tarea indicada al ritmo establecido",
+                )
 
       # 6. Actualizar la GUI (Optimización 60 FPS: actualización incremental de RMS + decimación directa por stride)
       is_rms = hasattr(self, 'chk_rms_env') and self.chk_rms_env.isChecked()
@@ -8398,7 +8979,8 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.actualizar_mediciones(processed_data, self.env_buffer_datos)
         pca_exp_on = bool(getattr(self, 'chk_pca_experimental', None) and self.chk_pca_experimental.isChecked())
         det_win_on = bool(getattr(self, 'chk_show_detection_window', None) and self.chk_show_detection_window.isChecked())
-        if (pca_exp_on or det_win_on) and hasattr(self, 'pulse_detector') and self.pulse_detector is not None:
+        is_active_rec = bool(getattr(self, 'is_recording', False) or getattr(self, 'is_autoforge_running', False))
+        if (is_active_rec or pca_exp_on or det_win_on) and hasattr(self, 'pulse_detector') and self.pulse_detector is not None:
           self.pulse_detector.process()
         if det_win_on:
           self._actualizar_posicion_ventana_deteccion()
@@ -8416,7 +8998,8 @@ class RealTimePlotter(QtWidgets.QWidget):
           else:
             if getattr(self, 'is_autoforge_continuo', False):
               pulso_num = max(1, getattr(self, 'metro_beat_count', 1))
-              palabra_cur = self.autoforge_words[(pulso_num - 1) % len(self.autoforge_words)].upper() if len(self.autoforge_words) > 0 else ""
+              seq_cont = getattr(self, 'autoforge_full_sequence', None) or getattr(self, 'autoforge_words', [])
+              palabra_cur = str(seq_cont[(pulso_num - 1) % len(seq_cont)]).upper() if len(seq_cont) > 0 else ""
               self.label_rec_time.setText(f"SECUENCIA: /{palabra_cur}/ (Pulso {pulso_num}) | {elapsed_time:.1f} s{cuadro_azul}")
               self.label_rec_time.setStyleSheet(f"font-weight: bold; color: {T['accent']}; font-size: 15px;")
               if hasattr(self, 'countdown_text'):
@@ -8426,10 +9009,6 @@ class RealTimePlotter(QtWidgets.QWidget):
               pulso_num = getattr(self, 'metro_beat_count', 0)
               self.label_rec_time.setText(f"GRABANDO VOCAL: /{palabra}/ (Pulso {pulso_num}) | {elapsed_time:.1f} s{cuadro_azul}")
               self.label_rec_time.setStyleSheet(f"font-weight: bold; color: {T['accent']}; font-size: 15px;")
-              if palabra:
-                vocal_colores = {'A': '#E63946', 'E': '#1F77B4', 'I': '#2CA02C', 'O': '#9D4EDD', 'U': '#E7A61A'}
-                v_col = vocal_colores.get(palabra, T['accent'])
-                self.lbl_recording_space.setText(f"<div align='center' style='font-size: 70px; font-weight: 900; color: {v_col};'>/{palabra}/</div>")
               if hasattr(self, 'countdown_text'):
                 self.countdown_text.hide()
         else:
@@ -8499,13 +9078,13 @@ class RealTimePlotter(QtWidgets.QWidget):
           
         if getattr(self, 'noise_calculated', False) and signal_time >= 0:
           # --- NUEVO: Evaluador Retrospectivo de Ruido Inter-pulso (Tester de relajación) ---
-          if not hasattr(self, 'rt_peaks'):
-            self.rt_peaks = [[] for _ in range(self.NUM_CANALES)]
-            self.rt_last_noise_eval = [0.0] * self.NUM_CANALES
+          self._asegurar_dimension_arreglos_canales()
 
           period_s = float(getattr(self, 'current_beat_tau_s', 60.0 / max(1, self.spin_bpm.value())))
           
           for i in range(self.NUM_CANALES):
+            if i >= len(getattr(self, 'peak_scatters', [])) or i >= len(self.rt_peaks) or i >= len(self.rt_last_noise_eval):
+              continue
             # Obtener el tiempo del pico visual actual
             x_data, y_data = self.peak_scatters[i].getData()
             if len(x_data) > 0:
@@ -8794,6 +9373,9 @@ class RealTimePlotter(QtWidgets.QWidget):
     (discreta o continua), cancelando timers, metronomo, beeps, overlays y estados pendientes.
     """
     self._autoforge_token = getattr(self, '_autoforge_token', 0) + 1
+    self._flash_beat_token = int(getattr(self, '_flash_beat_token', 0)) + 1
+    self._visor_mostrar_vocal = False
+    self._ultimo_estado_visor = None
     self.is_autoforge_running = False
     self.is_autoforge_continuo = False
     self.is_cvm_active = False
@@ -8807,6 +9389,7 @@ class RealTimePlotter(QtWidgets.QWidget):
       pass
     self.is_finishing_sequence = False
     self.is_paused = False
+    self.pause_start_perf = 0.0
 
     # Detener timer de fase pendiente
     if hasattr(self, '_phase_timer') and self._phase_timer.isActive():
@@ -8818,12 +9401,18 @@ class RealTimePlotter(QtWidgets.QWidget):
     if hasattr(self, 'session_timer') and self.session_timer.isActive():
       self.session_timer.stop()
 
-    # Detener metronomo y purgar cola de beeps
+    # Detener metronomo y purgar colas de beeps / locucion pendiente
     self.stop_native_metronome()
     if hasattr(self, 'beep_queue') and self.beep_queue is not None:
       while not self.beep_queue.empty():
         try:
           self.beep_queue.get_nowait()
+        except Exception:
+          break
+    if hasattr(self, 'voice_cue_player') and getattr(self.voice_cue_player, '_queue', None) is not None:
+      while not self.voice_cue_player._queue.empty():
+        try:
+          self.voice_cue_player._queue.get_nowait()
         except Exception:
           break
 
@@ -8838,6 +9427,20 @@ class RealTimePlotter(QtWidgets.QWidget):
     if hasattr(self, 'label_rec_time'):
       self.label_rec_time.setText("LISTO")
       self.label_rec_time.setStyleSheet(f"font-weight: bold; color: {T['accent']};")
+    try:
+      self._publicar_estado_display_remoto(
+        palabra="",
+        palabra_siguiente="",
+        pulso_actual=0,
+        total_pulsos=0,
+        flash=False,
+        grabando=False,
+        fase="EN ESPERA",
+        instruccion_fase="ESPERANDO INICIO DEL PROTOCOLO...",
+        subtitulo_fase="Relaja el rostro y sigue las indicaciones en pantalla",
+      )
+    except Exception:
+      pass
 
     # Limpiar buffers de grabacion en curso
     self.current_recording = []
@@ -8850,11 +9453,13 @@ class RealTimePlotter(QtWidgets.QWidget):
     if hasattr(self, 'config_stack'):
       self.config_stack.setCurrentIndex(0)
 
-    # Restaurar botones
+    # Restaurar botones (bloqueando señales de btn_pause para evitar disparos de reanudacion)
     if hasattr(self, 'btn_pause'):
+      self.btn_pause.blockSignals(True)
       self.btn_pause.setChecked(False)
-      self.btn_pause.setEnabled(False)
+      self.btn_pause.blockSignals(False)
       self.btn_pause.setText("PAUSAR")
+      self.btn_pause.setEnabled(bool(getattr(self, 'is_acquiring', False)))
     self.reset_autoforge_buttons()
 
     # Matar proceso externo de palabras si existiera
@@ -9086,7 +9691,10 @@ class RealTimePlotter(QtWidgets.QWidget):
     """
     try:
       import os
-      if getattr(self, 'is_autoforge_running', False):
+      if (
+        getattr(self, 'is_autoforge_running', False)
+        or "DETENER" in (self.btn_autoforge.text() if hasattr(self, 'btn_autoforge') else "").upper()
+      ):
         self.detener_autoforge()
         return
         
@@ -9191,11 +9799,21 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.autoforge_cvm_modo = "con_metronomo" if (hasattr(dialog, 'cmb_cvm_modo') and dialog.cmb_cvm_modo.currentIndex() == 1) else "guiado_sin_metronomo"
         self.reset_medidor_pca_vivo()
 
-        # --- Asistente Lineal Simple de Fotometria (solo si el usuario lo activó en el diálogo) ---
+        # --- Asistente Lineal Simple de Fotometria (solo si el usuario lo activó o preserva calibración previa) ---
         if hasattr(dialog, 'chk_abrir_fotometria') and dialog.chk_abrir_fotometria.isChecked():
           self._safe_photometry_open_assistant(es_continua=False)
         else:
-          self._photometry_session_active = False
+          pm = getattr(self, 'photometry_mgr', None)
+          ya_calibrada = bool(
+            pm is not None and (
+              getattr(pm, 'is_enabled', False)
+              or getattr(pm, 'fotometria_sesion', None) is not None
+              or getattr(pm, 'calibracion_inicial_data', None) is not None
+            )
+          )
+          self._photometry_session_active = ya_calibrada
+          if ya_calibrada:
+            print("[Fotometria] Conservando calibracion 3D realizada previamente en esta sesion.")
 
         # --- NUEVO: Mostrar Instrucciones del Experimento ---
         msg_box = QtWidgets.QMessageBox(self)
@@ -9245,11 +9863,19 @@ class RealTimePlotter(QtWidgets.QWidget):
       print(f"Error iniciando Autograbado: {e}")
       import traceback
       traceback.print_exc()
+      try:
+        self.detener_autoforge()
+      except Exception:
+        self.reset_autoforge_buttons()
       
   def iniciar_autoforge_continuo(self):
     try:
       import os
-      if getattr(self, 'is_autoforge_running', False):
+      if (
+        getattr(self, 'is_autoforge_running', False)
+        or getattr(self, 'is_autoforge_continuo', False)
+        or "DETENER" in (self.btn_autoforge_continuo.text() if hasattr(self, 'btn_autoforge_continuo') else "").upper()
+      ):
         self.detener_autoforge()
         return
         
@@ -9364,11 +9990,30 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.autoforge_cvm_modo = "con_metronomo" if (hasattr(dialog, 'cmb_cvm_modo') and dialog.cmb_cvm_modo.currentIndex() == 1) else "guiado_sin_metronomo"
         self.reset_medidor_pca_vivo()
 
-        # --- Asistente Lineal Simple de Fotometria (solo si el usuario lo activó en el diálogo) ---
+        # --- Asistente Lineal Simple de Fotometria (solo si el usuario lo activó o preserva calibración previa) ---
         if hasattr(dialog, 'chk_abrir_fotometria') and dialog.chk_abrir_fotometria.isChecked():
           self._safe_photometry_open_assistant(es_continua=True)
         else:
-          self._photometry_session_active = False
+          pm = getattr(self, 'photometry_mgr', None)
+          ya_calibrada = bool(
+            pm is not None and (
+              getattr(pm, 'is_enabled', False)
+              or getattr(pm, 'fotometria_sesion', None) is not None
+              or getattr(pm, 'calibracion_inicial_data', None) is not None
+            )
+          )
+          self._photometry_session_active = ya_calibrada
+          if ya_calibrada:
+            print("[Fotometria] Conservando calibracion 3D realizada previamente en esta sesion.")
+            try:
+              pm.guardar_fotometria_inmediata(
+                sujeto=self.autoforge_sujeto,
+                prueba=self.autoforge_prueba,
+                es_continua=True,
+                target_dir=getattr(self, '_current_session_target_dir', None),
+              )
+            except Exception:
+              pass
 
         # --- NUEVO: Mostrar Instrucciones del Experimento ---
         msg_box = QtWidgets.QMessageBox(self)
@@ -9421,6 +10066,10 @@ class RealTimePlotter(QtWidgets.QWidget):
       print(f"Error iniciando Autograbado Continuo: {e}")
       import traceback
       traceback.print_exc()
+      try:
+        self.detener_autoforge()
+      except Exception:
+        self.reset_autoforge_buttons()
 
   def _iniciar_timer_global_continuo(self):
     bpm = self.spin_bpm.value()
@@ -9466,6 +10115,17 @@ class RealTimePlotter(QtWidgets.QWidget):
     texto_ventana = f"<div align='center' style='font-size: 50px; font-weight: 900; color: {T['accent']};'>PREPARANDO ENTORNO...</div>"
     self.lbl_recording_space.setText(texto_ventana)
     self.word_window_process = None # Mantener variable para no romper nada
+    self._publicar_estado_display_remoto(
+      palabra="HAZ SILENCIO",
+      palabra_siguiente="",
+      pulso_actual=0,
+      total_pulsos=total_pulsos,
+      flash=False,
+      grabando=False,
+      fase="PREPARANDO ENTORNO",
+      instruccion_fase="HAZ SILENCIO — PREPARANDO ENTORNO",
+      subtitulo_fase="Relaja el rostro y evita tragar saliva",
+    )
     
     self._schedule_phase(3000, self.estado_grabar_ruido_continuo)
 
@@ -9577,6 +10237,17 @@ class RealTimePlotter(QtWidgets.QWidget):
         "</div>"
       )
       self.autoforge_overlay.show()
+      self._publicar_estado_display_remoto(
+        palabra="CALIBRACIÓN CVM",
+        palabra_siguiente="A",
+        pulso_actual=0,
+        total_pulsos=len(self.cvm_sequence),
+        flash=False,
+        grabando=False,
+        fase="CALIBRACIÓN CVM GUIADA",
+        instruccion_fase="CONTRACCIÓN MUSCULAR MÁXIMA (A, I, U)",
+        subtitulo_fase="Mantén cada gesto articulatorio de forma continua durante 2.5 s",
+      )
       self._safe_autoforge_single_shot(2000, self._cvm_guiado_preparar_toma)
     else:
       self.cvm_sequence = [
@@ -9594,6 +10265,17 @@ class RealTimePlotter(QtWidgets.QWidget):
           "</div>"
       )
       self.autoforge_overlay.show()
+      self._publicar_estado_display_remoto(
+        palabra="CALIBRACIÓN CVM",
+        palabra_siguiente="A",
+        pulso_actual=0,
+        total_pulsos=len(self.cvm_sequence),
+        flash=False,
+        grabando=False,
+        fase="CALIBRACIÓN CVM",
+        instruccion_fase="CONTRACCIÓN MUSCULAR MÁXIMA (A, I, U)",
+        subtitulo_fase="Sigue las instrucciones al ritmo del metrónomo",
+      )
       self.start_native_metronome(count_in=4, force_start=True)
 
   def _cvm_guiado_preparar_toma(self):
@@ -9621,7 +10303,17 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.lbl_recording_space.setText(
       f"<div align='center'><span style='color:{T['warn']}; font-size:36px; font-weight:bold;'>PREPÁRATE PARA SOSTENER: /{vocal}/ (Toma {self.cvm_step_idx+1}/{total_t})</span></div>"
     )
-    self._publicar_estado_display_remoto(palabra=f"PREP /{vocal}/", pulso_actual=self.cvm_step_idx+1, total_pulsos=total_t, grabando=False)
+    self._publicar_estado_display_remoto(
+      palabra=f"PREP /{vocal}/",
+      palabra_siguiente=vocal,
+      pulso_actual=self.cvm_step_idx + 1,
+      total_pulsos=total_t,
+      flash=False,
+      grabando=False,
+      fase="CALIBRACIÓN CVM — PREPÁRATE",
+      instruccion_fase=f"DESCANSANDO — PREPÁRATE PARA /{vocal}/ (Toma {self.cvm_step_idx+1}/{total_t})",
+      subtitulo_fase=desc,
+    )
     if int(toma) == 1 and hasattr(self, 'voice_cue_player'):
       self.voice_cue_player.say(f"di_{vocal.lower()}", f"Prepárate, sostén {vocal} con fuerza", fase="cvm_preparacion")
     self._safe_autoforge_single_shot(int(getattr(self, '_cvm_rest_ms', 2500)), self._cvm_guiado_iniciar_sosten)
@@ -9646,7 +10338,17 @@ class RealTimePlotter(QtWidgets.QWidget):
       f"<div align='center'><span style='color:{T['err']}; font-size:28px; font-weight:bold;'>¡SOSTÉN ({hold_s:.1f}s)!</span><br>"
       f"<span style='color:{T['accent']}; font-size:76px; font-weight:900;'>/{vocal}/</span></div>"
     )
-    self._publicar_estado_display_remoto(palabra=vocal, pulso_actual=self.cvm_step_idx+1, total_pulsos=total_t, flash=True, grabando=True)
+    self._publicar_estado_display_remoto(
+      palabra=vocal,
+      palabra_siguiente="",
+      pulso_actual=self.cvm_step_idx + 1,
+      total_pulsos=total_t,
+      flash=True,
+      grabando=True,
+      fase="CALIBRACIÓN CVM — SOSTÉN",
+      instruccion_fase=f"¡SOSTÉN LA CONTRACCIÓN AHORA! ({hold_s:.1f}s)",
+      subtitulo_fase=f"Toma {self.cvm_step_idx+1}/{total_t} — Mantén fuerza constante sin cortar",
+    )
     self._safe_autoforge_single_shot(int(getattr(self, '_cvm_hold_ms', 2500)), self._cvm_guiado_fin_sosten)
 
   def _cvm_guiado_fin_sosten(self):
@@ -9754,6 +10456,17 @@ class RealTimePlotter(QtWidgets.QWidget):
         f"</div>"
     )
     self.autoforge_overlay.show()
+    self._publicar_estado_display_remoto(
+      palabra="CVM LISTA",
+      palabra_siguiente="",
+      pulso_actual=0,
+      total_pulsos=0,
+      flash=False,
+      grabando=False,
+      fase="CALIBRACIÓN CVM COMPLETADA",
+      instruccion_fase="¡CONTRACCIÓN MUSCULAR MÁXIMA COMPLETADA!",
+      subtitulo_fase="Iniciando protocolo de grabación...",
+    )
     
     self._guardar_calibracion_csv()
     self._safe_autoforge_single_shot(2500, self._continuar_post_cvm)
@@ -9824,6 +10537,7 @@ class RealTimePlotter(QtWidgets.QWidget):
           full_cvm = np.concatenate(self.cvm_recording_chunks, axis=1)
           guardar_grabacion_csv([full_cvm], self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "calibracion_raw")
           guardar_grabacion_wav([full_cvm], self.SAMPLE_RATE, str(base_dir), self.NUM_CANALES, "calibracion")
+        self._guardar_log_consola_en_medicion(str(base_dir))
       except Exception as e:
         print(f"[Error Guardar calibracion.csv] {e}")
 
@@ -9842,6 +10556,7 @@ class RealTimePlotter(QtWidgets.QWidget):
   # ==============================================================================
   def estado_grabar_ruido_final(self, target_post_noise):
     if not getattr(self, 'is_autoforge_running', False): return
+    self._asegurar_dimension_arreglos_canales()
     self._post_final_noise_target_method = target_post_noise
     self._current_autoforge_word = "RUIDO_FINAL"
     self.is_recording = False
@@ -9850,6 +10565,17 @@ class RealTimePlotter(QtWidgets.QWidget):
     
     self.autoforge_overlay.setText("<div align='center'>HAZ SILENCIO<br>GRABANDO RUIDO FINAL (5s)...</div>")
     self.autoforge_overlay.show()
+    self._publicar_estado_display_remoto(
+      palabra="GRABANDO RUIDO",
+      palabra_siguiente="",
+      pulso_actual=0,
+      total_pulsos=0,
+      flash=False,
+      grabando=True,
+      fase="GRABANDO RUIDO FINAL",
+      instruccion_fase="HAZ SILENCIO — GRABANDO RUIDO FINAL (5s)",
+      subtitulo_fase="Mantén el rostro en reposo hasta concluir la sesión",
+    )
     
     if hasattr(self, 'voice_cue_player'):
       self.voice_cue_player.say("haz_silencio", "Haz silencio, grabando ruido final", fase="ruido_basal_final")
@@ -9935,6 +10661,7 @@ class RealTimePlotter(QtWidgets.QWidget):
 
   def estado_grabar_ruido_continuo(self):
     if not getattr(self, 'is_autoforge_running', False): return
+    self._asegurar_dimension_arreglos_canales()
     self.autoforge_overlay.setText("") 
     self.autoforge_overlay.hide()
     self.label_rec_time.setVisible(True) 
@@ -9950,6 +10677,17 @@ class RealTimePlotter(QtWidgets.QWidget):
       f"<span style='font-size:16px; color:{T['accent']};'>Relaja el rostro. Al terminar comenzará la secuencia con /{primera_v}/:</span><br>"
       f"<span>{tira_init}</span>"
       f"</div>"
+    )
+    self._publicar_estado_display_remoto(
+      palabra="GRABANDO RUIDO",
+      palabra_siguiente="",
+      pulso_actual=0,
+      total_pulsos=len(getattr(self, 'autoforge_full_sequence', []) or getattr(self, 'autoforge_words', [])),
+      flash=False,
+      grabando=True,
+      fase="GRABANDO RUIDO BASAL",
+      instruccion_fase="HAZ SILENCIO — GRABANDO RUIDO BASAL (5s)",
+      subtitulo_fase=f"Relaja el rostro. Al terminar comenzará la secuencia con /{primera_v}/",
     )
     if hasattr(self, 'voice_cue_player'):
       self.voice_cue_player.say("haz_silencio", "Haz silencio, grabando ruido basal", fase="ruido_basal_inicial")
@@ -10017,9 +10755,9 @@ class RealTimePlotter(QtWidgets.QWidget):
           if window_size < 1: window_size = 1
           all_noise_env = calculate_rms_envelope(all_noise, window_size)
           
-          self.noise_levels[i] = np.mean(all_noise_env)
-          self.initial_noise_mean[i] = self.noise_levels[i]
-          self.initial_noise_std[i] = np.std(all_noise_env)
+          self.noise_levels[i] = float(np.mean(all_noise_env))
+          self.initial_noise_mean[i] = float(self.noise_levels[i])
+          self.initial_noise_std[i] = float(np.std(all_noise_env))
           
           is_rms = hasattr(self, 'chk_rms_env') and self.chk_rms_env.isChecked()
           show_noise = self.chk_show_noise.isChecked()
@@ -10070,11 +10808,23 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.countdown_text.setPos(-self.PLOT_DURATION_S/2.0, y_center)
     self.countdown_text.setText("PREPÁRATE...\n3")
     self.countdown_text.show()
+    self._publicar_estado_display_remoto(
+      palabra=primera_vocal,
+      palabra_siguiente=primera_vocal,
+      pulso_actual=0,
+      total_pulsos=len(full_seq_init),
+      flash=False,
+      grabando=False,
+      fase="PREPÁRATE",
+      instruccion_fase=f"PREPÁRATE PARA INICIAR CON /{primera_vocal}/",
+      subtitulo_fase="Escucha la cuenta regresiva del metrónomo",
+    )
     self._on_count_in_finished_cb = self.estado_iniciar_grabacion_continua
     self.start_native_metronome(count_in=4, force_start=True)
 
   def estado_iniciar_grabacion_continua(self, anchor_perf=None):
     if not getattr(self, 'is_autoforge_running', False): return
+    self._asegurar_dimension_arreglos_canales()
     self.autoforge_overlay.hide()
     if hasattr(self, 'countdown_text'):
       self.countdown_text.hide()
@@ -10144,6 +10894,17 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.autoforge_estado_actual_str = "GUARDANDO SECUENCIA"
     self.autoforge_overlay.setText("<div align='center'>SECUENCIA COMPLETADA<br>GUARDANDO DATOS...</div>")
     self.autoforge_overlay.show()
+    self._publicar_estado_display_remoto(
+      palabra="GUARDANDO DATOS",
+      palabra_siguiente="",
+      pulso_actual=0,
+      total_pulsos=0,
+      flash=False,
+      grabando=False,
+      fase="GUARDANDO SECUENCIA",
+      instruccion_fase="SECUENCIA COMPLETADA — GUARDANDO DATOS",
+      subtitulo_fase="Espera unos segundos mientras se exportan los archivos",
+    )
     
     local_recording = self.current_recording.copy()
     self.current_recording = []
@@ -10401,6 +11162,10 @@ class RealTimePlotter(QtWidgets.QWidget):
         self._escribir_resumen_rapido_toma_txt(str(base_dir), metadata=metadata, modo="Secuencia Continua")
       except Exception as exc_res:
         print(f"[Resumen Rapido] Error al guardar resumen en Secuencia Continua: {exc_res}")
+
+      # 8. Guardar copia completa de consola DAQ y actualizar ultimo metadata guardado
+      self.last_saved_metadata = metadata
+      self._guardar_log_consola_en_medicion(str(base_dir))
       
     threading.Thread(target=guardar_async, daemon=True).start()
     
@@ -10466,7 +11231,12 @@ class RealTimePlotter(QtWidgets.QWidget):
     banner.append("=" * 72)
     try:
       banner.append("")
-      banner.append(self._formatear_informe_protocolo_completo_txt(modo_ejecucion=modo))
+      banner.append(
+        self._formatear_informe_protocolo_completo_txt(
+          metadata_dict=getattr(self, 'last_saved_metadata', None),
+          modo_ejecucion=modo,
+        )
+      )
     except Exception:
       pass
     texto_final = "\n".join(banner)
@@ -10495,7 +11265,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     except Exception as e_reg:
       print(f"[Aviso] No se pudo escribir registro de orden en disco: {e_reg}")
 
-    # 3. Mostrar en la UI (en el espacio grande de palabras)
+    # 3. Mostrar en la UI (en el espacio grande de palabras) y en la pantalla remota
     if hasattr(self, 'lbl_recording_space'):
       self.lbl_recording_space.setText(
         f"<div align='center'>"
@@ -10504,6 +11274,17 @@ class RealTimePlotter(QtWidgets.QWidget):
         f"<span style='font-size: 32px; font-weight: 900; color: {T['white']};'>{orden_flechas}</span>"
         f"</div>"
       )
+    self._publicar_estado_display_remoto(
+      palabra="SESIÓN COMPLETA",
+      palabra_siguiente="",
+      pulso_actual=0,
+      total_pulsos=0,
+      flash=False,
+      grabando=False,
+      fase="SESIÓN COMPLETADA",
+      instruccion_fase="¡SESIÓN COMPLETADA CON ÉXITO!",
+      subtitulo_fase=f"Orden registrado: {orden_flechas}",
+    )
 
   def estado_finalizar_secuencia_continua(self):
     if not getattr(self, 'is_autoforge_running', False): return
@@ -10517,12 +11298,13 @@ class RealTimePlotter(QtWidgets.QWidget):
       self.on_start_acq_click() # Esto detiene el DAQ y llama a reset_autoforge_buttons()
     else:
       self.is_autoforge_running = False
+      self.is_paused = False
       if hasattr(self, 'btn_pause'):
+        self.btn_pause.blockSignals(True)
         self.btn_pause.setChecked(False)
-        self.btn_pause.setEnabled(False)
-      if hasattr(self, 'btn_pause'):
-        self.btn_pause.setChecked(False)
-        self.btn_pause.setEnabled(False)
+        self.btn_pause.blockSignals(False)
+        self.btn_pause.setText("PAUSAR")
+        self.btn_pause.setEnabled(bool(getattr(self, 'is_acquiring', False)))
       self.is_autoforge_continuo = False
       self.reset_autoforge_buttons()
       
@@ -10606,9 +11388,13 @@ class RealTimePlotter(QtWidgets.QWidget):
         self.on_start_acq_click() # Detiene el DAQ correctamente y llama a reset_autoforge_buttons()
       else:
         self.is_autoforge_running = False
+        self.is_paused = False
         if hasattr(self, 'btn_pause'):
+          self.btn_pause.blockSignals(True)
           self.btn_pause.setChecked(False)
-          self.btn_pause.setEnabled(False)
+          self.btn_pause.blockSignals(False)
+          self.btn_pause.setText("PAUSAR")
+          self.btn_pause.setEnabled(bool(getattr(self, 'is_acquiring', False)))
         self.reset_autoforge_buttons()
         
       self.config_stack.setCurrentIndex(0) # Restaurar configuración
@@ -10642,6 +11428,17 @@ class RealTimePlotter(QtWidgets.QWidget):
     )
     self.lbl_recording_space.setText(texto_ventana)
     self.word_window_process = None
+    self._publicar_estado_display_remoto(
+      palabra="HAZ SILENCIO",
+      palabra_siguiente=palabra.upper(),
+      pulso_actual=0,
+      total_pulsos=self.autoforge_target_reps,
+      flash=False,
+      grabando=False,
+      fase="PREPARANDO ENTORNO",
+      instruccion_fase="HAZ SILENCIO — PREPARANDO ENTORNO",
+      subtitulo_fase=f"Relaja el rostro. Próxima vocal: /{palabra.upper()}/",
+    )
     
     # 3 Segundos de silencio ANTES de siquiera empezar a capturar el ruido
     self._schedule_phase(3000, self.estado_grabar_ruido)
@@ -10654,6 +11451,7 @@ class RealTimePlotter(QtWidgets.QWidget):
     Returns:
       Any: Resultado de la ejecución de la función.
     """
+    self._asegurar_dimension_arreglos_canales()
     self.autoforge_overlay.setText("") 
     self.autoforge_overlay.hide()
     self.label_rec_time.setVisible(True) 
@@ -10667,6 +11465,17 @@ class RealTimePlotter(QtWidgets.QWidget):
       f"<span style='font-size:28px; font-weight:900; color:{T['warn']};'>HAZ SILENCIO &mdash; GRABANDO RUIDO BASAL</span><br>"
       f"<span style='font-size:18px; color:{T['accent']};'>Relaja el rostro. Siguiente vocal a pronunciar: <b>/{palabra_next}/</b></span>"
       f"</div>"
+    )
+    self._publicar_estado_display_remoto(
+      palabra="GRABANDO RUIDO",
+      palabra_siguiente=palabra_next,
+      pulso_actual=0,
+      total_pulsos=self.autoforge_target_reps,
+      flash=False,
+      grabando=True,
+      fase="GRABANDO RUIDO BASAL",
+      instruccion_fase="HAZ SILENCIO — GRABANDO RUIDO BASAL",
+      subtitulo_fase=f"Relaja el rostro. Siguiente vocal a pronunciar: /{palabra_next}/",
     )
     if hasattr(self, 'voice_cue_player'):
       self.voice_cue_player.say("haz_silencio", "Haz silencio, grabando ruido basal", fase="ruido_basal_inicial")
@@ -10746,9 +11555,9 @@ class RealTimePlotter(QtWidgets.QWidget):
           if window_size < 1: window_size = 1
           all_noise_env = calculate_rms_envelope(all_noise, window_size)
           
-          self.noise_levels[i] = np.mean(all_noise_env)
-          self.initial_noise_mean[i] = self.noise_levels[i]
-          self.initial_noise_std[i] = np.std(all_noise_env)
+          self.noise_levels[i] = float(np.mean(all_noise_env))
+          self.initial_noise_mean[i] = float(self.noise_levels[i])
+          self.initial_noise_std[i] = float(np.std(all_noise_env))
           
           is_rms = hasattr(self, 'chk_rms_env') and self.chk_rms_env.isChecked()
           show_noise = self.chk_show_noise.isChecked()
@@ -10797,6 +11606,17 @@ class RealTimePlotter(QtWidgets.QWidget):
     )
     self.lbl_recording_space.setText(texto_ventana)
     self.word_window_process = None
+    self._publicar_estado_display_remoto(
+      palabra=palabra.upper(),
+      palabra_siguiente=palabra.upper(),
+      pulso_actual=0,
+      total_pulsos=self.autoforge_target_reps,
+      flash=False,
+      grabando=False,
+      fase="PREPÁRATE",
+      instruccion_fase=f"PREPÁRATE PARA PRONUNCIAR /{palabra.upper()}/",
+      subtitulo_fase="Escucha la cuenta regresiva del metrónomo",
+    )
     
     # Lanzar el metrónomo AHORA MISMO con un Count-in de tipo carreras (3 graves, 1 ya estaba agregado)
     # (El metrónomo ya está fijo en el recuadro superior)
@@ -10821,6 +11641,7 @@ class RealTimePlotter(QtWidgets.QWidget):
 
   def estado_cambiar_ventana_palabra(self, anchor_perf=None):
     if not getattr(self, 'is_autoforge_running', False): return
+    self._asegurar_dimension_arreglos_canales()
     """
     Ejecuta la funcionalidad de estado_cambiar_ventana_palabra.
 
@@ -10922,6 +11743,19 @@ class RealTimePlotter(QtWidgets.QWidget):
     self.autoforge_overlay.setText("<div align='center'>DESCANSO 5s<br>GUARDANDO DATOS...</div>")
     self.autoforge_overlay.show()
     self.lbl_recording_space.setText(f"<div align='center' style='color:{T['text_dim']}; font-size:55px; font-weight:bold;'>DESCANSO</div>")
+    words_lst = getattr(self, 'autoforge_words', []) or []
+    prox_palabra = words_lst[self.autoforge_word_idx + 1].upper() if (self.autoforge_word_idx + 1) < len(words_lst) else "FIN"
+    self._publicar_estado_display_remoto(
+      palabra="DESCANSO 5s",
+      palabra_siguiente=prox_palabra,
+      pulso_actual=self.autoforge_target_reps,
+      total_pulsos=self.autoforge_target_reps,
+      flash=False,
+      grabando=False,
+      fase="DESCANSO — GUARDANDO",
+      instruccion_fase="DESCANSO (5s) — GUARDANDO DATOS",
+      subtitulo_fase="Relaja los músculos faciales",
+    )
     if hasattr(self, 'voice_cue_player'):
       self.voice_cue_player.say("descanso", "Descanso", fase="descanso_entre_tomas")
     
@@ -11176,6 +12010,10 @@ class RealTimePlotter(QtWidgets.QWidget):
         self._escribir_resumen_rapido_toma_txt(str(base_dir), metadata=metadata, modo="Autograbado Discreto")
       except Exception as exc_res:
         print(f"[Resumen Rapido] Error al guardar resumen en Autograbado: {exc_res}")
+
+      # 8. Guardar log completo de consola DAQ y ultimo metadata
+      self.last_saved_metadata = metadata
+      self._guardar_log_consola_en_medicion(str(base_dir))
       
     threading.Thread(target=guardar_async, daemon=True).start()
     
@@ -11200,6 +12038,19 @@ class RealTimePlotter(QtWidgets.QWidget):
       "VERIFICACIÓN MUSCULAR<br>"
       "<span style='font-size:20px; color:#88FF88;'>Activa tus músculos para probar la señal</span>"
       "</div>"
+    )
+    words_lst = getattr(self, 'autoforge_words', []) or []
+    prox_palabra = words_lst[self.autoforge_word_idx + 1].upper() if (self.autoforge_word_idx + 1) < len(words_lst) else "RUIDO FINAL"
+    self._publicar_estado_display_remoto(
+      palabra="PROBAR MÚSCULO",
+      palabra_siguiente=prox_palabra,
+      pulso_actual=0,
+      total_pulsos=self.autoforge_target_reps,
+      flash=False,
+      grabando=False,
+      fase="VERIFICACIÓN MUSCULAR",
+      instruccion_fase="VERIFICACIÓN MUSCULAR (5s) — PROBAR MÚSCULO",
+      subtitulo_fase="Activa tus músculos para probar la señal antes de la siguiente vocal",
     )
     
     # Ir a la siguiente palabra tras los 5 segundos de verificación (10s totales)
@@ -11771,6 +12622,12 @@ class RealTimePlotter(QtWidgets.QWidget):
       
     self.stop_event.set() # Envía la señal a TODOS los hilos
     self.timer.stop() # Detiene el timer de la GUI
+    try:
+      if hasattr(self, 'beep_queue') and self.beep_queue is not None:
+        self.beep_queue.put(None)
+      _cerrar_stream_beep_persistente()
+    except Exception:
+      pass
 
     # Detener limpiamente el worker de camara web / fotometria
     if getattr(self, 'photometry_mgr', None):
@@ -11833,14 +12690,26 @@ class RealTimePlotter(QtWidgets.QWidget):
         pulse_event['jitter_activo'] = last_cue.get('jitter_activo', False)
         if not hasattr(self, 'sync_evaluation_log') or self.sync_evaluation_log is None:
           self.sync_evaluation_log = []
+        cue_p_idx = last_cue.get('pulso_vocal_idx', last_cue.get('pulso'))
+        cue_pal = last_cue.get('palabra', last_cue.get('vocal', vocal))
+        cue_t_wav = last_cue.get('t_wav_s', last_cue.get('t_rel_s', 0.0))
+        t_onset_val = round(float(cue_t_wav or 0.0) + (float(sync_latency_ms) / 1000.0), 4)
+        abs_lat = abs(float(sync_latency_ms))
+        clasif = "SINCRONIZADO" if abs_lat <= 250.0 else ("ANTICIPADO" if float(sync_latency_ms) < -250.0 else "TARDIO")
         self.sync_evaluation_log.append({
           "pulse_num": pulse_event['pulse_num'],
-          "cue_pulso_idx": last_cue.get('pulso_vocal_idx'),
-          "palabra": last_cue.get('palabra', vocal),
+          "cue_pulso_idx": cue_p_idx,
+          "pulso_asociado": cue_p_idx,
+          "palabra": cue_pal,
+          "vocal": cue_pal,
           "sync_latency_ms": sync_latency_ms,
-          "cue_t_wav_s": last_cue.get('t_wav_s'),
-          "cue_sample_daq": last_cue.get('sample_daq'),
-          "intervalo_s": last_cue.get('intervalo_s'),
+          "delta_sync_ms": sync_latency_ms,
+          "cue_t_wav_s": cue_t_wav,
+          "t_beat_s": cue_t_wav,
+          "t_onset_s": t_onset_val,
+          "clasificacion": clasif,
+          "cue_sample_daq": last_cue.get('sample_daq', last_cue.get('sample_idx')),
+          "intervalo_s": last_cue.get('intervalo_s', last_cue.get('tau_s')),
           "jitter_activo": last_cue.get('jitter_activo', False),
           "jitter_mode": last_cue.get('jitter_mode', 'off'),
         })
@@ -12804,24 +13673,19 @@ class RealTimePlotter(QtWidgets.QWidget):
     jit_on = bool(hasattr(self, 'chk_metro_jitter') and self.chk_metro_jitter.isChecked())
 
     if tira_secuencia is None:
-      if getattr(self, 'is_autoforge_continuo', False) and is_rec:
-        # Consigna Secuencia Continua: sin tira de secuencia ni próxima vocal en pantalla remota
-        tira_secuencia = []
-      else:
+      tira_secuencia = []
+      if not getattr(self, 'is_autoforge_continuo', False) and getattr(self, 'is_autoforge_running', False):
         words = getattr(self, 'autoforge_words', []) or []
-        if getattr(self, 'is_autoforge_continuo', False):
-          full_seq = getattr(self, 'autoforge_full_sequence', None) or words
-        else:
-          full_seq = words
-        n_w = len(full_seq)
-        act_i = (max(0, int(pulso_actual) - 1) % n_w) if getattr(self, 'is_autoforge_continuo', False) else int(getattr(self, 'autoforge_word_idx', 0)) % n_w
-        idxs = list(range(n_w)) if n_w <= 8 else [(act_i + off) % n_w for off in range(-1, 6)]
-        for i_w in idxs:
-          tira_secuencia.append({
-            "vocal": str(full_seq[i_w]).upper(),
-            "activo": (i_w == act_i),
-            "siguiente": (i_w == (act_i + 1) % n_w),
-          })
+        n_w = len(words)
+        if n_w > 0:
+          act_i = int(getattr(self, 'autoforge_word_idx', 0)) % n_w
+          idxs = list(range(n_w)) if n_w <= 8 else [(act_i + off) % n_w for off in range(-1, 6)]
+          for i_w in idxs:
+            tira_secuencia.append({
+              "vocal": str(words[i_w]).upper(),
+              "activo": (i_w == act_i),
+              "siguiente": (i_w == (act_i + 1) % n_w),
+            })
 
     srv = getattr(self, 'remote_display_server', None)
     if srv is not None and srv.activo():

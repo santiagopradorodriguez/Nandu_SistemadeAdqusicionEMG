@@ -2628,7 +2628,7 @@ def posicion_polo_desde_anclaje(
 # generan una sola vez con la misma voz Piper del asistente TARS.
 # =====================================================================
 DIRECTORIO_VOZ_ASISTENTE = pathlib.Path(__file__).resolve().parent / "voz_asistente"
-DIRECTORIO_CACHE_VOZ = pathlib.Path("/tmp/voz_asistente_cache")
+DIRECTORIO_CACHE_VOZ = pathlib.Path(tempfile.gettempdir()) / "voz_asistente_cache"
 MODELO_PIPER_RUTA = pathlib.Path(
     "~/.local/share/piper-voices/es_ES-sharvard-medium.onnx"
 ).expanduser()
@@ -2742,13 +2742,15 @@ class _VozGuia(QtCore.QObject):
         )
 
     def _inicializar(self) -> None:
-        # Reproduce el patron del asistente TARS: WAVs generados con Piper y
-        # reproducidos con pw-play o paplay.
+        # Reproduce el patron del asistente TARS: WAVs con pw-play/paplay/aplay en Linux
+        # y winsound asincrono nativo en Windows 10/11.
         for comando in ("pw-play", "paplay", "aplay"):
             ruta = shutil.which(comando)
             if ruta:
                 self.reproductor = ruta
                 break
+        if not self.reproductor and sys.platform == "win32":
+            self.reproductor = "__winsound__"
         if self.reproductor and DIRECTORIO_VOZ_ASISTENTE.is_dir() and any(
             DIRECTORIO_VOZ_ASISTENTE.glob("*.wav")
         ):
@@ -2902,6 +2904,13 @@ class _VozGuia(QtCore.QObject):
     def _reproducir(self, ruta: Optional[pathlib.Path]) -> None:
         try:
             if not self.reproductor or ruta is None or not pathlib.Path(ruta).is_file():
+                return
+            if self.reproductor == "__winsound__":
+                import winsound
+                winsound.PlaySound(
+                    str(ruta),
+                    winsound.SND_FILENAME | winsound.SND_ASYNC | winsound.SND_NODEFAULT,
+                )
                 return
             anterior = self._proceso_anterior
             if anterior is not None and anterior.poll() is None:
@@ -3375,14 +3384,15 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
     """
 
     PASO_FRONTAL = 0
-    PASO_MARCA_FRONTAL = 1
-    PASO_PERFIL_IZQ = 2
-    PASO_MARCA_PERFIL = 3
-    PASO_SUBMENTAL = 4
-    PASO_PERFIL_DER = 5
-    PASO_PARAMETROS = 6
-    # ETAPA 1: paso de marcado del canal submentoniano (solo foto submental)
-    PASO_MARCA_SUBMENTAL = 7
+    PASO_PERFIL_IZQ = 1
+    PASO_SUBMENTAL = 2
+    PASO_PERFIL_DER = 3
+    PASO_MARCADO_ELECTRODOS = 4
+    PASO_PARAMETROS = 5
+    # Alias de compatibilidad hacia atras apuntando al paso unificado de marcado
+    PASO_MARCA_FRONTAL = PASO_MARCADO_ELECTRODOS
+    PASO_MARCA_PERFIL = PASO_MARCADO_ELECTRODOS
+    PASO_MARCA_SUBMENTAL = PASO_MARCADO_ELECTRODOS
 
     def __init__(
         self,
@@ -3474,6 +3484,12 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
             "submental": None,
             "perfil_derecho": None,
         }
+        self._fotos_capturadas_cache: Dict[str, Dict[str, Any]] = {}
+        self._foto_marcado_activa: str = "frontal"
+        self._canal_marcado_activo: Optional[int] = emg_positions[0] if emg_positions else None
+        self._ts_inicio_paso: float = time.monotonic()
+        self._retorno_tras_recaptura: Optional[int] = None
+        self._bloqueo_selector_marcado: bool = False
         self._pose_fotos: Dict[str, Any] = {}
         self._dip_px_fotos: Dict[str, Optional[float]] = {"frontal": None}
         self._escala_mm_px_frontal: Optional[float] = None
@@ -3704,6 +3720,59 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         self.btn_continuar_paso.clicked.connect(self._continuar_paso)
         layout_pasos.addWidget(self.btn_continuar_paso)
 
+        # Panel unificado de marcado libre de electrodos sobre las 4 fotos capturadas
+        self._panel_marcado = QtWidgets.QGroupBox("Seleccion de Foto y Canal a Marcar")
+        self._panel_marcado.setStyleSheet(
+            "QGroupBox { background-color: #18222d; border: 1.5px solid #00ffcc; border-radius: 6px; margin-top: 8px; padding-top: 10px; color: #00ffcc; font-weight: bold; }"
+        )
+        lyt_marcado = QtWidgets.QVBoxLayout(self._panel_marcado)
+        lyt_marcado.setSpacing(6)
+
+        lbl_sel_foto = QtWidgets.QLabel("Foto visible (cambia libremente cuando quieras):")
+        lbl_sel_foto.setStyleSheet("color: #cbd5e1; font-size: 11px;")
+        lyt_marcado.addWidget(lbl_sel_foto)
+
+        fila_fotos_sel = QtWidgets.QGridLayout()
+        fila_fotos_sel.setSpacing(4)
+        self._btns_foto_marcado: Dict[str, QtWidgets.QPushButton] = {}
+        definicion_fotos = (
+            ("frontal", "01 Frontal", 0, 0),
+            ("perfil_izquierdo", "02 Perfil Izq", 0, 1),
+            ("submental", "03 Submental", 1, 0),
+            ("perfil_derecho", "04 Perfil Der", 1, 1),
+        )
+        for clave_f, etq_f, rr, cc in definicion_fotos:
+            btn_f = QtWidgets.QPushButton(etq_f)
+            btn_f.setCheckable(True)
+            btn_f.setStyleSheet(
+                "QPushButton { background-color: #1f2937; color: #e2e8f0; border: 1px solid #475569; padding: 5px 8px; font-size: 11px; }"
+                "QPushButton:checked { background-color: #00695c; color: #00ffcc; border: 2px solid #00ffcc; font-weight: bold; }"
+                "QPushButton:disabled { color: #555; border-color: #333; }"
+            )
+            btn_f.clicked.connect(lambda _chk=False, k=clave_f: self._seleccionar_foto_marcado(k))
+            fila_fotos_sel.addWidget(btn_f, rr, cc)
+            self._btns_foto_marcado[clave_f] = btn_f
+        lyt_marcado.addLayout(fila_fotos_sel)
+
+        lbl_sel_ch = QtWidgets.QLabel("Canal EMG activo (Polo + luego Polo -):")
+        lbl_sel_ch.setStyleSheet("color: #cbd5e1; font-size: 11px;")
+        lyt_marcado.addWidget(lbl_sel_ch)
+
+        self.cmb_canal_marcado = QtWidgets.QComboBox()
+        self.cmb_canal_marcado.currentIndexChanged.connect(self._al_cambiar_canal_marcado)
+        lyt_marcado.addWidget(self.cmb_canal_marcado)
+
+        self.btn_limpiar_canal_marcado = QtWidgets.QPushButton("Borrar / Remarcar Canal Seleccionado")
+        self.btn_limpiar_canal_marcado.setStyleSheet(
+            "QPushButton { background-color: #2c1a1d; color: #ff8a80; border: 1px solid #ff5252; padding: 5px; font-size: 11px; }"
+            "QPushButton:hover { background-color: #4a1212; }"
+        )
+        self.btn_limpiar_canal_marcado.clicked.connect(self._limpiar_canal_seleccionado)
+        lyt_marcado.addWidget(self.btn_limpiar_canal_marcado)
+
+        self._panel_marcado.setVisible(False)
+        layout_pasos.addWidget(self._panel_marcado)
+
         fila_voz = QtWidgets.QHBoxLayout()
         self.chk_voz = QtWidgets.QCheckBox("Guia por voz durante el asistente")
         self.chk_voz.setChecked(self._voz.disponible)
@@ -3885,91 +3954,155 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         """Textos de guia del paso actual para la interfaz y el marco del video."""
         paso = self._paso
         if paso == self.PASO_FRONTAL:
-            canales_txt = ", ".join(
-                f"Canal {self._nombre_canal(p)[0]} - {self._nombre_canal(p)[1]}"
-                for p in self._canales_frontal
-            ) or "sin canales activos"
             return {
-                "titulo": "Paso 1 de 4 : Foto Frontal",
+                "titulo": "Foto 1 de 4 : Captura Frontal",
                 "instruccion": "Mire de frente hasta que el semaforo quede en verde. "
-                               "La foto frontal se toma automaticamente.",
-                "sub": f"Luego se marcaran los canales: {canales_txt}",
-            }
-        if paso == self.PASO_MARCA_FRONTAL:
-            return {
-                "titulo": "Paso 1 de 4 : Foto Frontal - Marcado de Electrodos",
-                "instruccion": "",
-                "sub": "Clic izquierdo marca los Polos sobre la foto congelada | Clic derecho deshace | Continuar avanza al terminar",
+                               "Primero se capturan las 4 fotos y luego se marcan los electrodos.",
+                "sub": "Auto-captura al estabilizar mirada frontal",
             }
         if paso == self.PASO_PERFIL_IZQ:
-            sub_txt = (
-                ", ".join(f"Canal {self._nombre_canal(p)[0]} ({self._nombre_canal(p)[1]})" for p in self._canales_perfil)
-                if len(self._canales_perfil) > 0
-                else "Foto de referencia lateral (+45° hacia la derecha)"
-            )
             return {
-                "titulo": "Paso 2 de 4 : Foto Perfil Izquierdo (Gire a la DERECHA +45°)",
-                "instruccion": "Gire la cabeza 45 grados hacia la DERECHA (Yaw positivo +25° a +65°) hasta poner el semaforo en verde.",
-                "sub": sub_txt,
-            }
-        if paso == self.PASO_MARCA_PERFIL:
-            return {
-                "titulo": "Paso 2 de 4 : Foto Perfil Izquierdo - Marcado de Electrodos",
-                "instruccion": "",
-                "sub": "Clic izquierdo marca los Polos sobre la foto congelada | Clic derecho deshace | Continuar avanza al terminar",
-            }
-        if paso == self.PASO_MARCA_SUBMENTAL:
-            canal_txt = (
-                f"Canal {self._nombre_canal(self._pos_canal_submentoniano)[0]} - "
-                f"{self._nombre_canal(self._pos_canal_submentoniano)[1]}"
-                if self._pos_canal_submentoniano is not None
-                else "sin canal submentoniano designado"
-            )
-            return {
-                "titulo": "Paso 3 : Foto Submental - Marcado del Canal Submentoniano",
-                "instruccion": "",
-                "sub": f"Canales a marcar SOLO en esta imagen inferior mandibular: {canal_txt} | "
-                       "Clic izquierdo marca los Polos, clic derecho deshace, Continuar avanza",
+                "titulo": "Foto 2 de 4 : Perfil Izquierdo (Gire a la DERECHA +45°)",
+                "instruccion": "Gire la cabeza 45 grados hacia la DERECHA (Yaw +18° a +72°) hasta poner el semaforo en verde.",
+                "sub": "Luego tomaremos la foto submental mirando hacia arriba",
             }
         if paso == self.PASO_SUBMENTAL:
             return {
-                "titulo": "Paso 3 : Foto Submental (Mirando hacia ARRIBA +30°)",
-                "instruccion": "Levante la cabeza y mire hacia ARRIBA (Pitch positivo +15° a +45°) para registrar los electrodos del vientre anterior del digastrico (Canal 0).",
-                "sub": "Sostenga la elevacion del menton hasta que el semaforo quede en verde.",
+                "titulo": "Foto 3 de 4 : Submental (Mire hacia ARRIBA +30°)",
+                "instruccion": "Vuelva el rostro al centro y levante la cabeza mirando hacia ARRIBA (Pitch +14° a +60°) para ver la zona submental/digastrico.",
+                "sub": "Sostenga el menton elevado hasta que el semaforo quede en verde",
             }
         if paso == self.PASO_PERFIL_DER:
             return {
-                "titulo": "Paso 4 : Foto Perfil Derecho (Gire a la IZQUIERDA -45°)",
-                "instruccion": "Ahora gire la cabeza 45 grados hacia la IZQUIERDA (Yaw negativo -25° a -65°) hasta poner el semaforo en verde.",
-                "sub": "Exige orientacion opuesta al paso anterior (solo se activa al girar a la izquierda)",
+                "titulo": "Foto 4 de 4 : Perfil Derecho (Gire a la IZQUIERDA -45°)",
+                "instruccion": "Ahora gire la cabeza 45 grados hacia la IZQUIERDA (Yaw opuesto al perfil previo) hasta poner el semaforo en verde.",
+                "sub": "Al capturar esta foto pasaremos al marcado libre de electrodos",
+            }
+        if paso == self.PASO_MARCADO_ELECTRODOS:
+            return {
+                "titulo": "Paso 5 : Marcado de Electrodos sobre las 4 Fotos",
+                "instruccion": "Elige cada canal EMG y selecciona libremente en que foto marcar Polo + y Polo -.",
+                "sub": "Clic izquierdo marca Polos | Clic derecho deshace | El canal submentoniano preselecciona 03 Submental",
             }
         return {
-            "titulo": "Paso 5 : Parametros de Montaje",
+            "titulo": "Paso 6 : Parametros de Montaje y Comentario",
             "instruccion": "Revise diametro de gel y distancia inter-electrodo nominal; "
                            "agregue un comentario si lo desea. Confirme para grabar la sesion.",
             "sub": "Al confirmar, el montaje se guarda en la carpeta activa de la medicion",
         }
 
+    def _foto_recomendada_para_canal(self, canal_pos: Optional[int]) -> str:
+        if canal_pos is None:
+            return "frontal"
+        if canal_pos in self._pares_por_canal:
+            fk = self._pares_por_canal[canal_pos].get("foto_clave")
+            if fk and self._fotos.get(fk) is not None:
+                return fk
+        _fis, nombre = self._nombre_canal(canal_pos)
+        if canal_pos == getattr(self, "_pos_canal_submentoniano", None) or _es_musculo_submentoniano(nombre):
+            if self._fotos.get("submental") is not None:
+                return "submental"
+        if canal_pos in getattr(self, "_canales_perfil", []) and self._fotos.get("perfil_izquierdo") is not None:
+            return "perfil_izquierdo"
+        for k in ("frontal", "submental", "perfil_izquierdo", "perfil_derecho"):
+            if self._fotos.get(k) is not None:
+                return k
+        return "frontal"
+
+    def _cargar_foto_en_visor_marcado(self, clave: str) -> None:
+        if clave not in self._fotos or self._fotos.get(clave) is None:
+            for k in ("frontal", "submental", "perfil_izquierdo", "perfil_derecho"):
+                if self._fotos.get(k) is not None:
+                    clave = k
+                    break
+        self._foto_marcado_activa = clave
+        cache = self._fotos_capturadas_cache.get(clave, {})
+        img = cache.get("bgr") if cache.get("bgr") is not None else self._fotos.get(clave)
+        self._frozen_frame = img.copy() if img is not None else None
+        self._frozen_fiduciarios = cache.get("fiduciarios")
+        if hasattr(self, "_btns_foto_marcado"):
+            for k, btn in self._btns_foto_marcado.items():
+                disponible = self._fotos.get(k) is not None
+                btn.setEnabled(disponible)
+                btn.blockSignals(True)
+                btn.setChecked(k == clave and disponible)
+                btn.blockSignals(False)
+
+    def _seleccionar_foto_marcado(self, clave: str) -> None:
+        if self._paso != self.PASO_MARCADO_ELECTRODOS:
+            return
+        self._pend_pos_pole = None
+        self._pend_pos_anchor = None
+        self._cargar_foto_en_visor_marcado(clave)
+        self._refrescar_estado_ui()
+
+    def _poblar_combo_canales_marcado(self) -> None:
+        if not hasattr(self, "cmb_canal_marcado"):
+            return
+        self._bloqueo_selector_marcado = True
+        try:
+            self.cmb_canal_marcado.clear()
+            emg_pos = list(getattr(self, "_emg_positions", []))
+            for pos in emg_pos:
+                fisico, nombre = self._nombre_canal(pos)
+                par = self._pares_por_canal.get(pos)
+                if par is not None:
+                    estado = f"LISTO - {par.get('foto_clave', 'frontal')}"
+                else:
+                    estado = "PENDIENTE"
+                self.cmb_canal_marcado.addItem(f"[{estado}] Canal {fisico} (ai{fisico}) - {nombre}", pos)
+            if self._canal_marcado_activo is None and emg_pos:
+                self._canal_marcado_activo = emg_pos[0]
+            for idx in range(self.cmb_canal_marcado.count()):
+                if self.cmb_canal_marcado.itemData(idx) == self._canal_marcado_activo:
+                    self.cmb_canal_marcado.setCurrentIndex(idx)
+                    break
+        finally:
+            self._bloqueo_selector_marcado = False
+
+    def _al_cambiar_canal_marcado(self, index: int) -> None:
+        if getattr(self, "_bloqueo_selector_marcado", False) or index < 0:
+            return
+        canal_pos = self.cmb_canal_marcado.itemData(index)
+        if canal_pos is None:
+            return
+        self._canal_marcado_activo = int(canal_pos)
+        self._pend_pos_pole = None
+        self._pend_pos_anchor = None
+        clave_rec = self._foto_recomendada_para_canal(self._canal_marcado_activo)
+        self._cargar_foto_en_visor_marcado(clave_rec)
+        self._refrescar_estado_ui()
+
+    def _limpiar_canal_seleccionado(self) -> None:
+        if self._paso != self.PASO_MARCADO_ELECTRODOS:
+            return
+        ch_pos = self._canal_actual_marca()
+        if ch_pos is not None:
+            self._pares_por_canal.pop(ch_pos, None)
+        self._pend_pos_pole = None
+        self._pend_pos_anchor = None
+        self._poblar_combo_canales_marcado()
+        self._refrescar_estado_ui()
+
     def _ir_a_paso(self, nuevo_paso: int) -> None:
         self._paso = nuevo_paso
         self._frames_verde = 0
-        # Recordar el lado solo dentro de una secuencia de escaneo: al arrancar
-        # (o repetir) el perfil izquierdo se olvida la referencia anterior.
+        self._ts_inicio_paso = time.monotonic()
         if nuevo_paso in (self.PASO_FRONTAL, self.PASO_PERFIL_IZQ):
-            self._yaw_signo_perfil = None
-        es_paso_congelado = nuevo_paso in (
-            self.PASO_MARCA_FRONTAL, self.PASO_MARCA_PERFIL, self.PASO_MARCA_SUBMENTAL
-        )
+            if nuevo_paso == self.PASO_FRONTAL or self._retorno_tras_recaptura is None:
+                self._yaw_signo_perfil = None
+        es_paso_congelado = (nuevo_paso == self.PASO_MARCADO_ELECTRODOS)
         if not es_paso_congelado:
             self._frozen_frame = None
             self._frozen_fiduciarios = None
-        if nuevo_paso == self.PASO_MARCA_FRONTAL:
-            self._iniciar_marcado(self._canales_frontal)
-        elif nuevo_paso == self.PASO_MARCA_PERFIL:
-            self._iniciar_marcado(self._canales_perfil)
-        elif nuevo_paso == self.PASO_MARCA_SUBMENTAL:
-            # ETAPA 1: marcado del canal submentoniano unicamente aqui
-            self._iniciar_marcado(self._canales_submental)
+        else:
+            emg_pos = list(getattr(self, "_emg_positions", []))
+            pendientes = [p for p in emg_pos if p not in self._pares_por_canal]
+            self._iniciar_marcado(emg_pos)
+            self._canal_marcado_activo = pendientes[0] if pendientes else (emg_pos[0] if emg_pos else None)
+            self._poblar_combo_canales_marcado()
+            clave_rec = self._foto_recomendada_para_canal(self._canal_marcado_activo)
+            self._cargar_foto_en_visor_marcado(clave_rec)
         self._canal_anunciado = None
         self._clave_pendiente = ""
         self._frames_clave = 0
@@ -3980,51 +4113,62 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
 
     def _iniciar_marcado(self, canales: List[int]) -> None:
         self._canales_marcado_paso = list(canales)
-        # Solo encola canales que aun no tengan su par registrado.
         self._cola_marcado = [p for p in canales if p not in self._pares_por_canal]
         self._pend_pos_pole = None
         self._pend_pos_anchor = None
 
     def _canal_actual_marca(self) -> Optional[int]:
+        if self._paso != self.PASO_MARCADO_ELECTRODOS:
+            return None
+        if self._canal_marcado_activo is not None:
+            return self._canal_marcado_activo
         return self._cola_marcado[0] if self._cola_marcado else None
 
     def _refrescar_estado_ui(self) -> None:
         textos = self._textos_paso_actual()
-        paso_marca = self._paso in (
-            self.PASO_MARCA_FRONTAL, self.PASO_MARCA_PERFIL, self.PASO_MARCA_SUBMENTAL
-        )
+        paso_marca = (self._paso == self.PASO_MARCADO_ELECTRODOS)
+        if hasattr(self, "_panel_marcado"):
+            self._panel_marcado.setVisible(paso_marca)
         if paso_marca:
+            emg_pos = list(getattr(self, "_emg_positions", []))
+            pendientes = [p for p in emg_pos if p not in self._pares_por_canal]
             canal = self._canal_actual_marca()
             if canal is not None:
                 fisico, nombre = self._nombre_canal(canal)
-                self.lbl_titulo_paso.setText(
-                    f"Ubique el Canal {fisico}: Clic en Polo + y Clic en Polo -"
-                )
-                self.lbl_instruccion_paso.setText(
-                    f"Musculo: {nombre} - "
-                    + ("Marque ahora el Polo -" if self._pend_pos_pole is not None else
-                       "Marque primero el Polo + y luego el Polo -")
-                )
-                self._mostrar_consejo(
-                    f"Marque el Canal {fisico} - {nombre}: "
-                    "clic en Polo + y luego en Polo - sobre la foto congelada",
-                    "info",
-                )
-                if canal != self._canal_anunciado:
+                ya_marcado = canal in self._pares_por_canal
+                if ya_marcado and not pendientes:
+                    self.lbl_titulo_paso.setText("Todos los canales EMG estan marcados")
+                    self.lbl_instruccion_paso.setText(
+                        "Puedes revisar/reubicar cualquier canal seleccionando otra foto, o pulsar Continuar a Parametros."
+                    )
+                    self._mostrar_consejo(
+                        "Todos los electrodos marcados. Verifica las vistas y pulsa Continuar a Parametros",
+                        "ok",
+                    )
+                else:
+                    self.lbl_titulo_paso.setText(
+                        f"Ubique Canal {fisico} en foto '{self._foto_marcado_activa}': Clic en Polo + y Polo -"
+                    )
+                    self.lbl_instruccion_paso.setText(
+                        f"Musculo: {nombre} - "
+                        + ("Marque ahora el Polo -" if self._pend_pos_pole is not None else
+                           "Marque primero el Polo + y luego el Polo - sobre la foto visible")
+                    )
+                    self._mostrar_consejo(
+                        f"Marcando Canal {fisico} ({nombre}) en vista {self._foto_marcado_activa}: "
+                        "clic en Polo + y Polo -",
+                        "info",
+                    )
+                if canal != self._canal_anunciado and canal not in self._pares_por_canal:
                     self._canal_anunciado = canal
                     texto_canal = (
                         f"Marque el Canal {fisico}: {nombre}. Haga clic en el Polo + "
-                        "y despues en el Polo - sobre la foto congelada"
+                        "y despues en el Polo - sobre la foto"
                     )
                     self._decir(texto_canal, clave=f"canal{fisico}")
             else:
-                self.lbl_titulo_paso.setText("Todos los canales de esta foto estan marcados")
-                self.lbl_instruccion_paso.setText(
-                    "Clic derecho para deshacer un par; Continuar para avanzar al siguiente paso"
-                )
-                self._mostrar_consejo(
-                    "Foto completa: revise los pares y pulse Continuar al Siguiente Paso", "ok"
-                )
+                self.lbl_titulo_paso.setText(textos["titulo"])
+                self.lbl_instruccion_paso.setText(textos["instruccion"])
         else:
             self.lbl_titulo_paso.setText(textos["titulo"])
             self.lbl_instruccion_paso.setText(textos["instruccion"])
@@ -4033,13 +4177,20 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         es_paso_espera = self._paso in (self.PASO_FRONTAL, self.PASO_PERFIL_IZQ, self.PASO_SUBMENTAL, self.PASO_PERFIL_DER)
         self.btn_tomar_ahora.setVisible(es_paso_espera)
         self.btn_tomar_ahora.setEnabled(es_paso_espera)
+        self.btn_repetir_foto.setText("Repetir Foto Visible" if paso_marca else "Repetir Foto de este Paso")
         self.btn_repetir_foto.setVisible(paso_marca)
         self.btn_repetir_foto.setEnabled(paso_marca)
-        continuar_visible = paso_marca and not self._cola_marcado
-        self.btn_continuar_paso.setVisible(continuar_visible)
-        self.btn_continuar_paso.setEnabled(continuar_visible)
+        if paso_marca:
+            emg_pos = list(getattr(self, "_emg_positions", []))
+            faltantes = len([p for p in emg_pos if p not in self._pares_por_canal])
+            self.btn_continuar_paso.setText(
+                "Continuar a Parametros (Todos Listos)" if faltantes == 0 else f"Continuar a Parametros (Faltan {faltantes})"
+            )
+        else:
+            self.btn_continuar_paso.setText("Continuar al Siguiente Paso")
+        self.btn_continuar_paso.setVisible(paso_marca)
+        self.btn_continuar_paso.setEnabled(paso_marca)
 
-        # El grupo queda siempre activo para cargar el comentario antes del Paso 4
         self.grupo_parametros.setEnabled(True)
         self.btn_confirmar.setEnabled(self._paso == self.PASO_PARAMETROS)
 
@@ -4083,10 +4234,11 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
                     f"{par['ied_mm']:.1f} mm" if par.get("ied_mm") is not None
                     else f"{par['ied_px']:.0f} px"
                 )
+                fk_tag = par.get("foto_clave", "frontal")
                 self.list_progreso.addItem(
-                    f"[OK] Canal {fisico} - {nombre} - Polo + y Polo - marcados | IED: {ied_txt}"
+                    f"[OK] Canal {fisico} - {nombre} ({fk_tag}) | IED: {ied_txt}"
                 )
-            elif en_cola:
+            elif self._paso == self.PASO_MARCADO_ELECTRODOS and self._canal_actual_marca() == pos:
                 if self._pend_pos_pole is not None:
                     self.list_progreso.addItem(
                         f"[ >] Canal {fisico} - {nombre} - Polo + marcado, marque Polo -"
@@ -4095,19 +4247,13 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
                     self.list_progreso.addItem(
                         f"[ >] Canal {fisico} - {nombre} - Marque Polo +"
                     )
-            elif pos == getattr(self, "_pos_canal_submentoniano", None):
-                # ETAPA 1: el canal submentoniano se marca en la foto submental
+            elif _es_musculo_submentoniano(nombre) or pos == getattr(self, "_pos_canal_submentoniano", None):
                 self.list_progreso.addItem(
-                    f"[SUB] Canal {fisico} - {nombre} - se marca solo en la foto Submental"
+                    f"[  ] Canal {fisico} - {nombre} - Pendiente (Sugerido: 03 Submental)"
                 )
             else:
-                sub_motivo = (
-                    " (se marca en la foto Submental)"
-                    if pos in getattr(self, "_canales_submental", [])
-                    else ""
-                )
                 self.list_progreso.addItem(
-                    f"[  ] Canal {fisico} - {nombre} - Pendiente{sub_motivo}"
+                    f"[  ] Canal {fisico} - {nombre} - Pendiente (Sugerido: 01 Frontal)"
                 )
 
     # =====================================================================
@@ -4115,34 +4261,72 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
     # =====================================================================
 
     def _registrar_anclaje(
-        self, fiduciarios: Optional[Dict[str, Any]], img_x: float, img_y: float
-    ) -> Optional[Dict[str, Any]]:
-        """Ancla un clic al vertice de malla mas cercano: v_idx, offsets dx dy y datos 3D."""
-        if fiduciarios is None or "puntos_2d_px" not in fiduciarios:
-            return None
-        puntos_2d = fiduciarios["puntos_2d_px"]
-        distancias = np.hypot(puntos_2d[:, 0] - img_x, puntos_2d[:, 1] - img_y)
-        v_idx = int(np.argmin(distancias))
-        ancla = {
-            "v_idx": v_idx,
-            "dx": float(img_x - puntos_2d[v_idx, 0]),
-            "dy": float(img_y - puntos_2d[v_idx, 1]),
-            "dip_px": float(fiduciarios.get("distancia_interpupilar_px", 0.0)),
+        self,
+        fiduciarios: Optional[Dict[str, Any]],
+        img_x: float,
+        img_y: float,
+        foto_clave: str = "frontal",
+        img_shape: Tuple[int, int] = (480, 640),
+    ) -> Dict[str, Any]:
+        """Ancla un clic al vertice de malla mas cercano o sintetiza coordenadas 3D/dip si no hay malla."""
+        dip_fallback = float(self._dip_px_fotos.get("frontal") or 120.0)
+        if dip_fallback <= 1.0:
+            dip_fallback = 120.0
+        if fiduciarios is not None and "puntos_2d_px" in fiduciarios:
+            puntos_2d = fiduciarios["puntos_2d_px"]
+            distancias = np.hypot(puntos_2d[:, 0] - img_x, puntos_2d[:, 1] - img_y)
+            v_idx = int(np.argmin(distancias))
+            dip_val = float(fiduciarios.get("distancia_interpupilar_px", 0.0) or 0.0)
+            if dip_val <= 1.0:
+                dip_val = dip_fallback
+            ancla = {
+                "v_idx": v_idx,
+                "dx": float(img_x - puntos_2d[v_idx, 0]),
+                "dy": float(img_y - puntos_2d[v_idx, 1]),
+                "dip_px": dip_val,
+            }
+            puntos_3d = fiduciarios.get("puntos_3d")
+            if puntos_3d is not None and v_idx < len(puntos_3d):
+                ancla["vertice_3d"] = [float(v) for v in puntos_3d[v_idx]]
+            else:
+                h_im, w_im = float(img_shape[0]), float(img_shape[1])
+                ancla["vertice_3d"] = [
+                    round((float(img_x) - 0.5 * w_im) / dip_val, 5),
+                    round((float(img_y) - 0.5 * h_im) / dip_val, 5),
+                    0.0,
+                ]
+            return ancla
+
+        # Fallback geometrico sin None para vistas submentales/laterales donde MediaPipe no devuelva malla
+        h_im = float(img_shape[0]) if img_shape and len(img_shape) >= 2 else 480.0
+        w_im = float(img_shape[1]) if img_shape and len(img_shape) >= 2 else 640.0
+        v_idx_geom = 152 if foto_clave == "submental" else 1
+        return {
+            "v_idx": v_idx_geom,
+            "dx": 0.0,
+            "dy": 0.0,
+            "dip_px": dip_fallback,
+            "vertice_3d": [
+                round((float(img_x) - 0.5 * w_im) / dip_fallback, 5),
+                round((float(img_y) - 0.5 * h_im) / dip_fallback, 5),
+                0.0,
+            ],
         }
-        puntos_3d = fiduciarios.get("puntos_3d")
-        if puntos_3d is not None and v_idx < len(puntos_3d):
-            ancla["vertice_3d"] = [float(v) for v in puntos_3d[v_idx]]
-        return ancla
 
     def _al_clic_izquierdo(self, img_x: float, img_y: float) -> None:
-        if self._paso not in (
-            self.PASO_MARCA_FRONTAL, self.PASO_MARCA_PERFIL, self.PASO_MARCA_SUBMENTAL
-        ):
+        if self._paso != self.PASO_MARCADO_ELECTRODOS:
             return
         canal_pos = self._canal_actual_marca()
         if canal_pos is None:
             return
-        ancla = self._registrar_anclaje(self._frozen_fiduciarios, img_x, img_y)
+        img_shape = self._frozen_frame.shape[:2] if self._frozen_frame is not None else (480, 640)
+        ancla = self._registrar_anclaje(
+            self._frozen_fiduciarios,
+            img_x,
+            img_y,
+            foto_clave=self._foto_marcado_activa,
+            img_shape=img_shape,
+        )
         if self._pend_pos_pole is None:
             self._pend_pos_pole = (float(img_x), float(img_y))
             self._pend_pos_anchor = ancla
@@ -4150,36 +4334,47 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         else:
             pos_pt = self._pend_pos_pole
             pos_anc = self._pend_pos_anchor or {}
-            self._completar_par(canal_pos, pos_pt, pos_anc, (float(img_x), float(img_y)), ancla)
-            self._cola_marcado.pop(0)
+            self._completar_par(
+                canal_pos,
+                pos_pt,
+                pos_anc,
+                (float(img_x), float(img_y)),
+                ancla,
+                foto_clave=self._foto_marcado_activa,
+            )
             self._pend_pos_pole = None
             self._pend_pos_anchor = None
-            # Sin salto automatico: si quedan canales se pide el siguiente;
-            # si esta foto ya esta completa, el usuario revisa y pulsa Continuar.
+            emg_pos = list(getattr(self, "_emg_positions", []))
+            pendientes = [p for p in emg_pos if p not in self._pares_por_canal]
+            if pendientes:
+                self._canal_marcado_activo = pendientes[0]
+                sig_foto = self._foto_recomendada_para_canal(self._canal_marcado_activo)
+                if sig_foto != self._foto_marcado_activa:
+                    self._cargar_foto_en_visor_marcado(sig_foto)
+            self._poblar_combo_canales_marcado()
             self._refrescar_estado_ui()
         self._actualizar_lista_progreso()
 
     def _al_clic_derecho(self, _img_x: float, _img_y: float) -> None:
-        if self._paso not in (
-            self.PASO_MARCA_FRONTAL, self.PASO_MARCA_PERFIL, self.PASO_MARCA_SUBMENTAL
-        ):
+        if self._paso != self.PASO_MARCADO_ELECTRODOS:
             return
         if self._pend_pos_pole is not None:
             self._pend_pos_pole = None
             self._pend_pos_anchor = None
         else:
-            # Deshacer: retomar el ultimo par ya completado entre los canales
-            # que corresponden a la foto del paso actual.
-            completados_paso = [
-                pos for pos in self._canales_marcado_paso if pos in self._pares_por_canal
-            ]
-            if completados_paso:
-                objetivo = max(completados_paso)
+            objetivo = self._canal_actual_marca()
+            if objetivo is not None and objetivo in self._pares_por_canal:
                 self._pares_por_canal.pop(objetivo)
-                self._pend_pos_pole = None
-                self._pend_pos_anchor = None
-                if objetivo not in self._cola_marcado:
-                    self._cola_marcado.insert(0, objetivo)
+            else:
+                en_foto = [
+                    p for p, par in self._pares_por_canal.items()
+                    if par.get("foto_clave") == self._foto_marcado_activa
+                ]
+                if en_foto:
+                    objetivo = max(en_foto)
+                    self._pares_por_canal.pop(objetivo)
+                    self._canal_marcado_activo = objetivo
+            self._poblar_combo_canales_marcado()
         self._refrescar_estado_ui()
         self._actualizar_lista_progreso()
 
@@ -4190,31 +4385,60 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         pos_anc: Dict[str, Any],
         neg_pt: Tuple[float, float],
         neg_anc: Optional[Dict[str, Any]],
+        foto_clave: Optional[str] = None,
     ) -> None:
-        """Registra un par bipolar completo con anclajes, IED, angulo y distancias a fiduciarios."""
+        """Registra un par bipolar completo con anclajes, IED, angulo y distancias sin valores None."""
+        clave_foto = str(foto_clave or self._foto_marcado_activa or "frontal")
+        mapa_archivos = {
+            "frontal": NOMBRE_FOTO_FRONTAL,
+            "perfil_izquierdo": NOMBRE_FOTO_PERFIL_IZQUIERDO,
+            "submental": NOMBRE_FOTO_SUBMENTAL,
+            "perfil_derecho": NOMBRE_FOTO_PERFIL_DERECHO,
+        }
+        nombre_foto = mapa_archivos.get(clave_foto, NOMBRE_FOTO_FRONTAL)
         fisico, nombre = self._nombre_canal(canal_pos)
         ied_px = float(np.hypot(neg_pt[0] - pos_pt[0], neg_pt[1] - pos_pt[1]))
-        dip_px = self._dip_px_del_paso()
+        dip_px = self._dip_px_del_paso() or self._dip_px_fotos.get("frontal")
         escala_local = (self.d_ip_nominal_mm / dip_px) if dip_px and dip_px > 1.0 else None
-        # En vistas inclinadas o laterales (submental / perfil) la distancia interpupilar 2D
-        # sufre escorzo; priorizar la escala frontal calibrada cuando este disponible.
-        if self._paso in (self.PASO_MARCA_SUBMENTAL, self.PASO_MARCA_PERFIL) and self._escala_mm_px_frontal is not None:
+        escala_fallback = self.d_ip_nominal_mm / 120.0  # ~0.525 mm/px si falta DIP
+        if clave_foto != "frontal" and self._escala_mm_px_frontal is not None:
             escala = float(self._escala_mm_px_frontal)
         else:
-            escala = escala_local if escala_local is not None else self._escala_mm_px_frontal
-        ied_mm = ied_px * escala if escala is not None else None
+            escala = float(escala_local if escala_local is not None else (self._escala_mm_px_frontal or escala_fallback))
+        if dip_px is None or dip_px <= 1.0:
+            dip_px = float(self.d_ip_nominal_mm / max(escala, 1e-4))
+        ied_mm = float(ied_px * escala)
         angulo = float(np.degrees(np.arctan2(neg_pt[1] - pos_pt[1], neg_pt[0] - pos_pt[0])))
 
         cx = 0.5 * (float(pos_pt[0]) + float(neg_pt[0]))
         cy = 0.5 * (float(pos_pt[1]) + float(neg_pt[1]))
-        dist_fiduciarios_mm: Dict[str, Optional[float]] = {
-            "dist_nariz_pronasale_mm": None,
-            "dist_menton_gnathion_mm": None,
-            "dist_comisura_labial_mm": None,
-            "dist_oreja_trago_mm": None,
+
+        cache_foto = self._fotos_capturadas_cache.get(clave_foto, {})
+        img_ref = cache_foto.get("bgr") if cache_foto.get("bgr") is not None else (self._frozen_frame if self._frozen_frame is not None else self._fotos.get(clave_foto))
+        h_im = float(img_ref.shape[0]) if img_ref is not None else 480.0
+        w_im = float(img_ref.shape[1]) if img_ref is not None else 640.0
+
+        fiduciarios_act = (
+            cache_foto.get("fiduciarios")
+            or (self._frozen_fiduciarios if self._frozen_frame is not None else None)
+            or self._fotos_capturadas_cache.get("frontal", {}).get("fiduciarios")
+            or self._fiduciarios_marco
+        )
+
+        # Fallback geometrico garantizado desde dimensiones de imagen
+        dist_fiduciarios_mm: Dict[str, float] = {
+            "dist_nariz_pronasale_mm": round(float(np.hypot(cx - 0.5 * w_im, cy - 0.52 * h_im) * escala), 2),
+            "dist_menton_gnathion_mm": round(float(np.hypot(cx - 0.5 * w_im, cy - 0.68 * h_im) * escala), 2),
+            "dist_comisura_labial_mm": round(float(min(
+                np.hypot(cx - 0.44 * w_im, cy - 0.58 * h_im),
+                np.hypot(cx - 0.56 * w_im, cy - 0.58 * h_im),
+            ) * escala), 2),
+            "dist_oreja_trago_mm": round(float(min(
+                np.hypot(cx - 0.30 * w_im, cy - 0.52 * h_im),
+                np.hypot(cx - 0.70 * w_im, cy - 0.52 * h_im),
+            ) * escala), 2),
         }
-        fiduciarios_act = self._frozen_fiduciarios if self._frozen_frame is not None else self._fiduciarios_marco
-        if fiduciarios_act is not None and "puntos_2d_px" in fiduciarios_act and escala is not None:
+        if fiduciarios_act is not None and "puntos_2d_px" in fiduciarios_act:
             pts_2d = fiduciarios_act["puntos_2d_px"]
             n_pts = len(pts_2d)
             if n_pts > 1:
@@ -4239,6 +4463,8 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
             "canal_pos": canal_pos,
             "canal_fisico": fisico,
             "nombre": nombre,
+            "foto_clave": clave_foto,
+            "foto_nombre": nombre_foto,
             "polo_positivo": (float(pos_pt[0]), float(pos_pt[1])),
             "polo_negativo": (float(neg_pt[0]), float(neg_pt[1])),
             "anchor_positivo": pos_anc or {},
@@ -4246,8 +4472,8 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
             "ied_px": ied_px,
             "ied_mm": ied_mm,
             "angulo_deg": angulo,
-            "dip_px_foto": float(dip_px) if dip_px else 0.0,
-            "escala_mm_px": escala,
+            "dip_px_foto": float(dip_px),
+            "escala_mm_px": float(escala),
             "diametro_gel_mm": float(self.spin_gel_diam_mm.value()),
             "distancia_interelectrodo_nominal_mm": float(self.spin_ied_nominal_mm.value()),
             **dist_fiduciarios_mm,
@@ -4257,23 +4483,35 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
     def _dip_px_del_paso(self) -> Optional[float]:
         fiduciarios = self._frozen_fiduciarios if self._frozen_frame is not None else self._fiduciarios_marco
         if fiduciarios is not None:
-            dip = float(fiduciarios.get("distancia_interpupilar_px", 0.0))
+            dip = float(fiduciarios.get("distancia_interpupilar_px", 0.0) or 0.0)
             if dip > 1.0:
                 return dip
+        dip_front = self._dip_px_fotos.get("frontal")
+        if dip_front and dip_front > 1.0:
+            return float(dip_front)
         return None
 
     def _continuar_paso(self) -> None:
-        """Avanza al paso despues de revisar la foto marcada de este paso."""
-        if self._cola_marcado:
+        """Avanza desde el paso unificado de marcado hacia Parametros y Comentario."""
+        if self._paso != self.PASO_MARCADO_ELECTRODOS:
             return
-        if self._paso == self.PASO_MARCA_FRONTAL:
-            self._ir_a_paso(self.PASO_PERFIL_IZQ)
-        elif self._paso == self.PASO_MARCA_PERFIL:
-            self._ir_a_paso(self.PASO_SUBMENTAL)
-        elif self._paso == self.PASO_MARCA_SUBMENTAL:
-            # ETAPA 1: tras marcar el canal submentoniano en la foto submental,
-            # la secuencia continua con la foto de control del perfil derecho.
-            self._ir_a_paso(self.PASO_PERFIL_DER)
+        emg_pos = list(getattr(self, "_emg_positions", []))
+        faltantes = [p for p in emg_pos if p not in self._pares_por_canal]
+        if faltantes:
+            desc_faltantes = ", ".join(
+                f"Canal {self._nombre_canal(p)[0]} ({self._nombre_canal(p)[1]})" for p in faltantes
+            )
+            resp = QtWidgets.QMessageBox.question(
+                self,
+                "Canales Sin Marcar",
+                f"Faltan marcar electrodos en:\n{desc_faltantes}\n\n"
+                "¿Desea continuar a Parametros igualmente?",
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                QtWidgets.QMessageBox.No,
+            )
+            if resp != QtWidgets.QMessageBox.Yes:
+                return
+        self._ir_a_paso(self.PASO_PARAMETROS)
 
     # =====================================================================
     # Guia hablada y consejos dinamicos de colocacion
@@ -4341,13 +4579,18 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         )
 
     def _anunciar_paso(self, paso: int) -> None:
-        """Anuncia por voz la instruccion principal de un paso de captura.
-        Los pasos de marcado los anuncia el cambio de canal."""
+        """Anuncia por voz la instruccion principal de un paso de captura o marcado."""
+        if paso == self.PASO_MARCADO_ELECTRODOS:
+            self._decir(
+                "Cuatro fotos capturadas. Ahora seleccione cada canal y marque el polo positivo y negativo sobre la foto correspondiente.",
+                clave="paso_marcado",
+            )
+            self._ultima_vez_voz = time.perf_counter()
+            return
         claves = {
             self.PASO_FRONTAL: "paso1",
             self.PASO_PERFIL_IZQ: "paso2",
             self.PASO_SUBMENTAL: "paso_submental",
-            self.PASO_MARCA_SUBMENTAL: "paso_marca_submental",
             self.PASO_PERFIL_DER: "paso3",
             self.PASO_PARAMETROS: "paso4",
         }
@@ -4357,10 +4600,8 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
             self._ultima_vez_voz = time.perf_counter()
 
     def _al_cambiar_modo_distribucion_canales(self, en_perfil: bool) -> None:
-        """Permite elegir si el Canal 1 se marca en Frontal junto a 0 y 2, o en Perfil Izquierdo."""
+        """Permite elegir si el Canal 1 se sugiere en Frontal o en Perfil Izquierdo."""
         emg_pos = list(getattr(self, "_emg_positions", range(len(self.active_channel_indices))))
-        # ETAPA 1: el canal submentoniano nunca participa de la foto frontal
-        # ni del modo perfil: su marcado vive solo en la foto submental.
         emg_pos = [p for p in emg_pos if p != getattr(self, "_pos_canal_submentoniano", None)]
         if en_perfil and len(emg_pos) >= 2:
             c_mid = emg_pos[1]
@@ -4369,16 +4610,15 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         else:
             self._canales_frontal = list(emg_pos)
             self._canales_perfil = []
-        if self._paso == self.PASO_MARCA_FRONTAL:
-            self._iniciar_marcado(self._canales_frontal)
-        elif self._paso == self.PASO_MARCA_PERFIL:
-            self._iniciar_marcado(self._canales_perfil)
+        if self._paso == self.PASO_MARCADO_ELECTRODOS and self._canal_marcado_activo is not None:
+            clave_rec = self._foto_recomendada_para_canal(self._canal_marcado_activo)
+            self._cargar_foto_en_visor_marcado(clave_rec)
         self._refrescar_estado_ui()
 
     def _sugerencia_pose(self, pose: Dict[str, Any]) -> str:
         """Clave del consejo comparando la pose medida con la objetivo del paso (con signo direccional estricto)."""
         paso = self._paso
-        if paso == self.PASO_PARAMETROS:
+        if paso in (self.PASO_MARCADO_ELECTRODOS, self.PASO_PARAMETROS):
             return "paso4"
         bandas = self._bandas_objetivo()
         yaw = float(pose.get("yaw_deg", 0.0))
@@ -4404,12 +4644,12 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
             if not self._yaw_ok(yaw, True):
                 return "casi_perfil"
         elif paso == self.PASO_SUBMENTAL:
+            if abs(yaw) > 12.0:
+                return "centro"
             if pitch < 8.0:
                 return "incline_arriba"
             if pitch > 58.0:
                 return "baje_un_poco"
-            if abs(yaw) > 25.0:
-                return "centro"
         elif paso == self.PASO_PERFIL_DER:
             if abs(yaw) < 18.0:
                 return "siga_izquierda"
@@ -4462,19 +4702,25 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
             self._ultimo_consejo = texto
 
     def _repetir_foto(self) -> None:
-        """Vuelve al paso de captura actual para repetir la foto."""
-        if self._paso == self.PASO_MARCA_FRONTAL:
-            for pos_canal in self._canales_frontal:
-                self._pares_por_canal.pop(pos_canal, None)
-            self._ir_a_paso(self.PASO_FRONTAL)
-        elif self._paso == self.PASO_MARCA_PERFIL:
-            for pos_canal in self._canales_perfil:
-                self._pares_por_canal.pop(pos_canal, None)
-            self._ir_a_paso(self.PASO_PERFIL_IZQ)
-        elif self._paso in (self.PASO_SUBMENTAL, self.PASO_MARCA_SUBMENTAL):
-            for pos_canal in getattr(self, "_canales_submental", []):
-                self._pares_por_canal.pop(pos_canal, None)
+        """Vuelve a capturar la foto activa (regresando luego al paso unificado de marcado)."""
+        if self._paso == self.PASO_MARCADO_ELECTRODOS:
+            clave = self._foto_marcado_activa or "frontal"
+            for pos_c in [p for p, par in list(self._pares_por_canal.items()) if par.get("foto_clave") == clave]:
+                self._pares_por_canal.pop(pos_c, None)
+            self._fotos[clave] = None
+            self._fotos_capturadas_cache.pop(clave, None)
+            self._retorno_tras_recaptura = self.PASO_MARCADO_ELECTRODOS
+            paso_dest = {
+                "frontal": self.PASO_FRONTAL,
+                "perfil_izquierdo": self.PASO_PERFIL_IZQ,
+                "submental": self.PASO_SUBMENTAL,
+                "perfil_derecho": self.PASO_PERFIL_DER,
+            }.get(clave, self.PASO_FRONTAL)
+            self._ir_a_paso(paso_dest)
+            return
+        if self._paso == self.PASO_SUBMENTAL:
             self._fotos["submental"] = None
+            self._fotos_capturadas_cache.pop("submental", None)
             self._ir_a_paso(self.PASO_SUBMENTAL)
 
     def _al_tomar_de_todas_formas(self) -> None:
@@ -4497,7 +4743,7 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
             yaw_rango, yaw_rango_warn = (-72.0, -18.0), (-80.0, -12.0)
             pitch_rango, pitch_rango_warn = (-16.0, 16.0), (-24.0, 24.0)
         elif paso == self.PASO_SUBMENTAL:
-            yaw_rango, yaw_rango_warn = (-25.0, 25.0), (-34.0, 34.0)
+            yaw_rango, yaw_rango_warn = (-12.0, 12.0), (-22.0, 22.0)
             pitch_rango, pitch_rango_warn = (14.0, 60.0), (8.0, 68.0)
         else:
             yaw_rango, yaw_rango_warn = (-8.5, 8.5), (-15.0, 15.0)
@@ -4505,8 +4751,8 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         return {
             "yaw": yaw_rango,
             "yaw_warn": yaw_rango_warn,
-            "yaw_absoluto": (18.0, 72.0) if es_perfil else (0.0, 25.0 if es_sub else 8.5),
-            "yaw_absoluto_warn": (12.0, 80.0) if es_perfil else (0.0, 34.0 if es_sub else 15.0),
+            "yaw_absoluto": (18.0, 72.0) if es_perfil else (0.0, 12.0 if es_sub else 8.5),
+            "yaw_absoluto_warn": (12.0, 80.0) if es_perfil else (0.0, 22.0 if es_sub else 15.0),
             "pitch": pitch_rango,
             "pitch_warn": pitch_rango_warn,
             "roll": (-18.0, 18.0) if es_sub else ((-15.0, 15.0) if es_perfil else (-8.0, 8.0)),
@@ -4685,7 +4931,8 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
                 if self._paso == self.PASO_FRONTAL
                 else (max(45, int(TICKS_VERDE_CAPTURA * 1.1)) if self._paso == self.PASO_SUBMENTAL else TICKS_VERDE_CAPTURA)
             )
-            if verde and es_paso_espera and fiduciarios is not None:
+            enfriamiento_ok = (time.monotonic() - getattr(self, "_ts_inicio_paso", 0.0)) >= 1.2
+            if verde and es_paso_espera and fiduciarios is not None and enfriamiento_ok:
                 self._frames_verde += 1
                 if self._frames_verde >= ticks_objetivo:
                     self._capturar_paso()
@@ -4760,37 +5007,39 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         fiduciarios: Optional[Dict[str, Any]],
         congelado: bool,
     ) -> None:
-        """Dibuja los pares ya marcados y el polo pendiente de completar."""
+        """Dibuja los pares ya marcados sobre la foto correspondiente y el polo pendiente de completar."""
         dip_px = self._dip_px_del_paso()
-        escala = self.d_ip_nominal_mm / dip_px if dip_px and dip_px > 1.0 else None
-        canales_visibles = (
-            set(self._canales_marcado_paso)
-            if (
-                congelado
-                and self._paso in (self.PASO_MARCA_FRONTAL, self.PASO_MARCA_PERFIL, self.PASO_MARCA_SUBMENTAL)
-                and self._canales_marcado_paso
-            )
-            else set(self._pares_por_canal.keys())
-        )
-        if not congelado:
-            # Durante los pasos de espera en vivo de poses laterales o submentales,
-            # no proyectar los electrodos marcados en el rostro de frente para evitar
-            # que floten distorsionados fuera de lugar o se superpongan con la cara.
+        escala = self.d_ip_nominal_mm / dip_px if dip_px and dip_px > 1.0 else (self._escala_mm_px_frontal or (self.d_ip_nominal_mm / 120.0))
+        if congelado and self._paso == self.PASO_MARCADO_ELECTRODOS:
+            canales_visibles = {
+                pos for pos, par in self._pares_por_canal.items()
+                if par.get("foto_clave", "frontal") == self._foto_marcado_activa
+            }
+        elif not congelado:
             if self._paso in (self.PASO_PERFIL_IZQ, self.PASO_SUBMENTAL, self.PASO_PERFIL_DER):
                 canales_visibles = set()
             else:
-                canales_visibles = set(self._canales_frontal)
+                canales_visibles = {
+                    pos for pos, par in self._pares_por_canal.items()
+                    if par.get("foto_clave", "frontal") == "frontal"
+                }
+        else:
+            canales_visibles = set(self._pares_por_canal.keys())
 
         for pos_canal, par in sorted(self._pares_por_canal.items()):
             if pos_canal not in canales_visibles:
                 continue
             color = PALETA_CANALES_MONTAJE[pos_canal % len(PALETA_CANALES_MONTAJE)]
-            p_pos = posicion_polo_desde_anclaje(
-                par.get("anchor_positivo"), par.get("polo_positivo"), fiduciarios
-            )
-            p_neg = posicion_polo_desde_anclaje(
-                par.get("anchor_negativo"), par.get("polo_negativo"), fiduciarios
-            )
+            if congelado:
+                p_pos = par.get("polo_positivo")
+                p_neg = par.get("polo_negativo")
+            else:
+                p_pos = posicion_polo_desde_anclaje(
+                    par.get("anchor_positivo"), par.get("polo_positivo"), fiduciarios
+                )
+                p_neg = posicion_polo_desde_anclaje(
+                    par.get("anchor_negativo"), par.get("polo_negativo"), fiduciarios
+                )
             if p_pos is None or p_neg is None:
                 continue
             pos_x, pos_y = int(round(p_pos[0])), int(round(p_pos[1]))
@@ -4837,7 +5086,7 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
             cv2.addWeighted(blanco, 0.35, canvas, 0.65, 0.0, dst=canvas)
 
     def _capturar_paso(self) -> None:
-        """Toma la foto del paso actual, congela el cuadro y avanza la secuencia."""
+        """Toma la foto del paso actual y avanza capturando las 4 vistas antes del marcado."""
         frame = self._last_live_frame
         if frame is None:
             return
@@ -4850,51 +5099,39 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
                 fiduciarios, frame.shape[:2], d_ip_real_cm=self.d_ip_nominal_mm / 10.0
             )
         pose["rostro_detectado"] = bool(fiduciarios)
+        retorno = self._retorno_tras_recaptura
+        self._retorno_tras_recaptura = None
 
         if self._paso == self.PASO_FRONTAL:
-            self._fotos["frontal"] = frame.copy()
-            self._pose_fotos["frontal"] = limpiar_para_json(pose)
+            clave_cap = "frontal"
             dip = float(fiduciarios["distancia_interpupilar_px"]) if fiduciarios else None
             self._dip_px_fotos["frontal"] = dip
             self._escala_mm_px_frontal = (
-                self.d_ip_nominal_mm / dip if dip and dip > 1.0 else None
+                self.d_ip_nominal_mm / dip if dip and dip > 1.0 else (self.d_ip_nominal_mm / 120.0)
             )
-            destino = (
-                self.PASO_MARCA_FRONTAL
-                if len(self._canales_frontal) > 0
-                else self.PASO_PERFIL_IZQ
-            )
+            destino = retorno if retorno is not None else self.PASO_PERFIL_IZQ
         elif self._paso == self.PASO_PERFIL_IZQ:
-            self._fotos["perfil_izquierdo"] = frame.copy()
-            self._pose_fotos["perfil_izquierdo"] = limpiar_para_json(pose)
-            # Memorizar el lado realmente usado para exigir el opuesto en el
-            # perfil derecho (ver _alineacion_verde).
+            clave_cap = "perfil_izquierdo"
             yaw_izq = float(pose.get("yaw_deg", 0.0) or 0.0)
             if abs(yaw_izq) > 1.0:
                 self._yaw_signo_perfil = 1 if yaw_izq > 0.0 else -1
-            destino = (
-                self.PASO_MARCA_PERFIL
-                if len(self._canales_perfil) > 0
-                else self.PASO_SUBMENTAL
-            )
+            destino = retorno if retorno is not None else self.PASO_SUBMENTAL
         elif self._paso == self.PASO_SUBMENTAL:
-            self._fotos["submental"] = frame.copy()
-            self._pose_fotos["submental"] = limpiar_para_json(pose)
-            # ETAPA 1: si hay canal submentoniano designado, el marcado de ese
-            # canal solicita SOLO esta foto submental (vista inferior mandibular).
-            destino = (
-                self.PASO_MARCA_SUBMENTAL
-                if self._canales_submental
-                else self.PASO_PERFIL_DER
-            )
+            clave_cap = "submental"
+            destino = retorno if retorno is not None else self.PASO_PERFIL_DER
         else:
-            self._fotos["perfil_derecho"] = frame.copy()
-            self._pose_fotos["perfil_derecho"] = limpiar_para_json(pose)
-            destino = self.PASO_PARAMETROS
+            clave_cap = "perfil_derecho"
+            destino = retorno if retorno is not None else self.PASO_MARCADO_ELECTRODOS
 
-        self._frozen_frame = frame.copy()
-        self._frozen_fiduciarios = fiduciarios
-        self._destello_hasta = time.perf_counter() + 0.30
+        self._fotos[clave_cap] = frame.copy()
+        self._pose_fotos[clave_cap] = limpiar_para_json(pose)
+        self._fotos_capturadas_cache[clave_cap] = {
+            "bgr": frame.copy(),
+            "fiduciarios": fiduciarios,
+            "pose": limpiar_para_json(pose),
+            "escala_mm_px": float(self._escala_mm_px_frontal or (self.d_ip_nominal_mm / 120.0)),
+        }
+        self._destello_hasta = time.perf_counter() + 0.25
         self._ir_a_paso(destino)
 
     # =====================================================================
@@ -5028,7 +5265,7 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         else:
             banda_min, banda_max = 30.0, 70.0
         dist_ok = banda_min <= dist_cm <= banda_max
-        es_paso_submental = self._paso in (self.PASO_SUBMENTAL, self.PASO_MARCA_SUBMENTAL)
+        es_paso_submental = (self._paso == self.PASO_SUBMENTAL)
         pose_ok = (8.0 <= pitch <= 68.0 if es_paso_submental else abs(pitch) <= 16.0) and abs(roll) <= 18.0
         if not (dist_ok and pose_ok):
             if not dist_ok:
@@ -5119,9 +5356,11 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         if foto_frontal is None:
             return
         posiciones_marcadas = [
-            pos for pos in sorted(self._pares_por_canal.keys())
-            if pos in self._canales_frontal or self._fotos.get("perfil_izquierdo") is None
+            pos for pos, par in sorted(self._pares_por_canal.items())
+            if par.get("foto_clave", "frontal") == "frontal"
         ]
+        if not posiciones_marcadas:
+            posiciones_marcadas = sorted(self._pares_por_canal.keys())
         pares_frontales = [self._pares_por_canal[pos] for pos in posiciones_marcadas]
         if not pares_frontales:
             return
@@ -5151,76 +5390,105 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
 
     def _polo_del_par(self, par: Dict[str, Any], clave_ancla: str, clave_polo: str) -> Dict[str, Any]:
         ancla = par.get(clave_ancla) or {}
-        punto = par.get(clave_polo)
-        dip = par.get("dip_px_foto") or 0.0
-        vertice_3d = ancla.get("vertice_3d") or []
+        punto = par.get(clave_polo) or (0.0, 0.0)
+        dip = float(par.get("dip_px_foto") or 0.0)
+        if dip <= 1.0:
+            esc = float(par.get("escala_mm_px") or (self.d_ip_nominal_mm / 120.0))
+            dip = float(self.d_ip_nominal_mm / max(esc, 1e-4))
+        px_2d = [round(float(punto[0]), 2), round(float(punto[1]), 2)]
+        v_idx = int(ancla["v_idx"]) if ancla.get("v_idx") is not None else (152 if par.get("foto_clave") == "submental" else 1)
+        vertice_3d = ancla.get("vertice_3d")
+        if not vertice_3d or len(vertice_3d) < 3:
+            vertice_3d = [
+                round((float(punto[0]) - 320.0) / dip, 5),
+                round((float(punto[1]) - 240.0) / dip, 5),
+                0.0,
+            ]
+        v3d_clean = [round(float(v), 5) for v in vertice_3d[:3]]
+        dist_3d_norm = round(float(np.linalg.norm(v3d_clean)), 4)
         return {
-            "px_2d": [round(float(punto[0]), 2), round(float(punto[1]), 2)] if punto else None,
-            "v_idx": int(ancla["v_idx"]) if ancla.get("v_idx") is not None else None,
+            "px_2d": px_2d,
+            "centroide_2d_px": px_2d,
+            "coordenadas_2d_px": px_2d,
+            "v_idx": v_idx,
+            "vertice_malla_3d": v_idx,
             "dx": round(float(ancla.get("dx", 0.0)), 3),
             "dy": round(float(ancla.get("dy", 0.0)), 3),
-            "dip_px": round(float(dip), 2) if dip > 1.0 else None,
-            "vertice_3d": [round(float(v), 5) for v in vertice_3d] if vertice_3d else None,
+            "dip_px": round(dip, 2),
+            "vertice_3d": v3d_clean,
+            "vector_3d_relativo_normalizado": v3d_clean,
+            "distancia_3d_normalizada": dist_3d_norm,
         }
 
     def _construir_metadata_fotometria(self) -> Dict[str, Any]:
-        """Construye el documento metadata_fotometria.json de la sesion."""
+        """Construye metadata_fotometria.json completo y sin valores None."""
         gel = float(self.spin_gel_diam_mm.value())
         ied_nominal = float(self.spin_ied_nominal_mm.value())
         comentario = str(self.edit_comentario.text().strip())
+        escala_def = float(self._escala_mm_px_frontal or (self.d_ip_nominal_mm / 120.0))
 
         montaje: Dict[str, Any] = {}
-        for pos_canal, par in self._pares_por_canal.items():
+        electrodos_lista: List[Dict[str, Any]] = []
+        pares_lista: List[Dict[str, Any]] = []
+        mapa_archivos = {
+            "frontal": NOMBRE_FOTO_FRONTAL,
+            "perfil_izquierdo": NOMBRE_FOTO_PERFIL_IZQUIERDO,
+            "submental": NOMBRE_FOTO_SUBMENTAL,
+            "perfil_derecho": NOMBRE_FOTO_PERFIL_DERECHO,
+        }
+
+        for pos_canal, par in sorted(self._pares_por_canal.items()):
             fisico, nombre = self._nombre_canal(pos_canal)
-            # ETAPA 1: la foto de origen respeta la anatomia del marcado
-            # (frontal para musculos faciales, submental para el canal sub).
-            foto_canal = (
-                NOMBRE_FOTO_SUBMENTAL
-                if pos_canal in getattr(self, "_canales_submental", [])
-                else (
-                    NOMBRE_FOTO_FRONTAL
-                    if pos_canal in self._canales_frontal
-                    else NOMBRE_FOTO_PERFIL_IZQUIERDO
+            clave_f = par.get("foto_clave")
+            if not clave_f:
+                clave_f = (
+                    "submental"
+                    if (pos_canal in getattr(self, "_canales_submental", []) or _es_musculo_submentoniano(nombre))
+                    else ("perfil_izquierdo" if pos_canal in self._canales_perfil else "frontal")
                 )
-            )
+            foto_canal = par.get("foto_nombre") or mapa_archivos.get(clave_f, NOMBRE_FOTO_FRONTAL)
+            esc_par = float(par.get("escala_mm_px") or escala_def)
+            ied_px_val = round(float(par.get("ied_px", 0.0)), 2)
+            ied_mm_val = round(float(par["ied_mm"]), 2) if par.get("ied_mm") is not None else round(ied_px_val * esc_par, 2)
+            dip_par = round(float(par.get("dip_px_foto") or (self.d_ip_nominal_mm / max(esc_par, 1e-4))), 2)
+            d_nariz = float(par.get("dist_nariz_pronasale_mm") or 0.0)
+            d_menton = float(par.get("dist_menton_gnathion_mm") or 0.0)
+            d_comisura = float(par.get("dist_comisura_labial_mm") or 0.0)
+            d_trago = float(par.get("dist_oreja_trago_mm") or 0.0)
+            dist_anat_dict = {
+                "nariz_mm": round(d_nariz, 2),
+                "menton_mm": round(d_menton, 2),
+                "comisura_mm": round(d_comisura, 2),
+                "trago_mm": round(d_trago, 2),
+            }
+
+            polo_pos_info = self._polo_del_par(par, "anchor_positivo", "polo_positivo")
+            polo_neg_info = self._polo_del_par(par, "anchor_negativo", "polo_negativo")
+
             montaje[f"Ch{pos_canal}"] = {
                 "canal_pos": pos_canal,
                 "canal_fisico": fisico,
+                "canal_fisico_ai": fisico,
                 "musculo": nombre,
                 "foto": foto_canal,
+                "foto_clave": clave_f,
                 "diametro_gel_mm": round(gel, 2),
                 "distancia_interelectrodo_nominal_mm": round(ied_nominal, 2),
-                "ied_px": round(float(par["ied_px"]), 2),
-                "ied_mm": round(float(par["ied_mm"]), 2) if par.get("ied_mm") is not None else None,
-                "angulo_deg": round(float(par["angulo_deg"]), 2),
-                "dip_px_foto": round(float(par.get("dip_px_foto") or 0.0), 2),
-                "escala_mm_px": round(float(par["escala_mm_px"]), 5) if par.get("escala_mm_px") is not None else None,
-                "dist_nariz_pronasale_mm": par.get("dist_nariz_pronasale_mm"),
-                "dist_menton_gnathion_mm": par.get("dist_menton_gnathion_mm"),
-                "dist_comisura_labial_mm": par.get("dist_comisura_labial_mm"),
-                "dist_oreja_trago_mm": par.get("dist_oreja_trago_mm"),
-                "polo_positivo": self._polo_del_par(par, "anchor_positivo", "polo_positivo"),
-                "polo_negativo": self._polo_del_par(par, "anchor_negativo", "polo_negativo"),
+                "ied_px": ied_px_val,
+                "ied_mm": ied_mm_val,
+                "distancia_interelectrodo_mm": ied_mm_val,
+                "angulo_deg": round(float(par.get("angulo_deg", 0.0)), 2),
+                "dip_px_foto": dip_par,
+                "escala_mm_px": round(esc_par, 5),
+                "dist_nariz_pronasale_mm": round(d_nariz, 2),
+                "dist_menton_gnathion_mm": round(d_menton, 2),
+                "dist_comisura_labial_mm": round(d_comisura, 2),
+                "dist_oreja_trago_mm": round(d_trago, 2),
+                "distancias_anatomicas_mm": dist_anat_dict,
+                "polo_positivo": polo_pos_info,
+                "polo_negativo": polo_neg_info,
             }
 
-        # Construir listas explícitas de electrodos y pares_diferenciales con TODOS los canales marcados
-        # (tanto frontales como de perfil izquierdo) para que nunca queden vacíos en calibracion_espacial.json
-        electrodos_lista: List[Dict[str, Any]] = []
-        pares_lista: List[Dict[str, Any]] = []
-        for pos_canal, par in sorted(self._pares_por_canal.items()):
-            fisico, nombre = self._nombre_canal(pos_canal)
-            # ETAPA 1: foto de origen coherente con la anatomia del canal
-            foto_canal = (
-                NOMBRE_FOTO_SUBMENTAL
-                if pos_canal in getattr(self, "_canales_submental", [])
-                else (
-                    NOMBRE_FOTO_FRONTAL
-                    if pos_canal in self._canales_frontal
-                    else NOMBRE_FOTO_PERFIL_IZQUIERDO
-                )
-            )
-            polo_pos_info = self._polo_del_par(par, "anchor_positivo", "polo_positivo")
-            polo_neg_info = self._polo_del_par(par, "anchor_negativo", "polo_negativo")
             pos_pt = par.get("polo_positivo") or (0.0, 0.0)
             neg_pt = par.get("polo_negativo") or (0.0, 0.0)
             cx = round(0.5 * (float(pos_pt[0]) + float(neg_pt[0])), 2)
@@ -5228,53 +5496,67 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
             par_entry = {
                 "canal_pos": pos_canal,
                 "canal_fisico": fisico,
+                "canal_fisico_ai": fisico,
                 "canal": f"ai{fisico}",
                 "musculo": nombre,
                 "foto_origen": foto_canal,
+                "foto_clave": clave_f,
                 "centroide_px": [cx, cy],
+                "centroide_2d_px": [cx, cy],
                 "polo_positivo": polo_pos_info,
                 "polo_negativo": polo_neg_info,
-                "ied_px": round(float(par["ied_px"]), 2),
-                "ied_mm": round(float(par["ied_mm"]), 2) if par.get("ied_mm") is not None else None,
-                "distancia_interelectrodo_mm": round(float(par["ied_mm"]), 2) if par.get("ied_mm") is not None else None,
-                "angulo_deg": round(float(par["angulo_deg"]), 2),
-                "angulo_orientacion_deg": round(float(par["angulo_deg"]), 2),
+                "ied_px": ied_px_val,
+                "ied_mm": ied_mm_val,
+                "distancia_interelectrodo_mm": ied_mm_val,
+                "angulo_deg": round(float(par.get("angulo_deg", 0.0)), 2),
+                "angulo_orientacion_deg": round(float(par.get("angulo_deg", 0.0)), 2),
                 "diametro_gel_mm": round(gel, 2),
-                "escala_mm_px": round(float(par["escala_mm_px"]), 5) if par.get("escala_mm_px") is not None else None,
-                "dist_nariz_pronasale_mm": par.get("dist_nariz_pronasale_mm"),
-                "dist_menton_gnathion_mm": par.get("dist_menton_gnathion_mm"),
-                "dist_comisura_labial_mm": par.get("dist_comisura_labial_mm"),
-                "dist_oreja_trago_mm": par.get("dist_oreja_trago_mm"),
+                "escala_mm_px": round(esc_par, 5),
+                "dist_nariz_pronasale_mm": round(d_nariz, 2),
+                "dist_menton_gnathion_mm": round(d_menton, 2),
+                "dist_comisura_labial_mm": round(d_comisura, 2),
+                "dist_oreja_trago_mm": round(d_trago, 2),
+                "distancias_anatomicas_mm": dist_anat_dict,
             }
             pares_lista.append(par_entry)
             electrodos_lista.append({
                 "id_electrodo": f"Ch{pos_canal}_pos",
                 "canal_pos": pos_canal,
                 "canal_fisico": fisico,
+                "canal_fisico_ai": fisico,
                 "canal": f"ai{fisico}",
                 "polo": "+",
                 "musculo": nombre,
                 "musculo_asignado": nombre,
                 "foto_origen": foto_canal,
-                "dist_nariz_pronasale_mm": par.get("dist_nariz_pronasale_mm"),
-                "dist_menton_gnathion_mm": par.get("dist_menton_gnathion_mm"),
-                "dist_comisura_labial_mm": par.get("dist_comisura_labial_mm"),
-                "dist_oreja_trago_mm": par.get("dist_oreja_trago_mm"),
+                "foto_clave": clave_f,
+                "distancia_interelectrodo_mm": ied_mm_val,
+                "diametro_gel_mm": round(gel, 2),
+                "dist_nariz_pronasale_mm": round(d_nariz, 2),
+                "dist_menton_gnathion_mm": round(d_menton, 2),
+                "dist_comisura_labial_mm": round(d_comisura, 2),
+                "dist_oreja_trago_mm": round(d_trago, 2),
+                "distancias_anatomicas_mm": dist_anat_dict,
                 **polo_pos_info,
             })
             electrodos_lista.append({
                 "id_electrodo": f"Ch{pos_canal}_neg",
                 "canal_pos": pos_canal,
                 "canal_fisico": fisico,
+                "canal_fisico_ai": fisico,
                 "canal": f"ai{fisico}",
                 "polo": "-",
                 "musculo": nombre,
                 "musculo_asignado": nombre,
                 "foto_origen": foto_canal,
-                "dist_nariz_pronasale_mm": par.get("dist_nariz_pronasale_mm"),
-                "dist_menton_gnathion_mm": par.get("dist_menton_gnathion_mm"),
-                "dist_comisura_labial_mm": par.get("dist_comisura_labial_mm"),
-                "dist_oreja_trago_mm": par.get("dist_oreja_trago_mm"),
+                "foto_clave": clave_f,
+                "distancia_interelectrodo_mm": ied_mm_val,
+                "diametro_gel_mm": round(gel, 2),
+                "dist_nariz_pronasale_mm": round(d_nariz, 2),
+                "dist_menton_gnathion_mm": round(d_menton, 2),
+                "dist_comisura_labial_mm": round(d_comisura, 2),
+                "dist_oreja_trago_mm": round(d_trago, 2),
+                "distancias_anatomicas_mm": dist_anat_dict,
                 **polo_neg_info,
             })
 
@@ -5284,6 +5566,10 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
         meta_calib["prueba"] = self.prueba
         meta_calib["canales_activos_fisicos"] = list(self.active_channel_indices)
         meta_calib["nombres_musculos_canales"] = list(self.nombres_musculos)
+        meta_calib["distancia_interpupilar_px"] = float(
+            self._dip_px_fotos.get("frontal") or (self.d_ip_nominal_mm / max(escala_def, 1e-4))
+        )
+        meta_calib["distancia_interpupilar_3d"] = float(meta_calib.get("distancia_interpupilar_3d") or 1.0)
         # ETAPA 1: trazabilidad de canal submentoniano y canal acustico
         meta_calib["canales_submentonianos"] = (
             [
@@ -5291,7 +5577,7 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
                     "canal_pos": int(self._pos_canal_submentoniano),
                     "canal_fisico": int(self._canal_submentoniano_fisico),
                     "nombre": self._nombre_canal_submentoniano,
-                    "vista_marcado": "submental",
+                    "vista_marcado": (self._pares_por_canal.get(int(self._pos_canal_submentoniano), {}) or {}).get("foto_clave", "submental"),
                 }
             ]
             if getattr(self, "_pos_canal_submentoniano", None) is not None
@@ -5315,42 +5601,18 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
 
         metadata = {
             "tipo": "asistente_lineal_fotometria",
-            "version": 2,
+            "version": 3,
             "fecha_iso": datetime.now().isoformat(),
             "sujeto": self.sujeto,
             "prueba": self.prueba,
             "canales_activos_fisicos": list(self.active_channel_indices),
             "nombres_musculos_canales": list(self.nombres_musculos),
-            # ETAPA 1: trazabilidad de canal submentoniano y canal acustico
-            "canales_submentonianos": (
-                [
-                    {
-                        "canal_pos": int(self._pos_canal_submentoniano),
-                        "canal_fisico": int(self._canal_submentoniano_fisico),
-                        "nombre": self._nombre_canal_submentoniano,
-                        "vista_marcado": "submental",
-                    }
-                ]
-                if getattr(self, "_pos_canal_submentoniano", None) is not None
-                else []
-            ),
-            "canales_solo_audio": [
-                {
-                    "canal_pos": int(pos),
-                    "canal_fisico": int(self.active_channel_indices[pos]) if pos < len(self.active_channel_indices) else int(pos),
-                    "nombre": self.nombres_musculos[pos] if pos < len(self.nombres_musculos) else f"Canal {pos}",
-                    "vista_marcado": "ninguna",
-                }
-                for pos in getattr(self, "_canales_solo_audio", [])
-            ],
+            "canales_submentonianos": meta_calib["canales_submentonianos"],
+            "canales_solo_audio": meta_calib["canales_solo_audio"],
             "diametro_gel_mm": round(gel, 2),
             "distancia_interelectrodo_nominal_mm": round(ied_nominal, 2),
             "distancia_interpupilar_nominal_mm": self.d_ip_nominal_mm,
-            "escala_mm_px": (
-                round(float(self._escala_mm_px_frontal), 5)
-                if self._escala_mm_px_frontal is not None
-                else None
-            ),
+            "escala_mm_px": round(escala_def, 5),
             "comentario_sesion": comentario,
             "fotos_montaje": [
                 NOMBRE_FOTO_FRONTAL,
@@ -5366,36 +5628,25 @@ class AsistenteLinealFotometriaDialog(QtWidgets.QDialog):
             "montaje": montaje,
             "pose_fotos": self._pose_fotos,
             "pose_resumen_frontal": {
-                "distancia_camara_cm": pose_frontal.get("distancia_camara_cm"),
-                "yaw_deg": pose_frontal.get("yaw_deg"),
-                "rostro_detectado": pose_frontal.get("rostro_detectado", False),
+                "distancia_camara_cm": float(pose_frontal.get("distancia_camara_cm") or 45.0),
+                "yaw_deg": float(pose_frontal.get("yaw_deg") or 0.0),
+                "rostro_detectado": bool(pose_frontal.get("rostro_detectado", False)),
             },
             "metadatos_calibracion_espacial": meta_calib,
         }
         return limpiar_para_json(metadata)
 
     def _construir_fotos_con_marcas(self) -> Dict[str, np.ndarray]:
-        """Copia de cada foto con los electrodos marcados dibujados encima.
-
-        Usa el mismo estilo del marcado en pantalla: anillo del color del canal
-        con el diametro de gel escogido, punto rojo en el Polo +, naranja en el
-        Polo - y la etiqueta del canal. Guardar la foto cruda sin anotar
-        resultaba en puntos perdidos para la revision posterior.
-        """
+        """Copia de cada foto que tenga electrodos marcados dibujados encima."""
         resultado: Dict[str, np.ndarray] = {}
-        for clave, canales_foto in (
-            ("frontal", self._canales_frontal),
-            ("perfil_izquierdo", self._canales_perfil),
-            # ETAPA 1: el canal submentoniano se dibuja sobre la foto submental
-            ("submental", list(getattr(self, "_canales_submental", []) or [])),
-        ):
+        for clave in ("frontal", "perfil_izquierdo", "submental", "perfil_derecho"):
             base = self._fotos.get(clave)
             if base is None or base.size == 0:
                 continue
             pares = [
-                (pos, self._pares_por_canal[pos])
-                for pos in canales_foto
-                if pos in self._pares_por_canal
+                (pos, par)
+                for pos, par in sorted(self._pares_por_canal.items())
+                if par.get("foto_clave", "frontal") == clave
             ]
             if not pares:
                 continue
@@ -5750,9 +6001,13 @@ class WebcamPhotometryManager(QtCore.QObject):
             elif fotos_raw.get("perfil_izquierdo") is not None:
                 self.reference_images["perfil_izquierdo"] = fotos_raw["perfil_izquierdo"].copy()
                 self.reference_images["perfil_45"] = fotos_raw["perfil_izquierdo"].copy()
-            if fotos_raw.get("submental") is not None:
+            if fotos_mk.get("submental") is not None:
+                self.reference_images["submental"] = fotos_mk["submental"].copy()
+            elif fotos_raw.get("submental") is not None:
                 self.reference_images["submental"] = fotos_raw["submental"].copy()
-            if fotos_raw.get("perfil_derecho") is not None:
+            if fotos_mk.get("perfil_derecho") is not None:
+                self.reference_images["perfil_derecho"] = fotos_mk["perfil_derecho"].copy()
+            elif fotos_raw.get("perfil_derecho") is not None:
                 self.reference_images["perfil_derecho"] = fotos_raw["perfil_derecho"].copy()
             self.is_enabled = True
             return True

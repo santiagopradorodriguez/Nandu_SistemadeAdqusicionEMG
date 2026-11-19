@@ -66,6 +66,18 @@ if getattr(sys, 'frozen', False) and len(sys.argv) > 1:
         remaining_args = sys.argv[2:]
 
     if target_arg:
+        # Asegurar stdout/stderr validos en builds GUI de Windows donde son None
+        if sys.stdout is None:
+            try:
+                sys.stdout = open(os.devnull, "w", encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+        if sys.stderr is None:
+            try:
+                sys.stderr = open(os.devnull, "w", encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
         exe_dir = os.path.dirname(os.path.abspath(sys.executable))
         if os.path.basename(exe_dir) == "_internal":
             exe_dir = os.path.dirname(exe_dir)
@@ -75,14 +87,48 @@ if getattr(sys, 'frozen', False) and len(sys.argv) > 1:
             if p and p not in sys.path:
                 sys.path.insert(0, p)
 
+        def _reportar_error_multiplexor(error_msg: str):
+            try:
+                print(error_msg)
+            except Exception:
+                pass
+            try:
+                log_dir = _get_writable_temp_dir()
+                with open(os.path.join(log_dir, "multiplexer_error.log"), "w", encoding="utf-8") as f_log:
+                    f_log.write(error_msg)
+            except Exception:
+                pass
+            try:
+                with open("multiplexer_error.log", "w", encoding="utf-8") as f_loc:
+                    f_loc.write(error_msg)
+            except Exception:
+                pass
+            if sys.stdin is not None:
+                try:
+                    input("\nPresiona ENTER para cerrar...")
+                    return
+                except Exception:
+                    pass
+            try:
+                from PySide6.QtWidgets import QApplication, QMessageBox
+                _app_err = QApplication.instance() or QApplication(sys.argv)
+                QMessageBox.critical(None, "Error al iniciar modulo - Ñandú LSD", error_msg[:2000])
+            except Exception:
+                pass
+
         # 1. Si el archivo existe físicamente en el disco o dentro de sys._MEIPASS
-        candidate_paths = [
-            target_arg if os.path.isabs(target_arg) else None,
-            os.path.abspath(target_arg),
-            os.path.join(exe_dir, target_arg),
-            os.path.join(meipass_dir, target_arg),
-            os.path.join(meipass_dir, "EMG_desarrollo", target_arg)
-        ]
+        base_targets = [target_arg]
+        if not target_arg.endswith(('.py', '.pyw')):
+            base_targets.append(target_arg + '.py')
+        candidate_paths = []
+        for t_cand in base_targets:
+            candidate_paths.extend([
+                t_cand if os.path.isabs(t_cand) else None,
+                os.path.abspath(t_cand),
+                os.path.join(exe_dir, t_cand),
+                os.path.join(meipass_dir, t_cand),
+                os.path.join(meipass_dir, "EMG_desarrollo", t_cand),
+            ])
         resolved_path = None
         for cp in candidate_paths:
             if cp and os.path.isfile(cp):
@@ -99,11 +145,7 @@ if getattr(sys, 'frozen', False) and len(sys.argv) > 1:
                 runpy.run_path(resolved_path, run_name="__main__")
             except Exception as e:
                 import traceback
-                print(f"Error al ejecutar script ({resolved_path}): {e}\n{traceback.format_exc()}")
-                try:
-                    input("\nPresiona ENTER para cerrar...")
-                except Exception:
-                    pass
+                _reportar_error_multiplexor(f"Error al ejecutar script ({resolved_path}): {e}\n{traceback.format_exc()}")
             sys.exit(0)
 
         # 2. Si es un módulo empaquetado interno o script no resuelto como archivo suelto
@@ -217,17 +259,7 @@ if getattr(sys, 'frozen', False) and len(sys.argv) > 1:
         except Exception as e:
             import traceback
             error_msg = f"Error al ejecutar {module_name}: {e}\n{traceback.format_exc()}"
-            print(error_msg)
-            try:
-                with open("multiplexer_error.log", "w", encoding="utf-8") as f:
-                    f.write(error_msg)
-            except Exception:
-                pass
-            print("\nPresiona ENTER para cerrar esta ventana...")
-            try:
-                input()
-            except Exception:
-                pass
+            _reportar_error_multiplexor(error_msg)
         sys.exit(0)
 # --------------------------------------------------------
 
